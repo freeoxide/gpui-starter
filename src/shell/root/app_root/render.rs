@@ -1,11 +1,15 @@
+use std::rc::Rc;
+
 use gpui::{prelude::*, *};
 use gpui_component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _,
+    ActiveTheme as _, Collapsible, Icon, IconName, Sizable as _,
+    menu::PopupMenu,
     resizable::{h_resizable, resizable_panel},
-    sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuItem},
+    sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarItem, SidebarMenuItem},
     v_flex,
 };
 
+use crate::accessibility::A11yExt;
 use crate::app::ToggleSearch;
 use crate::routes::AppRoute;
 use crate::sidebar::Page;
@@ -17,6 +21,12 @@ use super::state::AppRoot;
 
 impl Render for AppRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // gpui has no a11y activation callback (it refreshes the window on AT
+        // connect/disconnect); deferred so refresh runs at App level.
+        if window.is_a11y_active() != crate::accessibility::snapshot(cx).bridge_enabled {
+            cx.defer(crate::accessibility::refresh);
+        }
+
         // clock (not std::time): Instant::now panics at runtime on wasm.
         let render_started = crate::platform::clock::Instant::now();
         let sheet_layer = gpui_component::Root::render_sheet_layer(window, cx);
@@ -30,68 +40,86 @@ impl Render for AppRoot {
         let active_page = self.active_route.page_for_render();
         let rtl = is_rtl_locale(&crate::app::current_locale(cx));
 
-        let sidebar = Sidebar::new("app-sidebar")
-            .w(relative(1.))
-            .border_0()
-            .collapsed(self.collapsed)
-            .header(
-                v_flex().w_full().gap_4().child(
-                    SidebarHeader::new().w_full().child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded(cx.theme().radius_lg)
-                            .bg(cx.theme().primary)
-                            .text_color(cx.theme().primary_foreground)
-                            .size_8()
-                            .flex_shrink_0()
-                            .child(Icon::new(IconName::Star)),
+        let sidebar =
+            Sidebar::new("app-sidebar")
+                .w(relative(1.))
+                .border_0()
+                .collapsed(self.collapsed)
+                .header(
+                    v_flex().w_full().gap_4().child(
+                        SidebarHeader::new().w_full().child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(cx.theme().radius_lg)
+                                .bg(cx.theme().primary)
+                                .text_color(cx.theme().primary_foreground)
+                                .size_8()
+                                .flex_shrink_0()
+                                .child(Icon::new(IconName::Star)),
+                        ),
                     ),
-                ),
-            )
-            .child(
-                SidebarGroup::new("Navigation").child(SidebarMenu::new().children(
-                    Page::all().iter().map(|page| {
+                )
+                .child(SidebarGroup::new("Navigation").children(
+                    Page::all().iter().enumerate().map(|(ix, page)| {
                         let page = *page;
-                        SidebarMenuItem::new(page.title())
-                            .icon(Icon::new(page.icon()).small())
-                            .active(!self.render_error && active_page == page)
-                            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                                this.set_route(AppRoute::page(page), cx);
-                            }))
+                        let context_menu: Rc<
+                            dyn Fn(PopupMenu, &mut Window, &mut App) -> PopupMenu,
+                        > = Rc::new(move |menu, _window, _cx| {
                             // Context menu: right-click on sidebar items.
-                            .context_menu(move |menu, _window, _cx| {
-                                menu.menu_with_icon(
-                                    "Navigate",
-                                    Icon::new(IconName::ArrowRight),
-                                    Box::new(NavigateToPage(page as usize)),
-                                )
-                                .separator()
-                                .menu_with_icon(
-                                    "Refresh",
-                                    Icon::new(IconName::Redo2),
-                                    Box::new(RefreshPage),
-                                )
-                                .separator()
-                                .menu_with_icon(
-                                    "Settings",
-                                    Icon::new(IconName::Settings2),
-                                    Box::new(NavigateToPage(Page::Settings as usize)),
-                                )
-                            })
+                            menu.menu_with_icon(
+                                "Navigate",
+                                Icon::new(IconName::ArrowRight),
+                                Box::new(NavigateToPage(page as usize)),
+                            )
+                            .separator()
+                            .menu_with_icon(
+                                "Refresh",
+                                Icon::new(IconName::Redo2),
+                                Box::new(RefreshPage),
+                            )
+                            .separator()
+                            .menu_with_icon(
+                                "Settings",
+                                Icon::new(IconName::Settings2),
+                                Box::new(NavigateToPage(Page::Settings as usize)),
+                            )
+                        });
+                        NavItem {
+                            page,
+                            active: !self.render_error && active_page == page,
+                            collapsed: false,
+                            // accesskit stores position_in_set 0-based; AT
+                            // bridges report the stored value +1.
+                            position: ix,
+                            total: Page::all().len(),
+                            on_click: Rc::new(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                this.set_route(AppRoute::page(page), cx);
+                            })),
+                            context_menu,
+                        }
                     }),
-                )),
-            );
+                ));
 
         // RTL: reverse sidebar position and flex direction
         let sidebar_panel = resizable_panel()
             .size(px(255.))
             .size_range(px(60.)..px(320.))
-            .child(sidebar);
+            .child(
+                div()
+                    .id("sidebar-nav")
+                    .a11y(Role::Navigation, "Main navigation")
+                    // AT-SPI derives each item's setsize from the nearest
+                    // ancestor that declares one; item-level values are ignored.
+                    .aria_size_of_set(Page::all().len())
+                    .child(sidebar),
+            );
 
         let content_panel = resizable_panel().child(
             v_flex()
+                .id("main")
+                .role(Role::Main)
                 .flex_1()
                 .h_full()
                 .overflow_x_hidden()
@@ -103,15 +131,28 @@ impl Render for AppRoot {
                         .border_color(cx.theme().border)
                         .child(
                             div()
+                                .id("page-title")
+                                .a11y(Role::Heading, page_title)
+                                .aria_level(1)
+                                // Navigation moves no keyboard focus, so the
+                                // new page title is announced via this live region.
+                                .a11y_live(accesskit::Live::Polite)
                                 .text_xl()
                                 .font_weight(FontWeight::BOLD)
                                 .child(page_title),
                         ),
                 )
-                .child(div().id("page").flex_1().overflow_y_scroll().child({
-                    let _render_guard = crate::lifecycle::enter_render_path();
-                    self.active_page_view(cx)
-                })),
+                .child(
+                    div()
+                        .id("page")
+                        .a11y(Role::Region, page_title)
+                        .flex_1()
+                        .overflow_y_scroll()
+                        .child({
+                            let _render_guard = crate::lifecycle::enter_render_path();
+                            self.active_page_view(cx)
+                        }),
+                ),
         );
 
         // In RTL locales the sidebar appears on the right; swap panel order.
@@ -190,5 +231,62 @@ impl Render for AppRoot {
             .children(sheet_layer)
             .children(dialog_layer)
             .children(notification_layer)
+    }
+}
+
+/// One sidebar page entry: wraps [`SidebarMenuItem`] with the accessibility
+/// node the component does not create — its clickable div has no role, so
+/// without this wrapper the items are absent from the a11y tree entirely.
+#[derive(Clone)]
+struct NavItem {
+    page: Page,
+    active: bool,
+    collapsed: bool,
+    position: usize,
+    total: usize,
+    on_click: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
+    context_menu: Rc<dyn Fn(PopupMenu, &mut Window, &mut App) -> PopupMenu>,
+}
+
+impl Collapsible for NavItem {
+    fn is_collapsed(&self) -> bool {
+        self.collapsed
+    }
+
+    fn collapsed(mut self, collapsed: bool) -> Self {
+        self.collapsed = collapsed;
+        self
+    }
+}
+
+impl SidebarItem for NavItem {
+    fn render(
+        self,
+        id: impl Into<ElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> impl IntoElement {
+        let id = id.into();
+        let label = self.page.title();
+        let item_on_click = self.on_click.clone();
+        let activate = self.on_click;
+        let context_menu = self.context_menu.clone();
+        let item = SidebarMenuItem::new(label)
+            .icon(Icon::new(self.page.icon()).small())
+            .active(self.active)
+            .collapsed(self.collapsed)
+            .on_click(move |ev, window, cx| item_on_click(ev, window, cx))
+            .context_menu(move |menu, window, cx| context_menu(menu, window, cx));
+
+        div()
+            .id(id.clone())
+            .a11y(Role::ListItem, label)
+            .aria_selected(self.active)
+            .aria_position_in_set(self.position)
+            .aria_size_of_set(self.total)
+            .on_a11y_action(AccessibleAction::Click, move |_, window, cx| {
+                activate(&ClickEvent::default(), window, cx);
+            })
+            .child(item.render(id, window, cx))
     }
 }

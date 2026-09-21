@@ -1,14 +1,23 @@
 use gpui::{prelude::*, *};
-use gpui_component::{ActiveTheme as _, button::Button, label::Label};
+use gpui_component::{ActiveTheme as _, button::Button};
 
+use crate::accessibility::A11yExt as _;
 use crate::telemetry::{self, TelemetryMode};
 
 /// Renders the "Telemetry" mode selection card.
 pub fn render_telemetry_section(cx: &mut Context<super::super::SettingsPage>) -> impl IntoElement {
     super::settings_card_base(cx)
-        .child(Label::new("Telemetry"))
+        .child(super::section_heading(
+            "settings-telemetry-title",
+            "Telemetry",
+        ))
         .child(
             div()
+                .id("settings-telemetry-desc")
+                .a11y(
+                    Role::Paragraph,
+                    "Telemetry export is disabled by default until explicit consent.",
+                )
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
                 .child("Telemetry export is disabled by default until explicit consent."),
@@ -55,7 +64,10 @@ pub fn render_telemetry_runtime_section(
     cx: &mut Context<super::super::SettingsPage>,
 ) -> impl IntoElement {
     super::settings_card_base(cx)
-        .child(Label::new("Telemetry Runtime"))
+        .child(super::section_heading(
+            "settings-telemetry-runtime-title",
+            "Telemetry Runtime",
+        ))
         .child(
             div()
                 .flex()

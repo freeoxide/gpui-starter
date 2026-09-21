@@ -39,6 +39,10 @@ pub fn bounded_list_height(item_sizes: &[Size<Pixels>], gap: Pixels, max_height:
 
 /// Render a virtualized list (entity clone, scroll tracking, gap, container,
 /// optional scrollbar). Precondition: items pinned to declared heights.
+///
+/// An inner node carries `Role::List` because the scrollable list element has
+/// no role of its own; items get their `Role::ListItem` from
+/// [`virtual_list_item`]. The container stays a plain `Div` for callers.
 pub fn render_virtual_list<R, V>(
     cx: &mut Context<V>,
     id: impl Into<ElementId>,
@@ -54,20 +58,50 @@ where
     V: Render + 'static,
 {
     let entity = cx.entity();
+    let list_id: ElementId = id.into();
+    let total = item_sizes.len();
 
-    let mut list = v_virtual_list(entity, id, item_sizes, render_items).track_scroll(scroll_handle);
+    let mut list = v_virtual_list(entity, list_id.clone(), item_sizes, render_items)
+        .track_scroll(scroll_handle);
 
     if gap > px(0.) {
         list = list.gap(gap);
     }
 
-    let mut container = v_flex().relative().w_full().h(list_height).child(list);
+    let mut region = div()
+        .id((list_id, "list-region"))
+        .role(Role::List)
+        .aria_orientation(Orientation::Vertical)
+        // AT-SPI derives each item's setsize from the nearest ancestor that
+        // declares one; item-level values are ignored.
+        .aria_size_of_set(total)
+        .size_full()
+        .child(list);
 
     if show_scrollbar {
-        container = container.scrollbar(scroll_handle, ScrollbarAxis::Vertical);
+        region = region.scrollbar(scroll_handle, ScrollbarAxis::Vertical);
     }
 
-    container
+    v_flex().relative().w_full().h(list_height).child(region)
+}
+
+/// A virtualized-list row: `Role::ListItem` announcing "item N of M". The
+/// label is required because plain text children produce no accessibility
+/// nodes; render the visible content inside and pass the same text as `label`.
+pub fn virtual_list_item(
+    id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
+    index: usize,
+    total: usize,
+) -> Stateful<Div> {
+    div()
+        .id(id)
+        .role(Role::ListItem)
+        .aria_label(label)
+        // accesskit stores position_in_set 0-based; AT bridges report the
+        // stored value +1.
+        .aria_position_in_set(index)
+        .aria_size_of_set(total)
 }
 
 #[cfg(test)]

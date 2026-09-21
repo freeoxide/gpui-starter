@@ -18,6 +18,8 @@ use koruma_collection::{
     format::{EmailValidation, PhoneNumberValidation, UrlValidation},
 };
 
+use crate::accessibility::A11yExt as _;
+
 #[derive(Clone, Debug, Default, EsFluentVariants, GpuiForm, Koruma, KorumaAllFluent)]
 #[fluent_variants(keys = ["description", "label"])]
 #[gpui_form(koruma(fluent))]
@@ -45,7 +47,7 @@ pub struct RegistrationForm {
 
 /// The five input fields of [`RegistrationForm`]; the enum keeps label, input,
 /// reset, and error handling in sync per field.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FormField {
     Name,
     Email,
@@ -249,6 +251,9 @@ impl FormPage {
         let required = !matches!(field_kind, FormField::Website);
         let error = self.error_for_field(field_kind);
         let description_text = crate::i18n::localize_message(&description);
+        let label_text = crate::i18n::localize_message(&label);
+        let error_id: ElementId =
+            ElementId::Name(SharedString::from(format!("form-error-{:?}", field_kind)));
         let input = self.field_input(field_kind);
 
         field()
@@ -261,10 +266,18 @@ impl FormPage {
                     .gap_1()
                     .child(div().child(description_text.clone()))
                     .when_some(error.clone(), |el, err| {
-                        el.child(div().text_color(danger).text_xs().child(err))
+                        el.child(
+                            div()
+                                .id(error_id.clone())
+                                .a11y(Role::Alert, err.clone())
+                                .a11y_live(accesskit::Live::Polite)
+                                .text_color(danger)
+                                .text_xs()
+                                .child(err),
+                        )
                     })
             })
-            .child(Input::new(input))
+            .child(Input::new(input).aria_label(label_text))
     }
 }
 
@@ -276,6 +289,8 @@ impl Render for FormPage {
         }
 
         let danger = cx.theme().danger;
+        let title = crate::i18n::localize("form_page_title", None);
+        let subtitle = crate::i18n::localize("form_page_subtitle", None);
 
         v_flex()
             .min_h_full()
@@ -283,26 +298,35 @@ impl Render for FormPage {
             .gap_4()
             .child(
                 div()
+                    .id("form-page-title")
+                    .a11y(Role::Heading, title.clone())
+                    .aria_level(1)
                     .text_xl()
                     .font_weight(FontWeight::BOLD)
-                    .child(crate::i18n::localize("form_page_title", None)),
+                    .child(title),
             )
             .child(
                 div()
+                    .id("form-page-subtitle")
+                    .a11y(Role::Paragraph, subtitle.clone())
                     .text_sm()
                     .text_color(cx.theme().muted_foreground)
-                    .child(crate::i18n::localize("form_page_subtitle", None)),
+                    .child(subtitle),
             )
             .when(self.submitted, |this| {
+                let success = crate::i18n::localize("form_page_success", None);
                 this.child(
                     div()
+                        .id("form-success")
+                        .a11y(Role::Status, success.clone())
+                        .a11y_live(accesskit::Live::Polite)
                         .p_3()
                         .rounded(cx.theme().radius)
                         .bg(cx.theme().success.opacity(0.1))
                         .border_1()
                         .border_color(cx.theme().success)
                         .text_color(cx.theme().success)
-                        .child(crate::i18n::localize("form_page_success", None)),
+                        .child(success),
                 )
             })
             .child(

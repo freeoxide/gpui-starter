@@ -20,6 +20,9 @@ gpui-form-collection = { git = "https://github.com/stayhydated/gpui-form", rev =
 # gpui-kit is listed directly because gpui-form's derives emit ::gpui_kit::
 # paths into consuming crates; gpui-kit-assets replaces gpui-component-assets
 # (the old longbridge/gpui-component git URL is retired with the zed patches).
+# Never add a direct `accesskit` dep: gpui re-exports its own accesskit
+# (`gpui::accesskit`, 0.24.x) and a separately-versioned accesskit is
+# type-incompatible with the bridge.
 gpui = { package = "gpui-pre", version = "0.3.5" }
 gpui_platform = { package = "gpui-pre-platform", version = "0.3.5", features = [
     "font-kit",
@@ -198,7 +201,6 @@ opentelemetry_sdk = { version = "0.24.1", optional = true, features = [
 rfd = "0.15.4"
 notify = "8.2.0"
 undo = "0.52.0"
-accesskit = "0.21.1"
 sys-locale = "0.3"
 flume = "0.11"
 fuzzy-matcher = "0.3"

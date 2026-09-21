@@ -13,6 +13,8 @@ use gpui_component::{
 
 use gpui_query::core::{MutationStatus, QueryStatus};
 
+use crate::accessibility::A11yExt as _;
+
 use super::super::ui_helpers::{chip, mapped_preview, section_card, source_preview, status_badge};
 use super::super::{PlaygroundPage, QueryPlaygroundPage};
 
@@ -54,7 +56,7 @@ impl QueryPlaygroundPage {
             h_flex().gap_2().items_center().px_4().py_2()
                 .child(
                     div().min_w(px(200.))
-                        .child(Input::new(&self.mutation_input_state))
+                        .child(Input::new(&self.mutation_input_state).aria_label("Mutation variables"))
                 )
                 .child(
                     Button::new("pg-mutate")
@@ -81,8 +83,11 @@ impl QueryPlaygroundPage {
             v_flex().gap_1().px_4().pb_3()
                 .child(
                     h_flex().gap_3().items_center()
-                        .child(
+                        .child({
+                            let label = format!("Status: {}", m_status.label());
                             div()
+                                .id("pg-mutation-status")
+                                .a11y(Role::Paragraph, label)
                                 .px_3()
                                 .py_1()
                                 .rounded(cx.theme().radius_lg)
@@ -90,17 +95,30 @@ impl QueryPlaygroundPage {
                                 .border_color(status_color)
                                 .text_sm()
                                 .text_color(status_color)
-                                .child(m_status.label().to_string()),
-                        )
+                                .child(m_status.label().to_string())
+                        })
                         .when_some(m_data, |el, d| {
-                            el.child(chip(&format!("data: {}", d), cx.theme().background, cx))
+                            el.child(chip(
+                                "mutation-data",
+                                &format!("data: {}", d),
+                                cx.theme().background,
+                                cx,
+                            ))
                         })
                         .when_some(m_vars, |el, v| {
-                            el.child(chip(&format!("vars: {}", v), cx.theme().background, cx))
+                            el.child(chip(
+                                "mutation-vars",
+                                &format!("vars: {}", v),
+                                cx.theme().background,
+                                cx,
+                            ))
                         })
                         .when_some(m_error, |el, e| {
                             el.child(
                                 div()
+                                    .id("pg-mutation-error")
+                                    .a11y(Role::Paragraph, format!("error: {e}"))
+                                    .a11y_live(accesskit::Live::Polite)
                                     .px_3()
                                     .py_1()
                                     .rounded(cx.theme().radius_lg)
@@ -197,13 +215,19 @@ impl QueryPlaygroundPage {
                         .label("Reset")
                         .on_click(cx.listener(|this, _, _, cx| this.reset_infinite(cx))),
                 )
-                .child(status_badge(inf_status, cx))
+                .child(status_badge("infinite", inf_status, cx))
                 .child(chip(
+                    "infinite-pages",
                     &format!("pages: {}/3 (max)", page_count),
                     cx.theme().background,
                     cx,
                 ))
-                .child(chip(&range_label, cx.theme().background, cx)),
+                .child(chip(
+                    "infinite-range",
+                    &range_label,
+                    cx.theme().background,
+                    cx,
+                )),
         )
         .when(!pages.is_empty(), |el| {
             el.child(
@@ -264,7 +288,7 @@ impl QueryPlaygroundPage {
                         .disabled(loading)
                         .on_click(cx.listener(|this, _, _, cx| this.fetch_select(cx))),
                 )
-                .child(status_badge(source_status, cx)),
+                .child(status_badge("select", source_status, cx)),
         )
         .child(
             h_flex().gap_4().px_4().pb_3()
@@ -351,9 +375,12 @@ impl QueryPlaygroundPage {
                 .items_center()
                 .px_4()
                 .pb_3()
-                .child(status_badge(status, cx))
-                .when_some(data, |el, d| el.child(chip(&d, cx.theme().background, cx)))
+                .child(status_badge("imperative", status, cx))
+                .when_some(data, |el, d| {
+                    el.child(chip("imperative-data", &d, cx.theme().background, cx))
+                })
                 .child(chip(
+                    "imperative-signal",
                     &format!("signal cancelled: {}", signal_cancelled),
                     cx.theme().background,
                     cx,

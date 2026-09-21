@@ -5,6 +5,7 @@ use gpui::{prelude::*, *};
 use gpui_component::{ActiveTheme as _, text::markdown, v_flex};
 
 use super::{ChatStreamSource, ChatTurn, Role};
+use crate::accessibility::A11yExt as _;
 
 /// The full-width U+258C (LEFT HALF BLOCK) cursor appended to a streaming
 /// assistant message.
@@ -127,6 +128,9 @@ impl AiResponseView {
                     .overflow_y_scroll()
                     .child(
                         div()
+                            .id("ai-chat-error-card")
+                            .a11y(gpui::Role::Alert, format!("Error. {error}"))
+                            .a11y_live(accesskit::Live::Polite)
                             .flex()
                             .flex_col()
                             .gap_2()
@@ -153,7 +157,13 @@ impl AiResponseView {
             return container;
         }
 
-        let mut messages = v_flex().w_full().p_4().gap_3();
+        let mut messages = v_flex()
+            .id("ai-chat-transcript")
+            .a11y(gpui::Role::List, "Chat transcript")
+            .aria_orientation(Orientation::Vertical)
+            .w_full()
+            .p_4()
+            .gap_3();
 
         let last_index = self.turns.len().saturating_sub(1);
         for (i, turn) in self.turns.iter().enumerate() {
@@ -201,6 +211,7 @@ fn render_user_bubble(
 ) -> impl IntoElement {
     div()
         .id(ElementId::Name(format!("ai-chat-user-{}", index).into()))
+        .a11y(gpui::Role::ListItem, format!("You: {content}"))
         .w_full()
         .flex()
         .justify_end()
@@ -233,20 +244,24 @@ fn render_assistant_message(
 
     if content.is_empty() && streaming {
         // Thinking placeholder before the first token arrives.
-        wrapper.child(
-            div()
-                .text_sm()
-                .italic()
-                .text_color(muted)
-                .child(SharedString::from("Thinking…")),
-        )
+        wrapper
+            .a11y(gpui::Role::ListItem, "Assistant: thinking")
+            .child(
+                div()
+                    .text_sm()
+                    .italic()
+                    .text_color(muted)
+                    .child(SharedString::from("Thinking…")),
+            )
     } else {
         let display = if streaming {
             format!("{}{}", content, STREAMING_CURSOR)
         } else {
             content.to_string()
         };
-        wrapper.child(markdown(SharedString::from(display)))
+        wrapper
+            .a11y(gpui::Role::ListItem, format!("Assistant: {content}"))
+            .child(markdown(SharedString::from(display)))
     }
 }
 

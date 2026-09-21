@@ -66,6 +66,9 @@ pub fn create_new_window(title: &str, cx: &mut App) {
             window.activate_window();
             window.set_window_title(&title);
         })?;
+        // App level (not inside the window update) so the new window reports
+        // as active in the accessibility snapshot.
+        cx.update(crate::accessibility::refresh);
 
         Ok::<_, anyhow::Error>(())
     })

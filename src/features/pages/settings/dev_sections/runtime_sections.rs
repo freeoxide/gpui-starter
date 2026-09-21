@@ -1,5 +1,5 @@
 use gpui::{prelude::*, *};
-use gpui_component::{WindowExt as _, button::Button, label::Label};
+use gpui_component::{WindowExt as _, button::Button};
 
 use crate::connectivity;
 use crate::desktop_actions;
@@ -11,7 +11,10 @@ pub fn render_desktop_actions_section(
     cx: &mut Context<super::super::SettingsPage>,
 ) -> impl IntoElement {
     super::settings_card_base(cx)
-        .child(Label::new("Desktop Actions"))
+        .child(super::section_heading(
+            "settings-desktop-actions-title",
+            "Desktop Actions",
+        ))
         .child(
             div()
                 .flex()
@@ -119,7 +122,10 @@ pub fn render_runtime_boundaries_section(
     cx: &mut Context<super::super::SettingsPage>,
 ) -> impl IntoElement {
     super::settings_card_base(cx)
-        .child(Label::new("Runtime Boundaries"))
+        .child(super::section_heading(
+            "settings-runtime-boundaries-title",
+            "Runtime Boundaries",
+        ))
         .child(
             div()
                 .flex()

@@ -6,6 +6,8 @@ use gpui_component::{
 use gpui_query::client::QueryClient;
 use gpui_query::core::QueryKeyFilter;
 
+use crate::accessibility::A11yExt as _;
+
 use super::helpers::QuerySort;
 use super::mutations::render_mutations_table;
 use super::registry::render_query_registry;
@@ -77,14 +79,25 @@ fn render_empty_state(cx: &mut Context<QueryDevToolsV2Page>) -> Div {
         )
         .child(
             div()
+                .id("v2-empty-title")
+                .a11y(Role::Heading, "No V2 Query Resources")
+                .aria_level(1)
                 .text_xl()
                 .font_weight(FontWeight::BOLD)
                 .child("No V2 Query Resources"),
         )
         .child(
-            div().text_sm().text_color(theme.muted_foreground).child(
-                "Navigate to the Query Playground page to create queries, then return here.",
-            ),
+            div()
+                .id("v2-empty-hint")
+                .a11y(
+                    Role::Paragraph,
+                    "Navigate to the Query Playground page to create queries, then return here.",
+                )
+                .text_sm()
+                .text_color(theme.muted_foreground)
+                .child(
+                    "Navigate to the Query Playground page to create queries, then return here.",
+                ),
         )
 }
 
@@ -132,12 +145,20 @@ fn render_dashboard(
         .p_4()
         .child(
             div()
+                .id("v2-devtools-title")
+                .a11y(Role::Heading, "Query V2 DevTools")
+                .aria_level(1)
                 .text_xl()
                 .font_weight(FontWeight::BOLD)
                 .child("Query V2 DevTools"),
         )
         .child(
             div()
+                .id("v2-devtools-subtitle")
+                .a11y(
+                    Role::Paragraph,
+                    "Live diagnostics dashboard for gpui-query-v2's QueryClient.",
+                )
                 .text_sm()
                 .text_color(muted_foreground)
                 .child("Live diagnostics dashboard for gpui-query-v2's QueryClient."),
@@ -209,8 +230,12 @@ fn stat_card(
     border: Hsla,
     muted: Hsla,
     muted_foreground: Hsla,
-) -> Div {
+) -> Stateful<Div> {
     div()
+        .id(ElementId::Name(SharedString::from(format!(
+            "v2-stat-{label}"
+        ))))
+        .a11y(Role::Paragraph, format!("{label}: {value}"))
         .flex_1()
         .rounded(radius_lg)
         .border_1()
@@ -307,6 +332,9 @@ fn render_action_bar(cx: &mut Context<QueryDevToolsV2Page>) -> Div {
         .p_4()
         .child(
             div()
+                .id("v2-actions-title")
+                .a11y(Role::Heading, "Actions")
+                .aria_level(2)
                 .text_sm()
                 .font_weight(FontWeight::SEMIBOLD)
                 .mb_2()

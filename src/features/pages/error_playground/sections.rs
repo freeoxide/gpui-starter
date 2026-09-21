@@ -32,7 +32,7 @@ impl ErrorPlaygroundPage {
         button_label: &str,
         error_message: &str,
         cx: &mut Context<Self>,
-    ) -> Div {
+    ) -> Stateful<Div> {
         let error_msg = error_message.to_string();
         test_card(title, description, true, cx).child(
             action_row(cx).child(
@@ -49,7 +49,7 @@ impl ErrorPlaygroundPage {
         )
     }
 
-    pub(super) fn render_background_panic(&mut self, cx: &mut Context<Self>) -> Div {
+    pub(super) fn render_background_panic(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
         let result_text = self.background_panic_result.clone();
         let card = test_card(
             "Background Task Panic",
@@ -86,7 +86,7 @@ impl ErrorPlaygroundPage {
         )
     }
 
-    pub(super) fn render_http_error(&mut self, cx: &mut Context<Self>) -> Div {
+    pub(super) fn render_http_error(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
         let result_text = self.http_result.clone();
         Self::render_error_block(
             ErrorBlockCtx {
@@ -106,7 +106,7 @@ impl ErrorPlaygroundPage {
         )
     }
 
-    pub(super) fn render_fs_error(&mut self, cx: &mut Context<Self>) -> Div {
+    pub(super) fn render_fs_error(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
         let result_text = self.fs_result.clone();
         let card = test_card(
             "Filesystem Error",
@@ -142,7 +142,7 @@ impl ErrorPlaygroundPage {
         )
     }
 
-    pub(super) fn render_async_timeout(&mut self, cx: &mut Context<Self>) -> Div {
+    pub(super) fn render_async_timeout(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
         let result_text = self.async_result.clone();
         Self::render_error_block(
             ErrorBlockCtx {
@@ -170,7 +170,7 @@ impl ErrorPlaygroundPage {
         set_result: impl Fn(&mut Self, Option<String>) + Copy + Send + 'static,
         result_text: Option<String>,
         cx: &mut Context<Self>,
-    ) -> Div {
+    ) -> Stateful<Div> {
         let card = test_card(ctx.title, ctx.description, false, cx);
 
         card.child(
@@ -265,7 +265,7 @@ impl ErrorPlaygroundPage {
         )
     }
 
-    pub(super) fn render_clear_results(&self, cx: &mut Context<Self>) -> Div {
+    pub(super) fn render_clear_results(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let card = test_card(
             "Clear Results",
             "Resets all inline error/success messages.",

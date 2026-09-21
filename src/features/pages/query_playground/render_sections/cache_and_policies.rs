@@ -9,6 +9,8 @@ use gpui_component::{
 
 use gpui_query::core::{QueryResource, QueryStatus, RetryPolicy};
 
+use crate::accessibility::A11yExt as _;
+
 use super::super::QueryPlaygroundPage;
 use super::super::ui_helpers::{chip, mini_card, section_card, status_badge};
 
@@ -67,8 +69,8 @@ impl QueryPlaygroundPage {
                 .py_3()
                 // NoCache card
                 .child(
-                    mini_card("NoCache", cx)
-                        .child(status_badge(nocache_status, cx))
+                    mini_card("nocache", "NoCache", cx)
+                        .child(status_badge("nocache", nocache_status, cx))
                         .child(
                             Button::new("pg-nocache-fetch")
                                 .primary()
@@ -79,8 +81,8 @@ impl QueryPlaygroundPage {
                 )
                 // TTL card
                 .child(
-                    mini_card("TTL 5s", cx)
-                        .child(status_badge(ttl_status, cx))
+                    mini_card("ttl", "TTL 5s", cx)
+                        .child(status_badge("ttl", ttl_status, cx))
                         .child(
                             Button::new("pg-ttl-fetch")
                                 .primary()
@@ -91,8 +93,8 @@ impl QueryPlaygroundPage {
                 )
                 // SWR card
                 .child(
-                    mini_card("SWR 3s/7s", cx)
-                        .child(status_badge(swr_status, cx))
+                    mini_card("swr", "SWR 3s/7s", cx)
+                        .child(status_badge("swr", swr_status, cx))
                         .child(
                             Button::new("pg-swr-fetch")
                                 .primary()
@@ -122,10 +124,10 @@ impl QueryPlaygroundPage {
             h_flex().gap_4().px_4().py_3()
                 // LatestWins card
                 .child(
-                    mini_card("LatestWins", cx)
-                        .child(status_badge(latest_status, cx))
+                    mini_card("latest-wins", "LatestWins", cx)
+                        .child(status_badge("latest-wins", latest_status, cx))
                         .when_some(latest_data, |el, d| {
-                            el.child(chip(&d, cx.theme().background, cx))
+                            el.child(chip("latest-wins-data", &d, cx.theme().background, cx))
                         })
                         .child(
                             Button::new("pg-latest-spam")
@@ -137,10 +139,10 @@ impl QueryPlaygroundPage {
                 )
                 // IgnoreWhileLoading card
                 .child(
-                    mini_card("IgnoreWhileLoading", cx)
-                        .child(status_badge(ignore_status, cx))
+                    mini_card("ignore", "IgnoreWhileLoading", cx)
+                        .child(status_badge("ignore", ignore_status, cx))
                         .when_some(ignore_data, |el, d| {
-                            el.child(chip(&d, cx.theme().background, cx))
+                            el.child(chip("ignore-data", &d, cx.theme().background, cx))
                         })
                         .child(
                             Button::new("pg-ignore-spam")
@@ -191,13 +193,15 @@ impl QueryPlaygroundPage {
                 .items_center()
                 .px_4()
                 .pb_3()
-                .child(status_badge(status, cx))
+                .child(status_badge("retry", status, cx))
                 .child(chip(
+                    "retry-max",
                     &format!("max retries: {}", policy.max_retries),
                     cx.theme().background,
                     cx,
                 ))
                 .child(chip(
+                    "retry-backoff",
                     &format!("backoff: {}ms", policy.retry_delay_ms),
                     cx.theme().background,
                     cx,
@@ -205,6 +209,12 @@ impl QueryPlaygroundPage {
                 .when_some(error, |el, _| {
                     el.child(
                         div()
+                            .id("pg-retry-error")
+                            .a11y(
+                                Role::Paragraph,
+                                format!("Gave up after {} retries.", policy.max_retries),
+                            )
+                            .a11y_live(accesskit::Live::Polite)
                             .text_xs()
                             .text_color(cx.theme().danger)
                             .child(format!("Gave up after {} retries.", policy.max_retries)),

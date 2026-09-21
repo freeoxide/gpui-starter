@@ -1,6 +1,8 @@
 //! Command palette ("launcher"): a floating search window over the command
 //! registry, backed by [`crate::features::palette`].
 
+use std::rc::Rc;
+
 use gpui::{prelude::*, *};
 use gpui_component::{
     ActiveTheme as _, FocusTrapElement as _, Icon, IconName, Root, Sizable as _, h_flex,
@@ -9,6 +11,7 @@ use gpui_component::{
     v_flex,
 };
 
+use crate::accessibility::A11yExt as _;
 use crate::commands::{self, CommandId};
 use crate::features::palette::{BaseDelegate, FuzzyMatchConfig, ItemFilter, PaletteEntry};
 
@@ -171,7 +174,21 @@ impl Render for Launcher {
             })
             .collect();
 
-        v_flex()
+        let status_text = if has_results {
+            format!("{filtered_count} results")
+        } else {
+            "No results".to_string()
+        };
+        // The live-region label must change only when the selection or the
+        // filtered set changes, or every keystroke would be announced.
+        let status_label = match rows.iter().find(|(ix, _, _, _)| *ix == selected) {
+            Some((_, _, title, _)) => format!("{title}, {} of {}", selected + 1, filtered_count),
+            None => status_text.clone(),
+        };
+
+        let dialog = v_flex()
+            .id("launcher-surface")
+            .a11y(Role::Dialog, "Command palette")
             .size_full()
             .bg(theme.background.opacity(0.0))
             .border_1()
@@ -179,7 +196,6 @@ impl Render for Launcher {
             .rounded(theme.radius_lg)
             .key_context(CONTEXT)
             .track_focus(&self.focus_handle)
-            .focus_trap("launcher", &self.focus_handle)
             .on_action(cx.listener(|this, _: &SelectNext, _, cx| {
                 this.state.select_down();
                 cx.notify();
@@ -209,11 +225,18 @@ impl Render for Launcher {
                             .appearance(false)
                             .bordered(false)
                             .focus_bordered(false)
+                            .aria_label("Search commands")
                             .flex_1(),
                     ),
             )
             .child(
                 v_flex()
+                    .id("launcher-results")
+                    .a11y(Role::ListBox, "Results")
+                    .aria_orientation(Orientation::Vertical)
+                    // AT-SPI derives each item's setsize from the nearest
+                    // ancestor that declares one; item-level values are ignored.
+                    .aria_size_of_set(rows.len())
                     .flex_1()
                     .overflow_y_scrollbar()
                     .py_1()
@@ -222,9 +245,22 @@ impl Render for Launcher {
                         let icon = row.1.clone();
                         let title = row.2.clone();
                         let subtitle = row.3.clone();
+                        let on_activate: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)> =
+                            Rc::new(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                this.set_selected_display(display_ix);
+                                this.act(cx);
+                            }));
+                        let on_a11y_activate = on_activate.clone();
 
                         h_flex()
                             .id(display_ix)
+                            .a11y(Role::ListBoxOption, title.clone())
+                            .aria_description(subtitle.clone())
+                            .aria_selected(is_selected)
+                            // accesskit stores position_in_set 0-based; AT
+                            // bridges report the stored value +1.
+                            .aria_position_in_set(display_ix)
+                            .aria_size_of_set(rows.len())
                             .px_3()
                             .py_2()
                             .mx_1()
@@ -240,10 +276,12 @@ impl Render for Launcher {
                                     cx.notify();
                                 }
                             }))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.set_selected_display(display_ix);
-                                this.act(cx);
-                            }))
+                            .on_click(move |event, window, cx| {
+                                on_activate(event, window, cx);
+                            })
+                            .on_a11y_action(AccessibleAction::Click, move |_, window, cx| {
+                                on_a11y_activate(&ClickEvent::default(), window, cx);
+                            })
                             .child(
                                 div()
                                     .flex_shrink_0()
@@ -278,6 +316,8 @@ impl Render for Launcher {
                     .when(!has_results, |el| {
                         el.child(
                             div()
+                                .id("launcher-no-results")
+                                .a11y(Role::Paragraph, "No results")
                                 .px_4()
                                 .py_8()
                                 .w_full()
@@ -300,10 +340,33 @@ impl Render for Launcher {
                     .border_color(theme.border)
                     .text_xs()
                     .text_color(theme.muted_foreground)
-                    .child("↑↓  navigate")
-                    .child("↵  open")
-                    .child("esc  close"),
-            )
+                    .child(
+                        div()
+                            .id("launcher-status")
+                            .a11y(Role::Status, status_label)
+                            .a11y_live(accesskit::Live::Polite)
+                            .child(status_text),
+                    )
+                    .child(
+                        h_flex()
+                            .id("launcher-hints")
+                            .a11y(
+                                Role::Paragraph,
+                                "Keyboard: up and down navigate, Enter opens, Escape closes",
+                            )
+                            .gap_4()
+                            .child("↑↓  navigate")
+                            .child("↵  open")
+                            .child("esc  close"),
+                    ),
+            );
+
+        // The trap container has an id but no a11y role, so gpui drops the
+        // wrapped element's node — trap a roleless wrapper, not the Dialog.
+        div()
+            .size_full()
+            .focus_trap("launcher", &self.focus_handle)
+            .child(dialog)
     }
 }
 
@@ -455,6 +518,9 @@ pub fn open_launcher(cx: &mut App) {
         window
             .update(cx, |_, window, _| {
                 window.activate_window();
+                // WindowOptions has no title field; this is what names both
+                // the WM window and the a11y root node.
+                window.set_window_title("Command Palette");
             })
             .ok();
 

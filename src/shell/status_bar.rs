@@ -1,6 +1,9 @@
-use gpui::{App, InteractiveElement as _, ParentElement as _, Styled as _, div};
+use gpui::{
+    App, Div, InteractiveElement as _, ParentElement as _, Role, Stateful, Styled as _, div,
+};
 use gpui_component::ActiveTheme as _;
 
+use crate::accessibility::A11yExt;
 use crate::{connectivity, notifications, routes::AppRoute, services::updater, session, tasks};
 
 pub fn render(route: &AppRoute, cx: &App) -> impl gpui::IntoElement {
@@ -64,6 +67,7 @@ pub fn render(route: &AppRoute, cx: &App) -> impl gpui::IntoElement {
 
     div()
         .id("status-bar")
+        .a11y(Role::Status, "Status")
         .w_full()
         .px_3()
         .py_2()
@@ -72,21 +76,30 @@ pub fn render(route: &AppRoute, cx: &App) -> impl gpui::IntoElement {
         .bg(cx.theme().secondary.opacity(0.35))
         .text_xs()
         .child({
-            let mut children: Vec<gpui::Div> = vec![
-                div().child(format!("Route: {}", route.title())),
-                div().child(format!("Tasks: {tasks_active}")),
-                div().child(format!("Unread: {unread}")),
-                div().child(format!(
-                    "Connectivity: {:?}",
-                    connectivity_state.unwrap_or(&connectivity::ConnectivityState::Unknown)
-                )),
-                div().child(format!("Session: {session_label}")),
-                div().child(format!("Notifications: {active_backend}")),
-                div().child(format!("Degraded: {degraded}")),
-                div().child(format!("LastError: {latest_error}")),
+            let mut children: Vec<Stateful<Div>> = vec![
+                status_row("status-route", format!("Route: {}", route.title())),
+                status_row("status-tasks", format!("Tasks: {tasks_active}")),
+                status_row("status-unread", format!("Unread: {unread}")),
+                status_row(
+                    "status-connectivity",
+                    format!(
+                        "Connectivity: {:?}",
+                        connectivity_state.unwrap_or(&connectivity::ConnectivityState::Unknown)
+                    ),
+                ),
+                status_row("status-session", format!("Session: {session_label}")),
+                status_row(
+                    "status-notifications",
+                    format!("Notifications: {active_backend}"),
+                ),
+                status_row("status-degraded", format!("Degraded: {degraded}")),
+                // New errors should be spoken; the rest of the bar is
+                // browse-only, so no other row is live.
+                status_row("status-last-error", format!("LastError: {latest_error}"))
+                    .a11y_live(gpui::accesskit::Live::Polite),
             ];
             if let Some(label) = updater_label {
-                children.push(div().child(label));
+                children.push(status_row("status-updater", label));
             }
             div()
                 .flex()
@@ -95,6 +108,12 @@ pub fn render(route: &AppRoute, cx: &App) -> impl gpui::IntoElement {
                 .children(frame_time_el)
                 .children(children)
         })
+}
+
+/// One read-out row. Paragraph, not Label: Label-role nodes draw their AT
+/// name from the value property, so these rows would read unnamed.
+fn status_row(id: &'static str, text: String) -> Stateful<Div> {
+    div().id(id).a11y(Role::Paragraph, text.clone()).child(text)
 }
 
 fn truncate_error(s: &str, max_len: usize) -> &str {

@@ -6,22 +6,31 @@ use gpui_component::{
     switch::Switch,
 };
 
+use crate::accessibility::A11yExt as _;
 use crate::notifications::{
     self, NotificationPermissionState, NotificationRequest, NotificationRuntimeSnapshot,
 };
 
-/// Status label/value row used by the notifications card.
+/// Status label/value row used by the notifications card. The visible texts
+/// are plain strings, so the combined text is the accessible label.
 pub(super) fn status_row(
     label: impl Into<SharedString>,
     value: impl Into<SharedString>,
 ) -> impl IntoElement {
+    let label = label.into();
+    let value = value.into();
+    let text = format!("{label}: {value}");
     div()
+        .id(ElementId::Name(SharedString::from(format!(
+            "settings-status-{label}"
+        ))))
+        .a11y(Role::Paragraph, text)
         .flex()
         .items_center()
         .justify_between()
         .gap_4()
-        .child(Label::new(label.into()))
-        .child(div().text_sm().child(value.into()))
+        .child(Label::new(label))
+        .child(div().text_sm().child(value))
 }
 
 /// Renders the "Native Local Notifications" settings card.
@@ -46,6 +55,7 @@ pub(super) fn render_notifications_section(
             ));
 
     let notifications_snapshot = notifications_snapshot.clone();
+    let enabled_label = crate::i18n::localize("settings_native_notifications", None);
 
     super::dev_sections::settings_card_base(cx)
         .child(
@@ -53,12 +63,10 @@ pub(super) fn render_notifications_section(
                 .flex()
                 .items_center()
                 .justify_between()
-                .child(Label::new(crate::i18n::localize(
-                    "settings_native_notifications",
-                    None,
-                )))
+                .child(Label::new(enabled_label.clone()))
                 .child(
                     Switch::new("native-notifications-enabled")
+                        .accessibility_label(enabled_label)
                         .checked(notifications_snapshot.enabled_by_user)
                         .on_click(|checked, _, cx| {
                             notifications::set_native_notifications_enabled(*checked, cx);
@@ -212,6 +220,11 @@ pub(super) fn render_notifications_section(
         )
         .child(
             div()
+                .id("settings-in-app-note")
+                .a11y(
+                    Role::Paragraph,
+                    crate::i18n::localize("settings_in_app_notifications_note", None),
+                )
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
                 .child(crate::i18n::localize(
@@ -221,6 +234,11 @@ pub(super) fn render_notifications_section(
         )
         .child(
             div()
+                .id("settings-push-note")
+                .a11y(
+                    Role::Paragraph,
+                    crate::i18n::localize("settings_push_notifications_note", None),
+                )
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
                 .child(crate::i18n::localize(

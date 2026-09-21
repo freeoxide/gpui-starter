@@ -22,6 +22,8 @@ use gpui_query::core::{
     InfiniteQueryResource, MappedQueryResource, MutationResource, QueryError, QueryResource,
 };
 
+use crate::accessibility::A11yExt as _;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PlaygroundUser {
     pub id: u32,
@@ -238,12 +240,23 @@ impl Render for QueryPlaygroundPage {
                             .gap_3()
                             .child(
                                 div()
+                                    .id("query-playground-title")
+                                    .a11y(Role::Heading, "Query V2 Playground")
+                                    .aria_level(1)
                                     .text_2xl()
                                     .font_weight(FontWeight::BOLD)
                                     .child("Query V2 Playground"),
                             )
                             .child(
                                 div()
+                                    .id("query-playground-intro")
+                                    .a11y(
+                                        Role::Paragraph,
+                                        "Interactive demo of every gpui-query-v2 feature: queries, \
+                                         cache policies, request policies, retry, mutations, \
+                                         infinite queries, select transforms, and imperative fetch \
+                                         with signal cancellation.",
+                                    )
                                     .max_w(px(800.))
                                     .text_sm()
                                     .text_color(muted_foreground)

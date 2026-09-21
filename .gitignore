@@ -47,3 +47,6 @@ wasm/__pycache__/
 
 # z-proflow orchestration state
 .z-proflow/
+
+# z-gpui-workflow orchestration state
+.z-gpui-workflow/

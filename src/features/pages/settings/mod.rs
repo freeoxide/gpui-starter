@@ -6,6 +6,7 @@ use gpui_component::{
     ActiveTheme as _, Selectable as _, Theme, button::Button, label::Label, switch::Switch, v_flex,
 };
 
+use crate::accessibility::A11yExt as _;
 use crate::app::{self, LOCALE_EN, LOCALE_ZH_CN, LocaleState};
 use crate::app_state;
 use crate::notifications::{self, NativeNotificationState, NotificationRuntimeSnapshot};
@@ -72,6 +73,9 @@ impl Render for SettingsPage {
         let is_dark = self.dark_mode;
         let notifications_snapshot = self.notifications.clone();
         let app_config = app_state::config(cx);
+        let title = crate::i18n::localize("settings_title", None);
+        let dark_mode_label = crate::i18n::localize("settings_dark_mode", None);
+        let language_label = crate::i18n::localize("settings_language", None);
 
         v_flex()
             .min_h_full()
@@ -79,38 +83,43 @@ impl Render for SettingsPage {
             .gap_6()
             .child(
                 div()
+                    .id("settings-title")
+                    .a11y(Role::Heading, title.clone())
+                    .aria_level(1)
                     .text_xl()
                     .font_weight(FontWeight::BOLD)
-                    .child(crate::i18n::localize("settings_title", None)),
+                    .child(title),
             )
             .child(
                 div()
                     .flex()
                     .items_center()
                     .justify_between()
-                    .child(Label::new(crate::i18n::localize(
-                        "settings_dark_mode",
-                        None,
-                    )))
-                    .child(Switch::new("dark-mode").checked(is_dark).on_click(
-                        move |checked, _, cx| {
-                            let mode = if *checked {
-                                gpui_component::ThemeMode::Dark
-                            } else {
-                                gpui_component::ThemeMode::Light
-                            };
-                            app::set_theme_mode(mode, cx);
-                        },
-                    )),
+                    .child(Label::new(dark_mode_label.clone()))
+                    .child(
+                        Switch::new("dark-mode")
+                            .accessibility_label(dark_mode_label)
+                            .checked(is_dark)
+                            .on_click(move |checked, _, cx| {
+                                let mode = if *checked {
+                                    gpui_component::ThemeMode::Dark
+                                } else {
+                                    gpui_component::ThemeMode::Light
+                                };
+                                app::set_theme_mode(mode, cx);
+                            }),
+                    ),
             )
             .child(
                 div()
                     .flex()
                     .items_center()
                     .justify_between()
-                    .child(Label::new(crate::i18n::localize("settings_language", None)))
+                    .child(Label::new(language_label.clone()))
                     .child(
                         div()
+                            .id("settings-language-group")
+                            .a11y(Role::Group, language_label)
                             .flex()
                             .items_center()
                             .gap_2()
@@ -118,6 +127,7 @@ impl Render for SettingsPage {
                                 Button::new("settings-language-en")
                                     .outline()
                                     .selected(locale.as_ref() == LOCALE_EN)
+                                    .toggled(locale.as_ref() == LOCALE_EN)
                                     .label(crate::i18n::localize("settings_language_english", None))
                                     .on_click(|_, _, cx| {
                                         app::set_locale(LOCALE_EN, cx);
@@ -127,6 +137,7 @@ impl Render for SettingsPage {
                                 Button::new("settings-language-zh-cn")
                                     .outline()
                                     .selected(locale.as_ref() == LOCALE_ZH_CN)
+                                    .toggled(locale.as_ref() == LOCALE_ZH_CN)
                                     .label(crate::i18n::localize(
                                         "settings_language_simplified_chinese",
                                         None,

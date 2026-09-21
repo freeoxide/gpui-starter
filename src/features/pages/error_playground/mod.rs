@@ -7,6 +7,8 @@ mod sections;
 use gpui::{prelude::*, *};
 use gpui_component::{ActiveTheme as _, v_flex};
 
+use crate::accessibility::A11yExt as _;
+
 pub struct ErrorPlaygroundPage {
     // Inline results for safe tests.
     http_result: Option<String>,
@@ -39,6 +41,11 @@ impl Render for ErrorPlaygroundPage {
         let border = theme.border;
         let muted = theme.muted;
         let muted_foreground = theme.muted_foreground;
+        let intro = "Test different failure modes. Red-bordered cards activate the \
+                     error boundary via action dispatch (a real render panic is \
+                     process-fatal in GPUI, so the recovery flow is simulated \
+                     without crashing). Green-bordered cards handle errors \
+                     gracefully inline.";
 
         v_flex()
             .id("error-playground-page")
@@ -55,20 +62,17 @@ impl Render for ErrorPlaygroundPage {
                     .bg(muted)
                     .child(
                         v_flex().gap_3().child(
-                            div().text_2xl().font_weight(FontWeight::BOLD)
+                            div().id("error-playground-title").a11y(Role::Heading, "Error Boundary Playground").aria_level(1)
+                                .text_2xl().font_weight(FontWeight::BOLD)
                                 .child("Error Boundary Playground"),
                         ).child(
                             div()
+                                .id("error-playground-intro")
+                                .a11y(Role::Paragraph, intro)
                                 .max_w(px(800.))
                                 .text_sm()
                                 .text_color(muted_foreground)
-                                .child(
-                                    "Test different failure modes. Red-bordered cards activate the \
-                                     error boundary via action dispatch (a real render panic is \
-                                     process-fatal in GPUI, so the recovery flow is simulated \
-                                     without crashing). Green-bordered cards handle errors \
-                                     gracefully inline.",
-                                ),
+                                .child(intro),
                         ),
                     ),
             )

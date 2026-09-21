@@ -69,6 +69,12 @@ nix build .#default    # release binary in result/bin/gpui-starter
 - Cmd+K command palette with fuzzy search over app actions
 - Undo/redo stack bound to Cmd+Z / Cmd+Y
 
+### Accessibility
+
+- AccessKit bridge via gpui: screen readers on macOS, Linux, and Windows get labeled landmarks, headings, lists, and controls
+- Live regions announce command palette selection and result count, form outcomes, and errors as they change
+- Diagnostics reports bridge state and active window counts; the wasm build has no bridge, so accessibility is inactive there
+
 ### Data
 
 - SQLite persistence via `rusqlite`
@@ -93,11 +99,10 @@ nix build .#default    # release binary in result/bin/gpui-starter
 - Telemetry with off / local / remote modes behind a consent gate
 - Diagnostics page showing live app state and subsystem status
 - Integration test harness under `#[cfg(test)]`
-- AccessKit integration for screen readers
 
 ## Architecture
 
-See [docs/gpui-architecture.md](docs/gpui-architecture.md) for the module layout and data flow.
+See [docs/architecture.md](docs/architecture.md) for the module layout and data flow.
 
 ## Marketing Site
 

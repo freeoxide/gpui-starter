@@ -9,7 +9,7 @@ use crate::{
 
 use super::row;
 
-pub fn build_diagnostic_rows(cx: &App) -> Vec<Div> {
+pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
     // Shared borrow: AppState carries the config, inbox, and permission sets.
     let state = cx.try_global::<app_state::AppState>();
     let lifecycle = cx
@@ -64,7 +64,7 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Div> {
     let lifecycle_panic_summary =
         crate::lifecycle::last_panic_summary().unwrap_or_else(|| "None".to_string());
 
-    let mut rows = vec![
+    let mut rows: Vec<Stateful<Div>> = vec![
         row("App", env!("CARGO_PKG_NAME")),
         row("Version", env!("CARGO_PKG_VERSION")),
         row("Lifecycle", lifecycle_label),

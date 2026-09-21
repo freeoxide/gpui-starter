@@ -4,6 +4,8 @@ use gpui_component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_query::client::ClientDiagnostic;
 use gpui_query::core::MutationStatus;
 
+use crate::accessibility::A11yExt as _;
+
 use super::dashboard::QueryDevToolsV2Page;
 
 pub(super) fn render_mutations_table(
@@ -25,23 +27,27 @@ pub(super) fn render_mutations_table(
         .unwrap_or_default();
 
     // Header
-    let header = h_flex().gap_3().px_3().py_2().children(vec![
+    let header_cell = |id: &'static str, label: &'static str| {
         div()
+            .id(id)
+            .role(Role::ColumnHeader)
+            .aria_label(label)
             .text_xs()
             .font_weight(FontWeight::BOLD)
             .flex_1()
-            .child("Key"),
-        div()
-            .text_xs()
-            .font_weight(FontWeight::BOLD)
-            .flex_1()
-            .child("Status"),
-        div()
-            .text_xs()
-            .font_weight(FontWeight::BOLD)
-            .flex_1()
-            .child("Retry Count"),
-    ]);
+            .child(label)
+    };
+    let header = h_flex()
+        .id("v2-mutations-header")
+        .role(Role::Row)
+        .gap_3()
+        .px_3()
+        .py_2()
+        .children(vec![
+            header_cell("v2-mutations-h-key", "Key"),
+            header_cell("v2-mutations-h-status", "Status"),
+            header_cell("v2-mutations-h-retries", "Retry Count"),
+        ]);
 
     if mutations.is_empty() {
         return div()
@@ -52,6 +58,9 @@ pub(super) fn render_mutations_table(
             .p_4()
             .child(
                 div()
+                    .id("v2-mutations-title")
+                    .a11y(Role::Heading, "Mutations")
+                    .aria_level(2)
                     .text_sm()
                     .font_weight(FontWeight::SEMIBOLD)
                     .mb_2()
@@ -60,12 +69,16 @@ pub(super) fn render_mutations_table(
             .child(
                 div().py_4().flex().justify_center().child(
                     div()
+                        .id("v2-mutations-empty")
+                        .a11y(Role::Paragraph, "No mutations registered.")
                         .text_sm()
                         .text_color(muted_foreground)
                         .child("No mutations registered."),
                 ),
             );
     }
+
+    let row_count = mutations.len() + 1;
 
     let rows: Vec<_> = mutations
         .iter()
@@ -88,9 +101,13 @@ pub(super) fn render_mutations_table(
                 m.key.as_deref().unwrap_or("anon"),
                 i
             );
+            let row_label = format!("{key_display}: {status_label}, {} retries", m.retry_count);
 
             div()
                 .id(ElementId::Name(SharedString::from(row_id)))
+                .role(Role::Row)
+                .aria_row_index(i + 2)
+                .aria_label(row_label)
                 .rounded(radius)
                 .px_3()
                 .py_2()
@@ -115,7 +132,15 @@ pub(super) fn render_mutations_table(
         })
         .collect();
 
-    let table = v_flex().gap_0p5().children(rows);
+    let table = v_flex()
+        .id("v2-mutations-table")
+        .role(Role::Table)
+        .aria_label("Mutations")
+        .aria_row_count(row_count)
+        .aria_column_count(3)
+        .gap_0p5()
+        .child(header)
+        .children(rows);
 
     div()
         .rounded(radius_lg)
@@ -125,11 +150,13 @@ pub(super) fn render_mutations_table(
         .p_4()
         .child(
             div()
+                .id("v2-mutations-title")
+                .a11y(Role::Heading, "Mutations")
+                .aria_level(2)
                 .text_sm()
                 .font_weight(FontWeight::SEMIBOLD)
                 .mb_2()
                 .child("Mutations"),
         )
-        .child(header)
         .child(table)
 }
