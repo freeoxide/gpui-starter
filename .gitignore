@@ -60,3 +60,6 @@ wasm/__pycache__/
 
 # z-gpui-workflow orchestration state
 .z-gpui-workflow/
+
+# commandcode
+.commandcode
