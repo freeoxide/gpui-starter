@@ -3949,6 +3949,7 @@ dependencies = [
  "base64",
  "block2 0.6.2",
  "chrono",
+ "crossbeam-channel",
  "directories",
  "ed25519-dalek",
  "es-fluent",
@@ -3985,6 +3986,7 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
+ "quick-xml 0.37.5",
  "raw-window-handle",
  "regex",
  "reqwest",
@@ -4015,6 +4017,8 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "web-time",
+ "windows 0.61.3",
+ "windows-registry 0.6.1",
 ]
 
 [[package]]
@@ -5004,9 +5008,11 @@ version = "3.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c"
 dependencies = [
+ "byteorder",
  "log",
  "security-framework 2.11.1",
  "security-framework 3.7.0",
+ "windows-sys 0.60.2",
  "zeroize",
 ]
 

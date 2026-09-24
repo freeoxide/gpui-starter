@@ -19,17 +19,13 @@ pub(crate) const VALID_HOSTS: &[&str] = &[
     Page::About.host(),
 ];
 
-/// Characters that are not permitted in path segments.
 const INVALID_SEGMENT_CHARS: &[char] = &['/', '\\', '\0', '<', '>', '|', '"'];
 
-/// Reject path segments that contain traversal sequences or other dangerous
-/// characters. Returns `Ok(())` when the segment is safe.
 fn validate_path_segment(segment: &str) -> Result<(), AppError> {
     if segment.is_empty() {
         return Ok(());
     }
 
-    // Path-traversal checks.
     if segment == ".." || segment == "." || segment.contains("..") {
         return Err(AppError::invalid_deep_link(
             segment,
@@ -114,11 +110,9 @@ impl AppRoute {
     }
 
     pub fn parse_deep_link(input: &str) -> Result<Self, AppError> {
-        // --- 1. Parse the raw URL -------------------------------------------
         let url =
             Url::parse(input).map_err(|err| AppError::invalid_deep_link(input, err.to_string()))?;
 
-        // --- 2. Scheme validation -------------------------------------------
         if url.scheme() != APP_URL_SCHEME {
             return Err(AppError::invalid_deep_link(
                 input,
@@ -130,7 +124,6 @@ impl AppRoute {
             ));
         }
 
-        // --- 3. Host validation ---------------------------------------------
         let host = url.host_str().unwrap_or_default();
         if !VALID_HOSTS.contains(&host) {
             return Err(AppError::invalid_deep_link(
@@ -139,7 +132,6 @@ impl AppRoute {
             ));
         }
 
-        // --- 4. Path segment validation -------------------------------------
         let segments: Vec<&str> = url
             .path_segments()
             .map(|segs| segs.filter(|s| !s.is_empty()).collect::<Vec<_>>())
@@ -151,8 +143,6 @@ impl AppRoute {
 
         // Query parameters are ignored: matching consumes host + path only,
         // so unsanitized query data can never reach dispatch.
-
-        // --- 5. Route matching (host→Page via `Page::from_host`, one source of truth)
         match (host, segments.as_slice()) {
             (host, []) => match Page::from_host(host) {
                 Some(page) => Ok(Self::Page(page)),

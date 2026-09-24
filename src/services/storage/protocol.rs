@@ -17,8 +17,6 @@ use serde::{Deserialize, Serialize};
 use crate::error_surface::ErrorRecord;
 use crate::services::crash_report::CrashReport;
 
-/// App → worker request: one variant per [`super::StorageBackend`] method.
-///
 /// Op names serialize kebab-case (`"schema-version"`, …) and payload fields
 /// camelCase (`reportId`, `uploadedAt`, …) — the exact strings the worker's
 /// `switch (op)` matches on. The tests below lock them in.
@@ -61,9 +59,8 @@ pub enum WorkerRequest {
     },
 }
 
-/// Worker → app response. Success variants mirror the request ops (plus
-/// their typed payload); [`WorkerResponse::Error`] is the single failure
-/// shape for every op, worker-side SQL errors included.
+/// [`WorkerResponse::Error`] is the single failure shape for every op,
+/// worker-side SQL errors included.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "kebab-case")]
 pub enum WorkerResponse {
@@ -105,8 +102,6 @@ pub enum WorkerResponse {
 }
 
 impl WorkerResponse {
-    /// The correlation id — always the reply to the request with the same
-    /// id, whatever the op.
     pub fn id(&self) -> u64 {
         match self {
             Self::SchemaVersion { id, .. }
@@ -121,8 +116,6 @@ impl WorkerResponse {
         }
     }
 
-    /// Convert the response into the trait-level result: the success
-    /// variant's typed payload, or `Err(message)` for [`Self::Error`].
     pub fn into_result(self) -> Result<WorkerResult, String> {
         match self {
             Self::SchemaVersion { version, .. } => Ok(WorkerResult::SchemaVersion(version)),
@@ -140,7 +133,6 @@ impl WorkerResponse {
     }
 }
 
-/// Payload of a successful response, one shape per request kind.
 #[derive(Clone, Debug, PartialEq)]
 pub enum WorkerResult {
     SchemaVersion(i64),
@@ -221,8 +213,6 @@ mod tests {
         }
     }
 
-    /// Every response variant must survive the same round-trip, and its
-    /// correlation id must survive the trip.
     #[test]
     fn responses_round_trip_through_json_with_ids() {
         let responses = vec![

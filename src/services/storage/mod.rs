@@ -1,7 +1,3 @@
-//! Persistent storage service: the target-neutral [`StorageBackend`] trait,
-//! its per-target implementations, and the boot/runtime surface in
-//! [`runtime`].
-//!
 //! Native: [`backend::SqliteStorage`] holds one shared `rusqlite` connection
 //! behind a mutex. Wasm: [`web::WebSqliteStorage`] talks to the OPFS sqlite
 //! worker over the JSON protocol in [`protocol`], falling back to the
@@ -44,7 +40,6 @@ impl Global for StorageSnapshot {}
 /// [`StorageError::Web`]. Callers format both the same way.
 #[derive(Debug)]
 pub enum StorageError {
-    /// Native SQLite failure.
     #[cfg(not(target_family = "wasm"))]
     Sqlite(rusqlite::Error),
     /// Web backend failure: worker transport, OPFS, or worker-side SQL

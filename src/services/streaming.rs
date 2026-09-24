@@ -8,8 +8,7 @@ use gpui::{App, AsyncApp, Context, Task, WeakEntity};
 /// Upper bound on buffered tokens before the producer waits on the consumer.
 const CHANNEL_CAPACITY: usize = 1024;
 
-/// Drive an async stream of tokens into a bounded [`flume::Receiver`] on the
-/// shared tokio runtime. Dropping the receiver cancels the producer.
+/// Dropping the receiver cancels the producer.
 pub fn spawn_token_stream<S, E>(cx: &App, stream: S) -> (Task<()>, Receiver<String>)
 where
     S: Stream<Item = Result<String, E>> + Send + 'static,
@@ -47,8 +46,7 @@ where
     (producer_task(cx, pump), rx)
 }
 
-/// Drain a token channel on the GPUI thread, invoking `on_token` per token;
-/// the returned [`Task`] cancels polling when dropped or replaced.
+/// The returned [`Task`] cancels polling when dropped or replaced.
 pub fn spawn_token_poller<T, F>(
     rx: Receiver<String>,
     weak: WeakEntity<T>,
@@ -60,7 +58,6 @@ where
     F: FnMut(&mut T, &str) + Send + 'static,
 {
     cx.spawn(async move |_this: WeakEntity<T>, cx: &mut AsyncApp| {
-        // recv_async blocks until a token arrives or the producer closes.
         while let Ok(token) = rx.recv_async().await {
             let _ = cx.update(|cx: &mut App| {
                 if let Some(this) = weak.upgrade() {

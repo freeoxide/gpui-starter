@@ -12,12 +12,9 @@ struct FilteredItem {
     score: i64,
 }
 
-/// Tuning knobs for [`ItemFilter`] scoring.
 #[derive(Clone, Debug)]
 pub struct FuzzyMatchConfig {
-    /// Bonus added when an item's name equals the query exactly.
     pub exact_match_bonus: i64,
-    /// Bonus added when the name starts with the query.
     pub prefix_match_bonus: i64,
     /// Bonus added when the query matches the start of any whitespace-delimited
     /// word in the name.
@@ -42,7 +39,6 @@ impl Default for FuzzyMatchConfig {
     }
 }
 
-/// Fuzzy filter over anything implementing [`PaletteEntry`].
 pub struct ItemFilter {
     matcher: SkimMatcherV2,
     config: FuzzyMatchConfig,
@@ -55,7 +51,6 @@ impl Default for ItemFilter {
 }
 
 impl ItemFilter {
-    /// Construct a filter with explicit scoring configuration.
     pub fn new(config: FuzzyMatchConfig) -> Self {
         Self {
             // Skim is smart-case by default; callers hand over the raw
@@ -118,7 +113,7 @@ impl ItemFilter {
         self.score_text(desc, &desc_lower, query, query_lower, true)
     }
 
-    /// Core text scoring. `text_lower`/`query_lower` are pre-lowercased by the
+    /// `text_lower`/`query_lower` are pre-lowercased by the
     /// caller; returns `None` when the matcher reports no hit.
     fn score_text(
         &self,
@@ -144,7 +139,6 @@ impl ItemFilter {
 
         let (mut score, indices) = matched?;
 
-        // Bonuses apply only to name matches, not description matches.
         if !is_description {
             if text_lower == query_lower {
                 score += self.config.exact_match_bonus;
@@ -164,8 +158,6 @@ impl ItemFilter {
         Some(score)
     }
 
-    /// Linearly scale the contiguity bonus by how many matched-character pairs
-    /// are adjacent. Single-character matches get the full bonus.
     fn contiguity_bonus(&self, indices: &[usize]) -> i64 {
         if indices.len() <= 1 {
             return self.config.contiguity_bonus;
@@ -175,8 +167,7 @@ impl ItemFilter {
         (ratio * self.config.contiguity_bonus as f64) as i64
     }
 
-    /// True when `query_lower` prefixes any whitespace-delimited word in
-    /// `text_lower`; both arguments must already be lowercased.
+    /// Both arguments must already be lowercased.
     fn matches_word_start(text_lower: &str, query_lower: &str) -> bool {
         text_lower
             .split_whitespace()
@@ -243,11 +234,11 @@ mod tests {
             Entry {
                 name: "Browser",
                 desc: None,
-            }, // name match
+            },
             Entry {
                 name: "Editor",
                 desc: Some("a browser for files"),
-            }, // desc only
+            },
         ];
         let scored = f.filter_with_scores(&items, "browser");
         assert_eq!(scored[0].index, 0);

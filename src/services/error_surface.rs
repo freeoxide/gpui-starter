@@ -150,7 +150,7 @@ async fn persist_error(
     db.persist_error_record(error).await
 }
 
-/// Replace home-dir prefixes with `~` (error messages may embed io paths).
+/// Error messages may embed io paths.
 fn scrub_home(text: &str) -> String {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))

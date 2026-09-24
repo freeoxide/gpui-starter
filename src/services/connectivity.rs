@@ -42,8 +42,6 @@ pub fn snapshot(cx: &App) -> ConnectivitySnapshot {
         .unwrap_or_default()
 }
 
-/// Native: HTTP probe via the shared tokio runtime + interface enumeration on
-/// a blocking thread.
 #[cfg(not(target_family = "wasm"))]
 pub fn check_now(cx: &mut App) {
     let probe_url = snapshot(cx).probe_url;
@@ -61,7 +59,6 @@ pub fn check_now(cx: &mut App) {
     };
 
     cx.spawn(async move |cx| {
-        // Run the HTTP connectivity probe on the tokio runtime.
         let probe_handle = rt.spawn(async move {
             client
                 .get(&probe_url)
@@ -79,7 +76,6 @@ pub fn check_now(cx: &mut App) {
             Err(e) => Err(format!("connectivity probe panicked: {e}")),
         };
 
-        // Await the interface list (concurrent with the probe above).
         let interfaces = interfaces_handle.await.unwrap_or_else(|e| {
             tracing::warn!(
                 target: "gpui_starter::connectivity",

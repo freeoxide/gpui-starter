@@ -51,7 +51,6 @@ impl CrashReport {
     }
 }
 
-/// Replace home-dir prefixes with `~` and cap length (reports get uploaded).
 fn scrub(text: &str, max_chars: usize) -> String {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
@@ -99,7 +98,6 @@ pub fn snapshot(cx: &App) -> CrashReportSnapshot {
         .unwrap_or_default()
 }
 
-/// Write a crash report as JSON to `{data_dir}/crash_reports/{id}.json`.
 /// Intentionally synchronous `std::fs`: the panic hook has no async runtime.
 pub fn write_crash_report(report: &CrashReport, data_dir: &Path) -> std::io::Result<()> {
     let reports_dir = data_dir.join("crash_reports");
@@ -118,7 +116,6 @@ pub fn write_crash_report(report: &CrashReport, data_dir: &Path) -> std::io::Res
     Ok(())
 }
 
-/// Scan a directory for `.json` crash report files and parse them.
 /// Non-JSON files and malformed entries are silently skipped.
 pub fn detect_pending_reports(data_dir: &Path) -> Vec<CrashReport> {
     let reports_dir = data_dir.join("crash_reports");
@@ -152,15 +149,12 @@ pub fn detect_pending_reports(data_dir: &Path) -> Vec<CrashReport> {
         }
     }
 
-    // Newest first.
     reports.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
     reports
 }
 
-/// Read pending reports from SQLite, POST each to the configured endpoint,
-/// and mark them uploaded on success. No-op without an endpoint or backend.
-/// Wasm has no report producer (the native panic hook owns that), so it
-/// degrades to a debug log.
+/// No-op without an endpoint or backend. Wasm has no report producer (the
+/// native panic hook owns that), so it degrades to a debug log.
 #[cfg(not(target_family = "wasm"))]
 pub fn upload_pending_reports(cx: &mut App) {
     let snap = snapshot(cx);

@@ -8,14 +8,12 @@ pub use view::AiResponseView;
 use futures_util::Stream;
 use gpui::App;
 
-/// A participant in a chat exchange.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role {
     User,
     Assistant,
 }
 
-/// One turn in a chat transcript.
 #[derive(Clone, Debug)]
 pub struct ChatTurn {
     pub role: Role,
@@ -38,14 +36,12 @@ impl ChatTurn {
     }
 }
 
-/// Abstract source of an assistant token stream. `messages` is the full
+/// `messages` is the full
 /// transcript; the returned stream yields the reply as string chunks.
 pub trait ChatStreamSource {
     /// Error produced by individual stream items; rendered via `Display`.
     type Error: std::fmt::Display + Send + 'static;
-    /// The async stream type returned by [`Self::stream`].
     type Stream: Stream<Item = Result<String, Self::Error>> + Send + 'static;
 
-    /// Begin streaming an assistant reply for the given transcript.
     fn stream(&self, messages: &[ChatTurn], cx: &App) -> Self::Stream;
 }

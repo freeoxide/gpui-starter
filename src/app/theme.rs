@@ -1,9 +1,8 @@
 use gpui::App;
 use gpui_component::ActiveTheme as _;
 
-/// Register the compile-time-embedded themes into the global registry. Runs
-/// unconditionally at startup, and again after a watcher reload (which clears
-/// the registry); name-dedup keeps already-registered dev themes winning.
+/// Runs unconditionally at startup, and again after a watcher reload (which
+/// clears the registry); name-dedup keeps already-registered dev themes winning.
 pub fn register_embedded_themes(cx: &mut App) {
     let registry = gpui_component::ThemeRegistry::global_mut(cx);
     for (name, json) in crate::app::assets::embedded_themes() {

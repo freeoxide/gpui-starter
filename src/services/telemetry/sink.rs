@@ -1,5 +1,3 @@
-//! Telemetry sink implementations: disabled, local, and remote (OTLP).
-
 #[cfg(feature = "otlp")]
 use std::sync::OnceLock;
 

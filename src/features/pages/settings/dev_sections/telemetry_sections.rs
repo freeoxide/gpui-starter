@@ -4,7 +4,6 @@ use gpui_component::{ActiveTheme as _, button::Button};
 use crate::accessibility::A11yExt as _;
 use crate::telemetry::{self, TelemetryMode};
 
-/// Renders the "Telemetry" mode selection card.
 pub fn render_telemetry_section(cx: &mut Context<super::super::SettingsPage>) -> impl IntoElement {
     super::settings_card_base(cx)
         .child(super::section_heading(
@@ -25,6 +24,7 @@ pub fn render_telemetry_section(cx: &mut Context<super::super::SettingsPage>) ->
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap_2()
                 .child(
@@ -59,7 +59,6 @@ pub fn render_telemetry_section(cx: &mut Context<super::super::SettingsPage>) ->
         )
 }
 
-/// Renders the "Telemetry Runtime" card (record event, error, user property, flush).
 pub fn render_telemetry_runtime_section(
     cx: &mut Context<super::super::SettingsPage>,
 ) -> impl IntoElement {
@@ -71,6 +70,7 @@ pub fn render_telemetry_runtime_section(
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap_2()
                 .child(

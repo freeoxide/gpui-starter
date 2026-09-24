@@ -78,7 +78,8 @@ impl Render for HomePage {
                     v_flex()
                         .id("first-run-setup")
                         .a11y(Role::Group, "First-run setup")
-                        .w(px(520.))
+                        .w_full()
+                        .max_w(px(520.))
                         .gap_3()
                         .p_4()
                         .rounded_lg()
@@ -98,6 +99,7 @@ impl Render for HomePage {
                         .child(
                             div()
                                 .flex()
+                                .flex_wrap()
                                 .items_center()
                                 .justify_between()
                                 .child(Label::new("Locale"))
@@ -142,6 +144,7 @@ impl Render for HomePage {
                         .child(
                             div()
                                 .flex()
+                                .flex_wrap()
                                 .items_center()
                                 .justify_between()
                                 .child(Label::new("Native notifications"))

@@ -7,8 +7,8 @@ use std::{
 use tempfile::tempdir;
 
 use super::{
-    MAX_LINE_BYTES, SCHEME, append_forwarded_link, drain_forwarded_links, read_bounded_line,
-    resolve_ipc_name, send_forwarded_link_via_ipc,
+    AcquireOutcome, MAX_LINE_BYTES, SCHEME, append_forwarded_link, drain_forwarded_links,
+    read_bounded_line, resolve_ipc_name, retry_until_single, send_forwarded_link_via_ipc,
 };
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, prelude::*};
 
@@ -102,4 +102,73 @@ fn oversized_ipc_frame_is_dropped() {
     }
     let line = bounded_line_harness(MAX_LINE_BYTES + 1);
     assert_eq!(line, None, "frame past the 16 KiB cap must be dropped");
+}
+
+#[test]
+fn retry_acquires_on_first_attempt_without_sleeping() {
+    let mut calls = 0;
+    let start = std::time::Instant::now();
+    let outcome = retry_until_single(
+        || {
+            calls += 1;
+            AcquireOutcome::Acquired("lock")
+        },
+        50,
+        Duration::from_secs(30),
+    );
+    assert!(matches!(outcome, AcquireOutcome::Acquired("lock")));
+    assert_eq!(calls, 1);
+    // A first-try success must not pay the sleep interval.
+    assert!(start.elapsed() < Duration::from_secs(30));
+}
+
+#[test]
+fn retry_acquires_after_busy_attempts() {
+    let mut calls = 0;
+    let outcome = retry_until_single(
+        || {
+            calls += 1;
+            if calls <= 3 {
+                AcquireOutcome::Busy
+            } else {
+                AcquireOutcome::Acquired(())
+            }
+        },
+        10,
+        Duration::from_millis(1),
+    );
+    assert!(matches!(outcome, AcquireOutcome::Acquired(())));
+    assert_eq!(calls, 4);
+}
+
+#[test]
+fn retry_exhausts_attempts_into_busy() {
+    let mut calls = 0;
+    let outcome: AcquireOutcome<()> = retry_until_single(
+        || {
+            calls += 1;
+            AcquireOutcome::Busy
+        },
+        5,
+        Duration::from_millis(1),
+    );
+    assert!(matches!(outcome, AcquireOutcome::Busy));
+    assert_eq!(calls, 5);
+}
+
+#[test]
+fn retry_failed_short_circuits_without_sleeping() {
+    let mut calls = 0;
+    let start = std::time::Instant::now();
+    let outcome: AcquireOutcome<()> = retry_until_single(
+        || {
+            calls += 1;
+            AcquireOutcome::Failed
+        },
+        50,
+        Duration::from_secs(30),
+    );
+    assert!(matches!(outcome, AcquireOutcome::Failed));
+    assert_eq!(calls, 1, "Failed must not consume further attempts");
+    assert!(start.elapsed() < Duration::from_secs(30));
 }

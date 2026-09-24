@@ -55,7 +55,6 @@ mod live {
     }
 
     impl WebSocketClient {
-        /// Create a new client targeting the given WebSocket URL.
         pub fn new(url: String) -> Self {
             Self {
                 url,
@@ -67,19 +66,16 @@ mod live {
             }
         }
 
-        /// Set a custom reconnection policy.
         pub fn with_reconnect_policy(mut self, policy: ReconnectPolicy) -> Self {
             self.reconnect = policy;
             self
         }
 
-        /// Set a message handler callback.
         pub fn on_message(mut self, handler: MessageHandler) -> Self {
             self.on_message = Some(handler);
             self
         }
 
-        /// Drain the pending buffer into the write half of a fresh connection.
         async fn flush_pending(&self, sink: &mut WriteHalf) {
             let messages = std::mem::take(&mut *self.pending.lock().await);
             if messages.is_empty() {

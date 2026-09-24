@@ -156,8 +156,10 @@ impl Render for DiagnosticsPage {
                     Button::new("diagnostics-trigger-test-panic")
                         .outline()
                         .label("Trigger Test Panic")
-                        .on_click(|_, _, cx| {
-                            cx.dispatch_action(&crate::app::TriggerTestPanic);
+                        .on_click(|_, window, cx| {
+                            // Window-scoped: App::dispatch_action is broken on
+                            // Windows (thread-local active-window lookup).
+                            window.dispatch_action(Box::new(crate::app::TriggerTestPanic), cx);
                         }),
                 )
             })

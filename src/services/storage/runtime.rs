@@ -10,8 +10,6 @@ use super::StorageError;
 #[cfg(not(target_family = "wasm"))]
 use std::path::{Path, PathBuf};
 
-/// GPUI Global holding the shared storage backend.
-///
 /// Native: the SQLite backend (`backend::SqliteStorage`). Wasm: the
 /// OPFS-worker backend (`web::WebSqliteStorage`). Both sit behind the same
 /// target-neutral trait, so the global (and every consumer) is un-gated.
@@ -321,7 +319,7 @@ fn db_path(cx: &App) -> PathBuf {
 }
 
 /// Open (or create) the database and apply migrations from `persistence` —
-/// the single source of truth for the schema. Returns the schema version.
+/// the single source of truth for the schema.
 #[cfg(not(target_family = "wasm"))]
 pub(crate) fn init_db(path: &Path) -> anyhow::Result<i64> {
     let conn = rusqlite::Connection::open(path)?;

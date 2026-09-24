@@ -6,7 +6,6 @@ use crate::desktop_actions;
 use crate::secure_storage;
 use crate::session::{self, SessionState};
 
-/// Renders the "Desktop Actions" settings card.
 pub fn render_desktop_actions_section(
     cx: &mut Context<super::super::SettingsPage>,
 ) -> impl IntoElement {
@@ -18,6 +17,7 @@ pub fn render_desktop_actions_section(
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap_2()
                 .child(
@@ -48,6 +48,7 @@ pub fn render_desktop_actions_section(
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap_2()
                 .child(
@@ -80,6 +81,7 @@ pub fn render_desktop_actions_section(
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap_2()
                 .child(
@@ -117,7 +119,6 @@ pub fn render_desktop_actions_section(
         )
 }
 
-/// Renders the "Runtime Boundaries" card (connectivity, session, secure storage).
 pub fn render_runtime_boundaries_section(
     cx: &mut Context<super::super::SettingsPage>,
 ) -> impl IntoElement {
@@ -129,6 +130,7 @@ pub fn render_runtime_boundaries_section(
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap_2()
                 .child(
@@ -176,6 +178,7 @@ pub fn render_runtime_boundaries_section(
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap_2()
                 .child(

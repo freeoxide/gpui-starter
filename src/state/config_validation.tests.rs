@@ -6,7 +6,6 @@ use std::collections::HashSet;
 use super::*;
 use crate::state::config_store::{AppConfig, PersistedWindowBounds};
 
-/// Helper: does the lint list contain an entry for the given dotted `field`?
 fn has_lint_for(lints: &[ConfigLint], field: &str) -> bool {
     lints.iter().any(|l| l.field == field)
 }
@@ -184,13 +183,11 @@ fn negative_origin_is_a_warning_not_error() {
         ..AppConfig::default()
     };
     let lints = validate_config(&cfg);
-    // Negative x is legal on multi-monitor setups but worth a warning.
     assert!(
         lints
             .iter()
             .any(|l| l.field == "window_bounds.x" && l.severity == LintSeverity::Warning)
     );
-    // y is positive so should not be flagged.
     assert!(!has_lint_for(&lints, "window_bounds.y"));
 }
 
@@ -255,8 +252,8 @@ fn none_window_bounds_is_clean() {
 #[test]
 fn unknown_granted_permission_fires_an_info_lint() {
     let mut perms = HashSet::new();
-    perms.insert("notifications".to_string()); // known
-    perms.insert("mind-reading".to_string()); // unknown
+    perms.insert("notifications".to_string());
+    perms.insert("mind-reading".to_string());
     let cfg = AppConfig {
         granted_permissions: perms,
         ..AppConfig::default()
@@ -268,7 +265,6 @@ fn unknown_granted_permission_fires_an_info_lint() {
             .any(|l| l.field == "granted_permissions.mind-reading"
                 && l.severity == LintSeverity::Info)
     );
-    // The known permission must NOT be flagged.
     assert!(!has_lint_for(&lints, "granted_permissions.notifications"));
 }
 
@@ -290,8 +286,6 @@ fn known_granted_permissions_are_clean() {
 
 #[test]
 fn multiple_bad_fields_stack_into_one_vec() {
-    // Several independent problems; all should appear, and the function still
-    // returns a Vec (never panics / never returns an error).
     let cfg = AppConfig {
         theme: String::new(),
         locale: "klingon".to_string(),

@@ -1,7 +1,6 @@
 //! Selection and filtered-view state for the command palette, independent of GPUI.
 
-/// Holds the full item set, the visible (filtered) subset as indices, and the
-/// current selection; all mutation helpers are infallible (clamped or ignored).
+/// All mutation helpers are infallible (clamped or ignored).
 pub struct BaseDelegate<T: Clone> {
     items: Vec<T>,
     /// Indices into [`BaseDelegate::items`] that are currently visible.
@@ -22,7 +21,6 @@ impl<T: Clone> BaseDelegate<T> {
         }
     }
 
-    /// The currently selected filtered position, if any.
     pub fn selected_index(&self) -> Option<usize> {
         self.selected_index
     }
@@ -32,7 +30,6 @@ impl<T: Clone> BaseDelegate<T> {
         self.selected_index = Some(index);
     }
 
-    /// Number of currently visible (filtered) items.
     pub fn filtered_count(&self) -> usize {
         self.filtered_indices.len()
     }
@@ -76,7 +73,6 @@ impl<T: Clone> BaseDelegate<T> {
         self.selected_index = Some(prev);
     }
 
-    /// Borrow the full, unfiltered item set.
     pub fn items(&self) -> &[T] {
         &self.items
     }
@@ -106,9 +102,9 @@ mod tests {
         d.select_down();
         d.select_down();
         assert_eq!(d.selected_index(), Some(2));
-        d.select_down(); // wraps to 0
+        d.select_down();
         assert_eq!(d.selected_index(), Some(0));
-        d.select_up(); // wraps to last
+        d.select_up();
         assert_eq!(d.selected_index(), Some(2));
     }
 

@@ -1,6 +1,3 @@
-//! Query V2 Playground — interactive demo of gpui-query-v2: queries, cache and
-//! request policies, retry, mutations, infinite queries, select transforms.
-
 mod queries;
 mod render_sections;
 mod ui_helpers;
@@ -50,7 +47,6 @@ pub struct HttpFetchResult {
     pub elapsed_ms: u64,
 }
 
-/// Which httpbin request the HTTP Fetching section should perform.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum HttpFetchKind {
     GetJson,
@@ -102,12 +98,10 @@ impl HttpFetchKind {
 // Page state: one lazily created entity + subscription per demo.
 pub struct QueryPlaygroundPage {
     pub(super) _subscriptions: Vec<Subscription>,
-    // Simple query
     pub(super) simple_query: Option<(
         Entity<QueryResource<PlaygroundUser, QueryError>>,
         Subscription,
     )>,
-    // Cache policy demos
     pub(super) nocache_query: Option<(
         Entity<QueryResource<PlaygroundUser, QueryError>>,
         Subscription,
@@ -120,36 +114,27 @@ pub struct QueryPlaygroundPage {
         Entity<QueryResource<PlaygroundUser, QueryError>>,
         Subscription,
     )>,
-    // Request policy demos
     pub(super) latest_wins_query: Option<(Entity<QueryResource<String, QueryError>>, Subscription)>,
     pub(super) ignore_query: Option<(Entity<QueryResource<String, QueryError>>, Subscription)>,
-    // Retry demo
     pub(super) retry_query: Option<(Entity<QueryResource<String, QueryError>>, Subscription)>,
-    // Mutation demo
     pub(super) mutation_entity: Option<(
         Entity<MutationResource<String, String, QueryError>>,
         Subscription,
     )>,
-    // Mutation input state
     pub(super) mutation_input_state: Entity<InputState>,
-    // Infinite query
     pub(super) infinite_entity: Option<(
         Entity<InfiniteQueryResource<PlaygroundPage, QueryError>>,
         Subscription,
     )>,
-    // Select transform
     pub(super) select_source: Option<Entity<QueryResource<Vec<PlaygroundUser>, QueryError>>>,
     pub(super) select_mapped:
         Option<Entity<MappedQueryResource<Vec<PlaygroundUser>, Vec<String>, QueryError>>>,
     pub(super) _select_subs: Option<(Subscription, Subscription)>,
-    // Imperative fetch
     pub(super) imperative_query: Option<(Entity<QueryResource<String, QueryError>>, Subscription)>,
-    // Real HTTP fetch (reqwest via the tokio runtime)
     pub(super) http_query: Option<(
         Entity<QueryResource<HttpFetchResult, QueryError>>,
         Subscription,
     )>,
-    // UI state
     pub(super) activity_log: Vec<String>,
     pub(super) log_scroll_handle: VirtualListScrollHandle,
     // Mutation callbacks write here so their log survives past the click handler.
@@ -200,7 +185,6 @@ impl QueryPlaygroundPage {
         }
     }
 
-    /// Read the current mutation input text from the InputState entity.
     pub(super) fn mutation_input_value(&self, cx: &App) -> String {
         self.mutation_input_state.read(cx).value().to_string()
     }

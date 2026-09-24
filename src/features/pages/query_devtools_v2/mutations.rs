@@ -26,7 +26,6 @@ pub(super) fn render_mutations_table(
         .map(|d| d.mutations.clone())
         .unwrap_or_default();
 
-    // Header
     let header_cell = |id: &'static str, label: &'static str| {
         div()
             .id(id)

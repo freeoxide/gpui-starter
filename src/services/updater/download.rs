@@ -86,8 +86,6 @@ enum DownloadOutcome {
     PermanentFailure(String),
 }
 
-/// Resolve asset → streaming download → Ed25519 verify → codesign (macOS).
-/// Verification failures come back as `Ok(PermanentFailure)` to suppress retry.
 #[cfg(not(target_family = "wasm"))]
 async fn run_download(
     version: String,
@@ -223,8 +221,7 @@ async fn run_download(
         }
     });
 
-    // Poll progress and push 10%-step updates into GPUI state; the GPUI
-    // background-executor timer avoids a fresh tokio task per tick.
+    // The GPUI background-executor timer avoids a fresh tokio task per tick.
     let mut last_progress: u32 = 0;
     loop {
         let cur = progress.load(Ordering::Relaxed);

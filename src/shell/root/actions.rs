@@ -5,12 +5,14 @@ use gpui::Action;
 #[action(namespace = app, no_json)]
 pub struct NavigateToPage(pub usize);
 
-/// Re-navigate to the current page (triggers a route refresh).
 #[derive(Action, Clone, PartialEq, Eq, serde::Deserialize)]
 #[action(namespace = app, no_json)]
 pub struct RefreshPage;
 
-/// True for RTL script locales: Arabic, Hebrew, Farsi, Urdu.
+#[derive(Action, Clone, PartialEq, Eq, serde::Deserialize)]
+#[action(namespace = app, no_json)]
+pub struct ToggleSidebar;
+
 pub(crate) fn is_rtl_locale(locale: &str) -> bool {
     locale
         .split('-')

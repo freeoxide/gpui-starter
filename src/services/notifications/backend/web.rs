@@ -145,8 +145,6 @@ fn permission_string() -> Option<String> {
         .and_then(|value| value.as_string())
 }
 
-/// Kick off `Notification.requestPermission()`, returning the channel its
-/// resolution lands on; `None` when the API is unavailable or the call threw.
 fn spawn_permission_request() -> Option<flume::Receiver<Result<String, String>>> {
     notification_constructor()?;
     let promise = match web_sys::Notification::request_permission() {
@@ -177,7 +175,6 @@ fn spawn_permission_request() -> Option<flume::Receiver<Result<String, String>>>
     Some(rx)
 }
 
-/// Best-effort human-readable message from a JS exception value.
 fn js_value_message(value: &JsValue) -> String {
     value.as_string().unwrap_or_else(|| format!("{value:?}"))
 }

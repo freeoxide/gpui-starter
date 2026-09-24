@@ -1,6 +1,7 @@
 use gpui::{
     Anchor, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement,
-    MouseButton, ParentElement as _, Render, Role, SharedString, Styled as _, Window, div, px,
+    MouseButton, ParentElement as _, Render, Role, SharedString, Styled as _, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     ActiveTheme as _, IconName, Sizable as _, Theme, TitleBar,
@@ -38,15 +39,23 @@ impl AppTitleBar {
 }
 
 impl Render for AppTitleBar {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Window controls eat a fixed ~105px beside the title bar, so at small
+        // viewports the decorative label is the first thing to yield space.
+        let show_theme_label = window.viewport_size().width >= px(640.);
         div()
             .id("title-bar")
             .a11y(Role::TitleBar, self.title.clone())
             .child(
                 TitleBar::new()
                     .child(
+                        // The menu bar scrolls internally once width-bound;
+                        // without flex_1/min_w_0 its content width pushes the
+                        // right cluster out of the window at small sizes.
                         div()
                             .flex()
+                            .flex_1()
+                            .min_w_0()
                             .items_center()
                             .gap_2()
                             .child(self.app_menu_bar.clone()),
@@ -58,12 +67,15 @@ impl Render for AppTitleBar {
                             .justify_end()
                             .px_2()
                             .gap_2()
+                            .flex_shrink_0()
                             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                            .child(
-                                Label::new("theme:")
-                                    .secondary(cx.theme().theme_name())
-                                    .text_sm(),
-                            )
+                            .when(show_theme_label, |this| {
+                                this.child(
+                                    Label::new("theme:")
+                                        .secondary(cx.theme().theme_name())
+                                        .text_sm(),
+                                )
+                            })
                             .child(self.settings.clone())
                             .child(
                                 Button::new("search")
@@ -98,10 +110,6 @@ impl Render for AppTitleBar {
             )
     }
 }
-
-// ---------------------------------------------------------------------------
-// Settings dropdown (font size, radius, scrollbar)
-// ---------------------------------------------------------------------------
 
 struct SettingsDropdown {
     focus_handle: FocusHandle,
@@ -184,14 +192,11 @@ impl Render for SettingsDropdown {
     }
 }
 
-/// Announced name for the icon-only search button, matching the cmd-k
-/// ToggleSearch binding ("cmd" is the platform modifier in gpui keystrokes).
-#[cfg(target_os = "macos")]
-fn search_a11y_label() -> &'static str {
-    "Search (Cmd+K)"
-}
-
-#[cfg(not(target_os = "macos"))]
-fn search_a11y_label() -> &'static str {
-    "Search (Super+K)"
+/// Announced name for the icon-only search button, derived from the
+/// ToggleSearch binding so the modifier matches the platform keymap.
+fn search_a11y_label() -> String {
+    format!(
+        "Search ({})",
+        crate::app::keys::label(crate::app::keys::TOGGLE_SEARCH)
+    )
 }

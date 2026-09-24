@@ -53,9 +53,9 @@ impl QueryPlaygroundPage {
             cx,
         )
         .child(
-            h_flex().gap_2().items_center().px_4().py_2()
+            h_flex().gap_2().items_center().flex_wrap().px_4().py_2()
                 .child(
-                    div().min_w(px(200.))
+                    div().flex_1().min_w(px(140.))
                         .child(Input::new(&self.mutation_input_state).aria_label("Mutation variables"))
                 )
                 .child(

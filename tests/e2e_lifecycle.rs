@@ -50,6 +50,34 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
+    // test_preflight_argv_accepts_quoted_command_line
+    // -----------------------------------------------------------------------
+
+    /// Explorer launches protocol URLs via the registry command
+    /// `"...gpui-starter.exe" "gpui-starter://settings"`; the preflight argv
+    /// scan must pick the URL out of that quoted shape and never mistake
+    /// argv[0] (the exe path) for a link.
+    #[test]
+    fn test_preflight_argv_accepts_quoted_command_line() {
+        let args = vec![
+            "C:\\Program Files\\GPUI Starter\\gpui-starter.exe".to_string(),
+            "gpui-starter://settings".to_string(),
+        ];
+        assert_eq!(
+            gpui_starter::single_instance::initial_deep_link(&args).as_deref(),
+            Some("gpui-starter://settings"),
+            "quoted protocol launch must yield the URL argument"
+        );
+
+        let no_link = vec!["C:\\Program Files\\GPUI Starter\\gpui-starter.exe".to_string()];
+        assert_eq!(
+            gpui_starter::single_instance::initial_deep_link(&no_link),
+            None,
+            "a plain launch must not report a deep link"
+        );
+    }
+
+    // -----------------------------------------------------------------------
     // test_config_loads
     // -----------------------------------------------------------------------
 

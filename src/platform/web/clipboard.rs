@@ -11,8 +11,6 @@ pub fn is_available() -> bool {
     clipboard_handle().is_some()
 }
 
-/// Write text through the async Clipboard API; see the module docs for the
-/// fire-and-forget contract.
 pub fn write_text_fire_and_forget(text: &str) {
     let Some(clipboard) = clipboard_handle() else {
         tracing::warn!(

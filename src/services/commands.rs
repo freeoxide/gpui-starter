@@ -86,8 +86,9 @@ pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
             }
         }
         CommandId::Restart => CommandAvailability {
-            enabled: cfg!(unix),
-            disabled_reason: (!cfg!(unix)).then_some("Restart requires exec-reload (unix)".into()),
+            enabled: cfg!(any(unix, windows)),
+            disabled_reason: (!cfg!(any(unix, windows)))
+                .then_some("Restart requires a native relaunch backend".into()),
         },
     }
 }
@@ -254,9 +255,9 @@ pub fn execute(id: CommandId, cx: &mut App) {
             let _ = crate::undo_stack::redo(cx);
         }
         CommandId::Restart => {
-            #[cfg(unix)]
+            #[cfg(any(unix, windows))]
             cx.dispatch_action(&crate::app::Restart);
-            #[cfg(not(unix))]
+            #[cfg(not(any(unix, windows)))]
             {
                 let _ = cx;
                 tracing::warn!(

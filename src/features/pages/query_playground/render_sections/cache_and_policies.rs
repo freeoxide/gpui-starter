@@ -17,7 +17,6 @@ use super::super::ui_helpers::{chip, mini_card, section_card, status_badge};
 // Readers for the recurring `Option<(Entity<QueryResource<..>>, Subscription)>`
 // shape; MutationStatus/infinite/bare-Entity sites don't fit and stay inline.
 
-/// Read the status of an optional query entity, defaulting to [`QueryStatus::Idle`].
 fn query_status<T: 'static, E: 'static>(
     opt: Option<&(Entity<QueryResource<T, E>>, Subscription)>,
     cx: &App,
@@ -27,7 +26,6 @@ fn query_status<T: 'static, E: 'static>(
     })
 }
 
-/// Read the cloned data (if any) of an optional query entity.
 fn query_data<T: Clone + 'static, E: 'static>(
     opt: Option<&(Entity<QueryResource<T, E>>, Subscription)>,
     cx: &App,
@@ -35,7 +33,6 @@ fn query_data<T: Clone + 'static, E: 'static>(
     opt.and_then(|(e, _)| e.read_with(cx, |r, _| r.data().cloned()))
 }
 
-/// Read the cloned error (if any) of an optional query entity.
 fn query_error<T: 'static, E: Clone + 'static>(
     opt: Option<&(Entity<QueryResource<T, E>>, Subscription)>,
     cx: &App,
@@ -45,15 +42,12 @@ fn query_error<T: 'static, E: Clone + 'static>(
 
 impl QueryPlaygroundPage {
     pub(in super::super) fn render_cache_policies(&mut self, cx: &mut Context<Self>) -> Div {
-        // NoCache
         let nocache_status = query_status(self.nocache_query.as_ref(), cx);
         let nocache_loading = nocache_status.is_loading();
 
-        // TTL
         let ttl_status = query_status(self.ttl_query.as_ref(), cx);
         let ttl_loading = ttl_status.is_loading();
 
-        // SWR
         let swr_status = query_status(self.swr_query.as_ref(), cx);
         let swr_loading = swr_status.is_loading();
 
@@ -67,7 +61,6 @@ impl QueryPlaygroundPage {
                 .gap_4()
                 .px_4()
                 .py_3()
-                // NoCache card
                 .child(
                     mini_card("nocache", "NoCache", cx)
                         .child(status_badge("nocache", nocache_status, cx))
@@ -79,7 +72,6 @@ impl QueryPlaygroundPage {
                                 .on_click(cx.listener(|this, _, _, cx| this.fetch_nocache(cx))),
                         ),
                 )
-                // TTL card
                 .child(
                     mini_card("ttl", "TTL 5s", cx)
                         .child(status_badge("ttl", ttl_status, cx))
@@ -91,7 +83,6 @@ impl QueryPlaygroundPage {
                                 .on_click(cx.listener(|this, _, _, cx| this.fetch_ttl(cx))),
                         ),
                 )
-                // SWR card
                 .child(
                     mini_card("swr", "SWR 3s/7s", cx)
                         .child(status_badge("swr", swr_status, cx))
@@ -122,7 +113,6 @@ impl QueryPlaygroundPage {
         )
         .child(
             h_flex().gap_4().px_4().py_3()
-                // LatestWins card
                 .child(
                     mini_card("latest-wins", "LatestWins", cx)
                         .child(status_badge("latest-wins", latest_status, cx))
@@ -137,7 +127,6 @@ impl QueryPlaygroundPage {
                                 .on_click(cx.listener(|this, _, _, cx| this.spam_latest_wins(cx))),
                         ),
                 )
-                // IgnoreWhileLoading card
                 .child(
                     mini_card("ignore", "IgnoreWhileLoading", cx)
                         .child(status_badge("ignore", ignore_status, cx))

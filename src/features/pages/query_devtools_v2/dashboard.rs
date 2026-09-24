@@ -16,10 +16,7 @@ pub struct QueryDevToolsV2Page {
     _subscriptions: Vec<Subscription>,
     pub(super) expanded_key: Option<String>,
     pub(super) sort_by: QuerySort,
-    /// Status filter: `None` shows all; `Some(String)` must be a valid
-    /// `QueryStatus` variant name (e.g. "Idle", "Success").
     pub(super) status_filter: Option<String>,
-    /// Scroll handle for the virtualized query registry list.
     pub(super) scroll_handle: gpui_component::VirtualListScrollHandle,
 }
 
@@ -164,7 +161,9 @@ fn render_dashboard(
                 .child("Live diagnostics dashboard for gpui-query-v2's QueryClient."),
         );
 
-    let overview = h_flex().gap_4().children(vec![
+    // Cards keep a floor width so narrow containers wrap them 2-up instead
+    // of squeezing one card into a sliver.
+    let overview = h_flex().gap_4().flex_wrap().children(vec![
         stat_card(
             "Total Queries",
             query_count.to_string(),
@@ -237,6 +236,7 @@ fn stat_card(
         ))))
         .a11y(Role::Paragraph, format!("{label}: {value}"))
         .flex_1()
+        .min_w(px(110.))
         .rounded(radius_lg)
         .border_1()
         .border_color(border)

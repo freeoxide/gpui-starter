@@ -1,5 +1,3 @@
-//! Section renderers for each error playground test card.
-
 use gpui::{prelude::*, *};
 use gpui_component::{
     button::{Button, ButtonVariants as _},
@@ -39,11 +37,17 @@ impl ErrorPlaygroundPage {
                 Button::new(SharedString::from(format!("ep-{}", title)))
                     .primary()
                     .label(button_label.to_string())
-                    .on_click(move |_, _, cx| {
+                    .on_click(move |_, window, cx| {
                         // AppRoot listens for this and swaps in RenderErrorPage.
-                        cx.dispatch_action(&TriggerRenderError {
-                            message: error_msg.clone(),
-                        });
+                        // Window-scoped dispatch: App::dispatch_action resolves
+                        // the active window via a thread-local on Windows and
+                        // fails with "window not found".
+                        window.dispatch_action(
+                            Box::new(TriggerRenderError {
+                                message: error_msg.clone(),
+                            }),
+                            cx,
+                        );
                     }),
             ),
         )
@@ -184,7 +188,6 @@ impl ErrorPlaygroundPage {
                                 set_result(this, Some(ctx.initial_msg.to_string()));
                                 cx.notify();
 
-                                // One global read covers both the runtime and client handles.
                                 let tokio_rt = cx
                                     .global::<crate::services::tokio_runtime::TokioRuntimeGlobal>();
                                 // The wasm tokio runtime is an undriven shim; only the client is needed there.

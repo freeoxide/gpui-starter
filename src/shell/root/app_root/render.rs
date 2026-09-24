@@ -2,10 +2,12 @@ use std::rc::Rc;
 
 use gpui::{prelude::*, *};
 use gpui_component::{
-    ActiveTheme as _, Collapsible, Icon, IconName, Sizable as _,
+    ActiveTheme as _, Collapsible, Icon, IconName, Side, Sizable as _, h_flex,
     menu::PopupMenu,
     resizable::{h_resizable, resizable_panel},
-    sidebar::{Sidebar, SidebarGroup, SidebarHeader, SidebarItem, SidebarMenuItem},
+    sidebar::{
+        Sidebar, SidebarGroup, SidebarHeader, SidebarItem, SidebarMenuItem, SidebarToggleButton,
+    },
     v_flex,
 };
 
@@ -15,7 +17,7 @@ use crate::routes::AppRoute;
 use crate::sidebar::Page;
 use crate::views::{ReloadCurrentPage, RenderErrorPage, TriggerRenderError};
 
-use super::super::actions::{NavigateToPage, RefreshPage, is_rtl_locale};
+use super::super::actions::{NavigateToPage, RefreshPage, ToggleSidebar, is_rtl_locale};
 use super::super::frame_time;
 use super::state::AppRoot;
 
@@ -39,27 +41,53 @@ impl Render for AppRoot {
         };
         let active_page = self.active_route.page_for_render();
         let rtl = is_rtl_locale(&crate::app::current_locale(cx));
+        let side = if rtl { Side::Right } else { Side::Left };
+
+        // The rail keeps only the toggle when collapsed; the 32px logo plus a
+        // button cannot fit the 48px icon rail.
+        let sidebar_header = h_flex()
+            .w_full()
+            .gap_2()
+            .items_center()
+            .map(|this| {
+                if self.collapsed {
+                    this.justify_center()
+                } else {
+                    this.justify_between()
+                }
+            })
+            .when(!self.collapsed, |this| {
+                this.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(cx.theme().radius_lg)
+                        .bg(cx.theme().primary)
+                        .text_color(cx.theme().primary_foreground)
+                        .size_8()
+                        .flex_shrink_0()
+                        .child(Icon::new(IconName::Star)),
+                )
+            })
+            .child(
+                SidebarToggleButton::new()
+                    .side(side)
+                    .collapsed(self.collapsed)
+                    .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_sidebar(cx))),
+            );
 
         let sidebar =
             Sidebar::new("app-sidebar")
                 .w(relative(1.))
                 .border_0()
                 .collapsed(self.collapsed)
+                .side(side)
                 .header(
-                    v_flex().w_full().gap_4().child(
-                        SidebarHeader::new().w_full().child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded(cx.theme().radius_lg)
-                                .bg(cx.theme().primary)
-                                .text_color(cx.theme().primary_foreground)
-                                .size_8()
-                                .flex_shrink_0()
-                                .child(Icon::new(IconName::Star)),
-                        ),
-                    ),
+                    v_flex()
+                        .w_full()
+                        .gap_4()
+                        .child(SidebarHeader::new().w_full().child(sidebar_header)),
                 )
                 .child(SidebarGroup::new("Navigation").children(
                     Page::all().iter().enumerate().map(|(ix, page)| {
@@ -67,7 +95,6 @@ impl Render for AppRoot {
                         let context_menu: Rc<
                             dyn Fn(PopupMenu, &mut Window, &mut App) -> PopupMenu,
                         > = Rc::new(move |menu, _window, _cx| {
-                            // Context menu: right-click on sidebar items.
                             menu.menu_with_icon(
                                 "Navigate",
                                 Icon::new(IconName::ArrowRight),
@@ -89,7 +116,7 @@ impl Render for AppRoot {
                         NavItem {
                             page,
                             active: !self.render_error && active_page == page,
-                            collapsed: false,
+                            collapsed: self.collapsed,
                             // accesskit stores position_in_set 0-based; AT
                             // bridges report the stored value +1.
                             position: ix,
@@ -102,80 +129,104 @@ impl Render for AppRoot {
                     }),
                 ));
 
-        // RTL: reverse sidebar position and flex direction
-        let sidebar_panel = resizable_panel()
-            .size(px(255.))
-            .size_range(px(60.)..px(320.))
+        let content_v = v_flex()
+            .id("main")
+            .role(Role::Main)
+            .flex_1()
+            .h_full()
+            .overflow_x_hidden()
             .child(
+                div()
+                    .id("header")
+                    .p_4()
+                    .border_b_1()
+                    .border_color(cx.theme().border)
+                    .child(
+                        div()
+                            .id("page-title")
+                            .a11y(Role::Heading, page_title)
+                            .aria_level(1)
+                            // Navigation moves no keyboard focus, so the
+                            // new page title is announced via this live region.
+                            .a11y_live(accesskit::Live::Polite)
+                            .text_xl()
+                            .font_weight(FontWeight::BOLD)
+                            .child(page_title),
+                    ),
+            )
+            .child(
+                div()
+                    .id("page")
+                    .a11y(Role::Region, page_title)
+                    .flex_1()
+                    .overflow_y_scroll()
+                    .child({
+                        let _render_guard = crate::lifecycle::enter_render_path();
+                        self.active_page_view(cx)
+                    }),
+            );
+
+        // Expanded: the sidebar fills a resizable panel (the wrapper must
+        // resolve the sidebar's relative width against a definite size).
+        // Collapsed: a fixed 48px icon rail outside the resizable group —
+        // the group only takes ResizablePanel children, and the panel's
+        // keyed size state must not pin the rail open at the panel width.
+        // In RTL locales the sidebar appears on the right; swap panel order.
+        let layout: AnyElement = if self.collapsed {
+            let rail = div().id("sidebar-rail").h_full().flex_shrink_0().child(
                 div()
                     .id("sidebar-nav")
                     .a11y(Role::Navigation, "Main navigation")
-                    // AT-SPI derives each item's setsize from the nearest
-                    // ancestor that declares one; item-level values are ignored.
                     .aria_size_of_set(Page::all().len())
                     .child(sidebar),
             );
-
-        let content_panel = resizable_panel().child(
-            v_flex()
-                .id("main")
-                .role(Role::Main)
-                .flex_1()
-                .h_full()
-                .overflow_x_hidden()
-                .child(
-                    div()
-                        .id("header")
-                        .p_4()
-                        .border_b_1()
-                        .border_color(cx.theme().border)
-                        .child(
-                            div()
-                                .id("page-title")
-                                .a11y(Role::Heading, page_title)
-                                .aria_level(1)
-                                // Navigation moves no keyboard focus, so the
-                                // new page title is announced via this live region.
-                                .a11y_live(accesskit::Live::Polite)
-                                .text_xl()
-                                .font_weight(FontWeight::BOLD)
-                                .child(page_title),
-                        ),
-                )
-                .child(
-                    div()
-                        .id("page")
-                        .a11y(Role::Region, page_title)
-                        .flex_1()
-                        .overflow_y_scroll()
-                        .child({
-                            let _render_guard = crate::lifecycle::enter_render_path();
-                            self.active_page_view(cx)
-                        }),
-                ),
-        );
-
-        // In RTL locales the sidebar appears on the right; swap panel order.
-        let mut layout = h_resizable("app-layout");
-        if rtl {
-            layout = layout.child(content_panel).child(sidebar_panel);
+            let content = div().flex_1().min_w_0().h_full().child(content_v);
+            let mut row = div().id("app-layout").flex().size_full();
+            if rtl {
+                row = row.child(content).child(rail);
+            } else {
+                row = row.child(rail).child(content);
+            }
+            row.into_any_element()
         } else {
-            layout = layout.child(sidebar_panel).child(content_panel);
-        }
+            let sidebar_panel = resizable_panel()
+                .size(px(255.))
+                .size_range(px(180.)..px(400.))
+                .child(
+                    div()
+                        .id("sidebar-nav")
+                        .h_full()
+                        .w_full()
+                        .a11y(Role::Navigation, "Main navigation")
+                        // AT-SPI derives each item's setsize from the nearest
+                        // ancestor that declares one; item-level values are ignored.
+                        .aria_size_of_set(Page::all().len())
+                        .child(sidebar),
+                );
+            let mut layout = h_resizable("app-layout");
+            let content_panel = resizable_panel().child(content_v);
+            if rtl {
+                layout = layout.child(content_panel).child(sidebar_panel);
+            } else {
+                layout = layout.child(sidebar_panel).child(content_panel);
+            }
+            layout.into_any_element()
+        };
 
         let content_area = div()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(|_, _: &ToggleSearch, _, cx| {
                 crate::launcher::open_launcher(cx);
             }))
-            // Cmd+1..9 → NavigateToPage handler
+            .on_action(cx.listener(|this, _: &ToggleSidebar, _, cx| {
+                this.toggle_sidebar(cx);
+            }))
             .on_action(cx.listener(|this, action: &NavigateToPage, _, cx| {
                 let pages = Page::all();
                 if let Some(&page) = pages.get(action.0) {
                     this.set_route(AppRoute::page(page), cx);
                 }
             }))
-            // Context menu action handlers
             .on_action(cx.listener(|this, _: &RefreshPage, _, cx| {
                 let current = this.active_route.page_for_render();
                 // Force a re-render by calling notify, since set_route
@@ -183,7 +234,6 @@ impl Render for AppRoot {
                 cx.notify();
                 tracing::info!(target: "gpui_starter::root", page = ?current, "page refreshed");
             }))
-            // Error boundary: reload clears the error state and retries the page.
             .on_action(cx.listener(|this, _: &ReloadCurrentPage, _, cx| {
                 tracing::info!(
                     target: "gpui_starter::root",
@@ -210,7 +260,6 @@ impl Render for AppRoot {
 
         let elapsed_us = render_started.elapsed().as_micros() as u64;
 
-        // Persist frame time for the status-bar readout.
         frame_time::store_frame_time(elapsed_us);
 
         if frame_time::is_slow_frame(elapsed_us) {

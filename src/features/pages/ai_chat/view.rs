@@ -1,6 +1,3 @@
-//! [`AiResponseView`] — renders a streaming chat transcript with user bubbles,
-//! assistant markdown, a "Thinking…" placeholder, and a U+258C streaming cursor.
-
 use gpui::{prelude::*, *};
 use gpui_component::{ActiveTheme as _, text::markdown, v_flex};
 
@@ -11,7 +8,6 @@ use crate::accessibility::A11yExt as _;
 /// assistant message.
 const STREAMING_CURSOR: char = '\u{258C}';
 
-/// View holding a chat transcript and driving a streaming assistant reply.
 /// Backend-agnostic: tokens arrive via [`Self::append_token`].
 #[derive(Clone)]
 pub struct AiResponseView {
@@ -56,7 +52,6 @@ impl AiResponseView {
         }
     }
 
-    /// Mark the current assistant reply as complete.
     pub fn finish_streaming(&mut self) {
         if self.is_streaming {
             tracing::debug!(
@@ -88,26 +83,20 @@ impl AiResponseView {
         self.is_streaming = true;
     }
 
-    /// The transcript so far (used by a [`ChatStreamSource`] implementor to build
-    /// the next request).
     pub fn turns(&self) -> &[ChatTurn] {
         &self.turns
     }
 
-    /// Whether an assistant reply is currently streaming.
     pub fn is_streaming(&self) -> bool {
         self.is_streaming
     }
 
-    /// Whether the view is in an error state.
     pub fn has_error(&self) -> bool {
         self.error.is_some()
     }
 }
 
 impl AiResponseView {
-    /// Render the transcript (or the error banner): user bubbles, assistant
-    /// markdown, a "Thinking…" placeholder, and a cursor while streaming.
     pub fn render(&self, _window: &mut Window, cx: &mut App) -> Div {
         let theme = cx.theme();
         let accent = theme.accent;
@@ -201,7 +190,6 @@ impl AiResponseView {
     }
 }
 
-/// Right-aligned user bubble.
 fn render_user_bubble(
     index: usize,
     content: &str,
@@ -231,7 +219,6 @@ fn render_user_bubble(
         )
 }
 
-/// Assistant turn: "Thinking…" placeholder, markdown body, or markdown + cursor.
 fn render_assistant_message(
     index: usize,
     content: &str,
@@ -243,7 +230,6 @@ fn render_assistant_message(
     ));
 
     if content.is_empty() && streaming {
-        // Thinking placeholder before the first token arrives.
         wrapper
             .a11y(gpui::Role::ListItem, "Assistant: thinking")
             .child(
@@ -279,7 +265,6 @@ where
     S: ChatStreamSource,
     F: FnMut(&mut E, &str) + Send + 'static,
 {
-    // Snapshot the transcript so the source can build its request.
     let messages: Vec<ChatTurn> = view.turns().to_vec();
     let stream = source.stream(&messages, cx);
 

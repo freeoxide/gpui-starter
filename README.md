@@ -4,8 +4,8 @@ A desktop application boilerplate built on [GPUI](https://github.com/zed-industr
 
 ## Prerequisites
 
-- Rust nightly (edition 2024)
-- macOS is the primary target. Linux on X11/Wayland works but is less tested.
+- Rust stable, edition 2024 (nightly only for the wasm target)
+- macOS is the primary target. Linux on X11/Wayland and Windows (MSVC) also build and run.
 
 ## Quick Start
 
@@ -52,6 +52,32 @@ so run `nix flake lock` once to pin nixpkgs.
 ```sh
 nix develop            # dev shell with Vulkan/Wayland/XCB on LD_LIBRARY_PATH
 nix build .#default    # release binary in result/bin/gpui-starter
+```
+
+### Windows Development
+
+Requirements: VS 2022 Build Tools with the C++ workload (`cl.exe`, `link.exe`)
+and Git Bash. Run from Git Bash:
+
+```sh
+scripts/windows-dev-env.sh --setup   # one-time: fetch the Windows SDK if missing
+. scripts/windows-dev-env.sh         # every shell: fix PATH/INCLUDE/LIB
+cargo build && cargo run
+```
+
+The setup step is needed when the Windows SDK component is not installed and
+you have no admin shell: it downloads the official SDK + CRT MSIs with
+[xwin](https://github.com/Jake-Shadle/xwin) and extracts them next to the repo
+(~1 GB under `../.xwin/`). Sourcing the script is needed in every Git Bash
+shell because `/usr/bin/link.exe` (coreutils) otherwise shadows MSVC's linker.
+PowerShell and cmd don't have that shadowing problem.
+
+To skip sourcing entirely, generate a gitignored `.cargo/config.toml` once —
+after that plain `cargo build`/`run`/`test` works in every shell:
+
+```sh
+scripts/windows-dev-env.sh --cargo-config
+cargo run
 ```
 
 ## Features

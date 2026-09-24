@@ -3,7 +3,6 @@ use gpui_component::{ActiveTheme as _, button::Button, label::Label, v_flex};
 
 use crate::accessibility::A11yExt as _;
 
-/// Renders the "Event Emitter" card (emit buttons + receiver log).
 pub fn render_event_emitter_section(
     event_log: &[String],
     cx: &mut Context<super::super::SettingsPage>,
@@ -29,7 +28,6 @@ pub fn render_event_emitter_section(
                 .text_color(cx.theme().muted_foreground)
                 .child("Test the event pipeline. Emit events and verify they are received."),
         )
-        // Emit buttons
         .child(
             div()
                 .flex()
@@ -78,7 +76,6 @@ pub fn render_event_emitter_section(
                         }),
                 ),
         )
-        // Receiver log
         .child(
             div()
                 .id("settings-event-receiver-title")

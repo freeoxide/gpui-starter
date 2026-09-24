@@ -161,6 +161,35 @@ jobs:
         run: cargo clippy -- -D warnings
 
   # ---------------------------------------------------------------------
+  # Windows lane: compiles the cfg(target_os = "windows")-gated code paths
+  # (user-notify backend, win32 single-instance IPC) that the macOS/Linux
+  # lanes never see. windows-latest ships VS 2022 + the full Windows SDK,
+  # so no setup step is needed. The default pwsh shell is load-bearing:
+  # a `shell: bash` step puts Git Bash's /usr/bin/link.exe (coreutils) on
+  # PATH ahead of MSVC's linker and every link fails — the same shadowing
+  # scripts/windows-dev-env.sh works around for no-SDK dev machines.
+  # ---------------------------------------------------------------------
+  check-windows:
+    name: Check (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "v2-windows"
+          # Master-only saves; PRs restore only (see the check job note).
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - name: Cargo check (dev)
+        run: cargo check
+
+      - name: Cargo check (release)
+        run: cargo check --release
+
+  # ---------------------------------------------------------------------
   # Scoped lib tests (Linux). The FULL `cargo test` workspace build is multi-
   # hour (every crate's tests pull gpui's TestAppContext) and not viable in CI,
   # but `cargo test -p gpui-starter --lib` compiles ONLY this crate's lib test
@@ -210,6 +239,37 @@ jobs:
           # Save even when tests fail: the cold rebuild noted above
           # (60-100+ min after any Cargo.lock change) shouldn't restart from
           # zero because one test flaked mid-run.
+          cache-on-failure: true
+
+      - name: Run scoped lib tests
+        run: cargo test -p gpui-starter --lib
+
+  # ---------------------------------------------------------------------
+  # Scoped lib tests (Windows) — same policy as the Linux test lane; also
+  # the only lane that exercises the MSVC LINKER on a runner (test binaries
+  # are linked even though `cargo check` never links). Default pwsh shell,
+  # never `shell: bash` (see the check-windows note on link.exe shadowing).
+  # ---------------------------------------------------------------------
+  test-windows:
+    name: Test (lib, Windows)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      # Same wrapper/fingerprint discipline as the Linux test lane.
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: ${{ github.ref == 'refs/heads/master' && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: mozilla-actions/sccache-action@v0.0.11
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "v2-windows-test"
+          # Master-only saves; PRs restore only (see the check job note).
+          save-if: ${{ github.ref == 'refs/heads/master' }}
           cache-on-failure: true
 
       - name: Run scoped lib tests

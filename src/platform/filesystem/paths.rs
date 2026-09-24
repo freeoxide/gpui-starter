@@ -4,7 +4,7 @@ use directories::ProjectDirs;
 
 use crate::errors::AppError;
 
-/// Canonical [`ProjectDirs`] for this application. Plain free fn, safe to call
+/// Plain free fn, safe to call
 /// before any GPUI `App` exists (e.g. single-instance preflight).
 pub fn project_dirs() -> Option<ProjectDirs> {
     ProjectDirs::from("com", "gpui-starter", "GPUI Starter")

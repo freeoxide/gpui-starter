@@ -52,9 +52,7 @@ pub struct AccessibilitySnapshot {
     /// assistive technology is connected. Dynamic; see [`refresh`].
     pub bridge_enabled: bool,
     pub status: String,
-    /// Windows whose a11y tree is currently active.
     pub active_windows: usize,
-    /// Windows currently open.
     pub total_windows: usize,
 }
 
@@ -66,7 +64,6 @@ impl Default for AccessibilitySnapshot {
     }
 }
 
-/// Compile-time fact: only native gpui targets carry the accesskit bridge.
 fn bridge_available() -> bool {
     cfg!(not(target_family = "wasm"))
 }

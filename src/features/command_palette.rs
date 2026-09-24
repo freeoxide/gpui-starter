@@ -54,7 +54,6 @@ impl PaletteEntry for LauncherItem {
     }
 }
 
-// Launcher view: pure search UI, emits LauncherEvent.
 pub enum LauncherEvent {
     Act(LauncherActionKind),
     Dismiss,
@@ -139,7 +138,7 @@ impl Launcher {
 
     fn act(&mut self, cx: &mut Context<Self>) {
         if let Some(item) = self.item(self.selected_display()) {
-            let action = item.action; // LauncherActionKind: Copy
+            let action = item.action;
             tracing::info!(
                 target: LOG,
                 action = ?action,
@@ -370,7 +369,6 @@ impl Render for Launcher {
     }
 }
 
-// LauncherRoot: standalone window root, handles events and closes the window.
 pub struct LauncherRoot {
     launcher: Entity<Launcher>,
     should_close: bool,
@@ -391,7 +389,7 @@ impl LauncherRoot {
 
         let launcher = cx.new(|cx| Launcher::new(window, cx));
 
-        // Focus the search input after the first layout pass
+        // Deferred until after the first layout pass
         let input_fh = launcher.read(cx).input.read(cx).focus_handle(cx);
         window.defer(cx, move |window, cx| {
             input_fh.focus(window, cx);
@@ -446,6 +444,29 @@ impl Render for LauncherRoot {
             self.should_close = false;
             cx.set_global(LauncherOpen(false));
             tracing::info!(target: LOG, "Removing launcher window (deferred)");
+            #[cfg(target_os = "windows")]
+            {
+                // Hand OS focus to the main window and let it settle before
+                // this popup leaves gpui's window map: key-ups and WM_ACTIVATE
+                // still route to the focused window afterward and would log
+                // "window not found" from gpui's own callbacks.
+                let handle = window.window_handle();
+                cx.spawn(async move |_this, cx| {
+                    cx.update(|cx| {
+                        if let Some(root) = crate::app::window::root_window(cx) {
+                            let _ = root.update(cx, |_, window, _| window.activate_window());
+                        }
+                    });
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_millis(50))
+                        .await;
+                    cx.update(|cx| {
+                        let _ = handle.update(cx, |_, window, _| window.remove_window());
+                    });
+                })
+                .detach();
+            }
+            #[cfg(not(target_os = "windows"))]
             window.defer(cx, |window, _cx| {
                 window.remove_window();
             });
@@ -460,7 +481,6 @@ impl Render for LauncherRoot {
     }
 }
 
-// Open the launcher as a floating PopUp window.
 pub fn open_launcher(cx: &mut App) {
     if cx.try_global::<LauncherOpen>().is_some_and(|g| g.0) {
         tracing::debug!(target: LOG, "Launcher already open — ignoring open request");

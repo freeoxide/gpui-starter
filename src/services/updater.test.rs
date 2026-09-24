@@ -4,13 +4,11 @@ use super::*;
 #[test]
 fn platform_key_format() {
     let key = platform_key();
-    // Must contain os and arch separated by a dash.
     let parts: Vec<&str> = key.split('-').collect();
     assert!(
         parts.len() >= 2,
         "platform_key should contain at least os and arch separated by dash, got: {key}"
     );
-    // Verify the arch portion is a known value.
     let arch = std::env::consts::ARCH;
     assert!(
         key.contains(arch),

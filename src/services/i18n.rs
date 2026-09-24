@@ -47,8 +47,6 @@ pub fn localize_message<T: FluentMessage + ?Sized>(message: &T) -> String {
     i18n().localize_message(message)
 }
 
-/// Detect the system locale via `sys-locale` (e.g. `"en-US"`), falling back
-/// to `"en"` when detection fails.
 pub fn detect_system_locale() -> String {
     sys_locale::get_locale().unwrap_or_else(|| "en".to_string())
 }

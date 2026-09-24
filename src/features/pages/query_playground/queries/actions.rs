@@ -456,7 +456,6 @@ impl QueryPlaygroundPage {
         }
     }
 
-    // HTTP Fetching: real requests via reqwest over the tokio runtime.
     pub(in super::super) fn fetch_http(&mut self, kind: HttpFetchKind, cx: &mut Context<Self>) {
         self.ensure_http_query(cx);
         let Some((entity, _)) = self.http_query.as_ref() else {
@@ -528,11 +527,7 @@ impl QueryPlaygroundPage {
     }
 }
 
-// Native: reqwest needs the driven tokio runtime, so requests are spawned onto
-// it and the JoinHandle awaited; wasm bridges through [`spawn_http_local`].
-
-/// Perform the raw HTTP exchange: send the request and buffer the body. On
-/// wasm the future is `!Send` — await it only from GPUI's local executor.
+/// On wasm the future is `!Send` — await it only from GPUI's local executor.
 async fn exchange(
     client: reqwest::Client,
     kind: HttpFetchKind,
@@ -582,7 +577,6 @@ pub(super) async fn run_http(
         exchange(client.clone(), kind, url.clone()).await?
     };
 
-    // Pretty-print JSON bodies; truncate long bodies for display.
     let is_json = matches!(kind, HttpFetchKind::GetJson | HttpFetchKind::PostJson);
     let body = if is_json {
         serde_json::from_str::<serde_json::Value>(&raw)

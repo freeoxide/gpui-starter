@@ -2,14 +2,20 @@
 // Wasm has one instance per tab, so `preflight()` always reports start.
 
 #[cfg(not(target_family = "wasm"))]
-pub use native::{Preflight, SingleInstanceRuntime, install, preflight, shutdown};
+pub use native::{
+    Preflight, SingleInstanceRuntime, initial_deep_link, install, preflight, shutdown,
+};
 
 // Test-only internals (the ipc round-trip tests exercise these directly).
 #[cfg(all(test, not(target_family = "wasm")))]
 pub(crate) use native::{
-    MAX_LINE_BYTES, SCHEME, append_forwarded_link, drain_forwarded_links, read_bounded_line,
-    resolve_ipc_name, send_forwarded_link_via_ipc,
+    AcquireOutcome, MAX_LINE_BYTES, SCHEME, append_forwarded_link, drain_forwarded_links,
+    read_bounded_line, resolve_ipc_name, retry_until_single, send_forwarded_link_via_ipc,
 };
+
+// The Windows deep-link registration derives its registry key name from SCHEME.
+#[cfg(all(target_os = "windows", not(test)))]
+pub(crate) use native::SCHEME;
 
 #[cfg(not(target_family = "wasm"))]
 mod native {
@@ -84,86 +90,146 @@ mod native {
         pub initial_deep_link: Option<String>,
     }
 
+    /// One lock-acquisition attempt: `Failed` (lock subsystem error) must not
+    /// be retried, while `Busy` (another instance holds the lock) may be.
+    pub(crate) enum AcquireOutcome<T> {
+        Acquired(T),
+        Busy,
+        Failed,
+    }
+
+    // Restart-handoff budget: 50 tries x 100ms while the dying parent's last
+    // mutex handle closes; every other launch stays single-shot.
+    const RESTART_LOCK_ATTEMPTS: u32 = 50;
+    const RESTART_LOCK_INTERVAL: Duration = Duration::from_millis(100);
+
+    pub(crate) fn retry_until_single<T>(
+        mut acquire: impl FnMut() -> AcquireOutcome<T>,
+        attempts: u32,
+        interval: Duration,
+    ) -> AcquireOutcome<T> {
+        for attempt in 0..attempts {
+            match acquire() {
+                AcquireOutcome::Acquired(value) => {
+                    if attempt > 0 {
+                        tracing::info!(
+                            target: LOG,
+                            attempt,
+                            "instance lock acquired after restart retry"
+                        );
+                    }
+                    return AcquireOutcome::Acquired(value);
+                }
+                AcquireOutcome::Failed => return AcquireOutcome::Failed,
+                AcquireOutcome::Busy => {}
+            }
+            if attempt + 1 < attempts {
+                std::thread::sleep(interval);
+            }
+        }
+        tracing::warn!(target: LOG, "instance lock never released by dying restart parent");
+        AcquireOutcome::Busy
+    }
+
+    /// The launch's deep-link argument, if any: the first argv entry that
+    /// starts with the scheme. Protocol launches pass the URL as its own argv
+    /// entry after the exe path (quotes are gone once the command line is
+    /// parsed), so argv[0] alone must never match.
+    pub fn initial_deep_link(args: &[String]) -> Option<String> {
+        args.iter().find(|arg| arg.starts_with(SCHEME)).cloned()
+    }
+
     pub fn preflight() -> Preflight {
         let args: Vec<String> = std::env::args().collect();
-        let deep_link = args.iter().find(|arg| arg.starts_with(SCHEME)).cloned();
+        let deep_link = initial_deep_link(&args);
         let ipc_name = ipc_name();
         let queue_file = queue_file_path();
 
-        let instance = match SingleInstance::new(INSTANCE_NAME) {
-            Ok(instance) => instance,
+        let acquire = || match SingleInstance::new(INSTANCE_NAME) {
+            Ok(instance) if instance.is_single() => AcquireOutcome::Acquired(instance),
+            Ok(_) => AcquireOutcome::Busy,
             Err(err) => {
                 eprintln!("single-instance init failed: {err}");
-                return Preflight {
-                    should_start: true,
-                    runtime: None,
-                    initial_deep_link: deep_link,
-                };
+                AcquireOutcome::Failed
             }
         };
-
-        if instance.is_single() {
-            if let Some(path) = &queue_file {
-                if let Some(parent) = path.parent() {
-                    let _ = fs::create_dir_all(parent);
-                }
-                let _ = fs::remove_file(path);
-            }
-            // Probe a filesystem socket left by a crashed run and remove it
-            // when nothing answers; namespaced sockets have no file to clean.
-            let socket_path = filesystem_socket_path(ipc_name.as_deref());
-            if let Some(path) = &socket_path
-                && path.exists()
-                && !is_socket_live(ipc_name.as_deref())
-            {
-                let _ = fs::remove_file(path);
-                tracing::warn!(
-                    target: LOG,
-                    path = %path.display(),
-                    "removed stale ipc socket before startup"
-                );
-            }
-            Preflight {
-                should_start: true,
-                runtime: Some(SingleInstanceRuntime {
-                    _instance: instance,
-                    ipc_name,
-                    queue_file,
-                    socket_path,
-                    ipc_running: Arc::new(AtomicBool::new(true)),
-                }),
-                initial_deep_link: deep_link,
-            }
+        let outcome = if std::env::var_os(crate::app::reload::RESTART_HANDOFF_ENV).is_some() {
+            retry_until_single(acquire, RESTART_LOCK_ATTEMPTS, RESTART_LOCK_INTERVAL)
         } else {
-            if let Some(link) = deep_link {
-                match ipc_name
-                    .as_deref()
-                    .map(|name| send_forwarded_link_via_ipc(name, &link))
+            acquire()
+        };
+
+        match outcome {
+            // Degraded unlocked start: the lock subsystem itself failed.
+            AcquireOutcome::Failed => Preflight {
+                should_start: true,
+                runtime: None,
+                initial_deep_link: deep_link,
+            },
+            AcquireOutcome::Acquired(instance) => {
+                if let Some(path) = &queue_file {
+                    if let Some(parent) = path.parent() {
+                        let _ = fs::create_dir_all(parent);
+                    }
+                    let _ = fs::remove_file(path);
+                }
+                // Probe a filesystem socket left by a crashed run and remove it
+                // when nothing answers; namespaced sockets have no file to clean.
+                let socket_path = filesystem_socket_path(ipc_name.as_deref());
+                if let Some(path) = &socket_path
+                    && path.exists()
+                    && !is_socket_live(ipc_name.as_deref())
                 {
-                    Some(Ok(())) => {}
-                    Some(Err(err)) => {
-                        tracing::warn!(
-                            target: LOG,
-                            error = %err,
-                            "ipc forward failed; falling back to queue file"
-                        );
-                        if let Some(queue) = &queue_file {
-                            append_forwarded_link(queue, &link);
+                    let _ = fs::remove_file(path);
+                    tracing::warn!(
+                        target: LOG,
+                        path = %path.display(),
+                        "removed stale ipc socket before startup"
+                    );
+                }
+                Preflight {
+                    should_start: true,
+                    runtime: Some(SingleInstanceRuntime {
+                        _instance: instance,
+                        ipc_name,
+                        queue_file,
+                        socket_path,
+                        ipc_running: Arc::new(AtomicBool::new(true)),
+                    }),
+                    initial_deep_link: deep_link,
+                }
+            }
+            AcquireOutcome::Busy => {
+                if let Some(link) = deep_link {
+                    match ipc_name
+                        .as_deref()
+                        .map(|name| send_forwarded_link_via_ipc(name, &link))
+                    {
+                        Some(Ok(())) => {}
+                        Some(Err(err)) => {
+                            tracing::warn!(
+                                target: LOG,
+                                error = %err,
+                                "ipc forward failed; falling back to queue file"
+                            );
+                            if let Some(queue) = &queue_file {
+                                append_forwarded_link(queue, &link);
+                            }
+                        }
+                        None => {
+                            tracing::warn!(
+                                target: LOG,
+                                link = %truncate_for_log(&link),
+                                "no safe ipc socket path available; deep link dropped"
+                            );
                         }
                     }
-                    None => {
-                        tracing::warn!(
-                            target: LOG,
-                            link = %truncate_for_log(&link),
-                            "no safe ipc socket path available; deep link dropped"
-                        );
-                    }
                 }
-            }
-            Preflight {
-                should_start: false,
-                runtime: None,
-                initial_deep_link: None,
+                Preflight {
+                    should_start: false,
+                    runtime: None,
+                    initial_deep_link: None,
+                }
             }
         }
     }
@@ -450,7 +516,6 @@ mod native {
         })
     }
 
-    /// Resolve a platform-appropriate local-socket name for the sync path.
     pub(crate) fn resolve_ipc_name<'a>(
         ipc_name: &'a str,
     ) -> std::io::Result<interprocess::local_socket::Name<'a>> {
@@ -545,7 +610,6 @@ mod native {
         }
     }
 
-    /// Probe whether a listener is currently answering on the forwarder socket.
     fn is_socket_live(ipc_name: Option<&str>) -> bool {
         match ipc_name.map(resolve_ipc_name).transpose() {
             Ok(Some(name)) => Stream::connect(name).is_ok(),

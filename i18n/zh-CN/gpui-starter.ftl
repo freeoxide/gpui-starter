@@ -41,7 +41,6 @@ home_get_started = 开始使用
 ## AboutPage
 
 about_title = 关于
-about_version = GPUI Starter v0.1.0
 
 ## SettingsPage
 

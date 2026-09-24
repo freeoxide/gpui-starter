@@ -1,5 +1,6 @@
 use gpui::{
-    App, Div, InteractiveElement as _, ParentElement as _, Role, Stateful, Styled as _, div,
+    AnyElement, App, Div, InteractiveElement as _, IntoElement as _, ParentElement as _, Role,
+    Stateful, Styled as _, div,
 };
 use gpui_component::ActiveTheme as _;
 
@@ -62,7 +63,6 @@ pub fn render(route: &AppRoute, cx: &App) -> impl gpui::IntoElement {
         None => "Unknown".to_string(),
     };
 
-    // Dev-only frame-time readout.
     let frame_time_el = render_frame_time(cx);
 
     div()
@@ -101,19 +101,48 @@ pub fn render(route: &AppRoute, cx: &App) -> impl gpui::IntoElement {
             if let Some(label) = updater_label {
                 children.push(status_row("status-updater", label));
             }
+            let mut segments: Vec<AnyElement> = Vec::with_capacity(children.len() * 2);
+            if let Some(frame_time_el) = frame_time_el {
+                segments.push(frame_time_el.into_any_element());
+            }
+            for child in children {
+                if !segments.is_empty() {
+                    // Separators keep the read-outs from reading as one
+                    // run-on line.
+                    segments.push(separator(cx).into_any_element());
+                }
+                segments.push(child.into_any_element());
+            }
             div()
                 .flex()
-                .gap_4()
+                // Segments wrap as whole units instead of shrinking to
+                // fragments; a lone oversized segment still truncates.
+                .flex_wrap()
+                .min_w_0()
+                .overflow_x_hidden()
                 .items_center()
-                .children(frame_time_el)
-                .children(children)
+                .children(segments)
         })
 }
 
 /// One read-out row. Paragraph, not Label: Label-role nodes draw their AT
 /// name from the value property, so these rows would read unnamed.
 fn status_row(id: &'static str, text: String) -> Stateful<Div> {
-    div().id(id).a11y(Role::Paragraph, text.clone()).child(text)
+    div()
+        .id(id)
+        .min_w_0()
+        .truncate()
+        .a11y(Role::Paragraph, text.clone())
+        .child(text)
+}
+
+/// Decoration only, no a11y node.
+fn separator(cx: &App) -> gpui::Div {
+    div()
+        .flex_shrink_0()
+        .px_2()
+        .text_color(cx.theme().foreground.opacity(0.45))
+        .child("·")
 }
 
 fn truncate_error(s: &str, max_len: usize) -> &str {
@@ -127,11 +156,6 @@ fn truncate_error(s: &str, max_len: usize) -> &str {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Dev-only frame-time readout
-// ---------------------------------------------------------------------------
-
-/// Frame-time label; debug builds only, toggled by `show_frame_time`.
 #[cfg(debug_assertions)]
 fn render_frame_time(cx: &App) -> Option<gpui::Div> {
     if !crate::app_state::with_config(cx, |c| c.show_frame_time) {
@@ -141,11 +165,9 @@ fn render_frame_time(cx: &App) -> Option<gpui::Div> {
     let us = crate::root::last_frame_time_us();
     let threshold = crate::root::slow_frame_threshold_us();
 
-    // Format as milliseconds (e.g. "Frame: 2.13ms").
     let ms = us as f64 / 1000.0;
     let label = format!("Frame: {ms:.2}ms");
 
-    // Colour-code: green < 50% threshold, yellow < threshold, red >= threshold.
     let color = if us < threshold / 2 {
         gpui::rgb(0x22c55e) // green
     } else if us < threshold {

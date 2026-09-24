@@ -37,6 +37,7 @@ impl Render for NotificationsPage {
             .child(
                 h_flex()
                     .w_full()
+                    .flex_wrap()
                     .justify_between()
                     .items_center()
                     .child(
@@ -49,11 +50,13 @@ impl Render for NotificationsPage {
                             .aria_level(1)
                             .text_xl()
                             .font_weight(FontWeight::BOLD)
+                            .min_w_0()
                             .child(title),
                     )
                     .child(
                         h_flex()
                             .gap_2()
+                            .flex_shrink_0()
                             .child(
                                 Button::new("notifications-mark-read")
                                     .outline()
@@ -118,11 +121,20 @@ fn render_item(index: usize, total: usize, item: NotificationInboxItem) -> State
         .border_1()
         .rounded_lg()
         .child(
+            // Timestamp wraps below the title instead of colliding with it
+            // when the row is narrower than title + timestamp.
             h_flex()
+                .flex_wrap()
                 .justify_between()
                 .items_center()
-                .child(div().font_weight(FontWeight::BOLD).child(title))
-                .child(div().text_xs().child(timestamp)),
+                .child(div().min_w_0().font_weight(FontWeight::BOLD).child(title))
+                .child(
+                    div()
+                        .text_xs()
+                        .flex_shrink_0()
+                        .whitespace_nowrap()
+                        .child(timestamp),
+                ),
         )
         .child(div().text_sm().child(body))
         .child(div().text_xs().child(summary))

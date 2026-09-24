@@ -162,12 +162,6 @@ gpui-form.workspace = true
 gpui-form-collection.workspace = true
 # user-notify / notify-rust live in the not-wasm target section (D-Bus/mac
 # notification frameworks have no wasm32-unknown-unknown story).
-# Optional: XDG Desktop Portal notification backend (enable with --features notifications-portal).
-# `notification` is required (ashpd gates its whole desktop::notification module behind it).
-# `async-io` (NOT tokio) is required: notify-rust already forces zbus/async-io, and zbus forbids
-# enabling both async-io and tokio. ashpd on async-io drives zbus's own background thread, so its
-# futures are safe to await directly (like notify-rust's show_async).
-ashpd = { version = "0.13", optional = true, default-features = false, features = ["notification", "async-io"] }
 thiserror = "2.0.18"
 uuid = { version = "1.23.1", features = ["v4", "serde"] }
 chrono = { version = "0.4.44", features = ["serde"] }
@@ -212,6 +206,9 @@ insta.workspace = true
 [target.'cfg(target_os = "macos")'.dependencies]
 tray-icon = { version = "0.24", default-features = false }
 global-hotkey = "0.8"
+# user-notify is the macOS backend only; its Windows backend lacks action
+# support, so Windows sends through src/platform/win_toast.rs instead.
+user-notify = "0.4.2"
 block2 = "0.6"
 objc2 = { version = "0.6", features = ["exception"] }
 objc2-foundation = { version = "0.3.0", default-features = false, features = [
@@ -233,6 +230,51 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = [
 ] }
 raw-window-handle = "0.6"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Optional: XDG Desktop Portal notification backend (enable with --features
+# notifications-portal). Linux-only table: ashpd is Unix-only (std::os::fd) and
+# the portal path targets Flatpak/Snap runs; other targets compile the feature
+# to a no-op. `notification` is required (ashpd gates its whole
+# desktop::notification module behind it). `async-io` (NOT tokio) is required:
+# notify-rust already forces zbus/async-io, and zbus forbids enabling both
+# async-io and tokio. ashpd on async-io drives zbus's own background thread, so
+# its futures are safe to await directly (like notify-rust's show_async).
+ashpd = { version = "0.13", optional = true, default-features = false, features = [
+    "notification",
+    "async-io",
+] }
+
+# Unpackaged Win32 apps need a Start Menu shortcut carrying the toast AUMID or
+# Windows silently drops every toast; see src/platform/toast_identity.rs. Same
+# windows crate copy user-notify 0.4 already pulls in. UI_Notifications +
+# Data_Xml_Dom + Foundation_Collections cover the interactive toast path in
+# src/platform/win_toast.rs; quick-xml escapes the toast XML (same helper
+# user-notify uses).
+[target.'cfg(target_os = "windows")'.dependencies]
+tray-icon = { version = "0.24", default-features = false }
+# Select multiplexes tray-icon's two global crossbeam channels onto the one
+# gpui-tray-events drain thread.
+crossbeam-channel = "0.5"
+global-hotkey = "0.8"
+quick-xml = "0.37"
+# Thin safe HKCU wrapper for the gpui-starter:// protocol registration in
+# src/platform/deep_link_registration.rs (already locked at 0.6 transitively).
+windows-registry = "0.6"
+windows = { version = "0.61", features = [
+    "Data_Xml_Dom",
+    "Foundation_Collections",
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_UI_WindowsAndMessaging",
+    "UI_Notifications",
+] }
+
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
@@ -245,10 +287,11 @@ libc = "0.2"
 single-instance = "0.3.3"
 interprocess = "2.4.2"
 network-interface = "2.0.3"
-keyring = { version = "3.6.3", features = ["apple-native"] }
+# Per-platform credential stores; a platform left without its store feature
+# silently falls back to keyring's per-entry mock (writes vanish, reads miss).
+keyring = { version = "3.6.3", features = ["apple-native", "windows-native"] }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 notify-rust = "4.17.0"
-user-notify = "0.4.2"
 # `open` hits compile_error!("open is not supported on this platform") and
 # `arboard` has no wasm clipboard backend (its `platform` module is
 # linux/osx/windows only) — both hard-fail on wasm32-unknown-unknown
@@ -260,8 +303,9 @@ arboard = { version = "3.6.1", features = ["image-data"] }
 # src/services/logging.rs.
 tracing-appender = "0.2"
 # Native-only tokio features re-added on top of the workspace base
-# (rt + sync + time): `net` and `io-util` have no wasm implementation.
-tokio = { workspace = true, features = ["io-util", "net"] }
+# (rt + sync + time): `net` and `io-util` have no wasm implementation, and
+# `rt-multi-thread` (tokio_runtime's dedicated I/O runtime) needs threads.
+tokio = { workspace = true, features = ["io-util", "net", "rt-multi-thread"] }
 
 # Web (wasm32-unknown-unknown) dependencies.
 [target.'cfg(target_family = "wasm")'.dependencies]

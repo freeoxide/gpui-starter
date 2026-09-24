@@ -15,7 +15,6 @@ pub struct SettingsPage {
     dark_mode: bool,
     locale: SharedString,
     notifications: NotificationRuntimeSnapshot,
-    /// Log of received event descriptions for the Event Emitter test section.
     event_log: Vec<String>,
     _subscriptions: Vec<Subscription>,
 }

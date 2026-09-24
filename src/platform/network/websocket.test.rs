@@ -40,7 +40,6 @@ fn stub_client_returns_error_without_feature() {
     let mut client = WebSocketClient::new("wss://localhost".to_string());
     assert_eq!(client.state, ConnectionState::Disconnected);
 
-    // The stub methods should surface a clear error.
     let rt = tokio::runtime::Runtime::new().unwrap();
     let result = rt.block_on(async { client.connect_loop().await });
     assert!(result.is_err());

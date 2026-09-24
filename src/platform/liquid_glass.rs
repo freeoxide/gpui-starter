@@ -10,43 +10,40 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 const LOG: &str = "liquid_glass";
 
-// NSAutoresizingMaskOptions constants
 const NS_VIEW_WIDTH_SIZABLE: u64 = 1 << 1;
 const NS_VIEW_HEIGHT_SIZABLE: u64 = 1 << 4;
 
 /// Configuration for `NSGlassEffectView`.
 #[derive(Debug, Clone)]
 pub struct LiquidGlassConfig {
-    /// Corner radius in points.
     pub corner_radius: f64,
     /// Glass style: `0` = default (heavier), `1` = clear/thin.
     pub style: i64,
-    /// Glass variant: controls the glass intensity/pattern.
     /// `0` = default, higher values change the glass appearance.
     pub variant: i64,
-    /// Optional tint color.
     pub tint: Option<LiquidGlassTint>,
-    /// Whether to disable the window shadow (recommended for glass windows).
     pub disable_shadow: bool,
 }
 
-/// Tint values for `NSGlassEffectView`.
 #[derive(Debug, Clone, Copy)]
 pub enum LiquidGlassTint {
-    /// Neutral grey tint.
     Grey,
-    /// System blue tint.
     Blue,
     /// Custom RGBA color (each component 0.0–1.0).
-    Custom { r: f64, g: f64, b: f64, a: f64 },
+    Custom {
+        r: f64,
+        g: f64,
+        b: f64,
+        a: f64,
+    },
 }
 
 impl Default for LiquidGlassConfig {
     fn default() -> Self {
         Self {
             corner_radius: 16.0,
-            style: 1,   // Default Liquid Glass (heavier)
-            variant: 3, // Default variant
+            style: 1,
+            variant: 3,
             tint: Some(LiquidGlassTint::Custom {
                 r: 0.0,
                 g: 0.0,
@@ -58,7 +55,6 @@ impl Default for LiquidGlassConfig {
     }
 }
 
-/// Handle to a discovered or created `NSGlassEffectView`.
 pub struct LiquidGlassView {
     view: *mut objc2::runtime::AnyObject,
 }
@@ -69,9 +65,7 @@ unsafe impl Send for LiquidGlassView {}
 unsafe impl Sync for LiquidGlassView {}
 
 impl LiquidGlassView {
-    /// Set the corner radius.
     pub fn set_corner_radius(&self, radius: f64) {
-        // SAFETY: setCornerRadius: is a standard NSGlassEffectView method.
         unsafe {
             let _: () = objc2::msg_send![self.view, setCornerRadius: radius];
         }
@@ -79,7 +73,6 @@ impl LiquidGlassView {
 
     /// Set the glass style (`0` = default, `1` = clear).
     pub fn set_style(&self, style: i64) {
-        // SAFETY: setStyle: is a standard NSGlassEffectView method.
         unsafe {
             let _: () = objc2::msg_send![self.view, setStyle: style];
         }
@@ -93,18 +86,14 @@ impl LiquidGlassView {
         }
     }
 
-    /// Set the tint color to a predefined tint.
     pub fn set_tint(&self, tint: LiquidGlassTint) {
-        // SAFETY: setTintColor: accepts an NSColor or nil.
         unsafe {
             let color: *mut objc2::runtime::AnyObject = make_nscolor(tint);
             let _: () = objc2::msg_send![self.view, setTintColor: color];
         }
     }
 
-    /// Clear the tint color (pass `nil`).
     pub fn clear_tint(&self) {
-        // SAFETY: setTintColor: nil is valid.
         // Use *mut AnyObject (encodes as '@') not *mut u8 (encodes as '*').
         unsafe {
             let _: () = objc2::msg_send![
@@ -115,7 +104,6 @@ impl LiquidGlassView {
     }
 }
 
-/// Create an NSColor from a `LiquidGlassTint`.
 fn make_nscolor(tint: LiquidGlassTint) -> *mut objc2::runtime::AnyObject {
     unsafe {
         let cls = AnyClass::get(c"NSColor").expect("NSColor class should exist");
@@ -129,7 +117,6 @@ fn make_nscolor(tint: LiquidGlassTint) -> *mut objc2::runtime::AnyObject {
     }
 }
 
-/// Utility for creating, discovering, and configuring `NSGlassEffectView` in a GPUI window.
 pub struct LiquidGlass;
 
 impl LiquidGlass {
@@ -141,7 +128,6 @@ impl LiquidGlass {
         let ns_view = Self::get_ns_view(window)?;
         let ns_window = ns_view.window()?;
 
-        // SAFETY: We have a valid NSWindow and NSGlassEffectView class.
         unsafe {
             if config.disable_shadow {
                 let _: () = objc2::msg_send![&*ns_window, setHasShadow: false];
@@ -150,7 +136,6 @@ impl LiquidGlass {
             let content_view = ns_window.contentView()?;
             let frame: objc2_foundation::NSRect = objc2::msg_send![&*content_view, bounds];
 
-            // Create the glass view.
             let glass: *mut objc2::runtime::AnyObject = objc2::msg_send![glass_cls, alloc];
             let glass: *mut objc2::runtime::AnyObject =
                 objc2::msg_send![glass, initWithFrame: frame];
@@ -228,7 +213,6 @@ impl LiquidGlass {
         result
     }
 
-    /// Find an existing glass view and apply a configuration.
     pub fn apply(window: &Window, config: &LiquidGlassConfig) -> bool {
         let Some(glass) = Self::find(window) else {
             return false;
@@ -243,7 +227,6 @@ impl LiquidGlass {
         true
     }
 
-    /// Get the native NSView from a GPUI window.
     fn get_ns_view(window: &Window) -> Option<&NSView> {
         // Use the HasWindowHandle trait method explicitly — Window has an inherent
         // window_handle() that returns AnyWindowHandle, which shadows the trait method.
@@ -256,7 +239,6 @@ impl LiquidGlass {
         Some(unsafe { appkit.ns_view.cast::<NSView>().as_ref() })
     }
 
-    /// Recursively search the view hierarchy for a view whose class matches.
     fn find_in_subviews(view: &NSView, target: &AnyClass) -> Option<LiquidGlassView> {
         let subviews = view.subviews();
         let count = subviews.count();

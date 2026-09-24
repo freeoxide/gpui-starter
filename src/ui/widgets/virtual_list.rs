@@ -1,6 +1,3 @@
-//! Virtualized-list helpers around `gpui_component::v_virtual_list`: item-size
-//! builders, bounded heights, and a single wired-up render entry point.
-
 use std::ops::Range;
 use std::rc::Rc;
 
@@ -8,37 +5,23 @@ use gpui::{prelude::*, *};
 use gpui_component::scroll::{ScrollableElement, ScrollbarAxis};
 use gpui_component::{VirtualListScrollHandle, v_flex, v_virtual_list};
 
-// ---------------------------------------------------------------------------
-// Item-size helpers
-// ---------------------------------------------------------------------------
-
-/// Uniform item sizes; width is `px(0.)` so each row's flex layout controls it.
+/// Width is `px(0.)` so each row's flex layout controls it.
 pub fn uniform_item_sizes(count: usize, height: Pixels) -> Rc<Vec<Size<Pixels>>> {
     Rc::new(vec![size(px(0.), height); count])
 }
 
-/// Variable item sizes from heights; width is `px(0.)` as above.
+/// Width is `px(0.)` as above.
 pub fn variable_item_sizes(heights: &[Pixels]) -> Rc<Vec<Size<Pixels>>> {
     Rc::new(heights.iter().map(|&h| size(px(0.), h)).collect())
 }
 
-// ---------------------------------------------------------------------------
-// Bounded list height
-// ---------------------------------------------------------------------------
-
-/// Bounded list height: `min(total_content_height + gaps, max_height)`.
 pub fn bounded_list_height(item_sizes: &[Size<Pixels>], gap: Pixels, max_height: Pixels) -> Pixels {
     let content_h: f32 = item_sizes.iter().map(|s| s.height.as_f32()).sum();
     let gap_total = gap.as_f32() * item_sizes.len().saturating_sub(1) as f32;
     px((content_h + gap_total).min(max_height.as_f32()))
 }
 
-// ---------------------------------------------------------------------------
-// render_virtual_list
-// ---------------------------------------------------------------------------
-
-/// Render a virtualized list (entity clone, scroll tracking, gap, container,
-/// optional scrollbar). Precondition: items pinned to declared heights.
+/// Precondition: items pinned to declared heights.
 ///
 /// An inner node carries `Role::List` because the scrollable list element has
 /// no role of its own; items get their `Role::ListItem` from

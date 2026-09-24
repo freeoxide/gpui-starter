@@ -9,7 +9,7 @@ use wasm_bindgen::prelude::*;
 /// Shared application bootstrap, invoked by the native `main` and the wasm
 /// `start` entry alike.
 pub fn bootstrap() {
-    // Wasm: console panic hook + logging first, so early failures surface.
+    // First, so early failures surface.
     #[cfg(target_family = "wasm")]
     gpui_platform::web_init();
 
@@ -39,7 +39,7 @@ pub fn bootstrap() {
             crate::events::emit(crate::events::AppEventKind::DeepLinkReceived(link), cx);
         }
 
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         crate::tray::setup(cx);
 
         cx.activate(true);
@@ -56,21 +56,20 @@ pub fn bootstrap() {
     #[cfg(target_family = "wasm")]
     std::mem::forget(app_runtime.run_embedded(launch));
 
-    // Re-exec after shutdown when a restart was requested. A silent no-op
-    // means the instance lock outlived run() (exec skips dtors).
-    #[cfg(unix)]
+    // Runs post-run only: the instance-mutex Global drops inside run()'s
+    // frame, and spawning outside any App borrow avoids gpui's Win32
+    // message-pump re-entrancy hazard. Never spawn from the Restart handler.
+    #[cfg(not(target_family = "wasm"))]
     {
         #[allow(clippy::collapsible_if)]
         if crate::app::is_reload_requested() {
-            if let Err(err) = crate::app::exec_reload() {
+            if let Err(err) = crate::app::perform_reload() {
                 eprintln!("reload failed: {err}");
             }
         }
     }
 }
 
-/// Wasm entry point — invoked by the `wasm-bindgen`-generated JS glue when
-/// the module instantiates (`#[wasm_bindgen(start)]`).
 #[cfg(target_family = "wasm")]
 #[wasm_bindgen(start)]
 pub fn start() {

@@ -371,7 +371,6 @@ fn select_primary_backend() -> (Option<Arc<dyn NotificationBackend>>, Option<Str
     }
 }
 
-/// Best-effort stringification of a `catch_unwind` panic payload.
 fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
     if let Some(s) = payload.downcast_ref::<&'static str>() {
         (*s).to_string()
@@ -385,7 +384,9 @@ fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
 #[cfg(test)]
 mod tests {
     use super::NotificationService;
-    use crate::services::notifications::backend::{NotificationBackend, NotifyRustBackend};
+    use crate::services::notifications::backend::NotificationBackend;
+    #[cfg(target_os = "linux")]
+    use crate::services::notifications::backend::NotifyRustBackend;
     use crate::services::notifications::service::types::{
         NotificationBackendKind, NotificationCapabilities, NotificationPermissionState,
         NotificationRequest,
@@ -395,7 +396,6 @@ mod tests {
 
     use async_trait::async_trait;
 
-    /// What a fake backend does when `send` is called.
     enum SendOutcome {
         Ok,
         Err(&'static str),
@@ -496,8 +496,6 @@ mod tests {
 
     #[test]
     fn primary_panic_does_not_bypass_fallback() {
-        // The whole point of catch_unwind: a panicking primary must not abort the
-        // send task, and the secondary must still be tried.
         let svc = NotificationService::with_backends(
             Some(fake(
                 NotificationBackendKind::UserNotify,
@@ -553,9 +551,7 @@ mod tests {
         assert_eq!(state, NotificationPermissionState::Unsupported);
     }
 
-    /// The XDG portal backend (feature-gated) reports its kind + capabilities and
-    /// constructs with no runtime handle (ashpd drives zbus's own thread).
-    #[cfg(feature = "notifications-portal")]
+    #[cfg(all(feature = "notifications-portal", target_os = "linux"))]
     #[test]
     fn portal_backend_reports_kind_and_capabilities() {
         use crate::services::notifications::backend::PortalBackend;

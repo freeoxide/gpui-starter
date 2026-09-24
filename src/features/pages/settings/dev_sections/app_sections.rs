@@ -1,7 +1,6 @@
 use gpui::{prelude::*, *};
 use gpui_component::{button::Button, label::Label, switch::Switch};
 
-/// Renders the "Shortcuts" settings card.
 pub fn render_shortcuts_section(
     app_config: &crate::app_state::AppConfig,
     cx: &mut Context<super::super::SettingsPage>,
@@ -17,10 +16,10 @@ pub fn render_shortcuts_section(
                 .flex()
                 .items_center()
                 .justify_between()
-                .child(Label::new("Enable global launcher shortcut (macOS)"))
+                .child(Label::new("Enable global launcher shortcut"))
                 .child(
                     Switch::new("global-shortcut-enabled")
-                        .accessibility_label("Enable global launcher shortcut (macOS)")
+                        .accessibility_label("Enable global launcher shortcut")
                         .checked(app_config.global_shortcut_enabled)
                         .on_click(|checked, _, cx| {
                             crate::app_state::update_config(cx, |config| {
@@ -32,13 +31,13 @@ pub fn render_shortcuts_section(
         )
 }
 
-/// Renders the "Storage" settings card.
 pub fn render_storage_section(cx: &mut Context<super::super::SettingsPage>) -> impl IntoElement {
     super::settings_card_base(cx)
         .child(super::section_heading("settings-storage-title", "Storage"))
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap_2()
                 .child(
@@ -60,7 +59,6 @@ pub fn render_storage_section(cx: &mut Context<super::super::SettingsPage>) -> i
         )
 }
 
-/// Renders the "Developer" settings card (frame-time toggle).
 pub fn render_developer_section(
     app_config: &crate::app_state::AppConfig,
     cx: &mut Context<super::super::SettingsPage>,

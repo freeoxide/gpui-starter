@@ -1,12 +1,41 @@
 use gpui::{
-    App, AppContext as _, Bounds, Focusable as _, SharedString, WindowBounds, WindowKind,
-    WindowOptions, px, size,
+    AnyWindowHandle, App, AppContext as _, Bounds, Focusable as _, Global, SharedString,
+    WindowBounds, WindowKind, WindowOptions, px, size,
 };
 use gpui_component::{Root, TitleBar};
 
-// ---------------------------------------------------------------------------
-// Window creation
-// ---------------------------------------------------------------------------
+/// The main app window, recorded at creation so code off the OS-input path
+/// (tray, shutdown) can reach it without `active_window()`, which resolves
+/// via thread-local `GetActiveWindow()` on Windows.
+#[derive(Clone, Copy)]
+pub struct RootWindow(pub AnyWindowHandle);
+
+impl Global for RootWindow {}
+
+fn note_root_window(handle: AnyWindowHandle, cx: &mut App) {
+    cx.set_global(RootWindow(handle));
+}
+
+/// The recorded main window, if one has been opened.
+pub fn root_window(cx: &App) -> Option<AnyWindowHandle> {
+    cx.try_global::<RootWindow>().map(|root| root.0)
+}
+
+/// Dispatch Quit at the recorded root window, falling back to app-level
+/// dispatch. `App::dispatch_action` routes at `active_window()` — thread-local
+/// `GetActiveWindow()` on Windows — which still reports the closing palette
+/// after an Esc and drops the action.
+pub fn dispatch_quit(cx: &mut App) {
+    let routed = root_window(cx).is_some_and(|root| {
+        root.update(cx, |_, window, cx| {
+            window.dispatch_action(Box::new(crate::app::Quit), cx)
+        })
+        .is_ok()
+    });
+    if !routed {
+        cx.dispatch_action(&crate::app::Quit);
+    }
+}
 
 pub fn create_new_window(title: &str, cx: &mut App) {
     let mut window_size = size(px(1400.0), px(900.0));
@@ -61,6 +90,10 @@ pub fn create_new_window(title: &str, cx: &mut App) {
             tracing::error!("failed to open window");
             return Ok::<_, anyhow::Error>(());
         };
+
+        // Stored so tray Show and the quit path reach the window without
+        // active_window() (thread-local GetActiveWindow on Windows).
+        cx.update(|cx| note_root_window(window.into(), cx));
 
         window.update(cx, |_, window, _| {
             window.activate_window();

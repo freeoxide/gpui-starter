@@ -4,6 +4,11 @@ use gpui::SharedString;
 
 pub const CATEGORY_ACTIONS: &str = "gpui-starter.actions";
 pub const CATEGORY_REPLY: &str = "gpui-starter.reply";
+// Action ids shared by the macOS category registration and the Windows
+// toast XML builder (src/platform/win_toast.rs).
+pub const ACTION_OPEN: &str = "settings.open";
+pub const ACTION_SNOOZE: &str = "settings.snooze";
+pub const ACTION_REPLY: &str = "settings.reply";
 
 // App identity: three DISTINCT ids — display name, desktop-entry/bundle id,
 // X11 WM_CLASS (must equal .desktop StartupWMClass).

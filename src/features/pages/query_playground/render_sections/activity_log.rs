@@ -57,7 +57,6 @@ impl QueryPlaygroundPage {
                 ),
             )
         } else {
-            // Virtualized list: only renders visible entries (20px each).
             let item_count = self.activity_log.len();
             let item_height = px(20.);
             let item_sizes = uniform_item_sizes(item_count, item_height);

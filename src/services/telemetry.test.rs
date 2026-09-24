@@ -62,7 +62,6 @@ fn resolve_endpoint_prefers_explicit() {
 #[test]
 fn resolve_endpoint_ignores_empty_explicit() {
     let ep = resolve_otlp_endpoint(Some(""));
-    // Should fall through to env var or default -- at minimum must not be empty.
     assert!(!ep.is_empty());
 }
 

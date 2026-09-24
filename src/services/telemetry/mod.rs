@@ -12,7 +12,6 @@ use sink::{DisabledSink, LocalSink, RemoteSink};
 /// OpenTelemetry Collector default for HTTP/Protobuf transport (port 4318).
 const DEFAULT_OTLP_ENDPOINT: &str = "http://localhost:4318";
 
-/// Set `OTEL_EXPORTER_OTLP_ENDPOINT` to override [`DEFAULT_OTLP_ENDPOINT`].
 const ENV_OTLP_ENDPOINT: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
 
 #[cfg(feature = "otlp")]
@@ -92,8 +91,6 @@ pub fn snapshot(cx: &App) -> TelemetrySnapshot {
         .unwrap_or_default()
 }
 
-/// Set the telemetry mode, consent flag, and optional endpoint override.
-///
 /// Without `endpoint`, `OTEL_EXPORTER_OTLP_ENDPOINT` (or the built-in
 /// default) is used. Only `Remote` + consent installs the OTLP exporter.
 pub fn set_mode(mode: TelemetryMode, consented: bool, endpoint: Option<&str>, cx: &mut App) {

@@ -9,22 +9,17 @@ const LOG: &str = "gpui_starter::ipc::command";
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "payload")]
 pub enum ForwardedCommand {
-    /// Bring the main window to the foreground.
     ShowWindow,
-    /// Hide the main window without quitting.
     HideWindow,
     /// Toggle the command palette (or equivalent quick-action UI).
     TogglePalette,
-    /// Quit the running application cleanly.
     Quit,
-    /// Reload configuration from disk.
     ReloadConfig,
     /// Open a deep link (`gpui-starter://...`) in the primary instance.
     DeepLink(String),
 }
 
 impl ForwardedCommand {
-    /// Short label for tracing/log fields.
     pub fn label(&self) -> &'static str {
         match self {
             Self::ShowWindow => "show_window",
@@ -45,7 +40,6 @@ pub struct ForwardedRequest {
 }
 
 impl ForwardedRequest {
-    /// Construct a new request with the given correlation id.
     pub fn new(id: u64, command: ForwardedCommand) -> Self {
         Self { id, command }
     }
@@ -62,7 +56,6 @@ pub struct ForwardedResponse {
 }
 
 impl ForwardedResponse {
-    /// Build a success response for the given request id.
     pub fn ok(id: u64) -> Self {
         Self {
             id,
@@ -71,7 +64,6 @@ impl ForwardedResponse {
         }
     }
 
-    /// Build a failure response carrying `error`.
     pub fn error(id: u64, error: impl Into<String>) -> Self {
         let message = error.into();
         tracing::warn!(target: LOG, id, error = %message, "ipc request failed");

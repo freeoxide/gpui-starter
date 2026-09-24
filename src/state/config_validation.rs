@@ -6,10 +6,8 @@ use std::collections::HashSet;
 use crate::app::{LOCALE_EN, LOCALE_ZH_CN};
 use crate::state::config_store::{AppConfig, PersistedWindowBounds};
 
-/// Logical log target for this module, matching the `gpui_starter::*` idiom.
 const LOG_TARGET: &str = "gpui_starter::config_validation";
 
-/// How serious a single [`ConfigLint`] is.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LintSeverity {
     /// Informational note; no action required (e.g. an unusual-but-legal value).
@@ -23,7 +21,6 @@ pub enum LintSeverity {
 }
 
 impl LintSeverity {
-    /// Lowercase label suitable for embedding in log lines or diagnostics rows.
     pub fn as_str(self) -> &'static str {
         match self {
             LintSeverity::Info => "info",
@@ -39,19 +36,16 @@ impl std::fmt::Display for LintSeverity {
     }
 }
 
-/// A single non-fatal warning; `field` is a dotted path for UI grouping.
 #[derive(Clone, Debug)]
 pub struct ConfigLint {
     /// Dotted path to the offending field (e.g. `theme`, `window_bounds.x`).
     pub field: String,
     /// Human-readable description of the issue and the likely fallback.
     pub message: String,
-    /// How serious this lint is.
     pub severity: LintSeverity,
 }
 
 impl ConfigLint {
-    /// Convenience constructor mirroring the struct's natural ordering.
     fn new(field: impl Into<String>, severity: LintSeverity, message: impl Into<String>) -> Self {
         Self {
             field: field.into(),
@@ -61,7 +55,6 @@ impl ConfigLint {
     }
 }
 
-/// Channels the updater recognises; anything else falls back to `stable`.
 const KNOWN_UPDATE_CHANNELS: &[&str] = &["stable", "beta", "nightly"];
 
 /// Locales the app ships translations for. Mirrors the two constants the rest
@@ -78,8 +71,6 @@ const MIN_WINDOW_DIM: f32 = 100.0;
 /// treated as corrupt and dropped rather than linted.
 pub(crate) const MAX_WINDOW_DIM: f32 = 8192.0;
 
-/// Lint an [`AppConfig`]; an empty Vec means no issues. Covers window bounds,
-/// update channel, locale, theme, and permission keys.
 pub fn validate_config(cfg: &AppConfig) -> Vec<ConfigLint> {
     let mut lints = Vec::new();
 
@@ -100,7 +91,6 @@ pub fn validate_config(cfg: &AppConfig) -> Vec<ConfigLint> {
     lints
 }
 
-/// Window-bounds sanity: non-negative and within a believable on-screen range.
 fn validate_window_bounds(bounds: Option<&PersistedWindowBounds>) -> Vec<ConfigLint> {
     let Some(b) = bounds else {
         return Vec::new();
@@ -143,7 +133,6 @@ fn validate_window_bounds(bounds: Option<&PersistedWindowBounds>) -> Vec<ConfigL
         }
     }
 
-    // Width/height below the usable floor or above the generous ceiling.
     if b.width.is_finite() && (b.width < MIN_WINDOW_DIM || b.width > MAX_WINDOW_DIM) {
         out.push(ConfigLint::new(
             "window_bounds.width",
@@ -187,7 +176,6 @@ fn validate_window_bounds(bounds: Option<&PersistedWindowBounds>) -> Vec<ConfigL
     out
 }
 
-/// `update_channel` must be one of the recognised channels.
 fn validate_update_channel(channel: &str) -> Vec<ConfigLint> {
     if channel.is_empty() {
         return vec![ConfigLint::new(
@@ -210,7 +198,6 @@ fn validate_update_channel(channel: &str) -> Vec<ConfigLint> {
     Vec::new()
 }
 
-/// `locale` must be one of the shipped locales.
 fn validate_locale(locale: &str) -> Vec<ConfigLint> {
     if locale.is_empty() {
         return vec![ConfigLint::new(
@@ -246,7 +233,6 @@ fn validate_theme(theme: &str) -> Vec<ConfigLint> {
     Vec::new()
 }
 
-/// `granted_permissions` should only contain keys the app understands.
 fn validate_granted_permissions(granted: &HashSet<String>) -> Vec<ConfigLint> {
     let known: HashSet<&str> = KNOWN_PERMISSIONS.iter().copied().collect();
     let mut out = Vec::new();

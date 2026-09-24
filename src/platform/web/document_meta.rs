@@ -23,7 +23,6 @@ const ICON_SIZE: u32 = 64;
 /// Last applied favicon inputs — skips canvas redraws on no-op updates.
 static LAST: Mutex<Option<(usize, ConnectivityState)>> = Mutex::new(None);
 
-/// Install the favicon/title observers at app init.
 pub fn install(cx: &mut App) {
     update(cx);
     cx.observe_global::<NotificationInboxState>(|cx| update(cx))
@@ -79,7 +78,6 @@ fn set_title(title: &str) {
     }
 }
 
-/// Draw the favicon on an offscreen canvas and return its PNG `data:` URL.
 fn render_favicon(unread: usize, state: &ConnectivityState) -> Option<String> {
     let document = web_sys::window()?.document()?;
     let canvas: web_sys::HtmlCanvasElement =

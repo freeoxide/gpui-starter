@@ -1,9 +1,10 @@
 pub mod actions;
 pub mod assets;
 pub mod init;
+pub mod keys;
 pub mod lifecycle;
 pub mod locale;
-#[cfg(unix)]
+#[cfg(not(target_family = "wasm"))]
 pub mod reload;
 pub mod theme;
 pub mod window;
@@ -17,8 +18,8 @@ pub use actions::{
     SelectRadius, SwitchTheme, SwitchThemeMode, ToggleSearch, TriggerTestPanic,
 };
 
-#[cfg(unix)]
-pub use reload::{exec_reload, is_reload_requested, request_reload};
+#[cfg(not(target_family = "wasm"))]
+pub use reload::{is_reload_requested, perform_reload, request_reload};
 
 pub use locale::{LOCALE_EN, LOCALE_ZH_CN, LocaleState, current_locale, set_locale};
 

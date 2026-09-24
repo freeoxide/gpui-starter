@@ -5,10 +5,6 @@ use crate::app::actions::*;
 use crate::app::locale::set_locale;
 use crate::app::theme::set_theme_mode;
 
-// ---------------------------------------------------------------------------
-// Init
-// ---------------------------------------------------------------------------
-
 /// Time and log a named startup step; the log name always matches the step.
 macro_rules! startup_step {
     ($cx:expr, $name:expr, $body:block) => {{
@@ -65,7 +61,6 @@ pub fn init(cx: &mut App) {
     // Marker data must be user-owned, never $TMPDIR (symlink planting);
     // install it before the marker write so startup crashes stay detectable.
     crate::lifecycle::set_app_data_dir(crate::app_state::paths(cx).data_dir.clone());
-    // Detect the previous run's marker BEFORE writing this launch's own.
     let previous_crash = crate::lifecycle::check_previous_crash();
     if let Some(marker) = &previous_crash {
         tracing::warn!(
@@ -78,6 +73,19 @@ pub fn init(cx: &mut App) {
 
     startup_step!(cx, "logging_init", {
         crate::logging::initialize(cx);
+    });
+
+    // Best-effort per-user gpui-starter:// registration; never block startup.
+    #[cfg(target_os = "windows")]
+    startup_step!(cx, "deep_link_registration", {
+        if let Err(reason) = crate::platform::deep_link_registration::ensure_deep_link_registered()
+        {
+            tracing::warn!(
+                target: "gpui_starter::deep_link_registration",
+                %reason,
+                "deep-link scheme registration failed; continuing without it"
+            );
+        }
     });
 
     startup_step!(cx, "capabilities_init", {
@@ -106,7 +114,6 @@ pub fn init(cx: &mut App) {
         );
     }
 
-    // Initialize es-fluent i18n for app and form text
     let system_locale = crate::i18n::detect_system_locale();
     tracing::info!(
         target: "gpui_starter::startup",
@@ -178,7 +185,6 @@ pub fn init(cx: &mut App) {
     })
     .detach();
 
-    // Theme switching actions
     cx.on_action(|switch: &SwitchTheme, cx| {
         if let Some(config) = gpui_component::ThemeRegistry::global(cx)
             .themes()
@@ -208,6 +214,9 @@ pub fn init(cx: &mut App) {
             crate::services::tokio_runtime::TokioRuntime::new(),
         ));
         crate::connectivity::initialize(cx);
+        // Probe once at startup so the status bar and the update checker see
+        // a real state instead of Unknown (the updater refuses while Unknown).
+        crate::connectivity::check_now(cx);
         crate::desktop_actions::initialize(cx);
         crate::accessibility::initialize(cx);
         crate::secure_storage::initialize(cx);
@@ -283,15 +292,14 @@ pub fn init(cx: &mut App) {
         crate::platform::web::install(cx);
     });
 
-    // Key bindings
     cx.bind_keys([
-        KeyBinding::new("cmd-k", ToggleSearch, None),
+        KeyBinding::new(crate::app::keys::TOGGLE_SEARCH, ToggleSearch, None),
         KeyBinding::new("/", ToggleSearch, None),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("cmd-q", Quit, None),
+        KeyBinding::new("secondary-q", Quit, None),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("alt-f4", Quit, None),
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         KeyBinding::new("ctrl-r", Restart, None),
     ]);
 
@@ -317,7 +325,6 @@ pub fn init(cx: &mut App) {
                 crate::desktop_actions::shutdown(cx);
                 crate::lifecycle::set_shutdown_step("unregister_shortcuts", cx);
                 crate::shortcuts::shutdown(cx);
-                // Flush any debounced config changes before continuing shutdown.
                 crate::lifecycle::set_shutdown_step("flush_config", cx);
                 crate::app_state::force_save(cx);
                 crate::lifecycle::set_shutdown_step("flush_storage", cx);
@@ -339,24 +346,30 @@ pub fn init(cx: &mut App) {
     });
 
     cx.on_action(|_: &Restart, cx| {
-        // Flag the re-exec, then reuse the full Quit shutdown path so every
+        // Flag the relaunch, then reuse the full Quit shutdown path so every
         // flush runs before the process exits.
-        #[cfg(unix)]
+        #[cfg(any(unix, windows))]
         {
             crate::app::request_reload();
             crate::lifecycle::set_shutdown_step("restart", cx);
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = cx;
             tracing::warn!(
                 target: "gpui_starter::reload",
-                "restart requested on a platform without exec-reload support; ignoring"
+                "restart requested on a platform without a native relaunch backend; ignoring"
             );
-            return;
         }
-        #[cfg(unix)]
-        cx.dispatch_action(&Quit);
+        #[cfg(any(unix, windows))]
+        {
+            // The handler window is either mid-teardown (palette trigger) or on
+            // the update stack (keybinding); re-updating it now fails with
+            // "window not found". Defer so Quit dispatches once unwound, routed
+            // at the recorded root window — the active-window lookup still
+            // reports the closing palette when Restart ran from the launcher.
+            cx.defer(crate::app::window::dispatch_quit);
+        }
     });
 
     cx.on_action(|_: &About, cx| {

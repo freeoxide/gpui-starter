@@ -10,7 +10,6 @@ use crate::{
 use super::row;
 
 pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
-    // Shared borrow: AppState carries the config, inbox, and permission sets.
     let state = cx.try_global::<app_state::AppState>();
     let lifecycle = cx
         .try_global::<LifecycleState>()

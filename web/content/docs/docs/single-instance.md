@@ -161,7 +161,7 @@ The module uses a few constants that you can change in `single_instance.rs`:
 | Queue poll interval | 450ms | How often the primary checks the fallback queue file |
 | IPC poll interval | 180ms | How often forwarded IPC messages are flushed to the event queue |
 
-To use a different URL scheme (for example, `myapp://`), change the `SCHEME` constant and register the scheme with the OS. On macOS this requires adding a `CFBundleURLSchemes` entry in your `Info.plist`. On Linux you need a `.desktop` file with `MimeType=x-scheme-handler/myapp`.
+To use a different URL scheme (for example, `myapp://`), change the `SCHEME` constant and register the scheme with the OS. On macOS this requires adding a `CFBundleURLSchemes` entry in your `Info.plist`. On Linux you need a `.desktop` file with `MimeType=x-scheme-handler/myapp`. On Windows, gpui-starter registers the scheme automatically at startup as a per-user (`HKCU\Software\Classes`) protocol handler pointing at the running exe — no installer step required.
 
 ## Capability reporting
 

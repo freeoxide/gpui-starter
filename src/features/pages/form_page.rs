@@ -129,8 +129,6 @@ impl FormPage {
         }
     }
 
-    /// Mirrors an input's event into `current_data` for `field` and marks the
-    /// page dirty; `value_change` normalizes Set/Clear/Unchanged.
     fn subscribe_field(
         field: FormField,
         input: &Entity<InputState>,
@@ -283,7 +281,6 @@ impl FormPage {
 
 impl Render for FormPage {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Re-run validation only when inputs have changed since the last compute.
         if self.touched && self.dirty {
             self.recompute_validation();
         }

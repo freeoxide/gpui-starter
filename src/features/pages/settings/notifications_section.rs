@@ -11,8 +11,7 @@ use crate::notifications::{
     self, NotificationPermissionState, NotificationRequest, NotificationRuntimeSnapshot,
 };
 
-/// Status label/value row used by the notifications card. The visible texts
-/// are plain strings, so the combined text is the accessible label.
+/// The visible texts are plain strings, so the combined text is the accessible label.
 pub(super) fn status_row(
     label: impl Into<SharedString>,
     value: impl Into<SharedString>,
@@ -33,7 +32,6 @@ pub(super) fn status_row(
         .child(div().text_sm().child(value))
 }
 
-/// Renders the "Native Local Notifications" settings card.
 pub(super) fn render_notifications_section(
     notifications_snapshot: &NotificationRuntimeSnapshot,
     cx: &mut Context<super::SettingsPage>,
@@ -45,9 +43,10 @@ pub(super) fn render_notifications_section(
                 | NotificationPermissionState::Unknown
                 | NotificationPermissionState::Unavailable(_)
         );
-    // Linux has no per-app permission model, so the button routes to the OS
-    // notification settings; on macOS only once permission is denied.
+    // Linux and Windows have no per-app permission model, so the button routes
+    // to the OS notification settings; on macOS only once permission is denied.
     let can_open_settings = cfg!(target_os = "linux")
+        || cfg!(target_os = "windows")
         || (cfg!(target_os = "macos")
             && matches!(
                 notifications_snapshot.permission,
@@ -101,6 +100,7 @@ pub(super) fn render_notifications_section(
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap_2()
                 .child(
@@ -149,6 +149,7 @@ pub(super) fn render_notifications_section(
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap_2()
                 .child(

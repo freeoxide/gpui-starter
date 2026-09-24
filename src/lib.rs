@@ -43,7 +43,7 @@ pub use foundation::{errors, ids, time};
 // SQLite migrations are native-only (no rusqlite on wasm).
 #[cfg(not(target_family = "wasm"))]
 pub use persistence::sqlite::db_migrations;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub use platform::desktop_shell::tray;
 pub use platform::filesystem::paths;
 pub use platform::input::shortcuts;

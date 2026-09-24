@@ -32,8 +32,7 @@ pub fn initialize(cx: &mut gpui::App) {
     // with the page reload. The action handler above still runs either way.
     #[cfg(not(target_family = "wasm"))]
     {
-        // Startup check after 5 seconds, then re-check every 4 hours. GPUI
-        // background-executor timers instead of a spawned tokio sleep task.
+        // GPUI background-executor timers instead of a spawned tokio sleep task.
         cx.spawn(async move |cx| {
             cx.background_executor()
                 .timer(std::time::Duration::from_secs(
@@ -150,7 +149,6 @@ fn reset_download_retry(cx: &mut gpui::App) {
     });
 }
 
-/// Dispatch a native notification for "update available".
 fn notify_update_available(version: &str, cx: &mut gpui::App) {
     dispatch_background_notification(
         &format!("Update v{version} available"),
@@ -159,7 +157,6 @@ fn notify_update_available(version: &str, cx: &mut gpui::App) {
     );
 }
 
-/// Dispatch a native notification for "update downloaded".
 fn notify_update_downloaded(version: &str, cx: &mut gpui::App) {
     dispatch_background_notification(
         &format!("Update v{version} ready"),
@@ -168,7 +165,7 @@ fn notify_update_downloaded(version: &str, cx: &mut gpui::App) {
     );
 }
 
-/// Dispatch a native notification for permanent update errors (retries exhausted).
+/// Permanent update errors only (retries exhausted).
 fn notify_update_error(cx: &mut gpui::App) {
     dispatch_background_notification(
         "Update check failed",

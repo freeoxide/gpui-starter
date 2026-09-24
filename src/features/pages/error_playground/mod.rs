@@ -10,7 +10,6 @@ use gpui_component::{ActiveTheme as _, v_flex};
 use crate::accessibility::A11yExt as _;
 
 pub struct ErrorPlaygroundPage {
-    // Inline results for safe tests.
     http_result: Option<String>,
     fs_result: Option<String>,
     async_result: Option<String>,

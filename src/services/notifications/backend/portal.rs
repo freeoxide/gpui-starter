@@ -1,7 +1,7 @@
 //! XDG Desktop Portal notification backend (Flatpak/Snap, `notifications-portal`
 //! feature), selected when sandboxed. ashpd/zbus drive their own executor thread.
 
-#![cfg(feature = "notifications-portal")]
+#![cfg(all(feature = "notifications-portal", target_os = "linux"))]
 
 use async_trait::async_trait;
 

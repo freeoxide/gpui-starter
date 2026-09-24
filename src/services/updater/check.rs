@@ -5,7 +5,6 @@ use super::types::*;
 use gpui::{App, UpdateGlobal as _};
 
 pub fn check_for_updates(cx: &mut App) {
-    // Bail if already checking or downloading.
     let current = super::snapshot(cx);
     match &current.status {
         UpdateStatus::Checking | UpdateStatus::Downloading { .. } => {
@@ -152,20 +151,16 @@ pub fn check_for_updates(cx: &mut App) {
     .detach();
 }
 
-/// Accessor by which [`schedule_retry`] finds the right retry counter field.
 pub(super) fn check_retry_field(snap: &mut UpdateSnapshot) -> &mut u32 {
     &mut snap.check_retry_count
 }
 
-/// Accessor by which [`schedule_retry`] finds the right retry counter field.
 pub(super) fn download_retry_field(snap: &mut UpdateSnapshot) -> &mut u32 {
     &mut snap.download_retry_count
 }
 
-/// Increment the retry counter via `retry_field` and, while under
-/// [`MAX_UPDATE_RETRIES`], rearm after exponential backoff on the GPUI
-/// background executor. Returns false when retries are exhausted — the caller
-/// owns the terminal error path and the interim status.
+/// Returns false when retries are exhausted — the caller owns the terminal
+/// error path and the interim status.
 pub(super) fn schedule_retry<F, R>(
     cx: &mut App,
     retry_field: F,
@@ -225,8 +220,7 @@ fn handle_check_failure(error: String, cx: &mut App) {
     }
 }
 
-/// GET → timeout → status check → bytes → serde. Callers that also need a
-/// platform asset should use [`fetch_platform_asset`].
+/// Callers that also need a platform asset should use [`fetch_platform_asset`].
 #[cfg(not(target_family = "wasm"))]
 pub(crate) async fn fetch_manifest(
     rt: Arc<tokio::runtime::Runtime>,

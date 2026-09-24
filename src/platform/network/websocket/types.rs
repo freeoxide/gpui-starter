@@ -1,6 +1,5 @@
 //! Types for the WebSocket client scaffold, always compiled.
 
-/// Connection state machine.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConnectionState {
     Disconnected,
@@ -10,18 +9,14 @@ pub enum ConnectionState {
     Closed,
 }
 
-/// Callback signature for incoming WebSocket messages.
 pub type MessageHandler = Box<dyn Fn(&str) + Send + Sync>;
 
 /// Reconnection behaviour: `base_delay_ms * 2^attempt`, capped at
 /// `max_delay_ms` when set.
 #[derive(Clone, Debug)]
 pub struct ReconnectPolicy {
-    /// Maximum number of reconnection attempts before giving up.
     pub max_retries: u8,
-    /// Base delay for exponential backoff (milliseconds).
     pub base_delay_ms: u64,
-    /// Optional cap so backoff does not grow indefinitely (milliseconds).
     pub max_delay_ms: Option<u64>,
 }
 
@@ -45,7 +40,6 @@ impl ReconnectPolicy {
     }
 }
 
-/// Error type for WebSocket operations.
 #[derive(Debug, thiserror::Error)]
 pub enum WebSocketError {
     #[error("connection failed: {0}")]

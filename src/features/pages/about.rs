@@ -20,7 +20,8 @@ impl Default for AboutPage {
 impl Render for AboutPage {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let title = crate::i18n::localize("about_title", None);
-        let version = crate::i18n::localize("about_version", None);
+        // From Cargo.toml; a locale string here would drift out of sync.
+        let version = format!("GPUI Starter v{}", env!("CARGO_PKG_VERSION"));
 
         v_flex()
             .min_h_full()

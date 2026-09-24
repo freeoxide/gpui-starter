@@ -35,7 +35,6 @@ const WORKER_URL: &str = "sqlite/worker.js";
 /// opens (`new OpfsDb("/gpui-starter-app.db")` in `wasm/sqlite/worker.js`).
 pub(crate) const DB_PATH_LABEL: &str = "opfs:/gpui-starter-app.db";
 
-/// Reply payload for a pending request.
 type Reply = Result<WorkerResult, String>;
 
 struct WorkerState {
@@ -52,9 +51,8 @@ struct WorkerState {
 }
 
 thread_local! {
-    /// Worker handle + pending-request correlation table. Thread-local
-    /// because every field except `next_id` holds `!Send` JS values (see
-    /// the module docs).
+    /// Thread-local because every field except `next_id` holds `!Send` JS
+    /// values (see the module docs).
     static WORKER: RefCell<Option<WorkerState>> = const { RefCell::new(None) };
 }
 
@@ -148,8 +146,7 @@ fn request_persistent_storage() {
     on_reject.forget();
 }
 
-/// Allocate a request id, register the reply channel, and post the encoded
-/// request. `None` when the worker was never spawned.
+/// `None` when the worker was never spawned.
 ///
 /// Failures (encode, post, dead worker) return a receiver that resolves to
 /// `Err(reason)` instead of `None`, so callers always have one error path.
@@ -186,15 +183,12 @@ fn send_request(make_request: impl FnOnce(u64) -> WorkerRequest) -> Option<flume
     })
 }
 
-/// A receiver pre-filled with `Err(reason)` — the synchronous failure shape.
 fn failed_reply(reason: String) -> flume::Receiver<Reply> {
     let (sender, receiver) = flume::unbounded();
     let _ = sender.send(Err(reason));
     receiver
 }
 
-/// Worker → app message: decode, correlate by id, complete the pending
-/// request.
 fn handle_worker_message(value: JsValue) {
     let event: web_sys::MessageEvent = value.unchecked_into();
     let Some(text) = event.data().as_string() else {
@@ -247,8 +241,7 @@ fn handle_worker_error(value: JsValue) {
     });
 }
 
-/// Send one request and await its reply — the shared body of every trait
-/// method. No thread-local borrow is held across the await.
+/// No thread-local borrow is held across the await.
 async fn call(
     op: &'static str,
     make_request: impl FnOnce(u64) -> WorkerRequest,
@@ -269,8 +262,6 @@ async fn call(
     }
 }
 
-/// Protocol-mismatch error: the worker answered a different op than the
-/// one that was asked.
 fn mismatch(expected: &str, got: WorkerResult) -> StorageError {
     StorageError::Web(format!(
         "storage worker protocol mismatch: expected `{expected}`, got `{}`",
@@ -381,7 +372,6 @@ impl StorageBackend for WebSqliteStorage {
     }
 }
 
-/// Best-effort human-readable message from a JS exception value.
 fn js_value_message(value: &JsValue) -> String {
     value.as_string().unwrap_or_else(|| format!("{value:?}"))
 }

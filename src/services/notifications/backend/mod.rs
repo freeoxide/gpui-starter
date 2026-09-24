@@ -1,6 +1,7 @@
 #[cfg(not(target_family = "wasm"))]
 mod notify_rust;
-#[cfg(feature = "notifications-portal")]
+// ashpd has no non-Unix build; the feature exists for Flatpak/Snap Linux runs.
+#[cfg(all(feature = "notifications-portal", target_os = "linux"))]
 mod portal;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 mod user_notify;
@@ -9,7 +10,7 @@ mod web;
 
 #[cfg(not(target_family = "wasm"))]
 pub use notify_rust::NotifyRustBackend;
-#[cfg(feature = "notifications-portal")]
+#[cfg(all(feature = "notifications-portal", target_os = "linux"))]
 pub use portal::PortalBackend;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub use user_notify::UserNotifyBackend;
@@ -38,8 +39,6 @@ pub trait NotificationBackend: Send + Sync {
 // Web Notifications mapping helpers, kept here (not `service::types`) so the
 // permission mapping stays unit-testable on native builds.
 
-/// Map a Web Notifications permission string onto [`NotificationPermissionState`].
-/// Anything outside `"granted" | "denied" | "default"` maps to `Unknown`.
 #[cfg_attr(not(target_family = "wasm"), allow(dead_code))]
 pub(crate) fn web_permission_to_state(permission: &str) -> NotificationPermissionState {
     match permission {
@@ -144,8 +143,6 @@ mod tests {
 
     #[test]
     fn web_tag_follows_thread_id() {
-        // Thread-scoped requests coalesce under their thread id on the web
-        // (same-tag notifications replace each other).
         let reply = NotificationRequest::reply("title", "body");
         assert_eq!(
             web_tag_for_request(&reply).as_deref(),

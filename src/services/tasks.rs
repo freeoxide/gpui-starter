@@ -307,8 +307,8 @@ enum DemoTaskNotificationKind {
     Cancelled,
 }
 
-/// Build the demo-task notification payload; both dispatch helpers apply the
-/// same `id1` toast identity so re-pushing replaces rather than stacks.
+/// Both dispatch helpers apply the same `id1` toast identity so re-pushing
+/// replaces rather than stacks.
 fn build_demo_task_notification(id: TaskId, kind: DemoTaskNotificationKind) -> Notification {
     match kind {
         DemoTaskNotificationKind::Loading => Notification::new()

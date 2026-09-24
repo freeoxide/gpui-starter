@@ -90,7 +90,7 @@ Every module lives under `src/`. Modules that depend on other modules are noted 
 24. telemetry::initialize(cx)
 25. notifications::inbox::initialize(cx)
 26. notifications::initialize(cx)
-27. Key bindings registered (cmd-k, /, cmd-q/alt-f4)
+27. Key bindings registered (secondary-k, /, secondary-q/alt-f4 — `secondary` is cmd on macOS, ctrl elsewhere)
 28. Action handlers: Quit, About, OpenDiagnostics, ExecuteCommand
 29. Lifecycle stage set to Running
 ```

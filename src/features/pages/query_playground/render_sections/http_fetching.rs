@@ -165,7 +165,6 @@ impl QueryPlaygroundPage {
     }
 }
 
-/// Strip the `; charset=…` suffix from a content-type header for compact display.
 fn short_content_type(ct: &str) -> &str {
     ct.split(';').next().unwrap_or(ct).trim()
 }

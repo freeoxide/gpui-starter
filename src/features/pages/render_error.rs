@@ -66,8 +66,10 @@ impl Render for RenderErrorPage {
                     .child(
                         Button::new("reload-current-page")
                             .label("Reload Page")
-                            .on_click(|_, _, cx| {
-                                cx.dispatch_action(&ReloadCurrentPage);
+                            .on_click(|_, window, cx| {
+                                // Window-scoped: App::dispatch_action is broken on
+                                // Windows (thread-local active-window lookup).
+                                window.dispatch_action(Box::new(ReloadCurrentPage), cx);
                             }),
                     ),
             )

@@ -112,16 +112,10 @@ pub fn track_recent_error(msg: String) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Render-path tracking (thread-local guard)
-// ---------------------------------------------------------------------------
-
 std::thread_local! {
     static IN_RENDER_PATH: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-/// RAII guard returned by [`enter_render_path`]. Resets the thread-local flag
-/// when dropped.
 struct RenderPathGuard;
 
 impl Drop for RenderPathGuard {
@@ -130,14 +124,12 @@ impl Drop for RenderPathGuard {
     }
 }
 
-/// Mark the thread as inside the render path; only render-originating panics
-/// trigger the error boundary. The guard clears the flag on drop.
+/// Only render-originating panics trigger the error boundary.
 pub fn enter_render_path() -> impl Drop {
     IN_RENDER_PATH.with(|c| c.set(true));
     RenderPathGuard
 }
 
-/// Returns `true` if the current thread is inside the render path.
 pub fn in_render_path() -> bool {
     IN_RENDER_PATH.with(|c| c.get())
 }
@@ -151,7 +143,6 @@ pub fn last_panic_summary() -> Option<String> {
         .and_then(|slot| slot.lock().ok().and_then(|value| value.clone()))
 }
 
-/// Read and reset the render-panic flag; `true` if a panic occurred.
 pub fn take_render_panic() -> bool {
     RENDER_PANIC_OCCURRED.swap(false, Ordering::SeqCst)
 }
@@ -173,7 +164,6 @@ pub fn install_panic_hook() {
             RENDER_PANIC_OCCURRED.store(true, Ordering::SeqCst);
         }
 
-        // Write a crash report file if the data directory is configured.
         if let Some(data_dir) = APP_DATA_DIR.get() {
             let backtrace = std::backtrace::Backtrace::capture();
             let bt_string = match backtrace.status() {
@@ -209,10 +199,6 @@ pub fn install_panic_hook() {
     }));
 }
 
-// ---------------------------------------------------------------------------
-// Crash marker (file-based crash detection)
-// ---------------------------------------------------------------------------
-
 // File-based crash detection is native-only: path APIs panic at runtime on
 // wasm and a browser tab has no next-launch semantics anyway.
 
@@ -223,7 +209,6 @@ fn crash_marker_path() -> Option<PathBuf> {
     APP_DATA_DIR.get().map(|dir| dir.join("crash-marker"))
 }
 
-/// Write a crash marker at startup, readable by the next launch.
 #[cfg(not(target_family = "wasm"))]
 pub fn write_crash_marker() {
     let Some(path) = crash_marker_path() else {
@@ -254,7 +239,6 @@ pub fn write_crash_marker() {
     }
 }
 
-/// Return the previous run's marker contents, if any.
 #[cfg(not(target_family = "wasm"))]
 pub fn check_previous_crash() -> Option<String> {
     let path = crash_marker_path()?;
@@ -276,7 +260,6 @@ pub fn check_previous_crash() -> Option<String> {
     }
 }
 
-/// Remove the crash marker on a clean shutdown.
 #[cfg(not(target_family = "wasm"))]
 pub fn remove_crash_marker() {
     let Some(path) = crash_marker_path() else {

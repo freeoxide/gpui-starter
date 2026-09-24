@@ -25,8 +25,6 @@ fn rejects_unknown_deep_links() {
     assert!(AppRoute::parse_deep_link("gpui-starter://missing").is_err());
 }
 
-// --- URL validation tests -----------------------------------------------
-
 #[test]
 fn rejects_wrong_scheme() {
     let err = AppRoute::parse_deep_link("https://home").unwrap_err();
@@ -81,8 +79,6 @@ fn validate_path_segment_helper() {
     assert!(validate_path_segment("foo/../bar").is_err());
     assert!(validate_path_segment("seg\x00ment").is_err());
 }
-
-// --- Hash deep-link tests (web location.hash <-> AppRoute) ---------------
 
 /// `to_hash` must cover EVERY page (exhaustive over `Page::all`), plus the
 /// settings sub-route — a new Page variant fails here until it is added.
@@ -148,16 +144,12 @@ fn empty_hash_resolves_to_default_route() {
 
 #[test]
 fn from_hash_rejects_unknown_and_unsafe_hashes() {
-    // Unknown host (same rejection as parse_deep_link).
     assert!(AppRoute::from_hash("#/missing").is_err());
     // Encoded path traversal survives URL parsing and is rejected by the
     // deep-link validator (same input the parse_deep_link tests use).
     assert!(AppRoute::from_hash("#/settings/..%2Fetc").is_err());
-    // Null bytes in segments reach the validator too.
     assert!(AppRoute::from_hash("#/settings/\0notifications").is_err());
-    // Deep sub-paths have no route mapping.
     assert!(AppRoute::from_hash("#/home/extra/segments").is_err());
-    // A foreign scheme must never parse as a hash route.
     assert!(AppRoute::from_hash("https://example.com").is_err());
 }
 
@@ -173,7 +165,6 @@ fn from_hash_neutralizes_plain_dot_segments_via_url_parsing() {
 
 #[test]
 fn hash_and_url_forms_agree_on_the_route_set() {
-    // Whatever to_url accepts, to_hash mirrors (scheme stripped, `#` added).
     for page in Page::all() {
         let route = AppRoute::Page(*page);
         let url = route.to_url();

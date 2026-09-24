@@ -26,15 +26,11 @@ const REGISTRY_MAX_LIST_H: f32 = 480.0; // cap before the list itself scrolls
 /// sort/filter; per-row strings precomputed to avoid per-frame `format!()`.
 struct RegistryRow {
     query: QueryDiagnostic,
-    /// Stable stateful element id (`"v2-query-row-{key}"`).
     element_id: SharedString,
-    /// Pre-formatted `cache_hits` Display string.
     cache_hits_str: SharedString,
-    /// Pre-formatted `retry_count` Display string.
     retry_count_str: SharedString,
 }
 
-/// Memoization cache for the filtered+sorted registry rows.
 #[derive(Default)]
 struct RegistryRowCache {
     signature: u64,
@@ -61,8 +57,6 @@ fn diagnostic_signature(d: &ClientDiagnostic) -> u64 {
     h.finish()
 }
 
-/// Return the memoized filtered+sorted row list, rebuilding only when the
-/// diagnostic signature, sort, or filter has changed.
 fn cached_registry_rows(
     diagnostic: &Option<ClientDiagnostic>,
     sort_by: QuerySort,
@@ -78,13 +72,11 @@ fn cached_registry_rows(
         return cache.rows.clone();
     }
 
-    // Miss: recompute the filtered+sorted rows from scratch.
     let mut queries: Vec<QueryDiagnostic> = diagnostic
         .as_ref()
         .map(|d| d.queries.clone())
         .unwrap_or_default();
 
-    // Apply status filter; unknown values are logged and ignored.
     if let Some(filter) = status_filter {
         let filter_status = match filter.as_str() {
             "Idle" => Some(QueryStatus::Idle),
@@ -106,7 +98,6 @@ fn cached_registry_rows(
         }
     }
 
-    // Apply sort.
     match sort_by {
         QuerySort::Key => queries.sort_by(|a, b| a.key.cmp(&b.key)),
         QuerySort::Status => queries.sort_by(|a, b| a.status.cmp(&b.status)),
@@ -156,11 +147,11 @@ pub(super) fn render_query_registry(
     let muted = theme.muted;
     let muted_foreground = theme.muted_foreground;
 
-    // Sort controls
     let sort_controls = h_flex()
         .id("v2-sort-group")
         .a11y(Role::Group, "Sort")
         .gap_2()
+        .flex_wrap()
         .children(vec![
             sort_button("By Key", QuerySort::Key, sort_by, cx),
             sort_button("By Status", QuerySort::Status, sort_by, cx),
@@ -183,17 +174,16 @@ pub(super) fn render_query_registry(
         .id("v2-filter-group")
         .a11y(Role::Group, "Status filter")
         .gap_2()
+        .flex_wrap()
         .children(
             status_options
                 .into_iter()
                 .map(|opt| filter_button(opt, status_filter, cx)),
         );
 
-    // Memoized rows: rebuilt only when the diagnostic, sort, or filter changes.
     let queries: Rc<Vec<RegistryRow>> =
         cached_registry_rows(diagnostic, sort_by, status_filter, cx);
 
-    // Header row
     let header = h_flex().gap_3().px_3().py_2().children(vec![
         div().w(rems_from_px(16.0)).child(div()),
         div()
@@ -245,7 +235,6 @@ pub(super) fn render_query_registry(
     let item_sizes = variable_item_sizes(&item_heights);
     let list_h = bounded_list_height(&item_sizes, px(REGISTRY_LIST_GAP), px(REGISTRY_MAX_LIST_H));
 
-    // Empty state within registry
     let registry_content = if queries.is_empty() {
         div().py_6().flex().justify_center().child(
             div()

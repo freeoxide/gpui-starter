@@ -79,7 +79,6 @@ pub struct AppConfig {
     pub update_channel: String,
     #[serde(default)]
     pub last_update_check: Option<String>,
-    /// Dev-only frame-time readout in the status bar; on by default in debug builds.
     #[serde(default = "default_show_frame_time")]
     pub show_frame_time: bool,
 }
@@ -157,7 +156,6 @@ fn default_stable() -> String {
     "stable".to_string()
 }
 
-/// Debug builds ship with the frame-time readout enabled.
 fn default_show_frame_time() -> bool {
     cfg!(debug_assertions)
 }
@@ -310,10 +308,9 @@ fn arm_debounce(cx: &mut App) {
         bg.timer(std::time::Duration::from_millis(DEBOUNCE_MS))
             .await;
 
-        // Allow the next update_config to schedule a fresh timer.
         SAVE_SCHEDULED.store(false, Ordering::Relaxed);
 
-        // Step 1 (UI thread): serialize + dirty-check. No I/O here.
+        // No I/O here.
         let request = cx.update(|cx| {
             cx.update_global::<AppState, _>(|state, _cx| {
                 if !state.dirty {
@@ -327,14 +324,11 @@ fn arm_debounce(cx: &mut App) {
             return;
         };
 
-        // Step 2 (background thread): atomic write + fsync.
         let write_bytes = bytes.clone();
         let result = bg
             .spawn(async move { save_config(&path, &write_bytes) })
             .await;
 
-        // Step 3 (UI thread): a stale write signals re-arm so the current
-        // bytes are re-flushed on the next debounce.
         cx.update(|cx| {
             let needs_rearm =
                 cx.update_global::<AppState, _>(|state, _cx| commit_flush(state, bytes, result));
@@ -515,6 +509,8 @@ fn save_config(path: &Path, json_bytes: &[u8]) -> Result<(), AppError> {
     #[cfg(not(target_family = "wasm"))]
     {
         ensure_parent_dir(path)?;
+        // `mut` is only consumed by the unix mode/preserve_mode calls below.
+        #[cfg_attr(not(target_family = "unix"), allow(unused_mut))]
         let mut options = AtomicWriteFile::options();
         // The rename commit replaces a planted symlink instead of writing
         // through it; every commit lands 0600 (preserve_mode off).
