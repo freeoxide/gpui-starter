@@ -1,0 +1,148 @@
+[workspace]
+default-members = [ "examples/some-lib-forms" ]
+members = [
+  "crates/gpui-form",
+  "crates/gpui-form-core",
+  "crates/gpui-form-codegen",
+  "crates/gpui-form-collection",
+  "crates/gpui-form-collection-derive",
+  "crates/gpui-form-component",
+  "crates/gpui-form-component-derive",
+  "crates/gpui-form-component-story",
+  "crates/gpui-form-mcp",
+  "crates/gpui-form-schema",
+  "crates/gpui-form-derive",
+  "crates/gpui-form-runtime",
+  "crates/gpui-form-prototyping-core",
+  "examples/some-lib",
+  "examples/some-lib-forms",
+  "examples/mcp-submit",
+  "examples/prototyping",
+  "web",
+  "xtask",
+]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = true
+readme = "README.md"
+repository = "https://github.com/stayhydated/gpui-form"
+rust-version = "1.98"
+version = "0.6.0"
+
+[workspace.dependencies]
+anyhow = "1.0"
+bon = "3.9"
+chrono = "0.4"
+clap = "4.6"
+component-shape = { git = "https://github.com/stayhydated/component-shape", rev = "8e7eb1307c608a5a77b59389510853d25d405a6a", version = "0.3.3" }
+component-shape-codegen = { git = "https://github.com/stayhydated/component-shape", rev = "8e7eb1307c608a5a77b59389510853d25d405a6a", version = "0.3.3" }
+component-shape-gpui = { git = "https://github.com/stayhydated/component-shape", rev = "8e7eb1307c608a5a77b59389510853d25d405a6a", version = "0.3.3" }
+component-shape-mcp = { git = "https://github.com/stayhydated/component-shape", rev = "8e7eb1307c608a5a77b59389510853d25d405a6a", version = "0.3.3" }
+crabtime = "1.1"
+darling = "0.24"
+derive_more = "2.1"
+dioxus = { default-features = false, version = "0.7" }
+es-fluent = { git = "https://github.com/stayhydated/es-fluent", rev = "94efb551ede72c9e7da4bbdf97d5eecb5ea09982", version = "0.18.1" }
+es-fluent-build = { git = "https://github.com/stayhydated/es-fluent", rev = "94efb551ede72c9e7da4bbdf97d5eecb5ea09982", version = "0.18.1" }
+es-fluent-lang = { git = "https://github.com/stayhydated/es-fluent", rev = "94efb551ede72c9e7da4bbdf97d5eecb5ea09982", version = "0.18.1" }
+es-fluent-manager-embedded = { git = "https://github.com/stayhydated/es-fluent", rev = "94efb551ede72c9e7da4bbdf97d5eecb5ea09982", version = "0.18.1" }
+# Local fork-pin of stayhydated/gpui-form @216af496: kit 0.6.0→0.7.0 and
+# component-shape 04cfd9a(0.2.0)→8e7eb13(0.3.3, kit-0.7-native); drop once upstream ships kit 0.7.
+gpui-kit = "0.7.0"
+gpui-es-fluent = { git = "https://github.com/stayhydated/gpui-es-fluent", rev = "fab092a1d04f71fae011ac589cd080d3c6c842c1", version = "0.1.0" }
+gpui-form = { path = "crates/gpui-form", version = "0.6.0" }
+gpui-form-codegen = { path = "crates/gpui-form-codegen", version = "0.6.0" }
+gpui-form-collection = { path = "crates/gpui-form-collection", version = "0.6.0" }
+gpui-form-collection-derive = { path = "crates/gpui-form-collection-derive", version = "0.6.0" }
+gpui-form-component = { path = "crates/gpui-form-component", version = "0.6.0" }
+gpui-form-component-derive = { path = "crates/gpui-form-component-derive", version = "0.6.0" }
+gpui-form-component-story = { path = "crates/gpui-form-component-story", version = "0.6.0" }
+gpui-form-core = { path = "crates/gpui-form-core", version = "0.6.0" }
+gpui-form-derive = { path = "crates/gpui-form-derive", version = "0.6.0" }
+gpui-form-mcp = { path = "crates/gpui-form-mcp", version = "0.6.0" }
+gpui-form-prototyping-core = { path = "crates/gpui-form-prototyping-core", version = "0.6.0" }
+gpui-form-runtime = { path = "crates/gpui-form-runtime", version = "0.6.0" }
+gpui-form-schema = { path = "crates/gpui-form-schema", version = "0.6.0" }
+gpui-storybook = { git = "https://github.com/stayhydated/gpui-storybook", rev = "45a215f4642fe153ed1f262b0ed34a7f35073c69", version = "0.5.0" }
+heck = "0.5.0"
+icu_calendar = "2.2.1"
+icu_datetime = "2.2.0"
+icu_locale_core = "2.2.0"
+insta = "1.48"
+inventory = "0.3"
+itertools = "0.15"
+jiff = "0.2.35"
+koruma = { git = "https://github.com/stayhydated/koruma", rev = "2ff495d8dc04794f0bcb2eb3c1a4a3c28e55a274", version = "0.11.0" }
+koruma-collection = { git = "https://github.com/stayhydated/koruma", rev = "2ff495d8dc04794f0bcb2eb3c1a4a3c28e55a274", version = "0.11.0" }
+koruma-derive-core = { git = "https://github.com/stayhydated/koruma", rev = "2ff495d8dc04794f0bcb2eb3c1a4a3c28e55a274", version = "0.11.0" }
+log = "0.4"
+prettyplease = "0.3"
+proc-macro-crate = "3.5"
+proc-macro2 = "1.0"
+quote = "1.0"
+rmcp = "3.1"
+rust_decimal = "1.42"
+serde = "1.0"
+serde_json = "1.0"
+stayhydated-dioxus = { git = "https://github.com/stayhydated/shared", rev = "809946144fe13b04a57ba17677c4c699143f4786" }
+stayhydated-site = { git = "https://github.com/stayhydated/shared", rev = "809946144fe13b04a57ba17677c4c699143f4786" }
+stayhydated-xtask = { git = "https://github.com/stayhydated/shared", rev = "809946144fe13b04a57ba17677c4c699143f4786" }
+strum = "0.28"
+syn = "3.0"
+syn-cfg-attr = { git = "https://github.com/stayhydated/syn-cfg-attr", rev = "b7fb4780cf40d643b11184590638ca4d032cdcc4", version = "0.3.0" }
+thiserror = "2.0"
+tokio = "1.53"
+tracing-subscriber = "0.3"
+unic-langid = "0.9"
+unicode-segmentation = "1.13"
+wasm-bindgen = "0.2"
+web = { path = "web" }
+web-sys = { features = [ "Location", "Window" ], version = "0.3" }
+
+[patch.crates-io]
+gpui-pre = { branch = "linux-headless-renderer", git = "https://github.com/stayhydated/zed" }
+gpui-pre-platform = { branch = "linux-headless-renderer", git = "https://github.com/stayhydated/zed" }
+gpui-pre-web = { branch = "linux-headless-renderer", git = "https://github.com/stayhydated/zed" }
+
+[profile.dev]
+codegen-units = 16
+debug = "limited"
+opt-level = 1
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = 3
+
+[workspace.lints.rust]
+future_incompatible = "deny"
+nonstandard_style = "deny"
+unexpected_cfgs = { check-cfg = [ "cfg(coverage)" ], level = "deny" }
+unsafe_op_in_unsafe_fn = "deny"
+unused_must_use = "deny"
+
+[workspace.lints.rustdoc]
+bare_urls = "deny"
+broken_intra_doc_links = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+dbg_macro = "deny"
+derive_partial_eq_without_eq = "warn"
+err_expect = "warn"
+incompatible_msrv = "deny"
+iter_on_single_items = "warn"
+needless_bool = "warn"
+redundant_clone = "warn"
+todo = "deny"
+type_complexity = "allow"
+uninlined_format_args = "allow"
+unused_trait_names = "warn"
+useless_conversion = "warn"

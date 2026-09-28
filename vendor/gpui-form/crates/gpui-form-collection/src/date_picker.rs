@@ -1,0 +1,151 @@
+use chrono::NaiveDate;
+use component_shape::ValueChange;
+use component_shape_gpui::{GpuiComponentValueBinding, component_shape};
+use gpui_kit::component::{
+    calendar::Date,
+    date_picker::{DatePickerEvent, DatePickerState, DateTime},
+};
+use gpui_kit::{Context, Window};
+
+fn date_picker_value_change(event: &DatePickerEvent) -> ValueChange<NaiveDate> {
+    match event {
+        DatePickerEvent::Change(value) => match value.date() {
+            Date::Single(Some(date)) => ValueChange::Set(date),
+            Date::Single(None) => ValueChange::Clear,
+            Date::Range(_, _) => ValueChange::Unchanged,
+        },
+    }
+}
+
+fn date_range_picker_value_change(event: &DatePickerEvent) -> ValueChange<(NaiveDate, NaiveDate)> {
+    match event {
+        DatePickerEvent::Change(value) => match value.date() {
+            Date::Range(Some(start), Some(end)) => ValueChange::Set((start, end)),
+            Date::Range(_, _) => ValueChange::Clear,
+            Date::Single(_) => ValueChange::Unchanged,
+        },
+    }
+}
+
+component_shape! {
+    /// Form component for a `gpui_kit::component::date_picker::DatePicker`.
+    pub struct DatePicker {
+        state = DatePickerState;
+        component = gpui_kit::component::date_picker::DatePicker;
+        value = NaiveDate;
+        field_suffix = "date_picker";
+        value_binding;
+
+        impl GpuiComponentValueBinding<NaiveDate> for DatePicker {
+            type Event = DatePickerEvent;
+
+            fn seed_value_binding_state(
+                state: &mut Self::State,
+                value: Option<&NaiveDate>,
+                window: &mut Window,
+                cx: &mut Context<'_, Self::State>,
+            ) {
+                state.set_date(Date::Single(value.copied()), window, cx);
+            }
+
+            fn value_change(_state: &Self::State, event: &Self::Event) -> ValueChange<NaiveDate> {
+                date_picker_value_change(event)
+            }
+        }
+    }
+}
+
+impl_form_component_shape!(DatePicker, gpui_form_runtime::shape::RequiredValueStorage);
+
+component_shape! {
+    /// Form component for a range-mode `gpui_kit::component::date_picker::DatePicker`.
+    pub struct DateRangePicker {
+        state = DatePickerState;
+        new = DatePickerState::range;
+        component = gpui_kit::component::date_picker::DatePicker;
+        value = (NaiveDate, NaiveDate);
+        field_suffix = "date_range_picker";
+        value_binding;
+
+        impl GpuiComponentValueBinding<(NaiveDate, NaiveDate)> for DateRangePicker {
+            type Event = DatePickerEvent;
+
+            fn seed_value_binding_state(
+                state: &mut Self::State,
+                value: Option<&(NaiveDate, NaiveDate)>,
+                window: &mut Window,
+                cx: &mut Context<'_, Self::State>,
+            ) {
+                let date = match value {
+                    Some((start, end)) => Date::Range(Some(*start), Some(*end)),
+                    None => Date::Range(None, None),
+                };
+                state.set_date(date, window, cx);
+            }
+
+            fn value_change(
+                _state: &Self::State,
+                event: &Self::Event,
+            ) -> ValueChange<(NaiveDate, NaiveDate)> {
+                date_range_picker_value_change(event)
+            }
+        }
+    }
+}
+
+impl_form_component_shape!(
+    DateRangePicker,
+    gpui_form_runtime::shape::RequiredValueStorage
+);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn date_picker_events_preserve_single_and_range_modes() {
+        let start = NaiveDate::from_ymd_opt(2026, 7, 11).unwrap();
+        let end = NaiveDate::from_ymd_opt(2026, 7, 18).unwrap();
+        let start_time = start.and_hms_opt(0, 0, 0).unwrap();
+        let end_time = end.and_hms_opt(0, 0, 0).unwrap();
+
+        assert_eq!(
+            date_picker_value_change(&DatePickerEvent::Change(DateTime::Single(Some(
+                start_time
+            )))),
+            ValueChange::Set(start)
+        );
+        assert_eq!(
+            date_picker_value_change(&DatePickerEvent::Change(DateTime::Single(None))),
+            ValueChange::Clear
+        );
+        assert_eq!(
+            date_picker_value_change(&DatePickerEvent::Change(DateTime::Range(
+                Some(start_time),
+                Some(end_time)
+            ))),
+            ValueChange::Unchanged
+        );
+
+        assert_eq!(
+            date_range_picker_value_change(&DatePickerEvent::Change(DateTime::Range(
+                Some(start_time),
+                Some(end_time),
+            ))),
+            ValueChange::Set((start, end))
+        );
+        assert_eq!(
+            date_range_picker_value_change(&DatePickerEvent::Change(DateTime::Range(
+                Some(start_time),
+                None
+            ))),
+            ValueChange::Clear
+        );
+        assert_eq!(
+            date_range_picker_value_change(&DatePickerEvent::Change(DateTime::Single(Some(
+                start_time
+            )))),
+            ValueChange::Unchanged
+        );
+    }
+}

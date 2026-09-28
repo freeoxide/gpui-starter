@@ -1,38 +1,37 @@
 [workspace]
-members = [
-	".",
-]
+# vendor/ excluded so the vendored gpui-form workspace keeps its own
+# workspace inheritance; cargo's cached-root lookup would otherwise claim it.
+exclude = ["vendor"]
 
 [workspace.dependencies]
-# gpui-form: git-sourced from the CANONICAL upstream stayhydated/gpui-form
-# (NOT vendored in-tree; crates.io still ships only the old 0.5.1
-# architecture). master @216af496 ("fix gpui-kit 0.6.0 CI", CI-green
-# 2026-09-07) is kit-0.6.0-native — its gpui resolves through the registry to
-# gpui-pre, unified with ours; its own [patch] section is IGNORED downstream.
-# The two consumed crates point at the SAME rev so cargo resolves them from
-# one checkout (internal crates come along transitively). The freeoxide fork
-# @2604a5e (0.5.2 zed-git line) stays frozen as the Phase-1 rollback path.
+# gpui-form: VENDORED at vendor/gpui-form (plain copy of upstream
+# stayhydated/gpui-form @216af496 minus .git; crates.io still ships only the
+# old 0.5.1 architecture). The git lines below document provenance only — the
+# [patch."https://github.com/stayhydated/gpui-form"] table swaps in the
+# vendored paths. Locally bumped to kit 0.7.0 (component-shape pin moved to
+# @8e7eb13, its kit-0.7-native rev); un-vendor when upstream ships kit 0.7.
 gpui-form = { git = "https://github.com/stayhydated/gpui-form", rev = "216af496b2551d1b7be83b12e519cd0c908c28ff" }
 gpui-form-collection = { git = "https://github.com/stayhydated/gpui-form", rev = "216af496b2551d1b7be83b12e519cd0c908c28ff" }
 
 # GPUI ecosystem — crates.io `gpui-pre` is the published snapshot of zed gpui
-# (PACKAGE name gpui-pre, lib name stays `gpui`); gpui-kit 0.6.4 builds on it.
+# (PACKAGE name gpui-pre, lib name stays `gpui`); gpui-kit 0.7.0 builds on it
+# and pins the whole gpui-pre-* snapshot family to =0.3.7.
 # gpui-kit is listed directly because gpui-form's derives emit ::gpui_kit::
 # paths into consuming crates; gpui-kit-assets replaces gpui-component-assets
 # (the old longbridge/gpui-component git URL is retired with the zed patches).
 # Never add a direct `accesskit` dep: gpui re-exports its own accesskit
 # (`gpui::accesskit`, 0.24.x) and a separately-versioned accesskit is
 # type-incompatible with the bridge.
-gpui = { package = "gpui-pre", version = "0.3.5" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.5", features = [
+gpui = { package = "gpui-pre", version = "0.3.7" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.7", features = [
     "font-kit",
     "x11",
     "wayland",
     "runtime_shaders",
 ] }
-gpui-kit = "0.6.4"
-gpui-component = "0.6.4"
-gpui-kit-assets = "0.6.4"
+gpui-kit = "0.7.0"
+gpui-component = "0.7.0"
+gpui-kit-assets = "0.7.0"
 
 # Serialization & data
 anyhow = "1"
@@ -404,3 +403,9 @@ gpui-pre-macros = { opt-level = 3 }
 gpui-query = { git = "https://github.com/hmziqagent/gpui-query", rev = "1449ef2" }
 # gpui-query = { path = "/Users/hmziq/fo/gpui-query/crates/gpui-query" }
 # <<< gpui-query-local <<<
+
+# Vendored from stayhydated/gpui-form @216af496 and bumped to kit 0.7.0
+# locally; upstream has no kit-0.7 rev yet (as of 2026-09-28).
+[patch."https://github.com/stayhydated/gpui-form"]
+gpui-form = { path = "vendor/gpui-form/crates/gpui-form" }
+gpui-form-collection = { path = "vendor/gpui-form/crates/gpui-form-collection" }
