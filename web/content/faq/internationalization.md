@@ -1,11 +1,11 @@
 ---
 question: "How do I add multi-language support and i18n to a Rust desktop app?"
-description: "gpui-starter uses Mozilla's Fluent system via the es-fluent crate for type-safe, plural-aware translations with runtime language switching."
+description: "gpui-starter uses Mozilla's Fluent system via the es-fluent crate for plural-aware translations with runtime language switching."
 category: "Features"
 order: 7
 ---
 
-gpui-starter ships with a dual i18n setup: `es-fluent` handles Fluent-based localization with compile-time message validation, and `rust-i18n` manages runtime locale switching. English (`en`) and Simplified Chinese (`zh-CN`) are included out of the box.
+gpui-starter ships with a dual i18n setup: `es-fluent` handles Fluent-based localization with runtime message resolution, and `rust-i18n` manages runtime locale switching. English (`en`) and Simplified Chinese (`zh-CN`) are included out of the box.
 
 ## Why Fluent, not a simple HashMap
 
