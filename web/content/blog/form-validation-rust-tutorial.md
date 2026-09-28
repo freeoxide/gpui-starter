@@ -103,7 +103,7 @@ registration_form_koruma_variants-phone-phone-number = 请输入有效的电话�
 registration_form_koruma_variants-website-url = 请输入有效的网址。
 ```
 
-The key format is `{struct_snake_case}_koruma_variants-{field}-{rule}`. The `KorumaAllFluent` derive generates these keys automatically. If you add a new field or a new rule, you just add the corresponding Fluent message. The compiler won't let you forget because the generated code references these keys by name.
+The key format is `{struct_snake_case}_koruma_variants-{field}-{rule}`. The `KorumaAllFluent` derive generates these keys automatically. If you add a new field or a new rule, you also add the corresponding Fluent message — nothing checks the `.ftl` side at compile time, so a missing key falls back through the locale chain rather than erroring.
 
 When the user switches language at runtime, the error messages update on the next validation pass. You don't need to do anything extra.
 
@@ -281,7 +281,7 @@ The derive macros generate a lot of code. If something goes wrong inside the gen
 
 The coupling between struct fields and validation rules is tight. If you need different validation depending on context (for example, a phone field that's optional during signup but required during checkout), you need separate structs. You can't conditionally apply rules at runtime. Validation logic in attributes is easy to audit and hard to forget, which is the point of this design.
 
-Fluent key generation follows a strict naming convention. If you rename a field, you must update the `.ftl` files to match. The compiler catches this, but it's one more thing to track during refactoring.
+Fluent key generation follows a strict naming convention. If you rename a field, the Rust compiler flags every use of the old variant, but nothing checks the `.ftl` files: a key missing from one locale shows another locale's string, and one missing everywhere renders as the raw key name. Keep the `.ftl` files in sync during refactoring; a CI step that diffs message IDs catches what the compiler does not.
 
 ## Where to go from here
 

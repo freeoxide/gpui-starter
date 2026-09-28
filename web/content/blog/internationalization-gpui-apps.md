@@ -105,7 +105,7 @@ pub fn init_i18n(lang: LanguageIdentifier) -> Result<(), String> {
 }
 ```
 
-The `define_i18n_module!()` macro embeds your `.ftl` files at build time and produces the `EmbeddedI18n` type; module-discovery problems surface when the i18n system initializes, and a missing message id falls back to the id string at runtime.
+The `define_i18n_module!()` macro embeds your `.ftl` files at build time and produces the `EmbeddedI18n` type; config and locale-directory problems are compile errors, broken `.ftl` content surfaces when the i18n system initializes, and a missing message id falls back through the locale chain to the id string at runtime.
 
 The `localize` function is straightforward:
 
@@ -165,7 +165,7 @@ To add support for a new language:
 2. Copy `en/gpui-starter.ftl` into it and translate every message.
 3. Register the locale in `src/app.rs` by adding a variant to the `Languages` enum annotated with `#[es_fluent_language]`.
 4. Add a menu item in `src/menus.rs` that dispatches the `SelectLocale` action with the new locale code.
-5. Run `cargo build`. If the `.ftl` file has syntax errors, the compiler will catch them.
+5. Run `cargo build`. Syntax errors in the `.ftl` file do not fail the build; they surface when the i18n system initializes — the parse error is logged at debug level and the locale falls back, while a broken required file fails init with `LanguageNotSupported`.
 
 See the [i18n documentation](/docs/i18n/) for the complete reference, including how to handle right-to-left languages and locale fallback chains.
 

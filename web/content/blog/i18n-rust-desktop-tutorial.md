@@ -151,7 +151,7 @@ You access the value with `page-settings` and the attribute with `page-settings.
 
 ## Calling Fluent from Rust
 
-The `es-fluent` crate embeds your `.ftl` files at compile time and generates type-safe accessors. If a Fluent message has broken syntax, you get a compile error. You find out about a broken translation before the app runs.
+The `es-fluent` crate embeds your `.ftl` files at compile time so locale files never ship alongside the app; a missing message id falls back to the id string at runtime.
 
 The i18n service is a thin wrapper:
 
@@ -187,7 +187,7 @@ pub fn localize(
 }
 ```
 
-The `define_i18n_module!()` macro scans your `.ftl` files at build time and produces the `EmbeddedI18n` type. The `OnceLock` ensures initialization happens once and the reference is valid for the rest of the process lifetime.
+The `define_i18n_module!()` macro embeds the `i18n/` folder at build time (via RustEmbed) and produces the `EmbeddedI18n` type. It validates the directory structure, never the `.ftl` content. The `OnceLock` ensures initialization happens once and the reference is valid for the rest of the process lifetime.
 
 The fallback in `localize` is deliberate. If a message ID is missing, you get the ID string itself in the UI. That is much easier to debug than an empty label or a panic. You see "settings_test_native_notification" on screen and you know exactly which key to add.
 
@@ -247,11 +247,11 @@ pub fn detect_system_locale() -> String {
 
 Check if the user has a persisted preference first. If not, use the system locale. This gives users a sensible default on first launch while respecting their explicit choice on subsequent launches.
 
-## Detecting missing translations at build time
+## Catching missing translations
 
-The biggest advantage of compile-time embedding is catching mistakes early. When you add a new message to the English `.ftl` file but forget to add it to the Chinese one, you have two safety nets.
+Nothing checks `.ftl` content at build time, so a message you add to the English file but forget in the Chinese one ships silently. At runtime the lookup falls back through the locale chain: the missing key resolves to the English string, so the Chinese user sees English text and nothing errors. A key missing from every locale is the visible case — the `es-fluent` fallback returns the message ID itself, which shows up as a raw key in the UI rather than a blank label.
 
-First, if the `.ftl` syntax itself is broken, `cargo build` fails with a clear error pointing to the file and line. Second, the `es-fluent` fallback mechanism returns the message ID as a string at runtime, so missing translations show up as visible keys in the UI rather than silent gaps.
+Neither case fails the build. That is why the build-time safety you actually get is structural: a malformed locale directory name or a bad `i18n.toml` is a compile error, while broken `.ftl` content surfaces when the i18n system initializes.
 
 I recommend adding a CI step that parses all `.ftl` files and reports which message IDs are present in one locale but missing from another. A simple diff of message IDs catches most localization gaps before they reach users.
 
@@ -267,4 +267,4 @@ On the other hand, if your app supports three or more languages, especially lang
 
 You now have a working internationalization setup for a Rust desktop app. You saw how Fluent `.ftl` files handle static strings, variable interpolation, and plural selectors without baking grammar rules into your Rust code. You saw how to embed translations at compile time with `es-fluent`, switch languages at runtime, and detect missing translations before they ship.
 
-The [gpui-starter](https://github.com/freeoxide/gpui-starter) project ships with this exact i18n setup out of the box, including English and simplified Chinese locales, a settings page for language switching, and compile-time validation. The [getting started guide](/docs/getting-started/) walks through the full setup in about ten minutes.
+The [gpui-starter](https://github.com/freeoxide/gpui-starter) project ships with this exact i18n setup out of the box, including English and simplified Chinese locales, a settings page for language switching, and locale bundles embedded into the binary. The [getting started guide](/docs/getting-started/) walks through the full setup in about ten minutes.

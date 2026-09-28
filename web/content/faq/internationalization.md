@@ -43,7 +43,7 @@ i18n/
     └── gpui-starter.ftl    # Simplified Chinese (68 messages)
 ```
 
-Both files must define the same message keys. If a key is missing in a locale file, the build fails with a compile-time error from `es-fluent` rather than showing a blank string at runtime.
+Both files should define the same message keys, but nothing enforces that at build time. A key missing from one locale falls back through the locale chain (`en` is the default), so that locale's users see the other locale's string. A key missing from every locale renders the raw key name in the UI. A CI step that diffs message IDs across locale files catches both cases.
 
 ## Using translations in views
 
