@@ -77,7 +77,7 @@ AccessKit provides screen reader support and semantic tree generation. The [test
 | [Architecture](/docs/architecture/) | GPUI API patterns, entity management, globals, subscriptions |
 | [Routing](/docs/routing/) | Route registry, sidebar, active page tracking |
 | [Themes](/docs/themes/) | Built-in themes, hot-reload, custom theme format |
-| [i18n](/docs/i18n/) | es-fluent setup, adding languages, compile-time checks |
+| [i18n](/docs/i18n/) | es-fluent setup, adding languages, runtime message resolution |
 | [Forms](/docs/forms/) | Validation rules, error display, submit handling |
 | [Command Launcher](/docs/command-launcher/) | Cmd+K overlay, fuzzy search, action registry |
 | [Secure Storage](/docs/secure-storage/) | OS keyring integration, credential management |
