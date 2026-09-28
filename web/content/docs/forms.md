@@ -18,24 +18,24 @@ A single struct with derive macros handles the setup:
 #[fluent_variants(keys = ["description", "label"])]
 #[gpui_form(koruma(fluent))]
 pub struct RegistrationForm {
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(NonEmptyValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(NonEmptyValidation::<_>::builder())]
     pub name: String,
 
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(EmailValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(EmailValidation::<_>::builder())]
     pub email: String,
 
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(NonEmptyValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(NonEmptyValidation::<_>::builder())]
     pub password: String,
 
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(PhoneNumberValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(PhoneNumberValidation::<_>::builder())]
     pub phone: String,
 
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(UrlValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(UrlValidation::<_>::builder())]
     pub website: String,
 }
 ```
@@ -44,7 +44,7 @@ Each derive serves a specific purpose:
 
 | Derive | What it generates |
 |--------|-------------------|
-| `GpuiForm` | `RegistrationFormFormFields` (entity holders for each input), `RegistrationFormFormValueHolder` (typed value storage), `RegistrationFormFormComponents` (factory methods to create input entities) |
+| `GpuiForm` | `RegistrationFormFormFields` (entity holders for each input), `RegistrationFormFormValueHolder` (typed `Option`-wrapped value storage), `RegistrationFormFormComponents` (factory methods to create input entities) |
 | `Koruma` | A `validate()` method on the value holder that runs all field rules and returns `Result<(), ValidationErrors>` |
 | `EsFluentVariants` | `RegistrationFormLabelVariants` and `RegistrationFormDescriptionVariants` enums for typed message lookup |
 | `KorumaAllFluent` | Fluent-backed error messages for each validator, auto-localized to the current locale |
@@ -67,7 +67,7 @@ The validators come from `koruma-collection`, which ships two categories:
 | `PhoneNumberValidation` | North American phone format | `(555) 123-4567` |
 | `UrlValidation` | Valid URL with scheme | `https://example.com` |
 
-In the `#[koruma(...)]` attribute, validators are written as bare paths (`NonEmptyValidation::<_>`); chain option setters directly on the path (for example `.min(3)`) when a validator needs configuration. The `#[koruma(...)]` attribute on each field is all the wiring you need.
+In the `#[koruma(...)]` attribute, validators are written as builder chains (`NonEmptyValidation::<_>::builder()`); chain option setters on the builder (for example `RangeValidation::<_>::builder().min(18).max(120)`) when a validator needs configuration. The `#[koruma(...)]` attribute on each field is all the wiring you need.
 
 ## Localized labels and error messages
 
@@ -93,30 +93,33 @@ Because `KorumaAllFluent` is derived alongside `EsFluentVariants`, validation er
 
 ## Wiring input state
 
-`GpuiForm` generates a `RegistrationFormFormFields` struct that holds an `Entity<InputState>` per field. Under gpui-form 0.6 the generated member and factory names are the RAW field names (`name`, not `name_input`). You create these in the page constructor and subscribe to change events via the `value_change` shape helper, which normalizes component events into `ValueChange::Set`/`Clear`/`Unchanged`:
+`GpuiForm` generates a `RegistrationFormFormFields` struct that holds an `Entity<InputState>` per field. The generated member and factory names append the component (`name_input`, not `name`). You create these in the page constructor and subscribe to `InputEvent::Change` to keep the value holder in sync. The holder stores `Option<String>` per field, so a cleared input maps to `None` and the required-field validators catch it:
 
 ```rust
-use gpui_form::runtime::shape::{ValueChange, value_change};
-use gpui_form_collection::input::Input as FormInput;
+use gpui_component::input::{InputEvent, InputState};
 
 pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
     let current_data = RegistrationFormFormValueHolder::default();
 
-    // Create input entities via the generated factory methods (raw field names)
-    let name = cx.new(|cx| RegistrationFormFormComponents::name(window, cx));
-    let email = cx.new(|cx| RegistrationFormFormComponents::email(window, cx));
+    // Input entities via the generated factory methods ({field}_input names)
+    let name_input = cx.new(|cx| RegistrationFormFormComponents::name_input(window, cx));
+    let email_input = cx.new(|cx| RegistrationFormFormComponents::email_input(window, cx));
     // ... one per field
 
-    // Subscribe to changes to keep current_data in sync. The 0.6 value holder
-    // stores plain String fields, so a cleared input maps to the empty string.
+    // Subscribe to change events to keep current_data in sync. The value
+    // holder stores Option<String> fields, so a cleared input maps to None.
     let _subscriptions = vec![
         cx.subscribe(
-            &name,
+            &name_input,
             |this: &mut FormPage, state: Entity<InputState>, event: &InputEvent, cx| {
-                match value_change::<FormInput, String>(state.read(cx), event) {
-                    ValueChange::Set(value) => this.current_data.name = value,
-                    ValueChange::Clear => this.current_data.name = String::new(),
-                    ValueChange::Unchanged => return,
+                if let InputEvent::Change = event {
+                    let text = state.read(cx).value();
+                    let value = if text.is_empty() {
+                        None
+                    } else {
+                        Some(text.to_string())
+                    };
+                    this.current_data.name = value;
                 }
             },
         ),
@@ -126,8 +129,8 @@ pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
     Self {
         current_data,
         fields: RegistrationFormFormFields {
-            name,
-            email,
+            name_input,
+            email_input,
             // ... rest
         },
         agree_terms: false,
@@ -169,7 +172,7 @@ v_form()
                         })
                 }
             })
-            .child(Input::new(&self.fields.name)),
+            .child(Input::new(&self.fields.name_input)),
     )
 ```
 
@@ -183,8 +186,8 @@ Validation produces a `ValidationErrors` struct with typed accessors for each fi
 let error_for = |field_name: &str| -> Option<String> {
     validation_errors.as_ref().and_then(|e| {
         let errs: Vec<String> = match field_name {
-            "name" => e.name().all().map(|m| crate::i18n::localize_message(&m)).collect(),
-            "email" => e.email().all().map(|m| crate::i18n::localize_message(&m)).collect(),
+            "name" => e.name().all().into_iter().map(|m| crate::i18n::localize_message(&m)).collect(),
+            "email" => e.email().all().into_iter().map(|m| crate::i18n::localize_message(&m)).collect(),
             // ... other fields
             _ => Vec::new(),
         };
@@ -193,7 +196,7 @@ let error_for = |field_name: &str| -> Option<String> {
 };
 ```
 
-Each call like `e.name()` returns an iterator over that field's validation failures (owned Fluent messages under koruma 0.11). `localize_message` converts each failure to a string in the current locale. Multiple errors on the same field are joined with newlines.
+Each call like `e.name()` returns that field's failed validators; `.all()` yields them as a `Vec` of owned Fluent messages (koruma 0.9), so `.into_iter()` adapts it for mapping. `localize_message` converts each failure to a string in the current locale. Multiple errors on the same field are joined with newlines.
 
 ## Handling submission
 
@@ -238,7 +241,7 @@ The reset button clears all input values, resets `touched` and `submitted`, and 
 ```rust
 fn on_reset(&mut self, window: &mut Window, cx: &mut Context<Self>) {
     self.current_data = RegistrationFormFormValueHolder::default();
-    self.fields.name.update(cx, |s, cx| s.set_value("", window, cx));
+    self.fields.name_input.update(cx, |s, cx| s.set_value("", window, cx));
     // ... clear other fields
     self.agree_terms = false;
     self.submitted = false;

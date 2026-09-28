@@ -16,24 +16,24 @@ One struct with derive macros does the wiring. Each field gets a component type 
 #[fluent_variants(keys = ["description", "label"])]
 #[gpui_form(koruma(fluent))]
 pub struct RegistrationForm {
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(NonEmptyValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(NonEmptyValidation::<_>::builder())]
     pub name: String,
 
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(EmailValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(EmailValidation::<_>::builder())]
     pub email: String,
 
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(NonEmptyValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(NonEmptyValidation::<_>::builder())]
     pub password: String,
 
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(PhoneNumberValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(PhoneNumberValidation::<_>::builder())]
     pub phone: String,
 
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(UrlValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(UrlValidation::<_>::builder())]
     pub website: String,
 }
 ```
@@ -65,11 +65,11 @@ Four derives on one struct, each with a specific job:
 | `PhoneNumberValidation` | North American phone format | `(555) 123-4567` |
 | `UrlValidation` | Valid URL with scheme | `https://example.com` |
 
-In the `#[koruma(...)]` attribute, validators are written as bare paths; chain option setters directly on the path when a validator needs configuration.
+In the `#[koruma(...)]` attribute, validators are written as builder chains (`NonEmptyValidation::<_>::builder()`); chain option setters on the builder when a validator needs configuration.
 
 ## How validation and rendering connect
 
-The `GpuiForm` derive generates a `RegistrationFormFormFields` struct that holds an `Entity<InputState>` per field. You create these in the page constructor and subscribe to change events to keep a `current_data` struct in sync.
+The `GpuiForm` derive generates a `RegistrationFormFormFields` struct that holds an `Entity<InputState>` per field. You create these in the page constructor and subscribe to `InputEvent::Change` to keep the value holder in sync; the holder stores `Option<String>` per field, so subscriptions map an empty input to `None`.
 
 Validation runs on submit, not on every keystroke. A `touched` boolean tracks whether the user has attempted to submit. Errors only render when `touched` is true, so the form stays clean until the user acts.
 
@@ -111,8 +111,8 @@ Validation produces a `ValidationErrors` struct with typed accessors for each fi
 let error_for = |field_name: &str| -> Option<String> {
     validation_errors.as_ref().and_then(|e| {
         let errs: Vec<String> = match field_name {
-            "name" => e.name().all().iter().map(crate::i18n::localize_message).collect(),
-            "email" => e.email().all().iter().map(crate::i18n::localize_message).collect(),
+            "name" => e.name().all().into_iter().map(|m| crate::i18n::localize_message(&m)).collect(),
+            "email" => e.email().all().into_iter().map(|m| crate::i18n::localize_message(&m)).collect(),
             _ => Vec::new(),
         };
         if errs.is_empty() { None } else { Some(errs.join("\n")) }
