@@ -283,9 +283,8 @@ impl Render for AppRoot {
     }
 }
 
-/// One sidebar page entry: layer set-position metadata and direct AT
-/// activation over [`SidebarMenuItem`], whose own node already reports the
-/// visible label and selected state.
+/// Wrapper over [`SidebarMenuItem`] layering set-position metadata and
+/// direct AT activation; the item's own node reports label and selection.
 #[derive(Clone)]
 struct NavItem {
     page: Page,
