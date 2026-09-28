@@ -1,6 +1,6 @@
 //! Kit 0.7 migration invariants the compiler cannot check: manifest pins,
 //! the single-kit lock graph (the round-1 links-conflict failure mode), and
-//! the vendored gpui-form patch shape.
+//! the gpui-form re-pin to the migrated freeoxide repo.
 
 use std::path::PathBuf;
 
@@ -119,41 +119,123 @@ fn gpui_pre_snapshot_family_is_unified() {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Vendored gpui-form patch shape
+// 3. gpui-form re-pin (freeoxide git rev + temporary local-checkout patch)
 // ---------------------------------------------------------------------------
 
 #[test]
-fn gpui_form_stays_path_patched_from_vendor() {
+fn gpui_form_pins_migrated_local_repo() {
     let manifest = repo_file("Cargo.toml");
     assert!(
-        manifest.contains("[patch.\"https://github.com/stayhydated/gpui-form\"]"),
-        "the gpui-form patch table must stay keyed by the upstream git URL"
+        manifest.contains(
+            "gpui-form = { git = \"https://github.com/freeoxide/gpui-form\", \
+             rev = \"f7e2fb0b30c1285638f1a877489dc03ad084319a\" }"
+        ),
+        "gpui-form must pin the freeoxide migration-branch HEAD byte-exact"
     );
-    for crate_path in [
-        "vendor/gpui-form/crates/gpui-form",
-        "vendor/gpui-form/crates/gpui-form-collection",
-    ] {
-        assert!(
-            manifest.contains(&format!("path = \"{crate_path}\"")),
-            "patch table must map to {crate_path}"
-        );
-    }
+    assert!(
+        !manifest.contains("stayhydated"),
+        "the retired stayhydated fork must not reappear in Cargo.toml"
+    );
+    assert!(
+        !manifest.contains("gpui-form-collection"),
+        "gpui-form-collection has no counterpart in the migrated repo"
+    );
+    assert!(
+        manifest.contains(
+            "gpui-query = { git = \"https://github.com/hmziqagent/gpui-query\", rev = \"1449ef2\" }"
+        ),
+        "the gpui-query [patch.crates-io] override must stay untouched"
+    );
 
     let lock = repo_file("Cargo.lock");
-    for package in ["gpui-form", "gpui-form-collection"] {
-        let blocks = lock_blocks(&lock, package);
-        assert_eq!(
-            blocks.len(),
-            1,
-            "expected exactly one {package} in Cargo.lock"
-        );
+    assert!(
+        !lock.contains("stayhydated"),
+        "Cargo.lock must carry zero stayhydated URLs"
+    );
+    assert!(
+        lock_blocks(&lock, "gpui-form-collection").is_empty(),
+        "gpui-form-collection must stay absent from the lock"
+    );
+    assert_single_version(&lock, "gpui-form", "0.5.2");
+    let query = lock_blocks(&lock, "gpui-query");
+    assert_eq!(
+        query.len(),
+        1,
+        "expected exactly one gpui-query in Cargo.lock"
+    );
+    assert!(
+        query[0].contains("source = \"git+https://github.com/hmziqagent/gpui-query?rev=1449ef2"),
+        "gpui-query must resolve from the hmziqagent git source"
+    );
+}
+
+#[test]
+fn satellites_stay_on_form_repo_registry_lines() {
+    let lock = repo_file("Cargo.lock");
+    for (prefix, version) in [("koruma", "0.9.0"), ("es-fluent", "0.16.0")] {
+        let family: Vec<&str> = lock
+            .split("[[package]]")
+            .skip(1)
+            .filter(|block| {
+                let name = block_name(block);
+                name == prefix || name.starts_with(&format!("{prefix}-"))
+            })
+            .collect();
         assert!(
-            blocks[0].contains("\nversion = \"0.6.0\""),
-            "{package} keeps its patched 0.6.0 version"
+            family.len() >= 2,
+            "expected the {prefix} family in Cargo.lock, found {}",
+            family.len()
         );
-        assert!(
-            !blocks[0].contains("source = "),
-            "{package} must be path-sourced from vendor/, not registry/git"
-        );
+        for block in &family {
+            let name = block_name(block);
+            assert_eq!(
+                lock_blocks(&lock, name).len(),
+                1,
+                "{name} must exist as exactly one copy in Cargo.lock"
+            );
+            assert!(
+                block.contains(&format!("\nversion = \"{version}\"")),
+                "{name} must resolve to {version}"
+            );
+            assert!(
+                block
+                    .contains("source = \"registry+https://github.com/rust-lang/crates.io-index\""),
+                "{name} must resolve from the registry, not a git/path duplicate"
+            );
+        }
     }
+}
+
+#[test]
+fn gpui_form_stays_patched_to_local_checkout() {
+    // Temporary-state test: after the PR merges, delete the [patch] table,
+    // re-lock, and flip these assertions (table absent, gpui-form git-sourced).
+    let manifest = repo_file("Cargo.toml");
+    let table = manifest
+        .split("[patch.\"https://github.com/freeoxide/gpui-form\"]")
+        .nth(1)
+        .expect("the temporary gpui-form [patch] table must stay present");
+    let entries: Vec<&str> = table
+        .lines()
+        .map(str::trim)
+        .take_while(|l| !l.starts_with('['))
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+    assert_eq!(
+        entries,
+        ["gpui-form = { path = \"../gpui-form/crates/gpui-form\" }"],
+        "the patch table must hold exactly the one local-checkout entry"
+    );
+
+    let lock = repo_file("Cargo.lock");
+    let blocks = lock_blocks(&lock, "gpui-form");
+    assert_eq!(
+        blocks.len(),
+        1,
+        "expected exactly one gpui-form in Cargo.lock"
+    );
+    assert!(
+        !blocks[0].contains("source = "),
+        "while patched, gpui-form carries no source line (local path shape)"
+    );
 }
