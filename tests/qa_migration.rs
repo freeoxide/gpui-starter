@@ -123,7 +123,7 @@ fn gpui_pre_snapshot_family_is_unified() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn gpui_form_pins_migrated_local_repo() {
+fn gpui_form_pins_migrated_freeoxide_repo() {
     let manifest = repo_file("Cargo.toml");
     assert!(
         manifest.contains(
