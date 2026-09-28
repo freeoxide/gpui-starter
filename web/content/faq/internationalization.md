@@ -66,7 +66,7 @@ For form validation errors specifically, use `localize_message()` which consumes
 
 Languages switch without restarting the app. Select a new locale through the settings view or the [command launcher](/docs/command-launcher/) (Cmd+K). The change propagates immediately because `es-fluent` resolves messages on every call rather than caching them at startup.
 
-The supported locales are defined by the `Languages` enum in `src/app.rs`, which the `es_fluent_language` macro auto-populates from the `i18n/` directory:
+The supported locales are defined by the `Languages` enum in `src/app/actions.rs`, which the `es_fluent_language` macro auto-populates from the `i18n/` directory:
 
 ```rust
 #[es_fluent_language]

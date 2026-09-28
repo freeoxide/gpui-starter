@@ -163,8 +163,8 @@ To add support for a new language:
 
 1. Create a new directory under `i18n/` named with the locale code (for example `fr-FR`).
 2. Copy `en/gpui-starter.ftl` into it and translate every message.
-3. Register the locale in `src/app.rs` by adding a variant to the `Languages` enum annotated with `#[es_fluent_language]`.
-4. Add a menu item in `src/menus.rs` that dispatches the `SelectLocale` action with the new locale code.
+3. Register the locale in `src/app/actions.rs` by adding a variant to the `Languages` enum annotated with `#[es_fluent_language]`.
+4. Add a menu item in `src/shell/menus.rs` that dispatches the `SelectLocale` action with the new locale code.
 5. Run `cargo build`. Syntax errors in the `.ftl` file do not fail the build; they surface when the i18n system initializes — the parse error is logged at debug level and the locale falls back, while a broken required file fails init with `LanguageNotSupported`.
 
 See the [i18n documentation](/docs/i18n/) for the complete reference, including how to handle right-to-left languages and locale fallback chains.

@@ -265,10 +265,10 @@ Re-render
 
 ### Add a new locale
 
-1. Add translation files under the `rust_i18n` resource path (e.g., `locales/`).
-2. Add the locale code constant to `app.rs` (alongside `LOCALE_EN`, `LOCALE_ZH_CN`).
+1. Add translation files under the assets dir `i18n.toml` points at (`i18n/`).
+2. Add the locale code constant to `src/app/locale.rs` (alongside `LOCALE_EN`, `LOCALE_ZH_CN`).
 3. Update `AppConfig::normalized()` to validate against the new locale.
-4. Add an `es-fluent` language variant in `src/app.rs` (`Languages` enum) and corresponding FTL files.
+4. Add an `es-fluent` language variant in `src/app/actions.rs` (`Languages` enum) and corresponding FTL files.
 
 ## Key Patterns
 
