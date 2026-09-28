@@ -83,6 +83,8 @@ fn lock_graph_holds_one_kit_family() {
     for (package, version) in [
         ("gpui-kit", "0.7.0"),
         ("gpui-component", "0.7.0"),
+        ("gpui-component-macros", "0.7.0"),
+        ("gpui-base", "0.7.0"),
         ("gpui-kit-assets", "0.7.0"),
         ("gpui-pre", "0.3.7"),
         ("gpui-pre-platform", "0.3.7"),
