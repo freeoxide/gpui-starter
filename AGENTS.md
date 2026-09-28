@@ -35,7 +35,7 @@ All three must pass before you call the work done. CI runs clippy with
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy --workspace --all-features --exclude some-lib-forms
+cargo clippy --workspace --all-features
 cargo test --workspace --all-features
 ```
 

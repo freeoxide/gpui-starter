@@ -11,10 +11,10 @@ fmt:
     rumdl fmt .
 
 clippy:
-    cargo clippy --workspace --all-features --exclude some-lib-forms
+    cargo clippy --workspace --all-features
 
 check:
-    cargo check --workspace --all-features --exclude some-lib-forms
+    cargo check --workspace --all-features
 
 # Web (wasm32-unknown-unknown) support. NIGHTLY is required: the locked
 # wasm_thread 0.3.3 (via the gpui web backend) uses
