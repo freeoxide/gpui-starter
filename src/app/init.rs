@@ -48,9 +48,9 @@ pub fn init(cx: &mut App) {
 
     crate::lifecycle::install_panic_hook();
 
-    // Must precede any gpui-component usage.
+    // Must precede any kit usage.
     startup_step!(cx, "component_init", {
-        gpui_component::init(cx);
+        gpui_kit::init(cx);
     });
 
     crate::lifecycle::set_stage(crate::lifecycle::LifecycleStage::Starting, cx);
@@ -144,7 +144,7 @@ pub fn init(cx: &mut App) {
         .get(persisted_theme.as_str())
         .cloned()
     {
-        gpui_component::Theme::global_mut(cx).apply_config(&theme);
+        gpui_component::Theme::update(cx, |t| t.apply_config(&theme));
     }
 
     // Hot reload of themes/ is dev-checkout-only: the watcher create_dir_all()s
@@ -171,9 +171,10 @@ pub fn init(cx: &mut App) {
     }
 
     if let Some(show) = persisted.scrollbar_show {
-        gpui_component::Theme::global_mut(cx).scrollbar_mode = show;
+        // set_scrollbar_mode routes through Theme::update, which projects the
+        // mode onto the Base scrollbar and refreshes windows.
+        gpui_component::Theme::set_scrollbar_mode(show, cx);
     }
-    cx.refresh_windows();
 
     cx.observe_global::<gpui_component::Theme>(move |cx| {
         let theme_name = cx.theme().theme_name().to_string();
@@ -191,9 +192,8 @@ pub fn init(cx: &mut App) {
             .get(&switch.0)
             .cloned()
         {
-            gpui_component::Theme::global_mut(cx).apply_config(&config);
+            gpui_component::Theme::update(cx, |theme| theme.apply_config(&config));
         }
-        cx.refresh_windows();
     });
     cx.on_action(|switch: &SwitchThemeMode, cx| {
         set_theme_mode(switch.0, cx);

@@ -1,7 +1,10 @@
+use std::rc::Rc;
+
 use gpui::SharedString;
 
 // No App context: gpui's test-support feature is a dev-dependency change,
-// so drive load_themes_from_str (what register_embedded_themes calls).
+// so drive load_themes_from_str (what register_embedded_themes calls) and
+// Theme::apply_config (what the Theme::update sites in init.rs call).
 
 /// (file, theme names) of every theme inside every embedded themes/*.json.
 fn embedded_theme_names() -> Vec<(SharedString, Vec<SharedString>)> {
@@ -24,6 +27,31 @@ fn embedded_theme_file_count_is_24() {
     // Tripwire: coverage in the tests below derives from the embed iterator;
     // this pins the shipped count so a dropped themes/*.json cannot slide by.
     assert_eq!(crate::app::assets::embedded_themes().len(), 24);
+}
+
+/// kit 0.7 adds `chart.grid` (ThemeColor::chart_grid); every embedded theme
+/// must resolve a grid color through apply_config, with or without the token.
+#[test]
+fn apply_config_resolves_chart_grid_for_every_embedded_theme() {
+    for (file, json) in crate::app::assets::embedded_themes() {
+        let set = serde_json::from_str::<gpui_component::theme::ThemeSet>(&json)
+            .unwrap_or_else(|err| panic!("{file}: {err}"));
+        for config in set.themes {
+            let name = config.name.clone();
+            let explicit = config.colors.chart_grid.clone();
+            let mut theme = gpui_component::Theme::default();
+            theme.apply_config(&Rc::new(config));
+
+            let expected = match explicit.as_deref() {
+                // 0.6 dropped this key silently; 0.7 parses it natively.
+                Some(value) => gpui_component::theme::try_parse_color(value)
+                    .unwrap_or_else(|err| panic!("{file} {name}: {value}: {err}")),
+                // The documented 0.7 fallback for themes without chart.grid.
+                None => theme.border.opacity(0.6),
+            };
+            assert_eq!(theme.chart_grid, expected, "{file}: {name}");
+        }
+    }
 }
 
 #[test]
