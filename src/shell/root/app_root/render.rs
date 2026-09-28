@@ -31,9 +31,6 @@ impl Render for AppRoot {
 
         // clock (not std::time): Instant::now panics at runtime on wasm.
         let render_started = crate::platform::clock::Instant::now();
-        let sheet_layer = gpui_component::Root::render_sheet_layer(window, cx);
-        let dialog_layer = gpui_component::Root::render_dialog_layer(window, cx);
-        let notification_layer = gpui_component::Root::render_notification_layer(window, cx);
         let page_title = if self.render_error {
             "Render Error"
         } else {
@@ -74,6 +71,12 @@ impl Render for AppRoot {
                 SidebarToggleButton::new()
                     .side(side)
                     .collapsed(self.collapsed)
+                    // Icon-only control; the label tracks the panel icon swap.
+                    .accessibility_label(if self.collapsed {
+                        "Expand sidebar"
+                    } else {
+                        "Collapse sidebar"
+                    })
                     .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_sidebar(cx))),
             );
 
@@ -277,15 +280,12 @@ impl Render for AppRoot {
             .child(self.title_bar.clone())
             .child(content_area)
             .child(crate::status_bar::render(&self.active_route, cx))
-            .children(sheet_layer)
-            .children(dialog_layer)
-            .children(notification_layer)
     }
 }
 
-/// One sidebar page entry: wraps [`SidebarMenuItem`] with the accessibility
-/// node the component does not create — its clickable div has no role, so
-/// without this wrapper the items are absent from the a11y tree entirely.
+/// One sidebar page entry: layer set-position metadata and direct AT
+/// activation over [`SidebarMenuItem`], whose own node already reports the
+/// visible label and selected state.
 #[derive(Clone)]
 struct NavItem {
     page: Page,
