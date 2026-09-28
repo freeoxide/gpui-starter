@@ -9,13 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `tests/qa_migration.rs` locks the migration's dependency-graph invariants: kit 0.7.0 + `gpui-pre` 0.3.7 manifest pins, exactly one gpui-kit family and one unified `gpui-pre` snapshot in the lockfile, the freeoxide `gpui-form` rev pin, single-copy `koruma` 0.9 / `es-fluent` 0.16 registry satellites, and the temporary one-entry `[patch]` override whose post-merge removal flips exactly one test
+- `tests/qa_migration.rs` locks the migration's dependency-graph invariants: kit 0.7.0 + `gpui-pre` 0.3.7 manifest pins, exactly one gpui-kit family and one unified `gpui-pre` snapshot in the lockfile, the freeoxide `gpui-form` rev pin, single-copy `koruma` 0.9 / `es-fluent` 0.16 registry satellites, and the retired gpui-form `[patch]` table's absence — the merged rev resolves from git unpatched
 
 ### Changed
 
 - Migrated the GPUI foundation to **gpui-kit 0.6.0** from crates.io, built on `gpui-pre` (the published snapshot of Zed's gpui) — the whole graph resolves to exactly one gpui copy and the zed git `[patch]` entries are gone
 - Bumped the gpui-kit ecosystem (`gpui-kit`, `gpui-component`, `gpui-kit-assets`) to **0.6.1**; the pinned `gpui-form` rev's caret requirement unifies on the same checkout, and 0.6.1's slimmed optional deps drop syntect/jni/rustls-platform-verifier from the lockfile
-- `gpui-form` is re-pinned to the freeoxide fork @`f7e2fb0b`, the `sync/gpui-kit-0.7.0` migration branch HEAD (no stayhydated rev targets kit 0.7; PR merge pending); the run-1 vendoring is retired and a temporary `[patch]` resolves the unpushed rev from the local sibling checkout — delete the table after the PR merges. `koruma` 0.9 and `es-fluent` 0.16 follow the migrated graph's single-copy registry lines
+- `gpui-form` is re-pinned to the freeoxide fork @`f7e2fb0b`, the `sync/gpui-kit-0.7.0` migration branch HEAD (no stayhydated rev targets kit 0.7); the run-1 vendoring is retired, and the temporary `[patch]` that resolved the then-unpushed rev from the local sibling checkout is deleted now that the rev is merged upstream — the git pin resolves as written. `koruma` 0.9 and `es-fluent` 0.16 follow the migrated graph's single-copy registry lines
 - `gpui-query` resolves through a `[patch.crates-io]` override to our `gpui-pre-0.6` fork branch (a one-line manifest swap onto `gpui-pre`); no sources are vendored for this override
 - Ported the form page to the gpui-form 0.5.2 API: `#[gpui_form(component(input))]` declarations, koruma 0.9 builder validators, `{field}_input` generated members, `InputEvent::Change` subscriptions; two adaptations are intentional — empty fields now fail the codegen-added required validator, and `website` is required-enforced at the holder level
 - The i18n service is ported to es-fluent 0.16 (`localize` keeps its `&'static str` id and resolves through `localize_in_domain`): an invalid message id now falls back to the id string instead of failing the retired 0.18 static registry's eager key check
