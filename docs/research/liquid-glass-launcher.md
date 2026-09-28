@@ -91,10 +91,12 @@ blur/glass view.
 
 ## Step 2 — Stop GPUI's Root from painting the theme background
 
-`gpui-component`'s `Root::render` does this (see
-`vendor/gpui-component/crates/ui/src/root.rs:504`):
+This session ran against the vendored kit 0.6, whose `gpui-component`
+`Root::render` painted the theme background inline:
 
 ```rust
+// kit 0.6; the vendor tree is gone and Root::window_shadow_size was
+// retired by 0.7 (the kit changelog maps it to window_border())
 window_border().shadow_size(self.window_shadow_size).child(
     div()
         .id("root")
@@ -108,13 +110,22 @@ window_border().shadow_size(self.window_shadow_size).child(
 )
 ```
 
-Without intervention, this paints `cx.theme().background` opaquely over the
-NSVisualEffectView/NSGlassEffectView, so you never see any glass — you see the
-theme colour.
+In kit 0.7 the same paint moved into a root plugin: component init
+registers the `WindowState` plugin via `Root::register_plugin`
+(`gpui-component-0.7.0/src/root.rs:21`), its `RootPlugin::style` hook
+refines the root surface with `.bg(cx.theme().tokens.background)`
+(`root.rs:440-447`), and `RootPlugin::decorate` wraps the surface in
+`window_border()`, which now owns the shadow size (`root.rs:450-457`).
 
-`Root` implements `Styled`, and `.refine_style(&self.style)` runs **after**
-`.bg(theme.background)`. So chaining `.bg(transparent_black())` on the `Root`
-entity wins via the refinement merge:
+Either way, without intervention the root surface is painted opaquely with
+the theme background over the NSVisualEffectView/NSGlassEffectView, so you
+never see any glass — you see the theme colour.
+
+The override survives the version change. `Root` implements `Styled`, and
+styles set on the `Root` instance are refined onto the surface after the
+plugin style hooks, so they take precedence over the plugin's opaque
+default (gpui-base documents this ordering on `RootPlugin::style`).
+Chaining `.bg(transparent_black())` on the `Root` entity wins:
 
 ```rust
 let window = cx
@@ -124,6 +135,10 @@ let window = cx
     })
     .expect("failed to open launcher window");
 ```
+
+The current launcher still does this in `src/features/command_palette.rs`
+(`open_launcher`); its comment there explains why it builds the `Root`
+manually instead of using `gpui_kit::open_window`.
 
 `gpui::transparent_black()` is `Hsla(0, 0, 0, 0)` — fully clear. After this,
 the GPUI metal layer is genuinely transparent and the view *behind* it (the
