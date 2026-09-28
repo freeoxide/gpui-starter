@@ -43,7 +43,7 @@ Multi-page sidebar navigation with type-safe route definitions. Each route maps 
 
 ### Internationalization
 
-English and Chinese (zh-CN) translations managed by es-fluent. Translation files live in `i18n/` and compile into typed constants, so a missing key is a compile error, not a runtime surprise. See [i18n configuration](/docs/i18n/) for the setup.
+English and Chinese (zh-CN) translations managed by es-fluent. Translation files live in `i18n/`; message ids resolve at runtime, and an invalid id falls back to the id string. See [i18n configuration](/docs/i18n/) for the setup.
 
 ### Form validation
 

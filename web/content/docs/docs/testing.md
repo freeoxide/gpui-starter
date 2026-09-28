@@ -129,7 +129,6 @@ fn test_with_window(cx: &mut TestAppContext) {
 }
 ```
 
-The `tests/support/rendering.rs` module wraps this pattern into reusable helpers. `open_visual_context(cx)` creates a minimal window, and `open_window_with_root(cx, |window, cx| MyView::new(window, cx))` opens one with your own root entity.
 
 ## Async tests
 
