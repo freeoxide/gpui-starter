@@ -225,37 +225,51 @@ pub phone: String,
 
 ## Writing a custom validator
 
-The four built-in rules (`NonEmptyValidation`, `EmailValidation`, `PhoneNumberValidation`, `UrlValidation`) cover common cases. For anything specific to your domain, implement the `Validation` trait:
+The four built-in rules (`NonEmptyValidation`, `EmailValidation`, `PhoneNumberValidation`, `UrlValidation`) cover common cases. For anything specific to your domain, write a validator struct with the `#[koruma::validator]` attribute and implement the `Validate` trait:
 
 ```rust
-use koruma::Validation;
+use koruma::{Validate, validator};
 
-struct UsernameValidation;
+#[validator]
+#[derive(Clone, Debug)]
+struct UsernameValidation {
+    #[koruma(value)]
+    actual: String,
+}
 
-impl Validation for UsernameValidation {
-    type Value = String;
-
-    fn validate(&self, value: &Self::Value) -> Result<(), String> {
+impl Validate<String> for UsernameValidation {
+    fn validate(&self, value: &String) -> bool {
         let v = value.trim();
-        if v.len() < 3 {
-            return Err("Username must be at least 3 characters.".into());
-        }
-        if !v.chars().all(|c| c.is_alphanumeric() || c == '_') {
-            return Err("Username can only contain letters, numbers, and underscores.".into());
-        }
-        Ok(())
+        v.len() >= 3 && v.chars().all(|c| c.is_alphanumeric() || c == '_')
     }
 }
 ```
 
-Then use it the same way:
+The `actual` field, marked `#[koruma(value)]`, is where the derive captures the value under validation. `#[koruma::validator]` also derives a builder for the struct, so the validator plugs into the same attribute as the built-ins:
 
 ```rust
-#[koruma(UsernameValidation)]
+#[koruma(UsernameValidation::builder())]
 pub username: String,
 ```
 
-Custom validators work with Fluent too. Add the key `{struct}_koruma_variants-{field}-username` to your `.ftl` files, and the `KorumaAllFluent` derive picks it up.
+If the validator has configuration fields, set them on the builder the same way the built-ins do: `RangeValidation::<_>::builder().min(0).max(100)`.
+
+`validate` returns a `bool`, not an error string. The message shown to the user comes from a `Display` impl on the validator:
+
+```rust
+impl std::fmt::Display for UsernameValidation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Username must be at least 3 characters and use only letters, numbers, and underscores."
+        )
+    }
+}
+```
+
+If you want a different message per failure, split the rules into separate validators and stack them on the field, like the phone example above.
+
+Custom validators work with Fluent too: derive `EsFluent` on the validator struct (the built-in rules do exactly this) and the `KorumaAllFluent` derive resolves the messages the same way.
 
 For the full validator API and edge cases like async validation, see [the forms documentation](/docs/forms/).
 
@@ -271,6 +285,6 @@ Fluent key generation follows a strict naming convention. If you rename a field,
 
 ## Where to go from here
 
-The complete working form lives in `src/views/form_page.rs` in the [gpui-starter repo](https://github.com/freeoxide/gpui-starter). You can clone it, run `cargo run`, and see the validation in action immediately. The form page is accessible from the sidebar navigation.
+The complete working form lives in `src/features/pages/form_page.rs` in the [gpui-starter repo](https://github.com/freeoxide/gpui-starter). You can clone it, run `cargo run`, and see the validation in action immediately. The form page is accessible from the sidebar navigation.
 
 For setup instructions and the full project structure, see [the getting started guide](/docs/getting-started/). The [earlier post on form validation with koruma](/blog/form-validation-koruma-rust/) covers the architecture in more depth if you want to understand the macro internals before building your own forms.
