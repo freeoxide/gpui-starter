@@ -119,7 +119,7 @@ fn gpui_pre_snapshot_family_is_unified() {
 }
 
 // ---------------------------------------------------------------------------
-// 3. gpui-form re-pin (freeoxide git rev + temporary local-checkout patch)
+// 3. gpui-form re-pin (freeoxide git rev, resolved unpatched)
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -207,24 +207,12 @@ fn satellites_stay_on_form_repo_registry_lines() {
 }
 
 #[test]
-fn gpui_form_stays_patched_to_local_checkout() {
-    // Temporary-state test: after the PR merges, delete the [patch] table,
-    // re-lock, and flip these assertions (table absent, gpui-form git-sourced).
+fn gpui_form_resolves_from_freeoxide_git_unpatched() {
     let manifest = repo_file("Cargo.toml");
-    let table = manifest
-        .split("[patch.\"https://github.com/freeoxide/gpui-form\"]")
-        .nth(1)
-        .expect("the temporary gpui-form [patch] table must stay present");
-    let entries: Vec<&str> = table
-        .lines()
-        .map(str::trim)
-        .take_while(|l| !l.starts_with('['))
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .collect();
-    assert_eq!(
-        entries,
-        ["gpui-form = { path = \"../gpui-form/crates/gpui-form\" }"],
-        "the patch table must hold exactly the one local-checkout entry"
+    assert!(
+        !manifest.contains("[patch.\"https://github.com/freeoxide/gpui-form\"]"),
+        "the retired gpui-form [patch] table must not reappear; the pinned \
+         rev is reachable upstream and resolves from git without it"
     );
 
     let lock = repo_file("Cargo.lock");
@@ -235,7 +223,9 @@ fn gpui_form_stays_patched_to_local_checkout() {
         "expected exactly one gpui-form in Cargo.lock"
     );
     assert!(
-        !blocks[0].contains("source = "),
-        "while patched, gpui-form carries no source line (local path shape)"
+        blocks[0].contains(
+            "source = \"git+https://github.com/freeoxide/gpui-form?rev=f7e2fb0b30c1285638f1a877489dc03ad084319a"
+        ),
+        "gpui-form must resolve from the freeoxide git source at the pinned rev"
     );
 }

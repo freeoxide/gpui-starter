@@ -3161,6 +3161,7 @@ dependencies = [
 [[package]]
 name = "gpui-form"
 version = "0.5.2"
+source = "git+https://github.com/freeoxide/gpui-form?rev=f7e2fb0b30c1285638f1a877489dc03ad084319a#f7e2fb0b30c1285638f1a877489dc03ad084319a"
 dependencies = [
  "bon",
  "gpui-form-component",
@@ -3172,6 +3173,7 @@ dependencies = [
 [[package]]
 name = "gpui-form-codegen"
 version = "0.5.2"
+source = "git+https://github.com/freeoxide/gpui-form?rev=f7e2fb0b30c1285638f1a877489dc03ad084319a#f7e2fb0b30c1285638f1a877489dc03ad084319a"
 dependencies = [
  "darling",
  "derive_more",
@@ -3185,6 +3187,7 @@ dependencies = [
 [[package]]
 name = "gpui-form-component"
 version = "0.5.2"
+source = "git+https://github.com/freeoxide/gpui-form?rev=f7e2fb0b30c1285638f1a877489dc03ad084319a#f7e2fb0b30c1285638f1a877489dc03ad084319a"
 dependencies = [
  "chrono",
  "es-fluent",
@@ -3203,6 +3206,7 @@ dependencies = [
 [[package]]
 name = "gpui-form-component-derive"
 version = "0.5.2"
+source = "git+https://github.com/freeoxide/gpui-form?rev=f7e2fb0b30c1285638f1a877489dc03ad084319a#f7e2fb0b30c1285638f1a877489dc03ad084319a"
 dependencies = [
  "darling",
  "proc-macro-crate",
@@ -3215,10 +3219,12 @@ dependencies = [
 [[package]]
 name = "gpui-form-core"
 version = "0.5.2"
+source = "git+https://github.com/freeoxide/gpui-form?rev=f7e2fb0b30c1285638f1a877489dc03ad084319a#f7e2fb0b30c1285638f1a877489dc03ad084319a"
 
 [[package]]
 name = "gpui-form-derive"
 version = "0.5.2"
+source = "git+https://github.com/freeoxide/gpui-form?rev=f7e2fb0b30c1285638f1a877489dc03ad084319a#f7e2fb0b30c1285638f1a877489dc03ad084319a"
 dependencies = [
  "darling",
  "gpui-form-codegen",
@@ -3234,6 +3240,7 @@ dependencies = [
 [[package]]
 name = "gpui-form-schema"
 version = "0.5.2"
+source = "git+https://github.com/freeoxide/gpui-form?rev=f7e2fb0b30c1285638f1a877489dc03ad084319a#f7e2fb0b30c1285638f1a877489dc03ad084319a"
 dependencies = [
  "heck 0.5.0",
  "inventory",

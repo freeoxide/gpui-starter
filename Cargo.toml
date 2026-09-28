@@ -2,7 +2,7 @@
 
 [workspace.dependencies]
 # gpui-form from the freeoxide fork; rev = the migration branch HEAD on
-# sync/gpui-kit-0.7.0. The [patch] table below redirects to the local checkout.
+# sync/gpui-kit-0.7.0.
 gpui-form = { git = "https://github.com/freeoxide/gpui-form", rev = "f7e2fb0b30c1285638f1a877489dc03ad084319a" }
 
 # GPUI ecosystem — crates.io `gpui-pre` is the published snapshot of zed gpui
@@ -392,8 +392,3 @@ gpui-pre-macros = { opt-level = 3 }
 gpui-query = { git = "https://github.com/hmziqagent/gpui-query", rev = "1449ef2" }
 # gpui-query = { path = "/Users/hmziq/fo/gpui-query/crates/gpui-query" }
 # <<< gpui-query-local <<<
-
-# Temporary no-fetch override: the pinned rev is unpushed, so gpui-form
-# resolves from the local checkout. Delete this table after the PR merges.
-[patch."https://github.com/freeoxide/gpui-form"]
-gpui-form = { path = "../gpui-form/crates/gpui-form" }
