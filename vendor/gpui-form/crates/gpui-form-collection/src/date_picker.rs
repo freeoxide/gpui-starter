@@ -3,7 +3,7 @@ use component_shape::ValueChange;
 use component_shape_gpui::{GpuiComponentValueBinding, component_shape};
 use gpui_kit::component::{
     calendar::Date,
-    date_picker::{DatePickerEvent, DatePickerState, DateTime},
+    date_picker::{DatePickerEvent, DatePickerState},
 };
 use gpui_kit::{Context, Window};
 
