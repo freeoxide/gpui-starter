@@ -131,24 +131,22 @@ fn _watch_themes_dir(themes_dir: PathBuf, cx: &mut App) -> anyhow::Result<()> {
 }
 ```
 
-The watcher sends file events through a bounded channel. The async receiver calls `reload_themes` on each event, which re-reads every JSON file in the directory. After reloading, the registry triggers `cx.observe_global::<ThemeRegistry>` in its init function:
+The watcher sends file events through a bounded channel. The async receiver calls `reload_themes` on each event, which re-reads every JSON file in the directory. A reload notifies the registry's observers, and two of them do the work.
+
+The kit installs the first observer during `gpui_kit::init`. It re-reads the active theme's config from the refreshed registry and re-applies it with `Theme::change(mode, None, cx)`, which in kit 0.7 reconciles the derived tokens, rebuilds the Base projection, and refreshes every open window itself. There is no manual `Theme::global_mut` mutation and no manual `cx.refresh_windows()` left to write.
+
+The application's own observer, registered in `src/app/init.rs`, has a narrower job. The kit's `reload()` clears the registry and re-seeds it from the crate defaults plus whatever is on disk, so the themes embedded in the binary vanish on every watcher event:
 
 ```rust
-cx.observe_global::<ThemeRegistry>(|cx| {
-    let mode = Theme::global(cx).mode;
-    let name = Theme::global(cx).theme_name().clone();
-
-    // Re-apply the active theme from the refreshed registry
-    if let Some(theme) = ThemeRegistry::global(cx).themes().get(&name).cloned() {
-        Theme::global_mut(cx).apply_config(&theme);
-    }
-
-    Theme::change(mode, None, cx);
-    cx.refresh_windows();
-}).detach();
+cx.observe_global::<gpui_component::ThemeRegistry>(|cx| {
+    crate::app::theme::ensure_embedded_themes(cx);
+})
+.detach();
 ```
 
-You edit a JSON file in the themes directory, save it, and the app picks up the change within milliseconds. No recompile, no restart. Every open window repaints with the new colors.
+`ensure_embedded_themes` reloads only the embedded files whose names went missing, and it checks before mutating: the restore re-notifies the registry, so an unconditional reload inside this observer would recurse forever.
+
+You edit a JSON file in the themes directory, save it, and the app picks up the change within milliseconds. No recompile, no restart. The kit's observer re-applies the active theme, and every open window repaints with the new colors.
 
 ## Tradeoffs
 
