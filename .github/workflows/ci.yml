@@ -172,6 +172,10 @@ jobs:
   check-windows:
     name: Check (Windows)
     runs-on: windows-latest
+    env:
+      # The default C:\Users\runneradmin\.cargo prefix puts gpui-form's longest
+      # checkout path at 266 chars (MAX_PATH is 260); C:\cargo caps it at 247.
+      CARGO_HOME: 'C:\cargo'
     steps:
       - uses: actions/checkout@v7
 
@@ -258,6 +262,8 @@ jobs:
       # Same wrapper/fingerprint discipline as the Linux test lane.
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: ${{ github.ref == 'refs/heads/master' && 'true' || 'false' }}
+      # Short CARGO_HOME: same gpui-form MAX_PATH fix as check-windows.
+      CARGO_HOME: 'C:\cargo'
     steps:
       - uses: actions/checkout@v7
 
