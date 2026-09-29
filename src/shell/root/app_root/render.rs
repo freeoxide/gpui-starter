@@ -1,7 +1,6 @@
 use std::rc::Rc;
 
-use gpui::{prelude::*, *};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, Collapsible, Icon, IconName, Side, Sizable as _, h_flex,
     menu::PopupMenu,
     resizable::{h_resizable, resizable_panel},
@@ -10,6 +9,7 @@ use gpui_component::{
     },
     v_flex,
 };
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt;
 use crate::app::ToggleSearch;

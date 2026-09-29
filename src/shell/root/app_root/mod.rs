@@ -3,7 +3,7 @@ mod state;
 
 pub use state::AppRoot;
 
-use gpui::*;
+use gpui_kit::*;
 
 impl Focusable for AppRoot {
     fn focus_handle(&self, _: &App) -> FocusHandle {

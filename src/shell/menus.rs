@@ -1,7 +1,7 @@
-use gpui::{App, Entity, Menu, MenuItem, SharedString};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, GlobalState, Theme, ThemeMode, ThemeRegistry, menu::AppMenuBar,
 };
+use gpui_kit::{App, Entity, Menu, MenuItem, SharedString};
 
 use crate::{
     app::{About, ExecuteCommand, Quit, SelectLocale, SwitchTheme, SwitchThemeMode},
@@ -87,11 +87,11 @@ fn build_menus(title: impl Into<SharedString>, cx: &App) -> Vec<Menu> {
                 MenuItem::action("Redo", ExecuteCommand(CommandId::Redo))
                     .disabled(!commands::availability(CommandId::Redo, cx).enabled),
                 MenuItem::separator(),
-                MenuItem::action("Cut", gpui_component::input::Cut),
-                MenuItem::action("Copy", gpui_component::input::Copy),
-                MenuItem::action("Paste", gpui_component::input::Paste),
+                MenuItem::action("Cut", gpui_kit::component::input::Cut),
+                MenuItem::action("Copy", gpui_kit::component::input::Copy),
+                MenuItem::action("Paste", gpui_kit::component::input::Paste),
                 MenuItem::separator(),
-                MenuItem::action("Select All", gpui_component::input::SelectAll),
+                MenuItem::action("Select All", gpui_kit::component::input::SelectAll),
             ],
             disabled: false,
         },

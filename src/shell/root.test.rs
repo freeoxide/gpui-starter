@@ -3,7 +3,7 @@
 use super::super::frame_time::is_slow_frame;
 use super::persisted_bounds;
 use crate::app_state::PersistedWindowBounds;
-use gpui::{Bounds, point, px, size};
+use gpui_kit::{Bounds, point, px, size};
 
 #[test]
 fn is_slow_frame_below_threshold() {
