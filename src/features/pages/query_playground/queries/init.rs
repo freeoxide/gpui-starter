@@ -308,8 +308,12 @@ impl QueryPlaygroundPage {
                             return Err(QueryError::cancelled("cancelled before send"));
                         }
                         // Take the handle out before awaiting: MutexGuard is !Send
-                        // and must not live across the await point.
-                        let task = http_task.lock().unwrap().take();
+                        // and must not live across the await point. The only
+                        // lock site never panics, so recover the guard on poison.
+                        let task = http_task
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .take();
                         match task {
                             Some(task) => task.await,
                             None => Err(QueryError::response(
