@@ -1,5 +1,5 @@
-use gpui::{prelude::*, *};
-use gpui_component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::{prelude::*, *};
 
 use gpui_query::client::ClientDiagnostic;
 use gpui_query::core::MutationStatus;
@@ -94,7 +94,8 @@ pub(super) fn render_mutations_table(
 
             let status_label = m.status.label();
 
-            // Stable id from key + index so ids don't shift on removal.
+            // MutationDiagnostic carries no unique id (anonymous keys repeat),
+            // so rows key on key+position; they hold no keyed element state.
             let row_id = format!(
                 "v2-mutation-row-{}-{}",
                 m.key.as_deref().unwrap_or("anon"),

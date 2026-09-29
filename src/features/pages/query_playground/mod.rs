@@ -2,16 +2,12 @@ mod queries;
 mod render_sections;
 mod ui_helpers;
 
-use std::sync::Arc;
-
-use gpui::prelude::*;
-use gpui::*;
-
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, VirtualListScrollHandle,
     input::{InputEvent, InputState},
     v_flex,
 };
+use gpui_kit::{prelude::*, *};
 use serde::{Deserialize, Serialize};
 
 use gpui_query::client::QueryClient;
@@ -137,8 +133,10 @@ pub struct QueryPlaygroundPage {
     )>,
     pub(super) activity_log: Vec<String>,
     pub(super) log_scroll_handle: VirtualListScrollHandle,
-    // Mutation callbacks write here so their log survives past the click handler.
-    pub(super) _callback_log: Arc<std::sync::Mutex<Vec<String>>>,
+    // Mutation callbacks run without a context; they send here and the
+    // page-owned drain task folds the messages into the activity log.
+    pub(super) callback_log_tx: tokio::sync::mpsc::UnboundedSender<String>,
+    _callback_log_drain: Task<()>,
 }
 
 impl QueryPlaygroundPage {
@@ -160,7 +158,22 @@ impl QueryPlaygroundPage {
             },
         ));
 
-        let callback_log = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let (callback_log_tx, mut callback_log_rx) = tokio::sync::mpsc::unbounded_channel();
+        // Held (not detached): dropping the task cancels it, so the drain dies
+        // with the page entity instead of outliving it.
+        let callback_log_drain = cx.spawn(async move |this, cx| {
+            while let Some(msg) = callback_log_rx.recv().await {
+                if this
+                    .update(cx, |page, cx| {
+                        page.log(msg);
+                        cx.notify();
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
 
         Self {
             _subscriptions: subs,
@@ -181,7 +194,8 @@ impl QueryPlaygroundPage {
             http_query: None,
             activity_log: Vec::new(),
             log_scroll_handle: VirtualListScrollHandle::new(),
-            _callback_log: callback_log,
+            callback_log_tx,
+            _callback_log_drain: callback_log_drain,
         }
     }
 

@@ -1,4 +1,4 @@
-use gpui::*;
+use gpui_kit::*;
 
 use gpui_query::core::QueryError;
 use gpui_query::hook::{
@@ -248,20 +248,16 @@ impl QueryPlaygroundPage {
         self.log(format!("Mutation: mutate_with_callbacks('{}')", vars));
 
         let exec = cx.background_executor().clone();
-        let log_for_success = self._callback_log.clone();
-        let log_for_error = self._callback_log.clone();
+        // Callbacks fire without a context; send into the page-owned channel
+        // so the drain task can log them on the entity (see `new`).
+        let tx_for_success = self.callback_log_tx.clone();
+        let tx_for_error = self.callback_log_tx.clone();
         let callbacks = MutationCallbacks::new()
             .on_success(move |data: &String| {
-                log_for_success
-                    .lock()
-                    .unwrap()
-                    .push(format!("on_success: {}", data));
+                let _ = tx_for_success.send(format!("on_success: {}", data));
             })
             .on_error(move |err: &QueryError| {
-                log_for_error
-                    .lock()
-                    .unwrap()
-                    .push(format!("on_error: {}", err));
+                let _ = tx_for_error.send(format!("on_error: {}", err));
             });
 
         mutate_with_callbacks(
@@ -277,8 +273,6 @@ impl QueryPlaygroundPage {
             callbacks,
             cx,
         );
-
-        self.log("Mutation: callbacks registered (on_success, on_error)");
     }
 
     pub(in super::super) fn reset_mutation(&mut self, cx: &mut Context<Self>) {
@@ -611,7 +605,7 @@ pub(super) fn spawn_http_local(
     client: &reqwest::Client,
     runtime: &std::sync::Arc<tokio::runtime::Runtime>,
     kind: HttpFetchKind,
-) -> gpui::Task<Result<HttpFetchResult, QueryError>> {
+) -> Task<Result<HttpFetchResult, QueryError>> {
     let client = client.clone();
     let runtime = runtime.clone();
     cx.spawn(async move |_this, _cx| run_http(&client, &runtime, kind).await)

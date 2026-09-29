@@ -1,7 +1,5 @@
-use gpui::prelude::*;
-use gpui::*;
-
-use gpui_component::{ActiveTheme as _, v_flex};
+use gpui_kit::component::{ActiveTheme as _, v_flex};
+use gpui_kit::{prelude::*, *};
 
 use gpui_query::core::QueryStatus;
 
@@ -9,6 +7,8 @@ use crate::accessibility::A11yExt as _;
 
 use super::PlaygroundUser;
 
+/// Section frame. `title` is a fixed per-section literal (never localized,
+/// unique by construction) and derives the heading/description ids.
 pub fn section_card(title: &str, description: &str, cx: &App) -> Div {
     div()
         .rounded(cx.theme().radius_lg)

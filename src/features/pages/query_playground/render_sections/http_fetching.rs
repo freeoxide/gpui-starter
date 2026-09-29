@@ -1,7 +1,5 @@
-use gpui::prelude::*;
-use gpui::*;
-
-use gpui_component::{ActiveTheme as _, Disableable as _, button::Button, h_flex};
+use gpui_kit::component::{ActiveTheme as _, Disableable as _, button::Button, h_flex};
+use gpui_kit::{prelude::*, *};
 
 use gpui_query::core::QueryStatus;
 

@@ -1,4 +1,4 @@
-use gpui::*;
+use gpui_kit::*;
 
 use gpui_query::core::{CachePolicy, QueryError, RequestPolicy, RetryPolicy, SelectTransform};
 use gpui_query::hook::{

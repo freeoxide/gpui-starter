@@ -1,8 +1,8 @@
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use gpui::{prelude::*, *};
-use gpui_component::{ActiveTheme as _, VirtualListScrollHandle, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, VirtualListScrollHandle, h_flex, v_flex};
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::ui::widgets::{
@@ -12,7 +12,7 @@ use gpui_query::client::{ClientDiagnostic, QueryDiagnostic};
 use gpui_query::core::QueryStatus;
 
 use super::dashboard::QueryDevToolsV2Page;
-use super::helpers::{QuerySort, filter_button, format_cache_age, rems_from_px, sort_button};
+use super::helpers::{QuerySort, filter_button, format_cache_age, sort_button};
 
 // `v_virtual_list` positions items purely from `item_sizes`, so rows/details
 // are pinned to these heights — keep in sync with the row renderers.
@@ -31,15 +31,15 @@ struct RegistryRow {
     retry_count_str: SharedString,
 }
 
+/// Owned by [`QueryDevToolsV2Page`] so the memo dies with the view instead of
+/// living in an app-wide Global nobody invalidates.
 #[derive(Default)]
-struct RegistryRowCache {
+pub(super) struct RegistryRowCache {
     signature: u64,
     sort: Option<QuerySort>,
     filter: Option<String>,
     rows: Rc<Vec<RegistryRow>>,
 }
-
-impl Global for RegistryRowCache {}
 
 /// Cheap signature of the diagnostic's query slice; equal signatures mean the
 /// cached sort/filter result is still valid.
@@ -58,13 +58,12 @@ fn diagnostic_signature(d: &ClientDiagnostic) -> u64 {
 }
 
 fn cached_registry_rows(
+    cache: &mut RegistryRowCache,
     diagnostic: &Option<ClientDiagnostic>,
     sort_by: QuerySort,
     status_filter: &Option<String>,
-    cx: &mut Context<QueryDevToolsV2Page>,
 ) -> Rc<Vec<RegistryRow>> {
     let signature = diagnostic.as_ref().map(diagnostic_signature).unwrap_or(0);
-    let cache = cx.default_global::<RegistryRowCache>();
     let hit = cache.signature == signature
         && cache.sort == Some(sort_by)
         && cache.filter.as_deref() == status_filter.as_deref();
@@ -138,6 +137,7 @@ pub(super) fn render_query_registry(
     expanded_key: &Option<String>,
     sort_by: QuerySort,
     status_filter: &Option<String>,
+    row_cache: &mut RegistryRowCache,
     scroll_handle: &VirtualListScrollHandle,
     cx: &mut Context<QueryDevToolsV2Page>,
 ) -> Div {
@@ -182,10 +182,10 @@ pub(super) fn render_query_registry(
         );
 
     let queries: Rc<Vec<RegistryRow>> =
-        cached_registry_rows(diagnostic, sort_by, status_filter, cx);
+        cached_registry_rows(row_cache, diagnostic, sort_by, status_filter);
 
     let header = h_flex().gap_3().px_3().py_2().children(vec![
-        div().w(rems_from_px(16.0)).child(div()),
+        div().w_4().child(div()),
         div()
             .text_xs()
             .font_weight(FontWeight::BOLD)
@@ -331,6 +331,10 @@ pub(super) fn render_query_registry(
         .child(registry_content)
 }
 
+#[cfg(test)]
+#[path = "registry.test.rs"]
+mod registry_test;
+
 fn query_row(
     row: &RegistryRow,
     is_expanded: bool,
@@ -385,7 +389,7 @@ fn query_row(
             // flex_1 data columns align.
             h_flex().gap_3().items_center().children(vec![
                 div()
-                    .w(rems_from_px(16.0))
+                    .w_4()
                     .text_xs()
                     .text_color(muted_foreground)
                     .child(chevron.to_string()),

@@ -1,6 +1,5 @@
-use gpui::*;
-
-use gpui_component::{Selectable, button::Button};
+use gpui_kit::component::{Selectable, button::Button};
+use gpui_kit::*;
 
 use super::dashboard::QueryDevToolsV2Page;
 
@@ -72,10 +71,4 @@ pub(super) fn format_cache_age(age_ms: Option<u64>) -> String {
             }
         }
     }
-}
-
-/// Convert pixels to rems assuming a 16px base font size (matches GPUI's
-/// default, but may differ with system config).
-pub(super) fn rems_from_px(px: f32) -> Rems {
-    Rems(px / 16.0)
 }
