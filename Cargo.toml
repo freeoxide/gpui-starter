@@ -5,9 +5,23 @@
 # sync/gpui-kit-0.7.0.
 gpui-form = { git = "https://github.com/freeoxide/gpui-form", rev = "f7e2fb0b30c1285638f1a877489dc03ad084319a" }
 
-# GPUI ecosystem — crates.io `gpui-pre` is the published snapshot of zed gpui
-# (PACKAGE name gpui-pre, lib name stays `gpui`); gpui-kit 0.7.0 builds on it
-# and pins the whole gpui-pre-* snapshot family to =0.3.7.
+# GPUI ecosystem — one application-facing dependency: gpui-kit. crates.io
+# `gpui-pre` is the published snapshot of zed gpui (PACKAGE name gpui-pre, lib
+# name stays `gpui`); gpui-kit 0.7.0 builds on it and pins the whole
+# gpui-pre-* snapshot family to =0.3.7. Imports go through the facade:
+# `gpui_kit::*` for GPUI, `gpui_kit::component` / `base` / `assets` /
+# `platform` for the layers.
+#
+# Direct deps beside gpui-kit, each with a reason:
+#   - gpui_platform: gpui-kit 0.7.0 forwards no platform features, so the
+#     backend selection (font-kit/x11/wayland on Linux, runtime_shaders on
+#     macOS) is enabled here. Feature selection only — code imports
+#     `gpui_kit::platform`, never `gpui_platform::` (qa_migration.rs checks).
+#   - gpui, gpui-component, gpui-kit-assets: carry no features of their own
+#     (gpui-kit already enables each with defaults) and exist only while
+#     `use gpui::` / `gpui_component::` / `gpui_kit_assets::` imports remain
+#     in src/. Drop all three once those are kit paths; the qa_migration.rs
+#     manifest pins move in lockstep.
 # gpui-kit is listed directly because gpui-form's derives emit ::gpui_kit::
 # paths into consuming crates; gpui-kit-assets replaces gpui-component-assets
 # (the old longbridge/gpui-component git URL is retired with the zed patches).

@@ -1,6 +1,7 @@
 //! Kit 0.7 migration invariants the compiler cannot check: manifest pins,
-//! the single-kit lock graph (the round-1 links-conflict failure mode), and
-//! the gpui-form re-pin to the migrated freeoxide repo.
+//! the single-kit lock graph (the round-1 links-conflict failure mode), the
+//! gpui-form re-pin to the migrated freeoxide repo, and the kit-facade
+//! import surface.
 
 use std::path::PathBuf;
 
@@ -31,6 +32,36 @@ fn block_name(block: &str) -> &str {
         .find_map(|l| l.trim().strip_prefix("name = "))
         .map(|n| n.trim_matches('"'))
         .unwrap_or_default()
+}
+
+/// Returns every compiled `.rs` file (src/ tree plus build.rs) as
+/// (display path, contents). Sorted so failures name files stably.
+fn app_sources() -> Vec<(String, String)> {
+    let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let mut files = Vec::new();
+    let mut stack = vec![root.join("src")];
+    while let Some(dir) = stack.pop() {
+        let mut entries: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap_or_else(|e| panic!("read dir {}: {e}", dir.display()))
+            .map(|e| e.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                let content = std::fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+                files.push((path.display().to_string(), content));
+            }
+        }
+    }
+    let build = root.join("build.rs");
+    files.push((
+        build.display().to_string(),
+        std::fs::read_to_string(&build).expect("read build.rs"),
+    ));
+    files
 }
 
 fn assert_single_version(lock: &str, package: &str, version: &str) {
@@ -230,4 +261,19 @@ fn gpui_form_resolves_from_freeoxide_git_unpatched() {
         ),
         "gpui-form must resolve from the freeoxide git source at the pinned rev"
     );
+}
+
+// ---------------------------------------------------------------------------
+// 4. Kit facade import surface
+// ---------------------------------------------------------------------------
+
+#[test]
+fn platform_reaches_code_through_the_kit_facade() {
+    for (path, content) in app_sources() {
+        assert!(
+            !content.contains("gpui_platform::"),
+            "{path} bypasses the kit facade with `gpui_platform::`; the direct \
+             gpui_platform dep only selects backends — import gpui_kit::platform"
+        );
+    }
 }
