@@ -1,6 +1,5 @@
-// No `use super::*` here: registry.rs globs `gpui_kit::*`, which would drag
-// the kit's `test` macro into scope and make `#[test]` resolve to it
-// recursively.
+// No `use super::*` here: the parent's gpui_kit::* glob would make `#[test]`
+// resolve to the kit's `test` macro recursively.
 use super::{QuerySort, RegistryRowCache, cached_registry_rows};
 use gpui_query::client::{ClientDiagnostic, QueryDiagnostic};
 use gpui_query::core::QueryStatus;

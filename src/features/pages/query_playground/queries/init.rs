@@ -307,9 +307,8 @@ impl QueryPlaygroundPage {
                         if signal.is_cancelled() {
                             return Err(QueryError::cancelled("cancelled before send"));
                         }
-                        // Take the handle out before awaiting: MutexGuard is !Send
-                        // and must not live across the await point. The only
-                        // lock site never panics, so recover the guard on poison.
+                        // Take the handle before awaiting (MutexGuard is !Send); into_inner
+                        // keeps the no-unwrap rule — a poisoned cell has no invariant to break.
                         let task = http_task
                             .lock()
                             .unwrap_or_else(std::sync::PoisonError::into_inner)
