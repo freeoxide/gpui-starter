@@ -280,9 +280,11 @@ jobs:
           # Master-only saves; PRs restore only (see the check job note).
           save-if: ${{ github.ref == 'refs/heads/master' }}
           cache-on-failure: true
-          # v2 does not read CARGO_TARGET_DIR; workspaces points the cache at
-          # C:\t instead of the now-unused <workspace>\target.
-          workspaces: 'C:\ -> t'
+          # v2 does not read CARGO_TARGET_DIR; cache-directories points the
+          # cache at C:\t instead of the now-unused <workspace>\target. Not
+          # `workspaces`: its C:\ root makes the key glob the whole drive
+          # (6m walk + EPERM annotation) and runs cargo metadata off-repo.
+          cache-directories: 'C:\t'
 
       - name: Run scoped lib tests
         run: cargo test -p gpui-starter --lib

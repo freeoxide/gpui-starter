@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use super::ensure_shortcut_at;
+use super::{ensure_shortcut_at, same_path};
 
 fn temp_programs(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("gpui-starter-toast-identity-{tag}"));
@@ -52,7 +52,14 @@ fn shortcut_is_refreshed_when_exe_moves() {
     ensure_shortcut_at(&programs, "com.example.app", &exe_b).expect("rewrite for exe b");
 
     let (target, aumid) = read_back(&programs);
-    assert_eq!(target, exe_b, "shortcut must follow the current exe");
+    // read_back yields the shell-normalized long form, which never textually
+    // equals the temp_dir-built path when TEMP is the 8.3 short form.
+    assert!(
+        same_path(&target, &exe_b),
+        "shortcut must follow the current exe: {} != {}",
+        target.display(),
+        exe_b.display()
+    );
     assert_eq!(aumid.as_deref(), Some("com.example.app"));
 }
 
@@ -65,7 +72,12 @@ fn shortcut_is_refreshed_when_aumid_changes() {
     ensure_shortcut_at(&programs, "com.new.app", &exe).expect("rewrite AUMID");
 
     let (target, aumid) = read_back(&programs);
-    assert_eq!(target, exe);
+    assert!(
+        same_path(&target, &exe),
+        "shortcut must follow the current exe: {} != {}",
+        target.display(),
+        exe.display()
+    );
     assert_eq!(aumid.as_deref(), Some("com.new.app"));
 }
 
