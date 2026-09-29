@@ -42,9 +42,9 @@ const MAX_PLAUSIBLE_DIM: f32 = 100_000.0;
 /// pending timer instead of spawning another one.
 static SAVE_SCHEDULED: AtomicBool = AtomicBool::new(false);
 
-/// App-wide config store (GPUI global). Read through the module helpers
-/// below; write only via [`update_config`] and [`force_save`], which own the
-/// debounced persistence.
+/// App-wide config store (GPUI global). Write only via [`update_config`]
+/// and [`force_save`], which own the debounced persistence; in-crate reads
+/// go through the helper fns in this module where one exists.
 pub struct AppState {
     // Crate-visible only while diagnostics rows read them directly; external
     // consumers go through the reader helpers below.
