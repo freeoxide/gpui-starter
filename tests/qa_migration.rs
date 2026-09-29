@@ -34,8 +34,10 @@ fn block_name(block: &str) -> &str {
         .unwrap_or_default()
 }
 
-/// Returns every compiled `.rs` file (src/ tree plus build.rs) as
-/// (display path, contents). Sorted so failures name files stably.
+/// Returns every `.rs` file the crate compiles or runs as a test target —
+/// the src/ tree, build.rs, and tests/*.rs — minus this file, whose own
+/// assertions spell the banned paths they check for. Sorted so failures name
+/// files stably.
 fn app_sources() -> Vec<(String, String)> {
     let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let mut files = Vec::new();
@@ -61,6 +63,18 @@ fn app_sources() -> Vec<(String, String)> {
         build.display().to_string(),
         std::fs::read_to_string(&build).expect("read build.rs"),
     ));
+    let mut tests: Vec<_> = std::fs::read_dir(root.join("tests"))
+        .unwrap_or_else(|e| panic!("read dir {}: {e}", root.join("tests").display()))
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|ext| ext == "rs"))
+        .collect();
+    tests.sort();
+    for path in tests {
+        let content = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        files.push((path.display().to_string(), content));
+    }
+    files.retain(|(path, _)| !path.ends_with("qa_migration.rs"));
     files
 }
 
@@ -91,9 +105,12 @@ fn manifest_pins_kit_070_and_gpui_pre_037() {
         manifest.contains("package = \"gpui-pre\", version = \"0.3.7\""),
         "gpui (gpui-pre) must stay on the kit-0.7 snapshot"
     );
+    // gpui-pre-platform is reached only through gpui-kit, which enables the
+    // font-kit/x11/wayland/runtime_shaders backends itself.
     assert!(
-        manifest.contains("package = \"gpui-pre-platform\", version = \"0.3.7\""),
-        "gpui_platform must stay on the kit-0.7 snapshot"
+        !manifest.contains("gpui_platform"),
+        "gpui_platform must not be a direct dependency; gpui-kit 0.7.0 \
+         already selects every backend feature this app builds with"
     );
     for pin in ["gpui-kit", "gpui-component", "gpui-kit-assets"] {
         assert!(
@@ -267,13 +284,16 @@ fn gpui_form_resolves_from_freeoxide_git_unpatched() {
 // 4. Kit facade import surface
 // ---------------------------------------------------------------------------
 
+// The end state bans `use gpui::`, `gpui_component::`, and `gpui_kit_assets::`
+// here too; each joins this guard in the round that migrates its last import.
 #[test]
 fn platform_reaches_code_through_the_kit_facade() {
     for (path, content) in app_sources() {
         assert!(
             !content.contains("gpui_platform::"),
-            "{path} bypasses the kit facade with `gpui_platform::`; the direct \
-             gpui_platform dep only selects backends — import gpui_kit::platform"
+            "{path} bypasses the kit facade with `gpui_platform::`; the \
+             platform crate is not a dependency of this crate — import \
+             gpui_kit::platform"
         );
     }
 }

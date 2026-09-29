@@ -47,7 +47,6 @@ pub use platform::desktop_shell::tray;
 pub use platform::filesystem::paths;
 pub use platform::input::shortcuts;
 pub use platform::ipc;
-pub use platform::network::websocket;
 pub use platform::process::single_instance;
 pub use runtime::{capabilities, events};
 pub use services::{
