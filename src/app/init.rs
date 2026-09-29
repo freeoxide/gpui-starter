@@ -379,11 +379,12 @@ pub fn init(cx: &mut App) {
                     .update(cx, |_, window, cx| {
                         window.defer(cx, |window, cx| {
                             window.open_alert_dialog(cx, |alert, _, _| {
-                                alert.title("About").description(markdown(
-                                    "GPUI Starter\n\n\
-                                    Version 0.1.0\n\n\
-                                    A boilerplate for GPUI desktop apps.",
-                                ))
+                                // env!, not a literal: must track Cargo.toml
+                                // and features/pages/about.rs.
+                                alert.title("About").description(markdown(format!(
+                                    "GPUI Starter\n\nVersion {}\n\nA boilerplate for GPUI desktop apps.",
+                                    env!("CARGO_PKG_VERSION")
+                                )))
                             });
                         });
                     })
