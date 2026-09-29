@@ -72,8 +72,10 @@ pub fn render(route: &AppRoute, cx: &App) -> impl IntoElement {
         .px_3()
         .py_2()
         .border_t_1()
-        .border_color(cx.theme().border)
-        .bg(cx.theme().secondary.opacity(0.35))
+        // Same surface roles the kit's StatusBar consumes, so a theme
+        // customizing the status bar applies here too.
+        .border_color(cx.theme().status_bar_border)
+        .bg(cx.theme().tokens.status_bar)
         .text_xs()
         .child({
             let mut children: Vec<Stateful<Div>> = vec![
