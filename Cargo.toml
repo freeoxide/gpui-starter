@@ -5,29 +5,25 @@
 # sync/gpui-kit-0.7.0.
 gpui-form = { git = "https://github.com/freeoxide/gpui-form", rev = "f7e2fb0b30c1285638f1a877489dc03ad084319a" }
 
-# GPUI ecosystem — one application-facing dependency: gpui-kit. crates.io
-# `gpui-pre` is the published snapshot of zed gpui (PACKAGE name gpui-pre, lib
-# name stays `gpui`); gpui-kit 0.7.0 builds on it, pins the whole gpui-pre-*
-# snapshot family to =0.3.7, and enables font-kit/x11/wayland/runtime_shaders
-# on gpui-pre-platform itself — so backend selection needs no direct platform
-# dependency here. Imports go through the facade: `gpui_kit::*` for GPUI,
-# `gpui_kit::component` / `base` / `assets` / `platform` for the layers.
-#
-# gpui, gpui-component, gpui-kit-assets remain direct deps only while
-# `use gpui::` / `gpui_component::` / `gpui_kit_assets::` imports exist in
-# src/ and tests/. They carry no features of their own (gpui-kit already
-# enables each with defaults); drop all three once those imports are kit
-# paths, moving the qa_migration.rs manifest pins in lockstep.
-# gpui-kit is listed directly because gpui-form's derives emit ::gpui_kit::
-# paths into consuming crates; gpui-kit-assets replaces gpui-component-assets
-# (the old longbridge/gpui-component git URL is retired with the zed patches).
-# Never add a direct `accesskit` dep: gpui re-exports its own accesskit
-# (`gpui::accesskit`, 0.24.x) and a separately-versioned accesskit is
-# type-incompatible with the bridge.
+# GPUI ecosystem — gpui-kit is the single application-facing dependency.
+# crates.io `gpui-pre` is the published snapshot of zed gpui (PACKAGE name
+# gpui-pre, lib name stays `gpui`); gpui-kit 0.7.0 builds on it, pins the
+# whole gpui-pre-* snapshot family to =0.3.7, and enables
+# font-kit/x11/wayland/runtime_shaders on gpui-pre-platform itself, so
+# backend selection needs no direct platform dependency. GPUI itself is
+# `use gpui_kit::*`; the layers are `gpui_kit::component` / `base` /
+# `assets` / `platform`. qa_migration.rs fails the build if a source file
+# imports any of those crates by their own names.
+# gpui-kit and gpui are direct deps for the same reason: the pinned
+# gpui-form rev's derives emit both ::gpui_kit::component paths and
+# ::gpui::Entity/Window/Context into consuming crates (see
+# crates/gpui-form-codegen/src/implementations/*.rs), so hand-written code
+# uses kit paths only while the macros still need both crate names.
+# Never add a direct `accesskit` dep: the kit re-exports gpui's accesskit
+# (0.24.x) and a separately-versioned accesskit is type-incompatible with
+# the bridge.
 gpui = { package = "gpui-pre", version = "0.3.7" }
 gpui-kit = "0.7.0"
-gpui-component = "0.7.0"
-gpui-kit-assets = "0.7.0"
 
 # Serialization & data
 anyhow = "1"
@@ -131,9 +127,7 @@ gpui.workspace = true
 # `^0.1.4`-only pin Cargo can silently drop a future patch as
 # `[[patch.unused]]` and build the registry version regardless.
 gpui-query = { version = ">=0.1.4, <0.3.0", features = ["hook"] }
-gpui-component.workspace = true
 gpui-kit.workspace = true
-gpui-kit-assets.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -193,6 +187,9 @@ rust-embed = "8"
 
 [dev-dependencies]
 insta.workspace = true
+# Test-only: TestAppContext + deterministic timers for the config-store
+# debounce tests. Dev-dep features never reach production or wasm builds.
+gpui = { package = "gpui-pre", version = "0.3.7", features = ["test-support"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tray-icon = { version = "0.24", default-features = false }

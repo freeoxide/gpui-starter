@@ -2,7 +2,7 @@ use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
 use futures_util::FutureExt;
-use gpui::{Global, SharedString};
+use gpui_kit::{Global, SharedString};
 
 #[cfg(target_family = "wasm")]
 use super::NotificationBackend;

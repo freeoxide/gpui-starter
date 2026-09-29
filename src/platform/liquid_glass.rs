@@ -1,7 +1,7 @@
 //! macOS 26+ Liquid Glass utilities: create, find, and configure an
 //! `NSGlassEffectView` inside a GPUI window's native view hierarchy.
 
-use gpui::Window;
+use gpui_kit::Window;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, NSObjectProtocol};
 use objc2_app_kit::NSView;

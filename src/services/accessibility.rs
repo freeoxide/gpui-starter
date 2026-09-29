@@ -15,7 +15,7 @@
 //! `.id(...)` and a `.role(...)`; focused elements are announced when they
 //! also `.track_focus(&handle)`. [`A11yExt`] adds the app-level helpers.
 
-use gpui::{App, Global, Role, SharedString, StatefulInteractiveElement, accesskit::Live};
+use gpui_kit::{App, Global, Role, SharedString, StatefulInteractiveElement, accesskit::Live};
 
 use crate::capabilities::CapabilityStatus;
 

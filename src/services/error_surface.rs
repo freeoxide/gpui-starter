@@ -1,4 +1,4 @@
-use gpui::{App, BorrowAppContext, Global};
+use gpui_kit::{App, BorrowAppContext, Global};
 use serde::{Deserialize, Serialize};
 
 use crate::{ids::EventId, time::AppTimestamp};

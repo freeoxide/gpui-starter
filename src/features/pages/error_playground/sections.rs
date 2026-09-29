@@ -38,10 +38,8 @@ impl ErrorPlaygroundPage {
                     .primary()
                     .label(button_label.to_string())
                     .on_click(move |_, window, cx| {
-                        // AppRoot listens for this and swaps in RenderErrorPage.
-                        // Window-scoped dispatch: App::dispatch_action resolves
-                        // the active window via a thread-local on Windows and
-                        // fails with "window not found".
+                        // AppRoot swaps in RenderErrorPage. Window-scoped
+                        // dispatch: the App-level one fails on Windows.
                         window.dispatch_action(
                             Box::new(TriggerRenderError {
                                 message: error_msg.clone(),

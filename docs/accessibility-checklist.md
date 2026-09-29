@@ -7,7 +7,7 @@ Use this checklist for every UI change before merge.
 - Every interactive control is reachable by keyboard only.
 - Focus order matches visual reading order.
 - Focus is visible on all controls, including icon-only buttons.
-- Escape closes transient surfaces (launcher/dialogs) and returns focus predictably.
+- Escape closes transient surfaces (dialogs) and returns focus predictably. In the launcher, Escape first clears a typed query and closes on the second press.
 - Global shortcuts do not block normal text input behaviors.
 
 ## Semantics And Labels

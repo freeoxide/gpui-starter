@@ -1,5 +1,5 @@
 use crossbeam_channel::Select;
-use gpui::App;
+use gpui_kit::App;
 use tray_icon::{
     MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent,
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},

@@ -1,5 +1,5 @@
-// No `use super::*` here: error_playground/mod.rs globs `gpui::*`, which would
-// drag `gpui::test` into scope and make `#[test]` resolve to it recursively.
+// No `use super::*`: mod.rs globs `gpui_kit::*`, dragging the kit `test`
+// macro in and making `#[test]` resolve to it recursively.
 use super::ErrorPlaygroundPage;
 
 #[test]

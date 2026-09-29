@@ -15,11 +15,6 @@ use crate::features::palette::{FuzzyMatchConfig, ItemFilter, PaletteEntry};
 
 const LOG: &str = "gpui_starter::launcher";
 
-/// Nothing to bind here: the palette component binds its own up/down/enter/
-/// escape keys in its "Command" context from `gpui_kit::init`. Kept for the
-/// boot seam (`app::init` calls this).
-pub fn init(_: &mut App) {}
-
 // Prevents double-opening the launcher
 pub struct LauncherOpen(pub bool);
 impl Global for LauncherOpen {}
@@ -378,10 +373,8 @@ impl Render for LauncherRoot {
             tracing::info!(target: LOG, "Removing launcher window (deferred)");
             #[cfg(target_os = "windows")]
             {
-                // Hand OS focus to the main window and let it settle before
-                // this popup leaves gpui's window map: key-ups and WM_ACTIVATE
-                // still route to the focused window afterward and would log
-                // "window not found" from gpui's own callbacks.
+                // Hand OS focus to the main window before the popup leaves
+                // gpui's map, or later key-ups log "window not found".
                 let handle = window.window_handle();
                 cx.spawn(async move |_this, cx| {
                     cx.update(|cx| {
@@ -451,9 +444,8 @@ pub fn open_launcher(cx: &mut App) {
             ..Default::default()
         };
 
-        // Manual Root, not gpui_kit::open_window: the WindowState plugin paints
-        // opaque tokens.background on the root surface; only an instance bg,
-        // refined after plugin styles, keeps this window transparent.
+        // Manual Root, not gpui_kit::open_window: the WindowState plugin
+        // paints an opaque root surface; only a post-plugin bg stays clear.
         let Some(window) = cx
             .open_window(options, |window, cx| {
                 let launcher_root = cx.new(|cx| LauncherRoot::new(window, cx));

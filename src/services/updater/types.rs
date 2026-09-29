@@ -1,7 +1,7 @@
 #[cfg(not(target_family = "wasm"))]
 use std::path::PathBuf;
 
-use gpui::actions;
+use gpui_kit::actions;
 use serde::{Deserialize, Serialize};
 
 actions!(updater, [CheckForUpdates]);
@@ -50,7 +50,7 @@ pub struct UpdateSnapshot {
     pub cached_asset: Option<PlatformAsset>,
 }
 
-impl gpui::Global for UpdateSnapshot {}
+impl gpui_kit::Global for UpdateSnapshot {}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UpdateManifest {

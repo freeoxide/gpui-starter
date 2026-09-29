@@ -1,4 +1,4 @@
-use gpui::{App, BorrowAppContext as _, Global};
+use gpui_kit::{App, BorrowAppContext as _, Global};
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use std::sync::{Mutex, OnceLock};
 

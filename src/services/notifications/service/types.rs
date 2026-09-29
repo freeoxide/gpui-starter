@@ -1,6 +1,6 @@
 use std::fmt;
 
-use gpui::SharedString;
+use gpui_kit::SharedString;
 
 pub const CATEGORY_ACTIONS: &str = "gpui-starter.actions";
 pub const CATEGORY_REPLY: &str = "gpui-starter.reply";

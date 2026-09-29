@@ -202,7 +202,6 @@ pub fn init(cx: &mut App) {
         set_locale(&locale.0, cx);
     });
 
-    crate::launcher::init(cx);
     cx.set_global(crate::events::AppEventQueue::default());
     cx.set_global(crate::launcher::LauncherOpen(false));
     startup_step!(cx, "runtime_services_init", {
@@ -363,11 +362,8 @@ pub fn init(cx: &mut App) {
         }
         #[cfg(any(unix, windows))]
         {
-            // The handler window is either mid-teardown (palette trigger) or on
-            // the update stack (keybinding); re-updating it now fails with
-            // "window not found". Defer so Quit dispatches once unwound, routed
-            // at the recorded root window — the active-window lookup still
-            // reports the closing palette when Restart ran from the launcher.
+            // The handler window is mid-teardown or on the update stack, so
+            // defer Quit, routed at the recorded root (active is the palette).
             cx.defer(crate::app::window::dispatch_quit);
         }
     });

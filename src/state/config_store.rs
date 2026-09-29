@@ -42,16 +42,14 @@ const MAX_PLAUSIBLE_DIM: f32 = 100_000.0;
 /// pending timer instead of spawning another one.
 static SAVE_SCHEDULED: AtomicBool = AtomicBool::new(false);
 
-/// App-wide config store (GPUI global). Write only via [`update_config`]
-/// and [`force_save`], which own the debounced persistence; in-crate reads
-/// go through the helper fns in this module where one exists.
+/// App-wide config store (GPUI global). Read through the helper fns in
+/// this module; write only via [`update_config`] and [`force_save`],
+/// which own the debounced persistence.
 pub struct AppState {
-    // Crate-visible only while diagnostics rows read them directly; external
-    // consumers go through the reader helpers below.
-    pub(crate) paths: AppPaths,
-    pub(crate) config: AppConfig,
-    pub(crate) last_load_error: Option<String>,
-    pub(crate) last_save_error: Option<String>,
+    paths: AppPaths,
+    config: AppConfig,
+    last_load_error: Option<String>,
+    last_save_error: Option<String>,
     dirty: bool,
     // Serialized bytes of the last successful flush; lets identical states skip the write.
     last_flushed_bytes: Vec<u8>,
@@ -237,6 +235,20 @@ pub fn with_config<R>(cx: &App, f: impl FnOnce(&AppConfig) -> R) -> R {
 /// Convenience getter cloning just the update channel instead of the config.
 pub fn update_channel(cx: &App) -> String {
     with_config(cx, |c| c.update_channel.clone())
+}
+
+/// Error from the last state-file load, if any; `None` before
+/// [`initialize`] and after a clean load.
+pub fn load_error(cx: &App) -> Option<String> {
+    cx.try_global::<AppState>()
+        .and_then(|s| s.last_load_error.clone())
+}
+
+/// Error from the most recent save, if any; cleared by the next
+/// successful flush.
+pub fn save_error(cx: &App) -> Option<String> {
+    cx.try_global::<AppState>()
+        .and_then(|s| s.last_save_error.clone())
 }
 
 pub fn paths(cx: &App) -> AppPaths {

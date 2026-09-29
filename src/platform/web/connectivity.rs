@@ -1,7 +1,7 @@
 //! Wasm connectivity bridge: `navigator.onLine` + online/offline events feed
 //! the [`ConnectivitySnapshot`] global via the dispatch queue.
 
-use gpui::BorrowAppContext as _;
+use gpui_kit::BorrowAppContext as _;
 use wasm_bindgen::{JsCast as _, JsValue, prelude::Closure};
 
 use crate::connectivity::{ConnectivitySnapshot, ConnectivityState};

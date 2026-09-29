@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gpui::{App, Global};
+use gpui_kit::{App, Global};
 
 /// Dedicated tokio runtime for I/O-bound work: GPUI's executor is not a tokio
 /// runtime, so tokio-dependent code must run via `runtime.spawn(...)` here.

@@ -4,7 +4,7 @@ mod sink;
 
 use std::sync::Arc;
 
-use gpui::{App, BorrowAppContext as _, Global};
+use gpui_kit::{App, BorrowAppContext as _, Global};
 use opentelemetry::global;
 
 use sink::{DisabledSink, LocalSink, RemoteSink};

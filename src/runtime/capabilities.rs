@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use gpui::{App, Global, SharedString};
+use gpui_kit::{App, Global, SharedString};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

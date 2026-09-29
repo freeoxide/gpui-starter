@@ -1,3 +1,6 @@
+use std::sync::Mutex;
+
+use gpui_kit::TestAppContext;
 use tempfile::tempdir;
 
 use super::*;
@@ -241,4 +244,176 @@ fn commit_flush_failure_keeps_the_state_dirty_for_retry() {
         "a failed write stays pending for the next flush"
     );
     assert!(state.last_save_error.is_some());
+}
+
+// ---------------------------------------------------------------------------
+// Write-path orchestration (update_config / force_save / arm_debounce)
+// ---------------------------------------------------------------------------
+
+// SAVE_SCHEDULED is process-global while each test gets its own App, so
+// debounce-arming tests serialize on this poison-tolerant lock.
+static DEBOUNCE_TESTS: Mutex<()> = Mutex::new(());
+
+fn debounce_test_lock() -> std::sync::MutexGuard<'static, ()> {
+    DEBOUNCE_TESTS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// A clean store: nothing pending, the default config already flushed, so
+/// only a real mutation produces bytes.
+fn clean_state(state_file: &std::path::Path) -> AppState {
+    let mut state = dirty_state(state_file);
+    state.dirty = false;
+    state.last_flushed_bytes = serde_json::to_vec(&state.config).unwrap();
+    state
+}
+
+fn read_persisted(state_file: &std::path::Path) -> AppConfig {
+    let json = std::fs::read_to_string(state_file)
+        .unwrap_or_else(|e| panic!("read {}: {e}", state_file.display()));
+    serde_json::from_str(&json).expect("persisted state must parse back")
+}
+
+// The debounce task runs on the test scheduler, so these use the async
+// harness and hold the App borrow only for each cx.update call.
+#[gpui_kit::test]
+async fn update_config_persists_after_the_debounce_window(cx: &TestAppContext) {
+    let _guard = debounce_test_lock();
+    let dir = tempdir().unwrap();
+    let state_file = dir.path().join("state.json");
+    cx.update(|cx| cx.set_global(clean_state(&state_file)));
+
+    cx.update(|cx| update_config(cx, |config| config.sidebar_collapsed = true));
+
+    assert!(
+        !state_file.exists(),
+        "the write must wait for the debounce window to close"
+    );
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(DEBOUNCE_MS));
+    cx.executor().run_until_parked();
+
+    let loaded = read_persisted(&state_file);
+    assert!(loaded.sidebar_collapsed);
+    assert!(!cx.read(|cx| cx.global::<AppState>().dirty));
+}
+
+#[gpui_kit::test]
+async fn a_burst_of_updates_lands_as_the_final_value(cx: &TestAppContext) {
+    let _guard = debounce_test_lock();
+    let dir = tempdir().unwrap();
+    let state_file = dir.path().join("state.json");
+    cx.update(|cx| cx.set_global(clean_state(&state_file)));
+
+    cx.update(|cx| update_config(cx, |config| config.sidebar_collapsed = true));
+    cx.update(|cx| update_config(cx, |config| config.theme = "Gruvbox Dark".to_string()));
+
+    assert!(
+        !state_file.exists(),
+        "both mutations share one debounce window"
+    );
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(DEBOUNCE_MS));
+    cx.executor().run_until_parked();
+
+    let loaded = read_persisted(&state_file);
+    assert!(loaded.sidebar_collapsed);
+    assert_eq!(loaded.theme, "Gruvbox Dark");
+}
+
+#[gpui_kit::test]
+async fn an_unchanged_update_skips_the_write_entirely(cx: &TestAppContext) {
+    let _guard = debounce_test_lock();
+    let dir = tempdir().unwrap();
+    let state_file = dir.path().join("state.json");
+    cx.update(|cx| cx.set_global(clean_state(&state_file)));
+
+    cx.update(|cx| update_config(cx, |_config| {}));
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(DEBOUNCE_MS));
+    cx.executor().run_until_parked();
+
+    assert!(
+        !state_file.exists(),
+        "a state identical to the last flush must never hit the disk"
+    );
+    assert!(!cx.read(|cx| cx.global::<AppState>().dirty));
+}
+
+#[gpui_kit::test]
+async fn force_save_flushes_immediately_and_cancels_the_debounce(cx: &TestAppContext) {
+    let _guard = debounce_test_lock();
+    let dir = tempdir().unwrap();
+    let state_file = dir.path().join("state.json");
+    cx.update(|cx| cx.set_global(clean_state(&state_file)));
+
+    cx.update(|cx| update_config(cx, |config| config.theme = "Gruvbox Dark".to_string()));
+    cx.update(force_save);
+
+    let loaded = read_persisted(&state_file);
+    assert_eq!(loaded.theme, "Gruvbox Dark");
+    let task_cancelled = cx.read(|cx| {
+        cx.try_global::<AppState>()
+            .unwrap()
+            .in_flight_save
+            .is_none()
+    });
+    assert!(
+        task_cancelled,
+        "the debounce task must be cancelled, not left to fire after shutdown"
+    );
+    assert!(!SAVE_SCHEDULED.load(Ordering::Relaxed));
+}
+
+#[gpui_kit::test]
+async fn a_failed_write_is_not_retried_until_the_next_mutation(cx: &TestAppContext) {
+    let _guard = debounce_test_lock();
+    let dir = tempdir().unwrap();
+    // A regular file where the state file's parent dir would be makes every
+    // write fail at ensure_parent_dir.
+    let blocker = dir.path().join("blocker");
+    std::fs::write(&blocker, b"not a dir").unwrap();
+    let state_file = blocker.join("state.json");
+    cx.update(|cx| cx.set_global(clean_state(&state_file)));
+
+    cx.update(|cx| update_config(cx, |config| config.sidebar_collapsed = true));
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(DEBOUNCE_MS));
+    cx.executor().run_until_parked();
+    assert!(
+        cx.read(|cx| cx.global::<AppState>().last_save_error.is_some()),
+        "the blocked write must record an error"
+    );
+
+    // Unblock and wait far past another window: no retry without a mutation.
+    std::fs::remove_file(&blocker).unwrap();
+    std::fs::create_dir_all(&blocker).unwrap();
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(DEBOUNCE_MS * 10));
+    cx.executor().run_until_parked();
+    assert!(
+        !state_file.exists(),
+        "a failed write must not retry on its own"
+    );
+
+    cx.update(|cx| update_config(cx, |config| config.theme = "Gruvbox Dark".to_string()));
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(DEBOUNCE_MS));
+    cx.executor().run_until_parked();
+
+    let loaded = read_persisted(&state_file);
+    assert!(loaded.sidebar_collapsed, "the failed payload must retry");
+    assert_eq!(loaded.theme, "Gruvbox Dark");
+}
+
+#[gpui_kit::test]
+async fn update_config_before_initialize_warns_and_does_nothing(cx: &TestAppContext) {
+    cx.update(|cx| update_config(cx, |config| config.sidebar_collapsed = true));
+    assert!(
+        cx.read(|cx| cx.try_global::<AppState>().is_none()),
+        "a missing store must not be created by an update"
+    );
+    cx.update(force_save);
+    assert!(cx.read(|cx| cx.try_global::<AppState>().is_none()));
 }
