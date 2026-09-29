@@ -34,7 +34,7 @@ pub(crate) fn test_card(title: &str, description: &str, boundary: bool, cx: &App
                 .top_0()
                 .bottom_0()
                 .left_0()
-                .w(px(4.))
+                .w_1()
                 .bg(accent),
         )
         .child(
