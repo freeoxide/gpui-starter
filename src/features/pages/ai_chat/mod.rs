@@ -6,7 +6,7 @@ pub mod view;
 pub use view::AiResponseView;
 
 use futures_util::Stream;
-use gpui::App;
+use gpui_kit::App;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Role {

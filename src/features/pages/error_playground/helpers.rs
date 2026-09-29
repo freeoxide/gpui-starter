@@ -1,5 +1,5 @@
-use gpui::{prelude::*, *};
-use gpui_component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 
@@ -72,9 +72,11 @@ pub(crate) fn action_row(_cx: &App) -> Div {
     h_flex().gap_2().flex_wrap().items_center().px_4().py_3()
 }
 
-/// Inline result text chip. Announced as a live region so async outcomes are
-/// spoken when they land.
-pub(crate) fn result_inline(text: &str, cx: &App) -> Stateful<Div> {
+/// Inline result text chip, keyed by `id` (the owning card's call-site key:
+/// the result text changes as an operation progresses and would re-key the
+/// chip mid-flight). Announced as a live region so async outcomes are spoken
+/// when they land.
+pub(crate) fn result_inline(id: &str, text: &str, cx: &App) -> Stateful<Div> {
     let theme = cx.theme();
     let is_error = text.to_lowercase().contains("error")
         || text.to_lowercase().contains("panic")
@@ -88,7 +90,7 @@ pub(crate) fn result_inline(text: &str, cx: &App) -> Stateful<Div> {
 
     div()
         .id(ElementId::Name(SharedString::from(format!(
-            "ep-result-{text}"
+            "ep-result-{id}"
         ))))
         .a11y(Role::Status, text.to_string())
         .a11y_live(accesskit::Live::Polite)

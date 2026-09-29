@@ -4,8 +4,8 @@
 mod helpers;
 mod sections;
 
-use gpui::{prelude::*, *};
-use gpui_component::{ActiveTheme as _, v_flex};
+use gpui_kit::component::{ActiveTheme as _, v_flex};
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 

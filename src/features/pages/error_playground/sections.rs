@@ -1,8 +1,8 @@
-use gpui::{prelude::*, *};
-use gpui_component::{
+use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     v_flex,
 };
+use gpui_kit::{prelude::*, *};
 
 use super::super::render_error::TriggerRenderError;
 use super::ErrorPlaygroundPage;
@@ -85,7 +85,9 @@ impl ErrorPlaygroundPage {
                                 });
                             })),
                     )
-                    .when_some(result_text, |el, text| el.child(result_inline(&text, cx))),
+                    .when_some(result_text, |el, text| {
+                        el.child(result_inline("bg-panic", &text, cx))
+                    }),
             ),
         )
     }
@@ -141,7 +143,9 @@ impl ErrorPlaygroundPage {
                                 cx.notify();
                             })),
                     )
-                    .when_some(result_text, |el, text| el.child(result_inline(&text, cx))),
+                    .when_some(result_text, |el, text| {
+                        el.child(result_inline("fs", &text, cx))
+                    }),
             ),
         )
     }
@@ -263,7 +267,9 @@ impl ErrorPlaygroundPage {
                                 .detach();
                             })),
                     )
-                    .when_some(result_text, |el, text| el.child(result_inline(&text, cx))),
+                    .when_some(result_text, |el, text| {
+                        el.child(result_inline(ctx.button_key, &text, cx))
+                    }),
             ),
         )
     }

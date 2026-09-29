@@ -1,7 +1,7 @@
 mod rows;
 
-use gpui::{prelude::*, *};
-use gpui_component::{button::Button, v_flex};
+use gpui_kit::component::{button::Button, v_flex};
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::{
@@ -176,6 +176,8 @@ impl Render for DiagnosticsPage {
 fn row(label: &str, value: &str) -> Stateful<Div> {
     let text = format!("{label}: {value}");
     div()
+        // The label is the row's fixed domain identity: each read-out is
+        // named once here or by a capability key, never localized.
         .id(ElementId::Name(SharedString::from(format!("diag-{label}"))))
         .a11y(Role::ListItem, text)
         .child(

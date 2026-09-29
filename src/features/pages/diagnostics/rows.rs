@@ -1,4 +1,4 @@
-use gpui::*;
+use gpui_kit::*;
 
 use crate::{
     accessibility, app_state, capabilities, commands, connectivity, crash_report, desktop_actions,

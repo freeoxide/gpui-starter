@@ -1,7 +1,9 @@
-use gpui::{prelude::*, *};
-use gpui_component::{ActiveTheme as _, text::markdown, v_flex};
+use gpui_kit::component::{ActiveTheme as _, text::markdown, v_flex};
+use gpui_kit::{prelude::*, *};
 
-use super::{ChatStreamSource, ChatTurn, Role};
+// Aliased: bare `Role` stays GPUI's accessibility role, which the a11y calls
+// below use unqualified.
+use super::{ChatStreamSource, ChatTurn, Role as ChatRole};
 use crate::accessibility::A11yExt as _;
 
 /// The full-width U+258C (LEFT HALF BLOCK) cursor appended to a streaming
@@ -46,7 +48,7 @@ impl AiResponseView {
     /// no assistant turn yet.
     pub fn append_token(&mut self, token: &str) {
         if let Some(last) = self.turns.last_mut() {
-            if last.role == Role::Assistant {
+            if last.role == ChatRole::Assistant {
                 last.content.push_str(token);
             }
         }
@@ -118,7 +120,7 @@ impl AiResponseView {
                     .child(
                         div()
                             .id("ai-chat-error-card")
-                            .a11y(gpui::Role::Alert, format!("Error. {error}"))
+                            .a11y(Role::Alert, format!("Error. {error}"))
                             .a11y_live(accesskit::Live::Polite)
                             .flex()
                             .flex_col()
@@ -148,7 +150,7 @@ impl AiResponseView {
 
         let mut messages = v_flex()
             .id("ai-chat-transcript")
-            .a11y(gpui::Role::List, "Chat transcript")
+            .a11y(Role::List, "Chat transcript")
             .aria_orientation(Orientation::Vertical)
             .w_full()
             .p_4()
@@ -157,9 +159,9 @@ impl AiResponseView {
         let last_index = self.turns.len().saturating_sub(1);
         for (i, turn) in self.turns.iter().enumerate() {
             let is_last = i == last_index;
-            let streaming_here = is_last && self.is_streaming && turn.role == Role::Assistant;
+            let streaming_here = is_last && self.is_streaming && turn.role == ChatRole::Assistant;
             match turn.role {
-                Role::User => {
+                ChatRole::User => {
                     messages = messages.child(render_user_bubble(
                         i,
                         &turn.content,
@@ -168,7 +170,7 @@ impl AiResponseView {
                         border,
                     ));
                 }
-                Role::Assistant => {
+                ChatRole::Assistant => {
                     messages = messages.child(render_assistant_message(
                         i,
                         &turn.content,
@@ -198,8 +200,8 @@ fn render_user_bubble(
     border: Hsla,
 ) -> impl IntoElement {
     div()
-        .id(ElementId::Name(format!("ai-chat-user-{}", index).into()))
-        .a11y(gpui::Role::ListItem, format!("You: {content}"))
+        .id(("ai-chat-user", index))
+        .a11y(Role::ListItem, format!("You: {content}"))
         .w_full()
         .flex()
         .justify_end()
@@ -225,20 +227,17 @@ fn render_assistant_message(
     streaming: bool,
     muted: Hsla,
 ) -> impl IntoElement {
-    let wrapper = div().id(ElementId::Name(
-        format!("ai-chat-assistant-{}", index).into(),
-    ));
+    // Turns are append-only, so the creation ordinal is a stable identity.
+    let wrapper = div().id(("ai-chat-assistant", index));
 
     if content.is_empty() && streaming {
-        wrapper
-            .a11y(gpui::Role::ListItem, "Assistant: thinking")
-            .child(
-                div()
-                    .text_sm()
-                    .italic()
-                    .text_color(muted)
-                    .child(SharedString::from("Thinking…")),
-            )
+        wrapper.a11y(Role::ListItem, "Assistant: thinking").child(
+            div()
+                .text_sm()
+                .italic()
+                .text_color(muted)
+                .child(SharedString::from("Thinking…")),
+        )
     } else {
         let display = if streaming {
             format!("{}{}", content, STREAMING_CURSOR)
@@ -246,7 +245,7 @@ fn render_assistant_message(
             content.to_string()
         };
         wrapper
-            .a11y(gpui::Role::ListItem, format!("Assistant: {content}"))
+            .a11y(Role::ListItem, format!("Assistant: {content}"))
             .child(markdown(SharedString::from(display)))
     }
 }

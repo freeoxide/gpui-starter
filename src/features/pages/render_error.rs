@@ -1,5 +1,5 @@
-use gpui::{prelude::*, *};
-use gpui_component::{ActiveTheme as _, button::Button, v_flex};
+use gpui_kit::component::{ActiveTheme as _, button::Button, v_flex};
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 
