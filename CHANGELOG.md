@@ -7,14 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `tests/qa_migration.rs` locks the migration's dependency-graph invariants: kit 0.7.0 + `gpui-pre` 0.3.7 manifest pins, exactly one gpui-kit family and one unified `gpui-pre` snapshot in the lockfile, the freeoxide `gpui-form` rev pin, single-copy `koruma` 0.9 / `es-fluent` 0.16 registry satellites, and the retired gpui-form `[patch]` table's absence — the merged rev resolves from git unpatched
+
 ### Changed
 
 - Migrated the GPUI foundation to **gpui-kit 0.6.0** from crates.io, built on `gpui-pre` (the published snapshot of Zed's gpui) — the whole graph resolves to exactly one gpui copy and the zed git `[patch]` entries are gone
 - Bumped the gpui-kit ecosystem (`gpui-kit`, `gpui-component`, `gpui-kit-assets`) to **0.6.1**; the pinned `gpui-form` rev's caret requirement unifies on the same checkout, and 0.6.1's slimmed optional deps drop syntect/jni/rustls-platform-verifier from the lockfile
-- `gpui-form` now comes from canonical upstream `stayhydated/gpui-form` master @`216af496` (git pin); `koruma` 0.11 and `es-fluent` 0.18.1 follow upstream's stayhydated pins
-- `gpui-query` resolves through a `[patch.crates-io]` override to our `gpui-pre-0.6` fork branch (a one-line manifest swap onto `gpui-pre`); no library sources are vendored
-- Ported the form page to the gpui-form 0.6 API: component paths via `gpui_form_collection`, `value_change` subscriptions, koruma bare-path validators; generated form members now use raw field names (`name` instead of `name_input`)
-- `i18n::localize` now takes a `&'static str` message id, and es-fluent 0.18 renames the variants-enum label message suffix `_this` to `_label`
+- `gpui-form` is re-pinned to the freeoxide fork @`f7e2fb0b`, the `sync/gpui-kit-0.7.0` migration branch HEAD (no stayhydated rev targets kit 0.7); the run-1 vendoring is retired, and the temporary `[patch]` that resolved the then-unpushed rev from the local sibling checkout is deleted now that the rev is merged upstream — the git pin resolves as written. `koruma` 0.9 and `es-fluent` 0.16 follow the migrated graph's single-copy registry lines
+- `gpui-query` resolves through a `[patch.crates-io]` override to our `gpui-pre-0.6` fork branch (a one-line manifest swap onto `gpui-pre`); no sources are vendored for this override
+- Ported the form page to the gpui-form 0.5.2 API: `#[gpui_form(component(input))]` declarations, koruma 0.9 builder validators, `{field}_input` generated members, `InputEvent::Change` subscriptions; two adaptations are intentional — empty fields now fail the codegen-added required validator, and `website` is required-enforced at the holder level
+- The i18n service is ported to es-fluent 0.16 (`localize` keeps its `&'static str` id and resolves through `localize_in_domain`): an invalid message id now falls back to the id string instead of failing the retired 0.18 static registry's eager key check
+- Migrated the gpui-kit ecosystem (`gpui-kit`, `gpui-component`, `gpui-kit-assets`) 0.6.4 → **0.7.0**, with `gpui` + `gpui_platform` (`gpui-pre` family) 0.3.5 → **0.3.7**; kit 0.7 pins the whole `gpui-pre` snapshot family at `=0.3.7`
+- The main window opens through `gpui_kit::open_window` after `gpui_kit::init`; the launcher keeps the manual `cx.open_window` + `Root::new().bg(transparent_black())` path, because the kit's root plugin paints an opaque background that only an instance style refinement overrides
+- Deleted the manual sheet/dialog/notification layer rendering (`Root::render_*_layer` is gone in 0.7); the root plugin auto-hosts every overlay layer above app content
+- Theme mutations go through `Theme::update` / `Theme::set_scrollbar_mode`, which reconcile tokens, rebuild the Base projection, and refresh every window — no `Theme::global_mut` mutation sites remain
 
 ## [0.3.0] - 2026-06-05
 

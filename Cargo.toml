@@ -1,38 +1,29 @@
 [workspace]
-members = [
-	".",
-]
 
 [workspace.dependencies]
-# gpui-form: git-sourced from the CANONICAL upstream stayhydated/gpui-form
-# (NOT vendored in-tree; crates.io still ships only the old 0.5.1
-# architecture). master @216af496 ("fix gpui-kit 0.6.0 CI", CI-green
-# 2026-09-07) is kit-0.6.0-native — its gpui resolves through the registry to
-# gpui-pre, unified with ours; its own [patch] section is IGNORED downstream.
-# The two consumed crates point at the SAME rev so cargo resolves them from
-# one checkout (internal crates come along transitively). The freeoxide fork
-# @2604a5e (0.5.2 zed-git line) stays frozen as the Phase-1 rollback path.
-gpui-form = { git = "https://github.com/stayhydated/gpui-form", rev = "216af496b2551d1b7be83b12e519cd0c908c28ff" }
-gpui-form-collection = { git = "https://github.com/stayhydated/gpui-form", rev = "216af496b2551d1b7be83b12e519cd0c908c28ff" }
+# gpui-form from the freeoxide fork; rev = the migration branch HEAD on
+# sync/gpui-kit-0.7.0.
+gpui-form = { git = "https://github.com/freeoxide/gpui-form", rev = "f7e2fb0b30c1285638f1a877489dc03ad084319a" }
 
 # GPUI ecosystem — crates.io `gpui-pre` is the published snapshot of zed gpui
-# (PACKAGE name gpui-pre, lib name stays `gpui`); gpui-kit 0.6.4 builds on it.
+# (PACKAGE name gpui-pre, lib name stays `gpui`); gpui-kit 0.7.0 builds on it
+# and pins the whole gpui-pre-* snapshot family to =0.3.7.
 # gpui-kit is listed directly because gpui-form's derives emit ::gpui_kit::
 # paths into consuming crates; gpui-kit-assets replaces gpui-component-assets
 # (the old longbridge/gpui-component git URL is retired with the zed patches).
 # Never add a direct `accesskit` dep: gpui re-exports its own accesskit
 # (`gpui::accesskit`, 0.24.x) and a separately-versioned accesskit is
 # type-incompatible with the bridge.
-gpui = { package = "gpui-pre", version = "0.3.5" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.5", features = [
+gpui = { package = "gpui-pre", version = "0.3.7" }
+gpui_platform = { package = "gpui-pre-platform", version = "0.3.7", features = [
     "font-kit",
     "x11",
     "wayland",
     "runtime_shaders",
 ] }
-gpui-kit = "0.6.4"
-gpui-component = "0.6.4"
-gpui-kit-assets = "0.6.4"
+gpui-kit = "0.7.0"
+gpui-component = "0.7.0"
+gpui-kit-assets = "0.7.0"
 
 # Serialization & data
 anyhow = "1"
@@ -59,20 +50,18 @@ tracing-subscriber = { version = "0.3", features = [
 # i18n
 rust-i18n = "3"
 regex = "1"
-# stayhydated es-fluent 0.18.1 family (upstream master pins this exact rev;
-# crates.io maxes at an older line). All four from ONE checkout so our
-# directly-used satellites stay in lockstep with the runtime gpui-form uses.
-es-fluent = { git = "https://github.com/stayhydated/es-fluent", rev = "94efb551ede72c9e7da4bbdf97d5eecb5ea09982", features = ["derive"] }
-es-fluent-build = { git = "https://github.com/stayhydated/es-fluent", rev = "94efb551ede72c9e7da4bbdf97d5eecb5ea09982" }
-es-fluent-lang = { git = "https://github.com/stayhydated/es-fluent", rev = "94efb551ede72c9e7da4bbdf97d5eecb5ea09982" }
-es-fluent-manager-embedded = { git = "https://github.com/stayhydated/es-fluent", rev = "94efb551ede72c9e7da4bbdf97d5eecb5ea09982" }
+# es-fluent 0.16 family from crates.io — the line the migrated gpui-form
+# graph resolves; one copy keeps our directly-used satellites in lockstep.
+es-fluent = { version = "0.16", features = ["derive"] }
+es-fluent-build = "0.16"
+es-fluent-lang = "0.16"
+es-fluent-manager-embedded = "0.16"
 
 # Validation
-# stayhydated koruma 0.11.0 family (crates.io maxes at 0.10; gpui-form
-# @216af496 consumes 0.11 from this exact rev). All three from ONE checkout.
-koruma = { git = "https://github.com/stayhydated/koruma", rev = "2ff495d8dc04794f0bcb2eb3c1a4a3c28e55a274", features = ["fluent"] }
-koruma-collection = { git = "https://github.com/stayhydated/koruma", rev = "2ff495d8dc04794f0bcb2eb3c1a4a3c28e55a274", features = ["full-fluent"] }
-koruma-derive-core = { git = "https://github.com/stayhydated/koruma", rev = "2ff495d8dc04794f0bcb2eb3c1a4a3c28e55a274" }
+# koruma 0.9 family from crates.io — the line the migrated gpui-form graph
+# resolves (gpui-form-derive 0.9 emits consumer-resolved koruma code).
+koruma = { version = "0.9", features = ["fluent"] }
+koruma-collection = { version = "0.9", features = ["full-fluent"] }
 
 # Proc-macro infrastructure
 darling = "0.23"
@@ -159,7 +148,6 @@ es-fluent-lang.workspace = true
 es-fluent-manager-embedded.workspace = true
 strum.workspace = true
 gpui-form.workspace = true
-gpui-form-collection.workspace = true
 # user-notify / notify-rust live in the not-wasm target section (D-Bus/mac
 # notification frameworks have no wasm32-unknown-unknown story).
 thiserror = "2.0.18"

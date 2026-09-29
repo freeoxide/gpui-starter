@@ -125,26 +125,28 @@ impl SettingsDropdown {
     fn on_select_font(
         &mut self,
         font_size: &SelectFont,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        Theme::global_mut(cx).font_size = px(font_size.0 as f32);
-        window.refresh();
+        // update() rebuilds the Base projection and refreshes every window,
+        // not just this one; a manual window.refresh() would be partial.
+        Theme::update(cx, |theme| theme.font_size = px(font_size.0 as f32));
     }
 
     fn on_select_radius(
         &mut self,
         radius: &SelectRadius,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        Theme::global_mut(cx).radius = px(radius.0 as f32);
-        Theme::global_mut(cx).radius_lg = if cx.theme().radius > px(0.) {
-            cx.theme().radius + px(2.)
-        } else {
-            px(0.)
-        };
-        window.refresh();
+        Theme::update(cx, |theme| {
+            theme.radius = px(radius.0 as f32);
+            theme.radius_lg = if theme.radius > px(0.) {
+                theme.radius + px(2.)
+            } else {
+                px(0.)
+            };
+        });
     }
 }
 

@@ -172,6 +172,10 @@ jobs:
   check-windows:
     name: Check (Windows)
     runs-on: windows-latest
+    env:
+      # The default C:\Users\runneradmin\.cargo prefix puts gpui-form's longest
+      # checkout path at 266 chars (MAX_PATH is 260); C:\cargo caps it at 247.
+      CARGO_HOME: 'C:\cargo'
     steps:
       - uses: actions/checkout@v7
 
@@ -258,6 +262,11 @@ jobs:
       # Same wrapper/fingerprint discipline as the Linux test lane.
       RUSTC_WRAPPER: sccache
       SCCACHE_GHA_ENABLED: ${{ github.ref == 'refs/heads/master' && 'true' || 'false' }}
+      # Short CARGO_HOME: same gpui-form MAX_PATH fix as check-windows.
+      CARGO_HOME: 'C:\cargo'
+      # sccache expands cargo's @response-file when respawning rustc; C:\t keeps
+      # the line ~22k chars, under CreateProcessW's 32767 cap (mozilla/sccache#2397).
+      CARGO_TARGET_DIR: 'C:\t'
     steps:
       - uses: actions/checkout@v7
 
@@ -271,6 +280,11 @@ jobs:
           # Master-only saves; PRs restore only (see the check job note).
           save-if: ${{ github.ref == 'refs/heads/master' }}
           cache-on-failure: true
+          # v2 does not read CARGO_TARGET_DIR; cache-directories points the
+          # cache at C:\t instead of the now-unused <workspace>\target. Not
+          # `workspaces`: its C:\ root makes the key glob the whole drive
+          # (6m walk + EPERM annotation) and runs cargo metadata off-repo.
+          cache-directories: 'C:\t'
 
       - name: Run scoped lib tests
         run: cargo test -p gpui-starter --lib

@@ -133,30 +133,30 @@ Missing tokens like `panel.background` or `title_bar.background` inherit from `b
 
 ## Hot-reload in detail
 
-Theme files are watched via `ThemeRegistry::watch_dir()` during app init in `src/app/mod.rs`:
+Theme files are watched via `ThemeRegistry::watch_dir()` during app init in `src/app/init.rs`:
 
 ```rust
-let persisted_theme = persisted.theme.clone();
-if let Err(err) = gpui_component::ThemeRegistry::watch_dir(
-    std::path::PathBuf::from(format!("{}/themes", env!("CARGO_MANIFEST_DIR"))),
-    cx,
-    move |cx| {
-        if let Some(theme) = gpui_component::ThemeRegistry::global(cx)
-            .themes()
-            .get(persisted_theme.as_str())
-            .cloned()
-        {
-            gpui_component::Theme::global_mut(cx).apply_config(&theme);
-        }
-    },
-) {
-    tracing::error!("Failed to watch themes directory: {}", err);
+#[cfg(not(target_family = "wasm"))]
+{
+    let themes_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("themes");
+    if themes_dir.exists() {
+        let _ = gpui_component::ThemeRegistry::watch_dir(
+            themes_dir,
+            cx,
+            crate::app::theme::register_embedded_themes,
+        );
+
+        cx.observe_global::<gpui_component::ThemeRegistry>(|cx| {
+            crate::app::theme::ensure_embedded_themes(cx);
+        })
+        .detach();
+    }
 }
 ```
 
-When a file changes on disk, the callback fires. If the changed file contains the user's current theme, the registry re-applies it and all windows refresh. If the changed file is a different theme, it gets loaded into the registry but does not interrupt the active theme.
+When a file changes on disk, the watcher reloads the registry from `themes/`. The reload clears the registry and re-reads only the directory, so the `observe_global` handler restores the embedded themes it dropped. Reloaded definitions are available to `SwitchTheme` immediately; the active theme is not re-applied in place, so re-select it to pick up edited colors.
 
-During theme development, you can edit colors in your JSON file, hit save, and see the result in the running app within milliseconds. No build step involved.
+During theme development, edit colors in your JSON file, hit save, then re-select the theme — the reloaded definition applies within milliseconds, with no build step involved.
 
 ## Runtime theme switching
 
@@ -181,11 +181,12 @@ cx.on_action(|switch: &SwitchTheme, cx| {
         .get(&switch.0)
         .cloned()
     {
-        gpui_component::Theme::global_mut(cx).apply_config(&config);
+        gpui_component::Theme::update(cx, |theme| theme.apply_config(&config));
     }
-    cx.refresh_windows();
 });
 ```
+
+`Theme::update` reconciles the derived tokens, rebuilds the Base projection, and refreshes every open window — no manual `cx.refresh_windows()` call.
 
 ### Toggle light/dark mode
 
@@ -211,7 +212,7 @@ The app observes the global `Theme` state and writes the current theme name and 
 ```rust
 cx.observe_global::<gpui_component::Theme>(move |cx| {
     let theme_name = cx.theme().theme_name().to_string();
-    let scrollbar_show = cx.theme().scrollbar_show;
+    let scrollbar_show = cx.theme().scrollbar_mode;
     crate::app_state::update_config(cx, |config| {
         config.theme = theme_name;
         config.scrollbar_show = Some(scrollbar_show);

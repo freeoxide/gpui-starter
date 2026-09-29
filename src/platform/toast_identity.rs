@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 
 use windows::Win32::Foundation::{E_OUTOFMEMORY, PROPERTYKEY, RPC_E_CHANGED_MODE};
-use windows::Win32::Storage::FileSystem::WIN32_FIND_DATAW;
+use windows::Win32::Storage::FileSystem::{GetLongPathNameW, WIN32_FIND_DATAW};
 use windows::Win32::System::Com::StructuredStorage::{PROPVARIANT, PropVariantClear};
 use windows::Win32::System::Com::{
     CLSCTX_ALL, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx, CoTaskMemAlloc,
@@ -21,7 +21,7 @@ use windows::Win32::UI::Shell::{
     FOLDERID_Programs, IShellLinkW, KNOWN_FOLDER_FLAG, SHGetKnownFolderPath,
     SetCurrentProcessExplicitAppUserModelID,
 };
-use windows::core::{GUID, HSTRING, Interface, PWSTR};
+use windows::core::{GUID, HSTRING, Interface, PCWSTR, PWSTR};
 
 const LOG: &str = "gpui_starter::toast_identity";
 const SHORTCUT_NAME: &str = "gpui-starter.lnk";
@@ -192,10 +192,33 @@ fn pwstr_to_string(pwstr: PWSTR) -> Result<String, String> {
     }
 }
 
-// Registry/shell paths compare case-insensitively; deep_link_registration
-// reuses this for its stored command value.
+// Shell APIs persist long paths while TEMP/current_exe can arrive as 8.3
+// short forms (RUNNER~1), so a raw text compare never matches. Also
+// case-insensitive; deep_link_registration reuses this for its command value.
 pub(crate) fn same_path(a: &Path, b: &Path) -> bool {
-    a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+    comparable(a) == comparable(b)
+}
+
+/// Lowercased long form; paths that cannot be expanded (not on disk) fall
+/// back to the raw lowercased text.
+fn comparable(path: &Path) -> String {
+    let raw = path.to_string_lossy();
+    match long_form(&raw) {
+        Some(long) => long.to_lowercase(),
+        None => raw.to_lowercase(),
+    }
+}
+
+/// GetLongPathNameW returns 0 for a path it cannot expand and the needed
+/// size (null included) when the buffer is too small; both mean "no".
+fn long_form(path: &str) -> Option<String> {
+    let wide: Vec<u16> = path.encode_utf16().chain(Some(0)).collect();
+    let mut buffer = [0u16; 1024];
+    let len = unsafe { GetLongPathNameW(PCWSTR::from_raw(wide.as_ptr()), Some(&mut buffer)) };
+    if len == 0 || len as usize >= buffer.len() {
+        return None;
+    }
+    String::from_utf16(&buffer[..len as usize]).ok()
 }
 
 #[cfg(test)]

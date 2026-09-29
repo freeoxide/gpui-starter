@@ -22,24 +22,24 @@ The `RegistrationForm` struct derives multiple macros:
 #[fluent_variants(keys = ["description", "label"])]
 #[gpui_form(koruma(fluent))]
 pub struct RegistrationForm {
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(NonEmptyValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(NonEmptyValidation::<_>::builder())]
     pub name: String,
 
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(EmailValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(EmailValidation::<_>::builder())]
     pub email: String,
 
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(NonEmptyValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(NonEmptyValidation::<_>::builder())]
     pub password: String,
 
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(PhoneNumberValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(PhoneNumberValidation::<_>::builder())]
     pub phone: String,
 
-    #[gpui_form(component(gpui_form_collection::input::Input::<_>))]
-    #[koruma(UrlValidation::<_>)]
+    #[gpui_form(component(input))]
+    #[koruma(UrlValidation::<_>::builder())]
     pub website: String,
 }
 ```
@@ -55,7 +55,7 @@ The following validators from `koruma-collection` are used:
 | `PhoneNumberValidation` | Validates phone format | `(555) 123-4567` |
 | `UrlValidation` | Validates URL format | `https://example.com` |
 
-In the `#[koruma(...)]` attribute, validators are written as bare paths (`NonEmptyValidation::<_>`); chain option setters directly on the path when a validator needs configuration.
+In the `#[koruma(...)]` attribute, validators are written as builder chains (`NonEmptyValidation::<_>::builder()`); chain option setters on the builder when a validator needs configuration.
 
 ## Fluent validation messages
 
@@ -85,7 +85,7 @@ v_form()
             .description_fn({
                 // closure that renders description + errors
             })
-            .child(Input::new(&self.fields.name)),
+            .child(Input::new(&self.fields.name_input)),
     )
 ```
 

@@ -4,14 +4,14 @@ GPUI Starter is a desktop application boilerplate built with the [GPUI](https://
 
 ## Dependency Foundations
 
-The UI foundation is [GPUI Kit](https://github.com/longbridge/gpui-kit) 0.6.4 from crates.io (`gpui-kit` + `gpui-component` + `gpui-kit-assets`), built on `gpui-pre` — the crates.io snapshot of Zed's `gpui` (package renamed `gpui-pre`, lib name still `gpui`). Every crate in the graph resolves to exactly ONE gpui copy; that single-copy discipline drives every override below. Supply-chain note: `gpui-pre` is published by the kit maintainer as a snapshot of `zed-industries/zed`, so the UI foundation depends on that publishing pipeline rather than on Zed's own crates.io releases (which stop at 0.2.x).
+The UI foundation is [GPUI Kit](https://github.com/longbridge/gpui-kit) 0.7.0 from crates.io (`gpui-kit` + `gpui-component` + `gpui-kit-assets`), built on the `gpui-pre` 0.3.7 family — the crates.io snapshot of Zed's `gpui` (package renamed `gpui-pre`, lib name still `gpui`; kit 0.7 pins the whole snapshot family at `=0.3.7`). Every crate in the graph resolves to exactly ONE gpui copy and ONE kit copy; that single-copy discipline drives every override below. Supply-chain note: `gpui-pre` is published by the kit maintainer as a snapshot of `zed-industries/zed`, so the UI foundation depends on that publishing pipeline rather than on Zed's own crates.io releases (which stop at 0.2.x).
 
-Two libraries are not gpui-pre-native upstream yet, so we override them — never by vendoring (copying their sources into this repo as path deps is forbidden: it forks maintenance and defeats review/update):
+Two libraries are overridden because no upstream release targets this kit line yet. The rule is no vendoring (copying sources into this repo as path deps forks maintenance and defeats review/update); both overrides sit on top of a real remote pin and are deleted when upstream catches up:
 
-- **gpui-form** — pinned as a git dependency to canonical upstream `stayhydated/gpui-form` master @`216af496` ("fix gpui-kit 0.6.0 CI", CI-green 2026-09-07; `gpui-form` + `gpui-form-collection` at the same rev = one checkout). Its own `[patch]` section is ignored downstream, so its gpui resolves through the registry to the same `gpui-pre` as ours. crates.io still ships only the pre-0.6 architecture; the freeoxide fork @`2604a5e` (0.5.2, zed-git line) stays frozen as the Phase-1 rollback path. `koruma` 0.11 and `es-fluent` 0.18.1 follow upstream's stayhydated git pins.
-- **gpui-query** — no published or upstream version targets gpui-pre, so a `[patch.crates-io]` override points the registry requirement (`>=0.1.4, <0.3.0`) at our fork branch `gpui-pre-0.6` @`81b0a33` on hmziqagent/gpui-query: published v0.2.0 + release-profile fix with ONE root-manifest line swapped to `gpui = { package = "gpui-pre", version = "0.3" }`. The branch is purely additive and upstreamable — drop the patch once gpui-query ships gpui-pre support on crates.io.
+- **gpui-form** — pinned to the freeoxide fork @`f7e2fb0b`, the `sync/gpui-kit-0.7.0` migration branch HEAD (gpui-form 0.5.2 on `gpui-kit` 0.7.0 / `gpui-pre` `=0.3.7`). The fork carries the kit-0.7 migration because no stayhydated rev targets kit 0.7 and the stayhydated git pin drags a second `gpui-kit-assets` into the graph, which cargo's `links = "gpui-kit-default-icons"` one-copy rule rejects. The rev is merged into freeoxide `master`, so the git pin resolves as written; the temporary `[patch."https://github.com/freeoxide/gpui-form"]` table that bridged the pre-merge window by resolving from the sibling checkout `../gpui-form/crates/gpui-form` is deleted and re-locked (the run-1 vendor tree and the stayhydated patch table are likewise gone, and `tests/qa_migration.rs` fails if the patch table reappears). Satellites follow the migrated graph's single-copy registry lines: `koruma` 0.9 and `es-fluent` 0.16 from crates.io (`gpui-form-derive` emits consumer-resolved koruma code, so a second koruma copy would type that code against a different API), and the i18n service is ported to es-fluent 0.16's `localize_in_domain`, trading the retired 0.18 static registry's eager id check for a runtime id-string fallback.
+- **gpui-query** — no published or upstream version targets gpui-pre, so a `[patch.crates-io]` override points the registry requirement (`>=0.1.4, <0.3.0`) at our fork branch `gpui-pre-0.6` @`1449ef2` on hmziqagent/gpui-query: published v0.2.1 (wasm support) merged with the gpui-pre re-point, ONE root-manifest line swapped to `gpui = { package = "gpui-pre", version = "0.3" }`. The branch is purely additive and upstreamable — drop the patch once gpui-query ships gpui-pre support on crates.io.
 
-Rollback for the whole Phase-2 swap is `git revert 32bc8c4` (this also restores the Phase-1 `gpui-query` pin `f84eac4`, orphaned but still fetchable). Under form 0.6 the generated `<N>FormFields`/`<N>FormComponents` members use the raw field names (`name`, not the 0.5 fork's `name_input`).
+`git revert 32bc8c4` was the Phase-2 swap's rollback before the kit-0.7 series landed on top (also restoring the Phase-1 `gpui-query` pin `f84eac4`, orphaned but still fetchable); rolling back the kit-0.7 migration means reverting its commit series, `6421c0d` through `HEAD`. Under gpui-form 0.5.2 the generated `<N>FormFields`/`<N>FormComponents` members use `{field}_{component}` names (`name_input`, not form 0.6's raw field names).
 
 ## Module Map
 
@@ -65,7 +65,7 @@ Every module lives under `src/`. Modules that depend on other modules are noted 
 
 ```
 1.  lifecycle::install_panic_hook()
-2.  gpui_component::init(cx)                           -- must precede all component use
+2.  gpui_kit::init(cx)                                 -- must precede all component use
 3.  app_state::initialize(cx)                          -- loads persisted config from disk
 4.  logging::initialize(cx)                            -- sets up tracing subscriber
 5.  capabilities::initialize(cx)                       -- empty registry, populated below
@@ -265,10 +265,10 @@ Re-render
 
 ### Add a new locale
 
-1. Add translation files under the `rust_i18n` resource path (e.g., `locales/`).
-2. Add the locale code constant to `app.rs` (alongside `LOCALE_EN`, `LOCALE_ZH_CN`).
+1. Add translation files under the assets dir `i18n.toml` points at (`i18n/`).
+2. Add the locale code constant to `src/app/locale.rs` (alongside `LOCALE_EN`, `LOCALE_ZH_CN`).
 3. Update `AppConfig::normalized()` to validate against the new locale.
-4. Add an `es-fluent` language variant in `src/app.rs` (`Languages` enum) and corresponding FTL files.
+4. Add an `es-fluent` language variant in `src/app/actions.rs` (`Languages` enum) and corresponding FTL files.
 
 ## Key Patterns
 

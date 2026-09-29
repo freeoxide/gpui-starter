@@ -152,27 +152,29 @@ Here is what happens during compilation:
 - `KorumaAllFluent` generates Fluent message lookups for each validation error, so error strings come from `.ftl` files instead of hard-coded strings
 - `EsFluentVariants` generates the `LabelVariants` and `DescriptionVariants` enums with typed accessors per field
 
-You can see the full working example in `src/views/form_page.rs` in the gpui-starter repo. For details on how gpui-form generates component bindings, the [component architecture docs](/docs/components/) break down the rendering pipeline.
+You can see the full working example in `src/features/pages/form_page.rs` in the gpui-starter repo. For details on how gpui-form generates component bindings, the [component architecture docs](/docs/components/) break down the rendering pipeline.
 
 ## Writing custom validators
 
-The built-in rules cover common cases. For anything domain-specific, such as credit card Luhn checks, postal codes by country, or custom business logic, you implement `koruma`'s `Validation` trait directly:
+The built-in rules cover common cases. For anything domain-specific, such as credit card Luhn checks, postal codes by country, or custom business logic, you write a validator struct with the `#[koruma::validator]` attribute and implement `koruma`'s `Validate` trait:
 
 ```rust
-struct PostalCodeValidation;
+use koruma::{Validate, validator};
 
-impl Validation for PostalCodeValidation {
-    type Value = String;
-    fn validate(&self, value: &Self::Value) -> Result<(), String> {
-        if value.chars().all(|c| c.is_alphanumeric() || c == ' ' || c == '-') {
-            Ok(())
-        } else {
-            Err("Invalid postal code format.".into())
-        }
+#[validator]
+#[derive(Clone, Debug)]
+struct PostalCodeValidation {
+    #[koruma(value)]
+    actual: String,
+}
+
+impl Validate<String> for PostalCodeValidation {
+    fn validate(&self, value: &String) -> bool {
+        value.chars().all(|c| c.is_alphanumeric() || c == ' ' || c == '-')
     }
 }
 ```
 
-Then use it with the same `#[koruma(...)]` attribute on your struct fields. The trait is straightforward: take a reference to the value, return `Ok(())` or `Err(String)`. The error message here is a plain string, not a Fluent key. If you need localized errors for custom validators, you will want to return a Fluent key as the error string and resolve it at render time. The [forms documentation](/docs/forms/) covers this pattern along with conditional validation and custom Fluent error keys.
+Then use it with the same `#[koruma(...)]` attribute on your struct fields, in builder form: `#[koruma(PostalCodeValidation::builder())]`. The attribute derives a builder for the struct, which is what the `#[koruma(...)]` field attribute accepts. The trait is straightforward: take a reference to the value, return a `bool`. The message shown to the user lives in a `Display` impl on the validator, as a plain string. If you need localized errors for custom validators, derive `EsFluent` on the validator struct (the built-in rules do exactly this) and the `KorumaAllFluent` derive resolves the messages. The [forms documentation](/docs/forms/) covers this pattern along with conditional validation and custom Fluent error keys.
 
 If you are new to GPUI itself and want to see how forms fit into the broader app structure, check out the [building your first GPUI app](/blog/hello-gpui/) guide.

@@ -2,7 +2,7 @@ use gpui::{
     AnyWindowHandle, App, AppContext as _, Bounds, Focusable as _, Global, SharedString,
     WindowBounds, WindowKind, WindowOptions, px, size,
 };
-use gpui_component::{Root, TitleBar};
+use gpui_component::TitleBar;
 
 /// The main app window, recorded at creation so code off the OS-input path
 /// (tray, shutdown) can reach it without `active_window()`, which resolves
@@ -74,16 +74,21 @@ pub fn create_new_window(title: &str, cx: &mut App) {
             ..Default::default()
         };
 
-        let Some(window) = cx
-            .open_window(options, |window, cx| {
-                let root_view = cx.new(|cx| crate::root::AppRoot::new(title.clone(), window, cx));
+        // gpui_kit::open_window needs &mut App, so from this async context it
+        // runs inside cx.update per the kit contract; it hosts the Base Root.
+        let Some((window, _root_view)) = cx
+            .update(|cx| {
+                gpui_kit::open_window(options, cx, |window, cx| {
+                    let root_view =
+                        cx.new(|cx| crate::root::AppRoot::new(title.clone(), window, cx));
 
-                let focus_handle = root_view.focus_handle(cx);
-                window.defer(cx, move |window, cx| {
-                    focus_handle.focus(window, cx);
-                });
+                    let focus_handle = root_view.focus_handle(cx);
+                    window.defer(cx, move |window, cx| {
+                        focus_handle.focus(window, cx);
+                    });
 
-                cx.new(|cx| Root::new(root_view, window, cx))
+                    root_view
+                })
             })
             .ok()
         else {
@@ -93,7 +98,7 @@ pub fn create_new_window(title: &str, cx: &mut App) {
 
         // Stored so tray Show and the quit path reach the window without
         // active_window() (thread-local GetActiveWindow on Windows).
-        cx.update(|cx| note_root_window(window.into(), cx));
+        cx.update(|cx| note_root_window(window, cx));
 
         window.update(cx, |_, window, _| {
             window.activate_window();

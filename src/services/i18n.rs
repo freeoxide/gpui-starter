@@ -1,9 +1,7 @@
+use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use es_fluent::{
-    FluentArgs, FluentLocalizer as _, FluentMessage,
-    registry::{StaticFluentDomain, StaticFluentEntryId, StaticFluentMessageKey},
-};
+use es_fluent::{FluentLocalizer as _, FluentMessage, FluentValue};
 use es_fluent_manager_embedded::EmbeddedI18n;
 
 es_fluent_manager_embedded::define_i18n_module!();
@@ -31,16 +29,12 @@ pub fn i18n() -> &'static EmbeddedI18n {
     })
 }
 
-/// Localizes a message `id` from this crate's fallback Fluent bundle; es-fluent
-/// 0.18 scopes the key by owner/domain, both defaulting to `CARGO_PKG_NAME`.
-pub fn localize<'a>(id: &'static str, args: Option<&'a FluentArgs<'a>>) -> String {
-    let domain = StaticFluentDomain::from_package_name(env!("CARGO_PKG_NAME"));
-    let key = StaticFluentMessageKey::new(
-        domain,
-        domain,
-        StaticFluentEntryId::try_new(id).expect("fluent message id must be valid"),
-    );
-    i18n().localize(key, args).unwrap_or_else(|| id.to_string())
+/// Localizes a message `id` from this crate's Fluent bundle; the embedded
+/// manager registers the bundle under the `CARGO_PKG_NAME` domain.
+pub fn localize<'a>(id: &'static str, args: Option<&HashMap<&str, FluentValue<'a>>>) -> String {
+    i18n()
+        .localize_in_domain(env!("CARGO_PKG_NAME"), id, args)
+        .unwrap_or_else(|| id.to_string())
 }
 
 pub fn localize_message<T: FluentMessage + ?Sized>(message: &T) -> String {

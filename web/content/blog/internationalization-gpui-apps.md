@@ -1,12 +1,12 @@
 ---
 title: "Internationalization in GPUI apps with es-fluent"
-description: "Add multi-language support to GPUI desktop apps using Mozillas Fluent system and es-fluent, with compile-time checks, plural rules, and runtime switching."
+description: "Add multi-language support to GPUI desktop apps using Mozillas Fluent system and es-fluent, with plural rules and runtime switching."
 date: 2026-05-01
 tags: [GPUI, i18n, Rust]
 draft: false
 ---
 
-If you are shipping a desktop app to users outside your own country, you need i18n. gpui-starter ships with multi-language support built on Mozilla's [Fluent](https://projectfluent.org/) system, using the `es-fluent` Rust crate for compile-time safety. This post walks through how it works, why I picked Fluent over simpler alternatives, and how the runtime language switch fits into GPUI's render loop.
+If you are shipping a desktop app to users outside your own country, you need i18n. gpui-starter ships with multi-language support built on Mozilla's [Fluent](https://projectfluent.org/) system, using the `es-fluent` Rust crate. This post walks through how it works, why I picked Fluent over simpler alternatives, and how the runtime language switch fits into GPUI's render loop.
 
 ## Why not just use JSON?
 
@@ -84,11 +84,11 @@ Each `.ftl` file contains all the Fluent messages for that locale. The English f
 
 If you are new to the project layout, the [getting started guide](/docs/getting-started/) walks through the directory structure in detail.
 
-## Compile-time safety with es-fluent
+## Embedded translations with es-fluent
 
-The `es-fluent` crate and its companion `es-fluent-manager-embedded` do something most i18n libraries skip. They embed your `.ftl` files at compile time and generate type-safe accessors from them.
+The `es-fluent` crate and its companion `es-fluent-manager-embedded` do something most i18n libraries skip. They embed your `.ftl` files at compile time so locale files never ship alongside the app.
 
-In `src/i18n.rs`, the setup looks like this:
+In `src/services/i18n.rs`, the setup looks like this:
 
 ```rust
 use es_fluent::FluentLocalizer as _;
@@ -105,7 +105,7 @@ pub fn init_i18n(lang: LanguageIdentifier) -> Result<(), String> {
 }
 ```
 
-The `define_i18n_module!()` macro scans your `.ftl` files at build time and produces the `EmbeddedI18n` type. If a Fluent message references a variable that does not exist, or if the `.ftl` syntax is malformed, you get a compile error. You find out about a broken translation before the app ever runs.
+The `define_i18n_module!()` macro embeds your `.ftl` files at build time and produces the `EmbeddedI18n` type; config and locale-directory problems are compile errors, broken `.ftl` content surfaces when the i18n system initializes, and a missing message id falls back through the locale chain to the id string at runtime.
 
 The `localize` function is straightforward:
 
@@ -163,9 +163,9 @@ To add support for a new language:
 
 1. Create a new directory under `i18n/` named with the locale code (for example `fr-FR`).
 2. Copy `en/gpui-starter.ftl` into it and translate every message.
-3. Register the locale in `src/app.rs` by adding a variant to the `Languages` enum annotated with `#[es_fluent_language]`.
-4. Add a menu item in `src/menus.rs` that dispatches the `SelectLocale` action with the new locale code.
-5. Run `cargo build`. If the `.ftl` file has syntax errors, the compiler will catch them.
+3. Register the locale in `src/app/actions.rs` by adding a variant to the `Languages` enum annotated with `#[es_fluent_language]`.
+4. Add a menu item in `src/shell/menus.rs` that dispatches the `SelectLocale` action with the new locale code.
+5. Run `cargo build`. Syntax errors in the `.ftl` file do not fail the build; they surface when the i18n system initializes — the parse error is logged at debug level and the locale falls back, while a broken required file fails init with `LanguageNotSupported`.
 
 See the [i18n documentation](/docs/i18n/) for the complete reference, including how to handle right-to-left languages and locale fallback chains.
 

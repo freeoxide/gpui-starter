@@ -472,12 +472,7 @@ impl Render for LauncherRoot {
             });
         }
 
-        let dialog_layer = Root::render_dialog_layer(window, cx);
-
-        div()
-            .size_full()
-            .child(self.launcher.clone())
-            .children(dialog_layer)
+        div().size_full().child(self.launcher.clone())
     }
 }
 
@@ -524,6 +519,9 @@ pub fn open_launcher(cx: &mut App) {
             ..Default::default()
         };
 
+        // Manual Root, not gpui_kit::open_window: the WindowState plugin paints
+        // opaque tokens.background on the root surface; only an instance bg,
+        // refined after plugin styles, keeps this window transparent.
         let Some(window) = cx
             .open_window(options, |window, cx| {
                 let launcher_root = cx.new(|cx| LauncherRoot::new(window, cx));

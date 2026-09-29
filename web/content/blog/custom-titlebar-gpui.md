@@ -130,7 +130,7 @@ The render method puts the menu bar in one flex child and the right-side control
 
 The `child` field is a closure that returns an `AnyElement`. Different pages inject custom content into the title bar without the title bar knowing about them. It is a lightweight form of dependency injection that keeps the component flexible.
 
-The `SettingsDropdown` is a focus-tracked div that uses the dropdown menu system to let users change font size and border radius at runtime. Changes go through `Theme::global_mut(cx)` and trigger a window refresh. For more on how theme tokens like `title_bar` and `title_bar_border` work, see the [themes guide](/docs/docs/themes).
+The `SettingsDropdown` is a focus-tracked div that uses the dropdown menu system to let users change font size and border radius at runtime. Changes go through `Theme::update(cx, ...)`, which refreshes every open window. For more on how theme tokens like `title_bar` and `title_bar_border` work, see the [themes guide](/docs/docs/themes).
 
 ## Wiring it into the root layout
 

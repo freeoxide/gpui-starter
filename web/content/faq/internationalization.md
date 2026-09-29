@@ -1,11 +1,11 @@
 ---
 question: "How do I add multi-language support and i18n to a Rust desktop app?"
-description: "gpui-starter uses Mozilla's Fluent system via the es-fluent crate for type-safe, plural-aware translations with runtime language switching."
+description: "gpui-starter uses Mozilla's Fluent system via the es-fluent crate for plural-aware translations with runtime language switching."
 category: "Features"
 order: 7
 ---
 
-gpui-starter ships with a dual i18n setup: `es-fluent` handles Fluent-based localization with compile-time message validation, and `rust-i18n` manages runtime locale switching. English (`en`) and Simplified Chinese (`zh-CN`) are included out of the box.
+gpui-starter ships with a dual i18n setup: `es-fluent` handles Fluent-based localization with runtime message resolution, and `rust-i18n` manages runtime locale switching. English (`en`) and Simplified Chinese (`zh-CN`) are included out of the box.
 
 ## Why Fluent, not a simple HashMap
 
@@ -43,7 +43,7 @@ i18n/
     └── gpui-starter.ftl    # Simplified Chinese (68 messages)
 ```
 
-Both files must define the same message keys. If a key is missing in a locale file, the build fails with a compile-time error from `es-fluent` rather than showing a blank string at runtime.
+Both files should define the same message keys, but nothing enforces that at build time. A key missing from one locale falls back through the locale chain (`en` is the default), so that locale's users see the other locale's string. A key missing from every locale renders the raw key name in the UI. A CI step that diffs message IDs across locale files catches both cases.
 
 ## Using translations in views
 
@@ -66,7 +66,7 @@ For form validation errors specifically, use `localize_message()` which consumes
 
 Languages switch without restarting the app. Select a new locale through the settings view or the [command launcher](/docs/command-launcher/) (Cmd+K). The change propagates immediately because `es-fluent` resolves messages on every call rather than caching them at startup.
 
-The supported locales are defined by the `Languages` enum in `src/app.rs`, which the `es_fluent_language` macro auto-populates from the `i18n/` directory:
+The supported locales are defined by the `Languages` enum in `src/app/actions.rs`, which the `es_fluent_language` macro auto-populates from the `i18n/` directory:
 
 ```rust
 #[es_fluent_language]
