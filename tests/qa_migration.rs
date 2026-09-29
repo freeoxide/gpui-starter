@@ -112,6 +112,19 @@ fn manifest_pins_kit_070_and_gpui_pre_037() {
         "gpui_platform must not be a direct dependency; gpui-kit 0.7.0 \
          already selects every backend feature this app builds with"
     );
+    let lock = repo_file("Cargo.lock");
+    let own = lock_blocks(&lock, "gpui-starter");
+    assert_eq!(
+        own.len(),
+        1,
+        "expected one gpui-starter block in Cargo.lock"
+    );
+    assert!(
+        !own[0].contains("\"gpui-pre-platform\""),
+        "Cargo.lock still lists gpui-pre-platform as a direct dependency of \
+         gpui-starter while Cargo.toml has none; regenerate the lock and \
+         commit it, or `cargo build --locked` on this commit fails"
+    );
     for pin in ["gpui-kit", "gpui-component", "gpui-kit-assets"] {
         assert!(
             manifest.contains(&format!("\n{pin} = \"0.7.0\"")),
