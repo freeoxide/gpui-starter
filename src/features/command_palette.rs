@@ -273,7 +273,7 @@ fn render_footer(state: &CommandState, titles: &[SharedString], cx: &App) -> Div
 
     h_flex()
         .px_4()
-        .py(px(8.))
+        .py_2()
         .gap_4()
         .flex_shrink_0()
         .border_t_1()
