@@ -6,10 +6,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(not(target_family = "wasm"))]
 use atomic_write_file::AtomicWriteFile;
-use gpui::{App, BorrowAppContext, Global};
+use gpui_kit::{App, BorrowAppContext, Global, Task};
 // Renamed upstream at gpui-component 5a5e2ab; variant names (and so the
 // persisted serde representation) are unchanged.
-use gpui_component::scroll::ScrollbarMode;
+use gpui_kit::component::scroll::ScrollbarMode;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -42,21 +42,29 @@ const MAX_PLAUSIBLE_DIM: f32 = 100_000.0;
 /// pending timer instead of spawning another one.
 static SAVE_SCHEDULED: AtomicBool = AtomicBool::new(false);
 
+/// App-wide config store (GPUI global). Read through the module helpers
+/// below; write only via [`update_config`] and [`force_save`], which own the
+/// debounced persistence.
 pub struct AppState {
-    pub paths: AppPaths,
-    pub config: AppConfig,
-    pub last_load_error: Option<String>,
-    pub last_save_error: Option<String>,
+    // Crate-visible only while diagnostics rows read them directly; external
+    // consumers go through the reader helpers below.
+    pub(crate) paths: AppPaths,
+    pub(crate) config: AppConfig,
+    pub(crate) last_load_error: Option<String>,
+    pub(crate) last_save_error: Option<String>,
     dirty: bool,
     // Serialized bytes of the last successful flush; lets identical states skip the write.
     last_flushed_bytes: Vec<u8>,
     // Bound debounce task; dropped on shutdown so it cannot commit stale bytes
     // beneath the synchronous flush (dropping a `Task` cancels it).
-    in_flight_save: Option<gpui::Task<()>>,
+    in_flight_save: Option<Task<()>>,
 }
 
 impl Global for AppState {}
 
+/// Persisted application configuration. The pub fields are the on-disk serde
+/// schema pinned by tests/snapshot_tests.rs: add new fields with a
+/// `#[serde(default)]`, never rename or repurpose an existing one.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AppConfig {
     pub version: u32,
@@ -448,7 +456,7 @@ fn load_config(path: &Path) -> (AppConfig, Option<String>) {
 
     match serde_json::from_str::<AppConfig>(&json) {
         Ok(config) => {
-            let config = crate::config_migrations::migrate(config).normalized();
+            let config = crate::state::migrations::migrate(config).normalized();
             // Log-only tier: lints surface unusable-but-loadable values.
             crate::state::config_validation::validate_config(&config);
             (config, None)

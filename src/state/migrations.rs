@@ -1,4 +1,4 @@
-use crate::app_state::{APP_STATE_VERSION, AppConfig};
+use crate::state::config_store::{APP_STATE_VERSION, AppConfig};
 
 pub fn migrate(mut config: AppConfig) -> AppConfig {
     // v0 -> v1 migration placeholders. Keep explicit so later versions can

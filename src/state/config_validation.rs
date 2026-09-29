@@ -67,9 +67,9 @@ const KNOWN_PERMISSIONS: &[&str] = &["notifications"];
 /// Below this the window is unusably small; above this it likely exceeds a
 /// typical display and will be clamped by the platform.
 const MIN_WINDOW_DIM: f32 = 100.0;
-/// Hard ceiling shared with the config-store sanitizer: bounds beyond this are
-/// treated as corrupt and dropped rather than linted.
-pub(crate) const MAX_WINDOW_DIM: f32 = 8192.0;
+/// Lint ceiling for one window dimension; the store's corruption ceiling
+/// (`MAX_PLAUSIBLE_DIM` in config_store) is what drops bounds outright.
+const MAX_WINDOW_DIM: f32 = 8192.0;
 
 pub fn validate_config(cfg: &AppConfig) -> Vec<ConfigLint> {
     let mut lints = Vec::new();
