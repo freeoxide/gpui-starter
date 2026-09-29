@@ -1,8 +1,8 @@
-use gpui::{
-    AnyWindowHandle, App, AppContext as _, Bounds, Focusable as _, Global, SharedString,
-    WindowBounds, WindowKind, WindowOptions, px, size,
+use gpui_kit::component::TitleBar;
+use gpui_kit::{
+    AnyWindowHandle, App, AppContext as _, Bounds, Focusable as _, Global, SharedString, Size,
+    WindowBounds, WindowKind, WindowOptions, point, px, size,
 };
-use gpui_component::TitleBar;
 
 /// The main app window, recorded at creation so code off the OS-input path
 /// (tray, shutdown) can reach it without `active_window()`, which resolves
@@ -47,8 +47,8 @@ pub fn create_new_window(title: &str, cx: &mut App) {
     let persisted_bounds = crate::app_state::config(cx).window_bounds;
     let window_bounds = if let Some(bounds) = persisted_bounds {
         Bounds {
-            origin: gpui::point(px(bounds.x), px(bounds.y)),
-            size: gpui::size(px(bounds.width), px(bounds.height)),
+            origin: point(px(bounds.x), px(bounds.y)),
+            size: size(px(bounds.width), px(bounds.height)),
         }
     } else {
         Bounds::centered(None, window_size, cx)
@@ -59,7 +59,7 @@ pub fn create_new_window(title: &str, cx: &mut App) {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(window_bounds)),
             titlebar: Some(TitleBar::title_bar_options()),
-            window_min_size: Some(gpui::Size {
+            window_min_size: Some(Size {
                 width: px(480.),
                 height: px(320.),
             }),
@@ -67,10 +67,12 @@ pub fn create_new_window(title: &str, cx: &mut App) {
             // The app id becomes Wayland app_id / X11 WM_CLASS, matching the
             // shipped .desktop's StartupWMClass so grouping + icons work.
             app_id: Some("gpui-starter".to_string()),
+            // Linux-only fields stay inline-qualified: hoisting the names into
+            // the import list turns them unused on every other target.
             #[cfg(target_os = "linux")]
-            window_background: gpui::WindowBackgroundAppearance::Transparent,
+            window_background: gpui_kit::WindowBackgroundAppearance::Transparent,
             #[cfg(target_os = "linux")]
-            window_decorations: Some(gpui::WindowDecorations::Client),
+            window_decorations: Some(gpui_kit::WindowDecorations::Client),
             ..Default::default()
         };
 

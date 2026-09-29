@@ -1,7 +1,8 @@
 use es_fluent::EsFluent;
 use es_fluent_lang::es_fluent_language;
-use gpui::{Action, SharedString, actions};
-use gpui_component::ThemeMode;
+use gpui_kit::actions;
+use gpui_kit::component::ThemeMode;
+use gpui_kit::{Action, SharedString};
 use strum::EnumIter;
 
 #[es_fluent_language]

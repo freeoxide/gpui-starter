@@ -1,5 +1,5 @@
-use gpui::Keystroke;
-use gpui_component::kbd::Kbd;
+use gpui_kit::Keystroke;
+use gpui_kit::component::kbd::Kbd;
 
 // `secondary-` is gpui's cross-platform modifier: cmd on macOS, ctrl on
 // Windows, Linux, and wasm. Binding with cmd- would hit the platform

@@ -1,5 +1,5 @@
-use gpui::{App, KeyBinding};
-use gpui_component::{ActiveTheme as _, Root, WindowExt as _, text::markdown};
+use gpui_kit::component::{ActiveTheme as _, Root, WindowExt as _, text::markdown};
+use gpui_kit::{App, KeyBinding};
 
 use crate::app::actions::*;
 use crate::app::locale::set_locale;
@@ -139,12 +139,12 @@ pub fn init(cx: &mut App) {
     // register before any registry lookup, on native and wasm alike.
     let persisted_theme = persisted.theme.clone();
     crate::app::theme::register_embedded_themes(cx);
-    if let Some(theme) = gpui_component::ThemeRegistry::global(cx)
+    if let Some(theme) = gpui_kit::component::ThemeRegistry::global(cx)
         .themes()
         .get(persisted_theme.as_str())
         .cloned()
     {
-        gpui_component::Theme::update(cx, |t| t.apply_config(&theme));
+        gpui_kit::component::Theme::update(cx, |t| t.apply_config(&theme));
     }
 
     // Hot reload of themes/ is dev-checkout-only: the watcher create_dir_all()s
@@ -155,7 +155,7 @@ pub fn init(cx: &mut App) {
         if themes_dir.exists() {
             // watch_dir never returns Err (it logs internally); on_load
             // re-registers embedded themes after the initial reload.
-            let _ = gpui_component::ThemeRegistry::watch_dir(
+            let _ = gpui_kit::component::ThemeRegistry::watch_dir(
                 themes_dir,
                 cx,
                 crate::app::theme::register_embedded_themes,
@@ -163,7 +163,7 @@ pub fn init(cx: &mut App) {
 
             // Watcher reloads clear the registry without re-running on_load,
             // so a deleted dev theme file must not strand the embedded set.
-            cx.observe_global::<gpui_component::ThemeRegistry>(|cx| {
+            cx.observe_global::<gpui_kit::component::ThemeRegistry>(|cx| {
                 crate::app::theme::ensure_embedded_themes(cx);
             })
             .detach();
@@ -173,10 +173,10 @@ pub fn init(cx: &mut App) {
     if let Some(show) = persisted.scrollbar_show {
         // set_scrollbar_mode routes through Theme::update, which projects the
         // mode onto the Base scrollbar and refreshes windows.
-        gpui_component::Theme::set_scrollbar_mode(show, cx);
+        gpui_kit::component::Theme::set_scrollbar_mode(show, cx);
     }
 
-    cx.observe_global::<gpui_component::Theme>(move |cx| {
+    cx.observe_global::<gpui_kit::component::Theme>(move |cx| {
         let theme_name = cx.theme().theme_name().to_string();
         let scrollbar_show = cx.theme().scrollbar_mode;
         crate::app_state::update_config(cx, |config| {
@@ -187,12 +187,12 @@ pub fn init(cx: &mut App) {
     .detach();
 
     cx.on_action(|switch: &SwitchTheme, cx| {
-        if let Some(config) = gpui_component::ThemeRegistry::global(cx)
+        if let Some(config) = gpui_kit::component::ThemeRegistry::global(cx)
             .themes()
             .get(&switch.0)
             .cloned()
         {
-            gpui_component::Theme::update(cx, |theme| theme.apply_config(&config));
+            gpui_kit::component::Theme::update(cx, |theme| theme.apply_config(&config));
         }
     });
     cx.on_action(|switch: &SwitchThemeMode, cx| {

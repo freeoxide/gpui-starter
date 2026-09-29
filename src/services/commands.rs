@@ -1,5 +1,5 @@
-use gpui::{App, SharedString};
-use gpui_component::{IconName, ThemeMode};
+use gpui_kit::component::{IconName, ThemeMode};
+use gpui_kit::{App, SharedString};
 use serde::{Deserialize, Serialize};
 
 use crate::{

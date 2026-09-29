@@ -1,9 +1,9 @@
-use gpui::{
+use gpui_kit::component::{
+    Sizable as _, WindowExt as _, h_flex, notification::Notification, spinner::Spinner,
+};
+use gpui_kit::{
     AnyWindowHandle, App, AppContext as _, Global, IntoElement as _, ParentElement as _,
     Styled as _, Task, Window,
-};
-use gpui_component::{
-    Sizable as _, WindowExt as _, h_flex, notification::Notification, spinner::Spinner,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};

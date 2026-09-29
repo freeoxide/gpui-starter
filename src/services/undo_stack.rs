@@ -1,5 +1,5 @@
-use gpui::{App, Global};
-use gpui_component::ThemeMode;
+use gpui_kit::component::ThemeMode;
+use gpui_kit::{App, Global};
 
 use crate::time::AppTimestamp;
 
