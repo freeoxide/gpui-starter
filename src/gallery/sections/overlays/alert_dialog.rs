@@ -1,0 +1,372 @@
+//! AlertDialog section, ported from the upstream `AlertDialogStory`.
+
+use gpui_kit::component::{
+    ActiveTheme as _, Icon, IconName, StyledExt as _, WindowExt as _,
+    button::{Button, ButtonVariant, ButtonVariants as _},
+    dialog::{
+        AlertDialog, DialogAction, DialogClose, DialogDescription, DialogFooter, DialogHeader,
+        DialogTitle,
+    },
+    v_flex,
+};
+use gpui_kit::*;
+
+use crate::gallery::registry::GallerySection;
+
+use super::demo::section;
+
+pub struct AlertDialogSection;
+
+impl AlertDialogSection {
+    pub fn view(_window: &mut Window, _cx: &mut App) -> Entity<Self> {
+        _cx.new(|_| Self)
+    }
+}
+
+impl Render for AlertDialogSection {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        v_flex().w_full().gap_6().p_4().child(
+            section("alert-dialog-default", "Default")
+                .description("Compose the header, message, and footer actions.")
+                .child(
+                    AlertDialog::new(cx)
+                        .p_0()
+                        .trigger(Button::new("alert-dialog-discard").outline().label("Discard Draft"))
+                        .on_ok(|_, window, cx| {
+                            window.push_notification("Draft discarded", cx);
+                            true
+                        })
+                        .on_cancel(|_, window, cx| {
+                            window.push_notification("Continuing to edit", cx);
+                            true
+                        })
+                        .content(|content, _, cx| {
+                            content
+                                .child(
+                                    DialogHeader::new().p_4().child(
+                                        DialogTitle::new().child("Discard unsaved changes?"),
+                                    ).child(
+                                        DialogDescription::new().child(
+                                            "Your edits since the last save will be permanently lost.",
+                                        ),
+                                    ),
+                                )
+                                .child(
+                                    DialogFooter::new()
+                                        .p_4()
+                                        .border_t_1()
+                                        .border_color(cx.theme().border)
+                                        .bg(cx.theme().muted)
+                                        .child(
+                                            DialogClose::new().child(
+                                                Button::new("alert-dialog-cancel")
+                                                    .outline()
+                                                    .label("Cancel"),
+                                            ),
+                                        )
+                                        .child(
+                                            DialogAction::new().child(
+                                                Button::new("alert-dialog-ok")
+                                                    .label("Discard")
+                                                    .danger(),
+                                            ),
+                                        ),
+                                )
+                        }),
+                ),
+        )
+        .child(
+            section("alert-dialog-imperative", "Imperative API")
+                .description("Open an alert directly from the window.")
+                .child(
+                    Button::new("alert-dialog-delete")
+                        .outline()
+                        .label("Delete File")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.open_alert_dialog(cx, |alert, _, cx| {
+                                alert
+                                    .icon(Icon::new(IconName::Info).text_color(cx.theme().danger))
+                                    .title("Delete File")
+                                    .description(
+                                        "This permanently deletes the file. This action cannot be undone.",
+                                    )
+                                    .confirm()
+                                    .ok_text("Delete")
+                                    .ok_variant(ButtonVariant::Danger)
+                                    .on_ok(|_, window, cx| {
+                                        window.push_notification("File deleted", cx);
+                                        true
+                                    })
+                            });
+                        })),
+                ),
+        )
+        .child(
+            section("alert-dialog-icon", "Icon")
+                .description("Add a visual cue above the title.")
+                .child(
+                    AlertDialog::new(cx).w(px(320.)).trigger(
+                        Button::new("alert-dialog-permission").outline().label("Request Permission"),
+                    ).on_ok(|_, window, cx| {
+                        window.push_notification("Thank you for allowing network access", cx);
+                        true
+                    })
+                    .content(|content, _, cx| {
+                        content
+                            .child(
+                                DialogHeader::new().items_center().child(
+                                    Icon::new(IconName::TriangleAlert)
+                                        .size_10()
+                                        .text_color(cx.theme().warning),
+                                ).child(
+                                    DialogTitle::new().child("Network Permission Required"),
+                                ).child(
+                                    DialogDescription::new().child(
+                                        "We need your permission to access the network to provide better services. \
+                                        Please allow network access in your system settings.",
+                                    ),
+                                ),
+                            )
+                            .child(
+                                DialogFooter::new().v_flex().child(
+                                    DialogAction::new().child(
+                                        Button::new("alert-dialog-agree").w_full().primary().label("Allow"),
+                                    ),
+                                ).child(
+                                    DialogClose::new().child(
+                                        Button::new("alert-dialog-deny")
+                                            .w_full()
+                                            .outline()
+                                            .label("Deny"),
+                                    ),
+                                ),
+                            )
+                    }),
+                ),
+        )
+        .child(
+            section("alert-dialog-destructive", "Destructive")
+                .description("Use a destructive action for irreversible choices.")
+                .child(
+                    AlertDialog::new(cx)
+                        .trigger(
+                            Button::new("alert-dialog-delete-account")
+                                .outline()
+                                .danger()
+                                .label("Delete Account"),
+                        )
+                        .on_ok(|_, window, cx| {
+                            window.push_notification("Your account has been deleted", cx);
+                            true
+                        })
+                        .content(|content, _, _| {
+                            content
+                                .child(
+                                    DialogHeader::new().child(
+                                        DialogTitle::new().child("Delete Account"),
+                                    ).child(
+                                        DialogDescription::new().child(
+                                            "This will permanently delete your account \
+                                            and all associated data. This action cannot be undone.",
+                                        ),
+                                    ),
+                                )
+                                .child(
+                                    DialogFooter::new().child(
+                                        DialogClose::new().child(
+                                            Button::new("alert-dialog-cancel")
+                                                .flex_1()
+                                                .outline()
+                                                .label("Cancel"),
+                                        ),
+                                    ).child(
+                                        DialogAction::new().child(
+                                            Button::new("alert-dialog-confirm-delete")
+                                                .flex_1()
+                                                .outline()
+                                                .danger()
+                                                .label("Delete"),
+                                        ),
+                                    ),
+                                )
+                        }),
+                ),
+        )
+        .child(
+            section("alert-dialog-without-title", "Without title")
+                .description("Render content without a heading.")
+                .child(
+                    Button::new("alert-dialog-without-title")
+                        .outline()
+                        .label("Continue without Title")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.open_alert_dialog(cx, |alert, _, _| {
+                                alert.confirm().child("Continue with this action?")
+                            });
+                        })),
+                ),
+        )
+        .child(
+            section("alert-dialog-custom-footer", "Custom footer")
+                .description("Replace the default action row.")
+                .child(
+                    Button::new("alert-dialog-session")
+                        .outline()
+                        .label("Show Session Expiry")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.open_alert_dialog(cx, |alert, _, _| {
+                                alert
+                                    .on_ok(|_, window, cx| {
+                                        window.push_notification("Redirecting to login…", cx);
+                                        true
+                                    })
+                                    .title("Session Expired")
+                                    .description(
+                                        "Your session has expired due to inactivity. \
+                                        Please log in again to continue.",
+                                    )
+                                    .footer(
+                                        DialogFooter::new().child(
+                                            Button::new("alert-dialog-sign-in")
+                                                .label("Sign in")
+                                                .primary()
+                                                .flex_1()
+                                                .on_click(|_, window, cx| {
+                                                    window.push_notification(
+                                                        "Redirecting to login…",
+                                                        cx,
+                                                    );
+                                                    window.close_dialog(cx);
+                                                }),
+                                        ),
+                                    )
+                            });
+                        })),
+                ),
+        )
+        .child(
+            section("alert-dialog-custom-content", "Custom content")
+                .description("Style header and footer regions independently.")
+                .child(
+                    AlertDialog::new(cx)
+                        .trigger(Button::new("alert-dialog-update").outline().label("Install Update"))
+                        .on_cancel(|_, window, cx| {
+                            window.push_notification("Update postponed", cx);
+                            true
+                        })
+                        .on_ok(|_, window, cx| {
+                            window.push_notification("Starting update…", cx);
+                            true
+                        })
+                        .content(|content, _, cx| {
+                            content
+                                .child(
+                                    DialogHeader::new().child(
+                                        DialogTitle::new().child("Update Available"),
+                                    ).child(
+                                        DialogDescription::new().child(
+                                            "A new version (v2.0.0) is available. \
+                                            This update includes new features and bug fixes.",
+                                        ),
+                                    ),
+                                )
+                                .child(
+                                    DialogFooter::new().bg(cx.theme().muted).child(
+                                        DialogClose::new().child(
+                                            Button::new("alert-dialog-later")
+                                                .flex_1()
+                                                .outline()
+                                                .label("Later"),
+                                        ),
+                                    ).child(
+                                        DialogAction::new().child(
+                                            Button::new("alert-dialog-update-now")
+                                                .flex_1()
+                                                .primary()
+                                                .label("Update"),
+                                        ),
+                                    ),
+                                )
+                        }),
+                ),
+        )
+        .child(
+            section("alert-dialog-keyboard", "Keyboard")
+                .description("Disable keyboard dismissal when required.")
+                .child(
+                    Button::new("alert-dialog-keyboard")
+                        .outline()
+                        .label("Review Notice")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.open_alert_dialog(cx, |alert, _, _| {
+                                alert
+                                    .title("Important Notice")
+                                    .description(
+                                        "Please read this important notice \
+                                        carefully before proceeding.",
+                                    )
+                                    .ok_text("Got It")
+                                    .keyboard(false)
+                            });
+                        })),
+                ),
+        )
+        .child(
+            section("alert-dialog-confirm", "Confirm mode")
+                .description("Provide standard OK and Cancel actions.")
+                .child(
+                    Button::new("alert-dialog-confirm")
+                        .outline()
+                        .label("Open Confirmation")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.open_alert_dialog(cx, |alert, _, _| {
+                                alert.confirm().title("Continue with this action?")
+                            });
+                        })),
+                ),
+        )
+        .child(
+            section("alert-dialog-prevent-close", "Prevent close")
+                .description("Callbacks can keep the dialog open.")
+                .child(
+                    Button::new("alert-dialog-prevent-close")
+                        .outline()
+                        .label("Close During Sync")
+                        .on_click(cx.listener(|_, _, window, cx| {
+                            window.open_alert_dialog(cx, |alert, _, _| {
+                                alert
+                                    .title("Sync in progress")
+                                    .close_button(true)
+                                    .description(
+                                        "Your changes are still syncing. The dialog remains open until syncing finishes.",
+                                    )
+                                    .confirm()
+                                    .ok_text("Close")
+                                    .cancel_text("Wait")
+                                    .on_ok(|_, window, cx| {
+                                        // Returning false keeps the dialog open.
+                                        window.push_notification(
+                                            "Cannot close: Process still running",
+                                            cx,
+                                        );
+                                        false
+                                    })
+                                    .on_cancel(|_, window, cx| {
+                                        window.push_notification("Waiting…", cx);
+                                        false
+                                    })
+                            });
+                        })),
+                ),
+        )
+    }
+}
+
+pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mut App) {
+    sections.push(GallerySection::new(
+        "alert-dialog",
+        "Alert Dialog",
+        "Require a response before the user can continue.",
+        AlertDialogSection::view(window, cx),
+    ));
+}
