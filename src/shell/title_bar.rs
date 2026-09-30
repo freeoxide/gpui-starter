@@ -1,13 +1,13 @@
-use gpui::{
-    Anchor, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement,
-    MouseButton, ParentElement as _, Render, Role, SharedString, Styled as _, Window, div,
-    prelude::FluentBuilder as _, px,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, IconName, Sizable as _, Theme, TitleBar,
     button::{Button, ButtonVariants as _},
     label::Label,
     menu::{AppMenuBar, DropdownMenu as _},
+};
+use gpui_kit::{
+    Anchor, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement,
+    MouseButton, ParentElement as _, Render, Role, SharedString, Styled as _, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 
 use crate::accessibility::A11yExt;

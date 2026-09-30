@@ -1,6 +1,5 @@
-use gpui::{prelude::*, *};
-use gpui_component::button::Button;
-use gpui_component::{h_flex, v_flex};
+use gpui_kit::component::{button::Button, h_flex, v_flex};
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::notifications::inbox::{self, NotificationInboxItem};

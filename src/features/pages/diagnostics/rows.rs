@@ -1,4 +1,4 @@
-use gpui::*;
+use gpui_kit::*;
 
 use crate::{
     accessibility, app_state, capabilities, commands, connectivity, crash_report, desktop_actions,
@@ -10,7 +10,6 @@ use crate::{
 use super::row;
 
 pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
-    let state = cx.try_global::<app_state::AppState>();
     let lifecycle = cx
         .try_global::<LifecycleState>()
         .cloned()
@@ -295,43 +294,35 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
         ),
     ];
 
-    if let Some(app_state) = state {
-        let fallback_log_dir = app_state.paths.log_dir.display().to_string();
+    if app_state::config_handle(cx).is_some() {
+        let paths = app_state::paths(cx);
+        let fallback_log_dir = paths.log_dir.display().to_string();
         let display_log_dir = if logging.log_dir.is_empty() {
             fallback_log_dir.as_str()
         } else {
             logging.log_dir.as_str()
         };
-        rows.push(row(
-            "Config Dir",
-            &app_state.paths.config_dir.display().to_string(),
-        ));
-        rows.push(row(
-            "Data Dir",
-            &app_state.paths.data_dir.display().to_string(),
-        ));
-        rows.push(row(
-            "Cache Dir",
-            &app_state.paths.cache_dir.display().to_string(),
-        ));
+        rows.push(row("Config Dir", &paths.config_dir.display().to_string()));
+        rows.push(row("Data Dir", &paths.data_dir.display().to_string()));
+        rows.push(row("Cache Dir", &paths.cache_dir.display().to_string()));
         rows.push(row("Log Dir", display_log_dir));
         rows.push(row("Log File Prefix", &logging.file_prefix));
-        rows.push(row(
-            "State File",
-            &app_state.paths.state_file.display().to_string(),
-        ));
+        rows.push(row("State File", &paths.state_file.display().to_string()));
         rows.push(row(
             "Active Route",
-            &app_state.config.active_route.to_url().to_string(),
+            &app_state::with_config(cx, |config| config.active_route.to_url().to_string()),
         ));
-        rows.push(row("Config Version", &app_state.config.version.to_string()));
+        rows.push(row(
+            "Config Version",
+            &app_state::with_config(cx, |config| config.version.to_string()),
+        ));
         rows.push(row(
             "State Load Error",
-            app_state.last_load_error.as_deref().unwrap_or("None"),
+            app_state::load_error(cx).as_deref().unwrap_or("None"),
         ));
         rows.push(row(
             "State Save Error",
-            app_state.last_save_error.as_deref().unwrap_or("None"),
+            app_state::save_error(cx).as_deref().unwrap_or("None"),
         ));
     }
 

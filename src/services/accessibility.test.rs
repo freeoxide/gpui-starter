@@ -1,5 +1,5 @@
 use super::*;
-use gpui::{Role, accesskit::Live, div, prelude::*};
+use gpui_kit::{Role, accesskit::Live, div, prelude::*};
 
 #[test]
 fn default_snapshot_matches_compiled_bridge() {

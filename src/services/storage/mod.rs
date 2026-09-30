@@ -20,7 +20,7 @@ pub(crate) use backend::SqliteStorage;
 pub use runtime::*;
 
 use async_trait::async_trait;
-use gpui::Global;
+use gpui_kit::Global;
 
 #[derive(Clone, Debug, Default)]
 pub struct StorageSnapshot {

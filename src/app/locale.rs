@@ -1,4 +1,4 @@
-use gpui::{App, Global, SharedString};
+use gpui_kit::{App, Global, SharedString};
 
 pub const LOCALE_EN: &str = "en";
 pub const LOCALE_ZH_CN: &str = "zh-CN";

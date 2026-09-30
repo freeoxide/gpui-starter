@@ -3,7 +3,7 @@
 
 use std::sync::OnceLock;
 
-use gpui::App;
+use gpui_kit::App;
 
 const LOG: &str = "gpui_starter::web::dispatch";
 

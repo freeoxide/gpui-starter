@@ -2,7 +2,7 @@
 //! registration truthfulness, snapshot semantics, the public element-helper
 //! surface, checklist claims, and runtime-proven rules, all anchored in code.
 
-use gpui::{Role, accesskit::Live, div, prelude::*};
+use gpui_kit::{Role, accesskit::Live, div, prelude::*};
 
 use gpui_starter::accessibility::{A11yExt, AccessibilitySnapshot, capability_status};
 use gpui_starter::ui::widgets::virtual_list_item;

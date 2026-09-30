@@ -1,5 +1,5 @@
-use gpui::{prelude::*, *};
-use gpui_component::{WindowExt as _, button::Button};
+use gpui_kit::component::{WindowExt as _, button::Button};
+use gpui_kit::{prelude::*, *};
 
 use crate::connectivity;
 use crate::desktop_actions;

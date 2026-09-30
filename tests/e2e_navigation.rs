@@ -125,8 +125,8 @@ fn test_settings_page_loads() {
         fn _assert_settings_page_constructible() {
             // Compile-time proof of the public constructor signature.
             let _: fn(
-                &mut gpui::Window,
-                &mut gpui::Context<gpui_starter::views::SettingsPage>,
+                &mut gpui_kit::Window,
+                &mut gpui_kit::Context<gpui_starter::views::SettingsPage>,
             ) -> gpui_starter::views::SettingsPage = gpui_starter::views::SettingsPage::new;
         }
     };

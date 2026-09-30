@@ -1,5 +1,5 @@
-use gpui::{prelude::*, *};
-use gpui_component::{button::Button, label::Label, switch::Switch};
+use gpui_kit::component::{button::Button, label::Label, switch::Switch};
+use gpui_kit::{prelude::*, *};
 
 pub fn render_shortcuts_section(
     app_config: &crate::app_state::AppConfig,

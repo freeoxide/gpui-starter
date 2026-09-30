@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 #[cfg(not(target_family = "wasm"))]
 use super::types::*;
-use gpui::App;
+use gpui_kit::App;
 
 /// Wasm: updates never reach the Downloaded state (download is stubbed) and
 /// there is no filesystem to write a swap marker to. No-op.

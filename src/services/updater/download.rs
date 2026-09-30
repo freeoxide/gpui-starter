@@ -4,11 +4,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::types::*;
-use gpui::App;
+use gpui_kit::App;
 #[cfg(not(target_family = "wasm"))]
-use gpui::AsyncApp;
+use gpui_kit::AsyncApp;
 #[cfg(not(target_family = "wasm"))]
-use gpui::UpdateGlobal as _;
+use gpui_kit::UpdateGlobal as _;
 
 pub fn download_update(cx: &mut App) {
     let current = super::snapshot(cx);

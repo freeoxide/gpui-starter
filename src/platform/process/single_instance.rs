@@ -32,7 +32,7 @@ mod native {
     #[cfg(target_family = "unix")]
     use std::os::unix::fs::OpenOptionsExt as _;
 
-    use gpui::{App, Global};
+    use gpui_kit::{App, Global};
     use interprocess::local_socket::{
         GenericFilePath, GenericNamespaced, ListenerOptions, Stream, prelude::*,
     };
@@ -620,7 +620,7 @@ mod native {
 
 #[cfg(target_family = "wasm")]
 mod wasm {
-    use gpui::{App, Global};
+    use gpui_kit::{App, Global};
 
     /// Unit runtime: no lock, no IPC — keeps the uniform `install(runtime, cx)`
     /// shape for callers.

@@ -62,16 +62,17 @@ Keep the subject line under 72 characters. Use the body for anything that needs 
 
 ### New Page
 
-1. Create a new file in `src/views/` (e.g. `src/views/my_page.rs`).
-2. Implement a render function using the GPUI component patterns you see in existing views like `home.rs` or `settings.rs`.
-3. Register the module in `src/views/mod.rs`.
-4. Add a route in `src/routes.rs` and a sidebar entry if applicable.
+1. Create a new file in `src/features/pages/` (e.g. `src/features/pages/my_page.rs`).
+2. Implement the page using the gpui-kit component patterns you see in existing pages like `home.rs` or `settings/mod.rs`.
+3. Declare the module and re-export the page type in `src/features/pages/mod.rs`.
+4. Add a `Page` variant in `src/shell/sidebar.rs`. The exhaustive `title`, `host`, and `icon` matches plus the `all()` list mark every spot to fill in, and `host()` feeds the deep-link hosts in `src/shell/route.rs`.
+5. Construct the entity in `src/shell/root/app_root/state.rs` and return it from `unchecked_active_page_view`.
 
 ### New Command
 
-1. Define the command in `src/commands.rs` following the existing pattern.
-2. Register the command handler in the relevant view or in `src/app.rs`.
-3. Bind a keyboard shortcut in `src/shortcuts.rs` if the command should be accessible from the keyboard.
+1. Add a `CommandId` variant and its `CommandSpec` in `src/services/commands.rs`.
+2. Handle it in the `ExecuteCommand` dispatch in `src/app/init.rs`.
+3. Bind an in-app shortcut with `KeyBinding` in `src/app/init.rs` (shared keystroke constants live in `src/app/keys.rs`), or an OS-global hotkey in `src/platform/input/shortcuts.rs`.
 
 ### New Theme
 
@@ -106,7 +107,7 @@ Run the full test suite:
 cargo test
 ```
 
-Add tests for any new functionality. Integration-style tests for GPUI views go in the `src/testing.rs` module following the existing patterns there. Unit tests for pure logic can live in the same file as the code they test, behind `#[cfg(test)]`.
+Add tests for any new functionality. Cross-crate tests live in `tests/` (see `qa_migration.rs` or `snapshot_tests.rs` for the patterns). Unit tests sit in a sibling `*.test.rs` file wired up with `#[cfg(test)] #[path = "..."] mod ...;` next to the code under test, following the existing modules.
 
 ## Architecture
 

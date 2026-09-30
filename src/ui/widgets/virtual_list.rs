@@ -1,9 +1,9 @@
 use std::ops::Range;
 use std::rc::Rc;
 
-use gpui::{prelude::*, *};
-use gpui_component::scroll::{ScrollableElement, ScrollbarAxis};
-use gpui_component::{VirtualListScrollHandle, v_flex, v_virtual_list};
+use gpui_kit::component::scroll::{ScrollableElement, ScrollbarAxis};
+use gpui_kit::component::{VirtualListScrollHandle, v_flex, v_virtual_list};
+use gpui_kit::{prelude::*, *};
 
 /// Width is `px(0.)` so each row's flex layout controls it.
 pub fn uniform_item_sizes(count: usize, height: Pixels) -> Rc<Vec<Size<Pixels>>> {

@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use gpui::{AssetSource, Result, SharedString};
+use gpui_kit::{AssetSource, Result, SharedString};
 
 /// The folder is deliberately relative: an absolute `$CARGO_MANIFEST_DIR`
 /// path breaks embed-at-compile-time builds.
@@ -46,7 +46,7 @@ pub fn embedded_themes() -> Vec<(SharedString, String)> {
 }
 
 pub struct CombinedAssets {
-    component: gpui_kit_assets::Assets,
+    component: gpui_kit::assets::Assets,
 }
 
 impl CombinedAssets {
@@ -54,9 +54,9 @@ impl CombinedAssets {
         Self {
             // Native: unit struct (icons embedded). Wasm: on-demand CDN source.
             #[cfg(not(target_family = "wasm"))]
-            component: gpui_kit_assets::Assets,
+            component: gpui_kit::assets::Assets,
             #[cfg(target_family = "wasm")]
-            component: gpui_kit_assets::Assets::default(),
+            component: gpui_kit::assets::Assets::default(),
         }
     }
 }

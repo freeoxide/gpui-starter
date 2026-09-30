@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use super::types::*;
-use gpui::{App, UpdateGlobal as _};
+use gpui_kit::{App, UpdateGlobal as _};
 
 pub fn check_for_updates(cx: &mut App) {
     let current = super::snapshot(cx);

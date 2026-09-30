@@ -1,4 +1,4 @@
-use gpui::{App, BorrowAppContext as _, Global, SharedString};
+use gpui_kit::{App, BorrowAppContext as _, Global, SharedString};
 
 // Native: variants carry the underlying `keyring::Error`. Wasm: keyring does
 // not exist, so the same variant names carry the error message string —

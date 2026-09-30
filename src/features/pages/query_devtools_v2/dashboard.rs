@@ -1,7 +1,8 @@
-use gpui::{prelude::*, *};
-use gpui_component::{
-    ActiveTheme as _, Disableable, Icon, IconName, button::Button, h_flex, v_flex,
+use gpui_kit::component::{
+    ActiveTheme as _, Disableable, Icon, IconName, VirtualListScrollHandle, button::Button, h_flex,
+    v_flex,
 };
+use gpui_kit::{prelude::*, *};
 
 use gpui_query::client::QueryClient;
 use gpui_query::core::QueryKeyFilter;
@@ -10,14 +11,15 @@ use crate::accessibility::A11yExt as _;
 
 use super::helpers::QuerySort;
 use super::mutations::render_mutations_table;
-use super::registry::render_query_registry;
+use super::registry::{RegistryRowCache, render_query_registry};
 
 pub struct QueryDevToolsV2Page {
     _subscriptions: Vec<Subscription>,
     pub(super) expanded_key: Option<String>,
     pub(super) sort_by: QuerySort,
     pub(super) status_filter: Option<String>,
-    pub(super) scroll_handle: gpui_component::VirtualListScrollHandle,
+    pub(super) scroll_handle: VirtualListScrollHandle,
+    row_cache: RegistryRowCache,
 }
 
 impl QueryDevToolsV2Page {
@@ -33,7 +35,8 @@ impl QueryDevToolsV2Page {
             expanded_key: None,
             sort_by: QuerySort::Key,
             status_filter: None,
-            scroll_handle: gpui_component::VirtualListScrollHandle::new(),
+            scroll_handle: VirtualListScrollHandle::new(),
+            row_cache: RegistryRowCache::default(),
         }
     }
 }
@@ -49,6 +52,7 @@ impl Render for QueryDevToolsV2Page {
                 &self.expanded_key,
                 self.sort_by,
                 &self.status_filter,
+                &mut self.row_cache,
                 &scroll_handle,
                 cx,
             )
@@ -103,7 +107,8 @@ fn render_dashboard(
     expanded_key: &Option<String>,
     sort_by: QuerySort,
     status_filter: &Option<String>,
-    scroll_handle: &gpui_component::VirtualListScrollHandle,
+    row_cache: &mut RegistryRowCache,
+    scroll_handle: &VirtualListScrollHandle,
     cx: &mut Context<QueryDevToolsV2Page>,
 ) -> Div {
     let theme = cx.theme();
@@ -165,6 +170,7 @@ fn render_dashboard(
     // of squeezing one card into a sliver.
     let overview = h_flex().gap_4().flex_wrap().children(vec![
         stat_card(
+            "v2-stat-total-queries",
             "Total Queries",
             query_count.to_string(),
             radius_lg,
@@ -173,6 +179,7 @@ fn render_dashboard(
             muted_foreground,
         ),
         stat_card(
+            "v2-stat-total-mutations",
             "Total Mutations",
             mutation_count.to_string(),
             radius_lg,
@@ -181,6 +188,7 @@ fn render_dashboard(
             muted_foreground,
         ),
         stat_card(
+            "v2-stat-cache-entries",
             "Cache Entries",
             cache_entries.to_string(),
             radius_lg,
@@ -189,6 +197,7 @@ fn render_dashboard(
             muted_foreground,
         ),
         stat_card(
+            "v2-stat-failed-queries",
             "Failed Queries",
             failed_queries.to_string(),
             radius_lg,
@@ -205,6 +214,7 @@ fn render_dashboard(
         expanded_key,
         sort_by,
         status_filter,
+        row_cache,
         scroll_handle,
         cx,
     );
@@ -222,7 +232,10 @@ fn render_dashboard(
         .child(mutations)
 }
 
+/// Stat read-out card. `id` is the per-card ElementId (static, namespaced);
+/// the visible `label` is not identity and may be reworded freely.
 fn stat_card(
+    id: &'static str,
     label: &str,
     value: String,
     radius_lg: Pixels,
@@ -231,9 +244,7 @@ fn stat_card(
     muted_foreground: Hsla,
 ) -> Stateful<Div> {
     div()
-        .id(ElementId::Name(SharedString::from(format!(
-            "v2-stat-{label}"
-        ))))
+        .id(id)
         .a11y(Role::Paragraph, format!("{label}: {value}"))
         .flex_1()
         .min_w(px(110.))

@@ -1,10 +1,5 @@
-use gpui::{
-    AnyWindowHandle, App, AppContext as _, Global, IntoElement as _, ParentElement as _,
-    Styled as _, Task, Window,
-};
-use gpui_component::{
-    Sizable as _, WindowExt as _, h_flex, notification::Notification, spinner::Spinner,
-};
+use gpui_kit::component::{WindowExt as _, notification::Notification};
+use gpui_kit::{AnyWindowHandle, App, AppContext as _, Global, Task, Window};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -307,21 +302,13 @@ enum DemoTaskNotificationKind {
     Cancelled,
 }
 
-/// Both dispatch helpers apply the same `id1` toast identity so re-pushing
-/// replaces rather than stacks.
+/// Toast identity is shared (`id1`) so re-pushing replaces rather than
+/// stacks; kit-standard constructors keep the visual language in the kit.
 fn build_demo_task_notification(id: TaskId, kind: DemoTaskNotificationKind) -> Notification {
     match kind {
-        DemoTaskNotificationKind::Loading => Notification::new()
+        DemoTaskNotificationKind::Loading => Notification::info("Running demo task...")
             .title("Demo task started")
-            .autohide(false)
-            .content(|_, _, _| {
-                h_flex()
-                    .gap_2()
-                    .items_center()
-                    .child(Spinner::new().small())
-                    .child("Running demo task...")
-                    .into_any_element()
-            }),
+            .autohide(false),
         DemoTaskNotificationKind::Success => {
             Notification::success("Demo task finished successfully.").title("Demo task completed")
         }

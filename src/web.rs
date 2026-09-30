@@ -1,7 +1,7 @@
 //! Application entry points: one [`bootstrap`] shared by the native binary
 //! and the wasm `start` entry, so both boot the same code path.
 
-use gpui::App;
+use gpui_kit::App;
 
 #[cfg(target_family = "wasm")]
 use wasm_bindgen::prelude::*;
@@ -11,7 +11,7 @@ use wasm_bindgen::prelude::*;
 pub fn bootstrap() {
     // First, so early failures surface.
     #[cfg(target_family = "wasm")]
-    gpui_platform::web_init();
+    gpui_kit::platform::web_init();
 
     let preflight = crate::single_instance::preflight();
     if !preflight.should_start {
@@ -22,14 +22,15 @@ pub fn bootstrap() {
 
     #[cfg(not(target_family = "wasm"))]
     let app_runtime =
-        gpui_platform::application().with_assets(crate::app::assets::CombinedAssets::new());
+        gpui_kit::application().with_assets(crate::app::assets::CombinedAssets::new());
 
     // Wasm: force WebGL2 — Auto/WebGPU dies with "device lost" on software
     // rasterizers; WebGL2 is stable everywhere and renders identically.
     #[cfg(target_family = "wasm")]
-    let app_runtime =
-        gpui_platform::application_with_web_backend(gpui_platform::WebBackendPreference::WebGl)
-            .with_assets(crate::app::assets::CombinedAssets::new());
+    let app_runtime = gpui_kit::platform::application_with_web_backend(
+        gpui_kit::platform::WebBackendPreference::WebGl,
+    )
+    .with_assets(crate::app::assets::CombinedAssets::new());
     let launch = move |cx: &mut App| {
         crate::app::init(cx);
         if let Some(runtime) = startup_runtime {

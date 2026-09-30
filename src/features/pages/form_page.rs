@@ -1,6 +1,6 @@
 use es_fluent::EsFluentVariants;
-use gpui::{prelude::*, *};
-use gpui_component::{
+use gpui_form::GpuiForm;
+use gpui_kit::component::{
     ActiveTheme as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
     checkbox::Checkbox,
@@ -9,7 +9,7 @@ use gpui_component::{
     input::{Input, InputEvent, InputState},
     v_flex,
 };
-use gpui_form::GpuiForm;
+use gpui_kit::{prelude::*, *};
 use koruma::{Koruma, KorumaAllFluent};
 use koruma_collection::{
     collection::NonEmptyValidation,

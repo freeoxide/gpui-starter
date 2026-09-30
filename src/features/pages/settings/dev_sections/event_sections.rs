@@ -1,10 +1,11 @@
-use gpui::{prelude::*, *};
-use gpui_component::{ActiveTheme as _, button::Button, label::Label, v_flex};
+use gpui_kit::component::{ActiveTheme as _, button::Button, label::Label, v_flex};
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
+use crate::ids::EventId;
 
 pub fn render_event_emitter_section(
-    event_log: &[String],
+    event_log: &[(EventId, String)],
     cx: &mut Context<super::super::SettingsPage>,
 ) -> impl IntoElement {
     let log_total = event_log.len();
@@ -105,10 +106,12 @@ pub fn render_event_emitter_section(
                             .child("No events received yet. Click a button above."),
                     )
                 })
-                .children(event_log.iter().rev().enumerate().map(|(ix, entry)| {
+                .children(event_log.iter().rev().enumerate().map(|(ix, (id, entry))| {
                     div()
+                        // Keyed by event id: the log drains from the front,
+                        // so a position key would move under a fixed row.
                         .id(ElementId::Name(SharedString::from(format!(
-                            "settings-event-{ix}"
+                            "settings-event-{id}"
                         ))))
                         .a11y(Role::ListItem, entry.clone())
                         // accesskit stores position_in_set 0-based; AT
@@ -117,7 +120,7 @@ pub fn render_event_emitter_section(
                         .aria_size_of_set(log_total)
                         .text_xs()
                         .p_1()
-                        .rounded(px(4.))
+                        .rounded_sm()
                         .bg(cx.theme().muted)
                         .child(entry.clone())
                 })),

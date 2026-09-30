@@ -7,7 +7,7 @@ pub mod dispatch;
 pub mod document_meta;
 pub mod router;
 
-use gpui::App;
+use gpui_kit::App;
 
 /// Install every browser integration at app init; [`dispatch`] must come
 /// first because router/connectivity push work through its queue.

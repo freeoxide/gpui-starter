@@ -1,4 +1,4 @@
-use gpui::{prelude::*, *};
+use gpui_kit::{prelude::*, *};
 
 use crate::sidebar::Page;
 use crate::title_bar::AppTitleBar;

@@ -1,5 +1,5 @@
 use std::{
-    io::{BufRead, Write},
+    io::{BufRead, ErrorKind, Write},
     sync::mpsc,
     time::Duration,
 };
@@ -79,7 +79,16 @@ fn bounded_line_harness(payload: usize) -> Option<String> {
         resolve_ipc_name(&unique_name).expect("resolve client name"),
     )
     .expect("connect client");
-    writeln!(client, "{}", "a".repeat(payload)).expect("write frame");
+    let write = writeln!(client, "{}", "a".repeat(payload));
+    // Past the cap the reader closes after MAX+1 bytes, so the write tail
+    // surfaces as BrokenPipe on Windows named pipes — still a dropped frame.
+    if payload > MAX_LINE_BYTES {
+        if let Err(error) = write {
+            assert_eq!(error.kind(), ErrorKind::BrokenPipe);
+        }
+    } else {
+        write.expect("write frame");
+    }
     rx.recv_timeout(Duration::from_secs(3))
         .expect("reader finished")
 }

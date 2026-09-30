@@ -3,7 +3,7 @@
 
 use std::sync::Mutex;
 
-use gpui::App;
+use gpui_kit::App;
 use wasm_bindgen::JsCast as _;
 
 use crate::{

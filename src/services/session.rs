@@ -1,4 +1,4 @@
-use gpui::{App, BorrowAppContext as _, Global};
+use gpui_kit::{App, BorrowAppContext as _, Global};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum SessionState {

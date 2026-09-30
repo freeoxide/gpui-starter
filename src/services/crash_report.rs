@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use gpui::App;
+use gpui_kit::App;
 #[cfg(not(target_family = "wasm"))]
-use gpui::BorrowAppContext as _;
-use gpui::Global;
+use gpui_kit::BorrowAppContext as _;
+use gpui_kit::Global;
 use serde::{Deserialize, Serialize};
 
 // Caps keep reports (and the upload payload) bounded; scrubbing keeps the

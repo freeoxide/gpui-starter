@@ -1,5 +1,5 @@
 use global_hotkey::GlobalHotKeyEvent;
-use gpui::App;
+use gpui_kit::App;
 use tray_icon::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
 use super::{LOG, icon};

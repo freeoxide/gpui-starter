@@ -1,4 +1,4 @@
-use gpui::{App, BorrowAppContext as _, Global};
+use gpui_kit::{App, BorrowAppContext as _, Global};
 #[cfg(not(target_family = "wasm"))]
 use network_interface::NetworkInterfaceConfig;
 use serde::{Deserialize, Serialize};

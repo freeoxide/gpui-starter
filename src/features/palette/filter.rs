@@ -287,8 +287,7 @@ mod tests {
     #[test]
     fn uppercase_query_matches_lowercase_items() {
         // Regression: skim is smart-case, so without ignore_case the raw
-        // query "Set" would turn matching case-sensitive and miss
-        // all-lowercase names entirely.
+        // query "Set" would miss all-lowercase names entirely.
         let f = ItemFilter::default();
         let items = [
             Entry {

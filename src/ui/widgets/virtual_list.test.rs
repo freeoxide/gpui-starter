@@ -1,7 +1,7 @@
 // No `use super::*`: gpui's `test` proc-macro glob would make bare `#[test]`
 // recurse infinitely. Import only what we need.
 use super::{bounded_list_height, uniform_item_sizes, variable_item_sizes};
-use gpui::{Pixels, Size, px, size};
+use gpui_kit::{Pixels, Size, px, size};
 
 #[test]
 fn uniform_item_sizes_correct_count() {

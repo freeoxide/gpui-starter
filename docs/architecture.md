@@ -75,24 +75,23 @@ Every module lives under `src/`. Modules that depend on other modules are noted 
 9.  Theme scrollbar_show restore                       -- from persisted config
 10. cx.observe_global::<Theme>(...)                    -- auto-persist theme changes
 11. Action handlers: SwitchTheme, SwitchThemeMode, SelectLocale
-12. launcher::init(cx)
-13. events::AppEventQueue installed as global
-14. tasks::initialize(cx)
-15. error_surface::initialize(cx)
-16. undo_stack::initialize(cx)
-17. shortcuts::initialize(cx)
-18. connectivity::initialize(cx)
-19. desktop_actions::initialize(cx)
-20. accessibility::initialize(cx)
-21. secure_storage::initialize(cx)
-22. session::initialize(cx)
-23. storage::initialize(cx)                            -- SQLite schema + health check
-24. telemetry::initialize(cx)
-25. notifications::inbox::initialize(cx)
-26. notifications::initialize(cx)
-27. Key bindings registered (secondary-k, /, secondary-q/alt-f4 — `secondary` is cmd on macOS, ctrl elsewhere)
-28. Action handlers: Quit, About, OpenDiagnostics, ExecuteCommand
-29. Lifecycle stage set to Running
+12. events::AppEventQueue installed as global
+13. tasks::initialize(cx)
+14. error_surface::initialize(cx)
+15. undo_stack::initialize(cx)
+16. shortcuts::initialize(cx)
+17. connectivity::initialize(cx)
+18. desktop_actions::initialize(cx)
+19. accessibility::initialize(cx)
+20. secure_storage::initialize(cx)
+21. session::initialize(cx)
+22. storage::initialize(cx)                           -- SQLite schema + health check
+23. telemetry::initialize(cx)
+24. notifications::inbox::initialize(cx)
+25. notifications::initialize(cx)
+26. Key bindings registered (secondary-k, /, secondary-q/alt-f4 — `secondary` is cmd on macOS, ctrl elsewhere)
+27. Action handlers: Quit, About, OpenDiagnostics, ExecuteCommand
+28. Lifecycle stage set to Running
 ```
 
 After `init` returns, `main` calls `create_new_window` which opens the first `AppRoot` window.

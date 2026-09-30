@@ -1,7 +1,5 @@
-use gpui::prelude::*;
-use gpui::*;
-
-use gpui_component::{ActiveTheme as _, button::Button, h_flex};
+use gpui_kit::component::{ActiveTheme as _, button::Button, h_flex};
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::ui::widgets::{render_virtual_list, uniform_item_sizes, virtual_list_item};

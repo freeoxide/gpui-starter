@@ -1,11 +1,11 @@
-use gpui::{prelude::*, *};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, Selectable as _,
     button::{Button, ButtonVariants as _},
     label::Label,
     switch::Switch,
     v_flex,
 };
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 

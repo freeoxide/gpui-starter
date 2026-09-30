@@ -1,13 +1,13 @@
-use gpui::{
-    AnyElement, App, Div, InteractiveElement as _, IntoElement as _, ParentElement as _, Role,
-    Stateful, Styled as _, div,
+use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::{
+    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Role, Stateful,
+    Styled as _, accesskit::Live, div,
 };
-use gpui_component::ActiveTheme as _;
 
 use crate::accessibility::A11yExt;
 use crate::{connectivity, notifications, routes::AppRoute, services::updater, session, tasks};
 
-pub fn render(route: &AppRoute, cx: &App) -> impl gpui::IntoElement {
+pub fn render(route: &AppRoute, cx: &App) -> impl IntoElement {
     let tasks_active = tasks::active_count(cx);
     let unread = notifications::inbox::unread_count(cx);
 
@@ -72,8 +72,10 @@ pub fn render(route: &AppRoute, cx: &App) -> impl gpui::IntoElement {
         .px_3()
         .py_2()
         .border_t_1()
-        .border_color(cx.theme().border)
-        .bg(cx.theme().secondary.opacity(0.35))
+        // Same surface roles the kit's StatusBar consumes, so a theme
+        // customizing the status bar applies here too.
+        .border_color(cx.theme().status_bar_border)
+        .bg(cx.theme().tokens.status_bar)
         .text_xs()
         .child({
             let mut children: Vec<Stateful<Div>> = vec![
@@ -96,7 +98,7 @@ pub fn render(route: &AppRoute, cx: &App) -> impl gpui::IntoElement {
                 // New errors should be spoken; the rest of the bar is
                 // browse-only, so no other row is live.
                 status_row("status-last-error", format!("LastError: {latest_error}"))
-                    .a11y_live(gpui::accesskit::Live::Polite),
+                    .a11y_live(Live::Polite),
             ];
             if let Some(label) = updater_label {
                 children.push(status_row("status-updater", label));
@@ -137,7 +139,7 @@ fn status_row(id: &'static str, text: String) -> Stateful<Div> {
 }
 
 /// Decoration only, no a11y node.
-fn separator(cx: &App) -> gpui::Div {
+fn separator(cx: &App) -> Div {
     div()
         .flex_shrink_0()
         .px_2()
@@ -157,7 +159,7 @@ fn truncate_error(s: &str, max_len: usize) -> &str {
 }
 
 #[cfg(debug_assertions)]
-fn render_frame_time(cx: &App) -> Option<gpui::Div> {
+fn render_frame_time(cx: &App) -> Option<Div> {
     if !crate::app_state::with_config(cx, |c| c.show_frame_time) {
         return None;
     }
@@ -169,17 +171,17 @@ fn render_frame_time(cx: &App) -> Option<gpui::Div> {
     let label = format!("Frame: {ms:.2}ms");
 
     let color = if us < threshold / 2 {
-        gpui::rgb(0x22c55e) // green
+        cx.theme().success
     } else if us < threshold {
-        gpui::rgb(0xeab308) // yellow
+        cx.theme().warning
     } else {
-        gpui::rgb(0xef4444) // red
+        cx.theme().danger
     };
 
     Some(div().text_color(color).child(label))
 }
 
 #[cfg(not(debug_assertions))]
-fn render_frame_time(_cx: &App) -> Option<gpui::Div> {
+fn render_frame_time(_cx: &App) -> Option<Div> {
     None
 }

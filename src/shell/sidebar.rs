@@ -1,4 +1,4 @@
-use gpui_component::IconName;
+use gpui_kit::component::IconName;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

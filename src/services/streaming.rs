@@ -3,7 +3,7 @@
 
 use flume::Receiver;
 use futures_util::Stream;
-use gpui::{App, AsyncApp, Context, Task, WeakEntity};
+use gpui_kit::{App, AsyncApp, Context, Task, WeakEntity};
 
 /// Upper bound on buffered tokens before the producer waits on the consumer.
 const CHANNEL_CAPACITY: usize = 1024;

@@ -6,7 +6,7 @@ use std::{
 
 #[cfg(not(target_family = "wasm"))]
 use arboard::Clipboard;
-use gpui::{App, BorrowAppContext as _, Global};
+use gpui_kit::{App, BorrowAppContext as _, Global};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
 #[derive(Debug, thiserror::Error)]

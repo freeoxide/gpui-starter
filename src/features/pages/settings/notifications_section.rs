@@ -1,18 +1,21 @@
-use gpui::{prelude::*, *};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, Disableable as _,
     button::{Button, ButtonVariants as _},
     label::Label,
     switch::Switch,
 };
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::notifications::{
     self, NotificationPermissionState, NotificationRequest, NotificationRuntimeSnapshot,
 };
 
-/// The visible texts are plain strings, so the combined text is the accessible label.
+/// `id` keys the row; the label is localized and would re-key the row on every
+/// locale switch. The visible texts are plain strings, so the combined text is
+/// the accessible label.
 pub(super) fn status_row(
+    id: &'static str,
     label: impl Into<SharedString>,
     value: impl Into<SharedString>,
 ) -> impl IntoElement {
@@ -21,7 +24,7 @@ pub(super) fn status_row(
     let text = format!("{label}: {value}");
     div()
         .id(ElementId::Name(SharedString::from(format!(
-            "settings-status-{label}"
+            "settings-status-{id}"
         ))))
         .a11y(Role::Paragraph, text)
         .flex()
@@ -73,10 +76,12 @@ pub(super) fn render_notifications_section(
                 ),
         )
         .child(status_row(
+            "backend",
             crate::i18n::localize("settings_native_backend", None),
             notifications_snapshot.active_backend.to_string(),
         ))
         .child(status_row(
+            "permission",
             crate::i18n::localize("settings_permission", None),
             notifications_snapshot.permission.label(),
         ))
@@ -84,6 +89,7 @@ pub(super) fn render_notifications_section(
             notifications_snapshot.degraded_reason.clone(),
             |this, reason| {
                 this.child(status_row(
+                    "degraded",
                     crate::i18n::localize("settings_degraded", None),
                     reason,
                 ))
@@ -91,11 +97,17 @@ pub(super) fn render_notifications_section(
         )
         .when_some(
             notifications_snapshot.last_backend_error.clone(),
-            |this, error| this.child(status_row("Last backend error", error)),
+            |this, error| this.child(status_row("backend-error", "Last backend error", error)),
         )
         .when_some(
             notifications_snapshot.daemon_capabilities.clone(),
-            |this, caps| this.child(status_row("Daemon capabilities", caps)),
+            |this, caps| {
+                this.child(status_row(
+                    "daemon-capabilities",
+                    "Daemon capabilities",
+                    caps,
+                ))
+            },
         )
         .child(
             div()

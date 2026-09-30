@@ -1,32 +1,19 @@
 //! Command palette ("launcher"): a floating search window over the command
-//! registry, backed by [`crate::features::palette`].
+//! registry, rendered by the kit's [`Command`] component and filtered by
+//! [`crate::features::palette`].
 
-use std::rc::Rc;
-
-use gpui::{prelude::*, *};
-use gpui_component::{
-    ActiveTheme as _, FocusTrapElement as _, Icon, IconName, Root, Sizable as _, h_flex,
-    input::{Input, InputEvent, InputState},
-    scroll::ScrollableElement as _,
-    v_flex,
+use gpui_kit::component::{
+    ActiveTheme as _, FocusTrapElement as _, Icon, IconName, IndexPath, Root, Sizable as _,
+    command::{Command, CommandItem, CommandState},
+    h_flex, v_flex,
 };
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::commands::{self, CommandId};
-use crate::features::palette::{BaseDelegate, FuzzyMatchConfig, ItemFilter, PaletteEntry};
+use crate::features::palette::{FuzzyMatchConfig, ItemFilter, PaletteEntry};
 
 const LOG: &str = "gpui_starter::launcher";
-const CONTEXT: &str = "Launcher";
-
-actions!(launcher, [SelectNext, SelectPrev, Dismiss]);
-
-pub fn init(cx: &mut App) {
-    cx.bind_keys([
-        KeyBinding::new("down", SelectNext, Some(CONTEXT)),
-        KeyBinding::new("up", SelectPrev, Some(CONTEXT)),
-        KeyBinding::new("escape", Dismiss, Some(CONTEXT)),
-    ]);
-}
 
 // Prevents double-opening the launcher
 pub struct LauncherOpen(pub bool);
@@ -60,40 +47,34 @@ pub enum LauncherEvent {
 }
 
 pub struct Launcher {
-    focus_handle: FocusHandle,
-    pub input: Entity<InputState>,
-    state: BaseDelegate<LauncherItem>,
+    state: Entity<CommandState>,
+    /// Registry snapshot the fuzzy filter scores.
+    items: Vec<LauncherItem>,
+    /// Indices into `items` behind the rows the last render supplied; the
+    /// palette's confirm IndexPath row indexes this list.
+    matches: Vec<usize>,
     filter: ItemFilter,
 }
 
 impl EventEmitter<LauncherEvent> for Launcher {}
 
 impl Focusable for Launcher {
-    fn focus_handle(&self, _: &App) -> FocusHandle {
-        self.focus_handle.clone()
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.state.read(cx).focus_handle(cx)
     }
 }
 
 impl Launcher {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Search pages and commands…"));
-
-        cx.subscribe(&input, |this, _, ev: &InputEvent, cx| match ev {
-            InputEvent::Change => this.refilter(cx),
-            InputEvent::PressEnter { .. } => this.act(cx),
-            _ => {}
-        })
-        .detach();
-
-        let state = BaseDelegate::new(Self::make_items());
-        let filter = ItemFilter::new(FuzzyMatchConfig::default());
+        let state = cx.new(|cx| CommandState::new(window, cx));
+        let items = Self::make_items();
+        let matches = (0..items.len()).collect();
 
         Self {
-            focus_handle: cx.focus_handle(),
-            input,
             state,
-            filter,
+            items,
+            matches,
+            filter: ItemFilter::new(FuzzyMatchConfig::default()),
         }
     }
 
@@ -109,43 +90,32 @@ impl Launcher {
             .collect()
     }
 
-    fn refilter(&mut self, cx: &mut Context<Self>) {
+    /// Local filtering stays in [`crate::features::palette`]: its fuzzy scorer
+    /// ranks description hits below name hits, which the component's own
+    /// substring match does not do, so the palette runs `filterable(false)`
+    /// and this callback supplies the rows each query.
+    fn refilter(&mut self, query: &str, cx: &mut Context<Self>) {
         // ItemFilter lowercases the query once per pass; handing it the raw
         // value keeps a single lowercase per keystroke.
-        let q = self.input.read(cx).value();
-        let indices = self.filter.filter_indices(self.state.items(), &q);
-        self.state.apply_filtered_indices(indices);
+        self.matches = self.filter.filter_indices(&self.items, query);
         tracing::debug!(
             target: LOG,
-            query = %q,
-            results = self.state.filtered_count(),
+            query = %query,
+            results = self.matches.len(),
             "Launcher filtered"
         );
         cx.notify();
     }
 
-    fn selected_display(&self) -> usize {
-        self.state.selected_index().unwrap_or(0)
-    }
-
-    fn set_selected_display(&mut self, display_ix: usize) {
-        self.state.set_selected_unchecked(display_ix);
-    }
-
-    fn item(&self, display_ix: usize) -> Option<&LauncherItem> {
-        self.state.get_filtered_item(display_ix)
-    }
-
-    fn act(&mut self, cx: &mut Context<Self>) {
-        if let Some(item) = self.item(self.selected_display()) {
-            let action = item.action;
+    fn confirm(&mut self, path: IndexPath, cx: &mut Context<Self>) {
+        if let Some(item) = self.matches.get(path.row).map(|&ix| &self.items[ix]) {
             tracing::info!(
                 target: LOG,
-                action = ?action,
+                action = ?item.action,
                 item = %item.title,
                 "Launcher action triggered"
             );
-            cx.emit(LauncherEvent::Act(action));
+            cx.emit(LauncherEvent::Act(item.action));
         } else {
             tracing::debug!(target: LOG, "Launcher dismissed with no selection");
         }
@@ -156,217 +126,174 @@ impl Launcher {
 impl Render for Launcher {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme().clone();
-        let selected = self.selected_display();
-        let filtered_count = self.state.filtered_count();
-        let has_results = filtered_count > 0;
+        let entity = cx.entity();
 
-        // Snapshot the visible rows so the render closure holds only owned data.
-        let rows: Vec<(usize, IconName, SharedString, SharedString)> = (0..filtered_count)
-            .filter_map(|di| {
-                let item = self.item(di)?;
-                Some((
-                    di,
-                    item.icon.clone(),
-                    item.title.clone(),
-                    item.subtitle.clone(),
-                ))
-            })
+        let rows: Vec<LauncherItem> = self
+            .matches
+            .iter()
+            .map(|&ix| self.items[ix].clone())
             .collect();
+        let titles: Vec<SharedString> = rows.iter().map(|row| row.title.clone()).collect();
 
-        let status_text = if has_results {
-            format!("{filtered_count} results")
-        } else {
-            "No results".to_string()
-        };
-        // The live-region label must change only when the selection or the
-        // filtered set changes, or every keystroke would be announced.
-        let status_label = match rows.iter().find(|(ix, _, _, _)| *ix == selected) {
-            Some((_, _, title, _)) => format!("{title}, {} of {}", selected + 1, filtered_count),
-            None => status_text.clone(),
-        };
+        let command = Command::new(&self.state)
+            .items(rows.into_iter().map(|row| {
+                let icon = row.icon.clone();
+                let title = row.title;
+                let subtitle = row.subtitle;
+                CommandItem::new().label(title.clone()).child(
+                    move |_: &mut Window, cx: &mut App| {
+                        render_row(icon.clone(), title.clone(), subtitle.clone(), cx)
+                    },
+                )
+            }))
+            .placeholder("Search pages and commands…")
+            .filterable(false)
+            .empty(|_: &CommandState, _: &mut Window, cx: &mut App| render_no_results(cx))
+            .footer(move |state: &CommandState, _: &mut Window, cx: &mut App| {
+                render_footer(state, &titles, cx)
+            })
+            .on_query({
+                let entity = entity.clone();
+                move |query, _window, cx| {
+                    entity.update(cx, |launcher, cx| launcher.refilter(query, cx));
+                }
+            })
+            .on_confirm({
+                let entity = entity.clone();
+                move |path, _window, cx| {
+                    entity.update(cx, |launcher, cx| launcher.confirm(path, cx));
+                }
+            })
+            .on_cancel(move |_window, cx| {
+                entity.update(cx, |_, cx| cx.emit(LauncherEvent::Dismiss));
+            })
+            // The launcher window is a transparent borderless popup; the
+            // palette surface and the window must stay see-through together.
+            .bordered(false)
+            .size_full()
+            .max_h(DefiniteLength::Fraction(1.))
+            .bg(transparent_black())
+            .border_1()
+            .border_color(theme.border.opacity(0.5))
+            .rounded(theme.radius_lg);
 
-        let dialog = v_flex()
+        let surface = div()
             .id("launcher-surface")
             .a11y(Role::Dialog, "Command palette")
             .size_full()
-            .bg(theme.background.opacity(0.0))
-            .border_1()
-            .border_color(theme.border.opacity(0.5))
-            .rounded(theme.radius_lg)
-            .key_context(CONTEXT)
-            .track_focus(&self.focus_handle)
-            .on_action(cx.listener(|this, _: &SelectNext, _, cx| {
-                this.state.select_down();
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &SelectPrev, _, cx| {
-                this.state.select_up();
-                cx.notify();
-            }))
-            .on_action(cx.listener(|_, _: &Dismiss, _, cx| {
-                cx.emit(LauncherEvent::Dismiss);
-            }))
-            .child(
-                h_flex()
-                    .px_4()
-                    .py(px(12.))
-                    .gap_3()
-                    .border_b_1()
-                    .border_color(theme.border)
-                    .items_center()
-                    .child(
-                        Icon::new(IconName::Search)
-                            .size_5()
-                            .text_color(theme.muted_foreground),
-                    )
-                    .child(
-                        Input::new(&self.input)
-                            .appearance(false)
-                            .bordered(false)
-                            .focus_bordered(false)
-                            .aria_label("Search commands")
-                            .flex_1(),
-                    ),
-            )
-            .child(
-                v_flex()
-                    .id("launcher-results")
-                    .a11y(Role::ListBox, "Results")
-                    .aria_orientation(Orientation::Vertical)
-                    // AT-SPI derives each item's setsize from the nearest
-                    // ancestor that declares one; item-level values are ignored.
-                    .aria_size_of_set(rows.len())
-                    .flex_1()
-                    .overflow_y_scrollbar()
-                    .py_1()
-                    .children(rows.iter().enumerate().map(|(display_ix, row)| {
-                        let is_selected = display_ix == selected;
-                        let icon = row.1.clone();
-                        let title = row.2.clone();
-                        let subtitle = row.3.clone();
-                        let on_activate: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)> =
-                            Rc::new(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                                this.set_selected_display(display_ix);
-                                this.act(cx);
-                            }));
-                        let on_a11y_activate = on_activate.clone();
-
-                        h_flex()
-                            .id(display_ix)
-                            .a11y(Role::ListBoxOption, title.clone())
-                            .aria_description(subtitle.clone())
-                            .aria_selected(is_selected)
-                            // accesskit stores position_in_set 0-based; AT
-                            // bridges report the stored value +1.
-                            .aria_position_in_set(display_ix)
-                            .aria_size_of_set(rows.len())
-                            .px_3()
-                            .py_2()
-                            .mx_1()
-                            .gap_3()
-                            .items_center()
-                            .rounded(theme.radius)
-                            .cursor_pointer()
-                            .when(is_selected, |el| el.bg(theme.list_active))
-                            .when(!is_selected, |el| el.hover(|el| el.bg(theme.list_hover)))
-                            .on_mouse_move(cx.listener(move |this, _, _, cx| {
-                                if this.selected_display() != display_ix {
-                                    this.set_selected_display(display_ix);
-                                    cx.notify();
-                                }
-                            }))
-                            .on_click(move |event, window, cx| {
-                                on_activate(event, window, cx);
-                            })
-                            .on_a11y_action(AccessibleAction::Click, move |_, window, cx| {
-                                on_a11y_activate(&ClickEvent::default(), window, cx);
-                            })
-                            .child(
-                                div()
-                                    .flex_shrink_0()
-                                    .size_8()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .rounded(theme.radius)
-                                    .bg(theme.secondary)
-                                    .child(Icon::new(icon).small()),
-                            )
-                            .child(
-                                v_flex()
-                                    .flex_1()
-                                    .overflow_hidden()
-                                    .child(
-                                        div()
-                                            .text_sm()
-                                            .font_weight(FontWeight::MEDIUM)
-                                            .truncate()
-                                            .child(title),
-                                    )
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .text_color(theme.muted_foreground)
-                                            .truncate()
-                                            .child(subtitle),
-                                    ),
-                            )
-                    }))
-                    .when(!has_results, |el| {
-                        el.child(
-                            div()
-                                .id("launcher-no-results")
-                                .a11y(Role::Paragraph, "No results")
-                                .px_4()
-                                .py_8()
-                                .w_full()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_sm()
-                                .text_color(theme.muted_foreground)
-                                .child("No results"),
-                        )
-                    }),
-            )
-            .child(
-                h_flex()
-                    .px_4()
-                    .py(px(8.))
-                    .gap_4()
-                    .flex_shrink_0()
-                    .border_t_1()
-                    .border_color(theme.border)
-                    .text_xs()
-                    .text_color(theme.muted_foreground)
-                    .child(
-                        div()
-                            .id("launcher-status")
-                            .a11y(Role::Status, status_label)
-                            .a11y_live(accesskit::Live::Polite)
-                            .child(status_text),
-                    )
-                    .child(
-                        h_flex()
-                            .id("launcher-hints")
-                            .a11y(
-                                Role::Paragraph,
-                                "Keyboard: up and down navigate, Enter opens, Escape closes",
-                            )
-                            .gap_4()
-                            .child("↑↓  navigate")
-                            .child("↵  open")
-                            .child("esc  close"),
-                    ),
-            );
+            .child(command);
 
         // The trap container has an id but no a11y role, so gpui drops the
         // wrapped element's node — trap a roleless wrapper, not the Dialog.
+        let focus_handle = self.focus_handle(cx);
         div()
             .size_full()
-            .focus_trap("launcher", &self.focus_handle)
-            .child(dialog)
+            .focus_trap("launcher", &focus_handle)
+            .child(surface)
     }
+}
+
+/// Row content (icon + two-line text); the palette component owns the row
+/// chrome, selection highlight, and trailing slot.
+fn render_row(icon: IconName, title: SharedString, subtitle: SharedString, cx: &App) -> Div {
+    h_flex()
+        .w_full()
+        .gap_3()
+        .items_center()
+        .child(
+            div()
+                .flex_shrink_0()
+                .size_8()
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(cx.theme().radius)
+                .bg(cx.theme().secondary)
+                .child(Icon::new(icon).small()),
+        )
+        .child(
+            v_flex()
+                .flex_1()
+                .overflow_hidden()
+                .child(
+                    div()
+                        .text_sm()
+                        .font_weight(FontWeight::MEDIUM)
+                        .truncate()
+                        .child(title),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .truncate()
+                        .child(subtitle),
+                ),
+        )
+}
+
+fn render_no_results(cx: &App) -> Stateful<Div> {
+    div()
+        .id("launcher-no-results")
+        .a11y(Role::Paragraph, "No results")
+        .px_4()
+        .py_8()
+        .w_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_sm()
+        .text_color(cx.theme().muted_foreground)
+        .child("No results")
+}
+
+/// Palette footer: a live-region status announcing the selection and result
+/// count (documented in docs/accessibility-checklist.md) plus key hints.
+fn render_footer(state: &CommandState, titles: &[SharedString], cx: &App) -> Div {
+    let count = state.matched_count();
+    let status_text = if count > 0 {
+        format!("{count} results")
+    } else {
+        "No results".to_string()
+    };
+    // The live-region label must change only when the selection or the
+    // filtered set changes, or every keystroke would be announced.
+    let status_label = match state.selected_index() {
+        Some(path) => titles
+            .get(path.row)
+            .map(|title| format!("{title}, {} of {}", path.row + 1, count))
+            .unwrap_or_else(|| status_text.clone()),
+        None => status_text.clone(),
+    };
+
+    h_flex()
+        .px_4()
+        .py_2()
+        .gap_4()
+        .flex_shrink_0()
+        .border_t_1()
+        .border_color(cx.theme().border)
+        .text_xs()
+        .text_color(cx.theme().muted_foreground)
+        .child(
+            div()
+                .id("launcher-status")
+                .a11y(Role::Status, status_label)
+                .a11y_live(accesskit::Live::Polite)
+                .child(status_text),
+        )
+        .child(
+            h_flex()
+                .id("launcher-hints")
+                .a11y(
+                    Role::Paragraph,
+                    "Keyboard: up and down navigate, Enter opens, Escape closes",
+                )
+                .gap_4()
+                .child("↑↓  navigate")
+                .child("↵  open")
+                .child("esc  close"),
+        )
 }
 
 pub struct LauncherRoot {
@@ -390,9 +317,9 @@ impl LauncherRoot {
         let launcher = cx.new(|cx| Launcher::new(window, cx));
 
         // Deferred until after the first layout pass
-        let input_fh = launcher.read(cx).input.read(cx).focus_handle(cx);
+        let focus_handle = launcher.read(cx).focus_handle(cx);
         window.defer(cx, move |window, cx| {
-            input_fh.focus(window, cx);
+            focus_handle.focus(window, cx);
         });
 
         cx.subscribe(&launcher, |this, _, ev: &LauncherEvent, cx| {
@@ -446,10 +373,8 @@ impl Render for LauncherRoot {
             tracing::info!(target: LOG, "Removing launcher window (deferred)");
             #[cfg(target_os = "windows")]
             {
-                // Hand OS focus to the main window and let it settle before
-                // this popup leaves gpui's window map: key-ups and WM_ACTIVATE
-                // still route to the focused window afterward and would log
-                // "window not found" from gpui's own callbacks.
+                // Hand OS focus to the main window before the popup leaves
+                // gpui's map, or later key-ups log "window not found".
                 let handle = window.window_handle();
                 cx.spawn(async move |_this, cx| {
                     cx.update(|cx| {
@@ -512,16 +437,15 @@ pub fn open_launcher(cx: &mut App) {
             is_movable: true,
             is_resizable: false,
             window_background: WindowBackgroundAppearance::Blurred,
-            window_min_size: Some(gpui::Size {
+            window_min_size: Some(Size {
                 width: window_w,
                 height: window_h,
             }),
             ..Default::default()
         };
 
-        // Manual Root, not gpui_kit::open_window: the WindowState plugin paints
-        // opaque tokens.background on the root surface; only an instance bg,
-        // refined after plugin styles, keeps this window transparent.
+        // Manual Root, not gpui_kit::open_window: the WindowState plugin
+        // paints an opaque root surface; only a post-plugin bg stays clear.
         let Some(window) = cx
             .open_window(options, |window, cx| {
                 let launcher_root = cx.new(|cx| LauncherRoot::new(window, cx));

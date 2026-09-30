@@ -1,15 +1,13 @@
-use gpui::prelude::*;
-use gpui::*;
-
 use std::sync::Arc;
 
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme as _, Disableable as _,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::Input,
     v_flex,
 };
+use gpui_kit::{prelude::*, *};
 
 use gpui_query::core::{MutationStatus, QueryStatus};
 
