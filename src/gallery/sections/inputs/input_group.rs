@@ -34,7 +34,7 @@ use super::demo::section;
 
 /// The demo inputs the story builds up front, keyed by the suffix every
 /// element ID in their group carries.
-const INPUT_KEYS: [(&str, &str, &str); 22] = [
+const INPUT_KEYS: [(&str, &str, &str); 23] = [
     ("align-start", "Search…", ""),
     ("align-end", "Enter password", ""),
     ("align-top", "Enter your full name", ""),
@@ -57,6 +57,7 @@ const INPUT_KEYS: [(&str, &str, &str); 22] = [
     ("loading-start", "Processing…", ""),
     ("loading-text", "Saving changes…", ""),
     ("profile-name", "Your name", "Ada Lovelace"),
+    ("profile-email", "you@example.com", "ada@example.com"),
 ];
 
 const TEXTAREA_KEYS: [(&str, &str, &str); 7] = [
@@ -567,27 +568,29 @@ impl InputGroupSection {
             .child(
                 column().child(
                     self.input("popover-url", "Website with details").addon(
-                        InputGroupAddon::new(self.id("address-details-addon")).child(
-                            Popover::new(self.id("address-details"))
-                                .trigger(
-                                    InputGroupButton::new(self.id("address-details-trigger"))
-                                        .icon(IconName::Info)
-                                        .accessibility_label("Address details")
-                                        .tooltip("Address details"),
-                                )
-                                .w(rems(18.))
-                                .gap_2()
-                                .text_sm()
-                                .child(
-                                    div()
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .child("Address details"),
-                                )
-                                .child(format!("https://{address}"))
-                                .child(
-                                    "The protocol prefix stays separate from the editable hostname.",
-                                ),
-                        ),
+                        InputGroupAddon::new(self.id("address-details-addon"))
+                            .child(
+                                Popover::new(self.id("address-details"))
+                                    .trigger(
+                                        InputGroupButton::new(self.id("address-details-trigger"))
+                                            .icon(IconName::Info)
+                                            .accessibility_label("Address details")
+                                            .tooltip("Address details"),
+                                    )
+                                    .w(rems(18.))
+                                    .gap_2()
+                                    .text_sm()
+                                    .child(
+                                        div()
+                                            .font_weight(FontWeight::SEMIBOLD)
+                                            .child("Address details"),
+                                    )
+                                    .child(format!("https://{address}"))
+                                    .child(
+                                        "The protocol prefix stays separate from the editable hostname.",
+                                    ),
+                            )
+                            .child(InputGroupText::new().child("https://")),
                     ),
                 ),
             )
