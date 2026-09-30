@@ -5,4 +5,5 @@ pub mod buttons;
 pub mod controls;
 pub mod inputs;
 pub mod overlays;
+pub mod pickers;
 pub mod welcome;
