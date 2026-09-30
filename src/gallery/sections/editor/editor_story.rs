@@ -211,9 +211,8 @@ impl Render for EditorSection {
                     )
                     .child(self.render_toolbar(cx)),
             )
-            // The app enables none of the crate's tree-sitter features, so no
-            // highlighter exists and fold arrows never appear; both tabs keep
-            // the gutter, decorations, and font controls.
+            // No tree-sitter features are enabled, so no highlighter exists and
+            // fold arrows never appear; gutter, decorations, and font controls are unaffected.
             .child(div().min_h_0().h(rems(30.)).child(if self.active_tab == 0 {
                 Editor::new(&self.editor_state)
                     .when_some(self.font_family.clone(), |this, family| {
