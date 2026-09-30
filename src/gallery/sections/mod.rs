@@ -1,0 +1,4 @@
+//! Content-section modules. A new area adds `pub mod <name>;` here plus its
+//! registration line in `crate::gallery::registry::sections`.
+
+pub mod welcome;
