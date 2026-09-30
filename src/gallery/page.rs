@@ -90,8 +90,38 @@ impl Render for GalleryPage {
                     }))
             })));
 
-        let content = match self.sections.get(self.active_ix) {
-            Some(section) => v_flex()
+        // `active_ix` always points into `matches` while it is non-empty;
+        // follow_search and item clicks only pick matching indexes.
+        let content = if matches.is_empty() {
+            v_flex()
+                .id("gallery-empty")
+                .flex_1()
+                .min_w_0()
+                .h_full()
+                .items_center()
+                .justify_center()
+                .child(
+                    v_flex()
+                        .id("gallery-empty-state")
+                        .gap_2()
+                        .items_center()
+                        .child(
+                            div()
+                                .id("gallery-empty-title")
+                                .text_lg()
+                                .font_weight(FontWeight::MEDIUM)
+                                .child("No matching sections"),
+                        )
+                        .child(
+                            div()
+                                .id("gallery-empty-hint")
+                                .text_color(cx.theme().muted_foreground)
+                                .child("Clear the search to see every section."),
+                        ),
+                )
+        } else {
+            let section = &self.sections[self.active_ix];
+            v_flex()
                 .id(SharedString::from(format!(
                     "gallery-section-{}",
                     section.id()
@@ -135,33 +165,7 @@ impl Render for GalleryPage {
                         // Single scroll owner for section content.
                         .overflow_y_scroll()
                         .child(section.view()),
-                ),
-            None => v_flex()
-                .id("gallery-empty")
-                .flex_1()
-                .min_w_0()
-                .h_full()
-                .items_center()
-                .justify_center()
-                .child(
-                    v_flex()
-                        .id("gallery-empty-state")
-                        .gap_2()
-                        .items_center()
-                        .child(
-                            div()
-                                .id("gallery-empty-title")
-                                .text_lg()
-                                .font_weight(FontWeight::MEDIUM)
-                                .child("No matching sections"),
-                        )
-                        .child(
-                            div()
-                                .id("gallery-empty-hint")
-                                .text_color(cx.theme().muted_foreground)
-                                .child("Clear the search to see every section."),
-                        ),
-                ),
+                )
         };
 
         h_flex()
