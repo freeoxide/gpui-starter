@@ -3,6 +3,7 @@
 
 pub mod buttons;
 pub mod controls;
+pub mod editor;
 pub mod inputs;
 pub mod overlays;
 pub mod pickers;
