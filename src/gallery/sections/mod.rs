@@ -2,5 +2,6 @@
 //! registration line in `crate::gallery::registry::sections`.
 
 pub mod buttons;
+pub mod inputs;
 pub mod overlays;
 pub mod welcome;
