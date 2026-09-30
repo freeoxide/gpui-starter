@@ -181,12 +181,30 @@ impl Render for TooltipSection {
                     .relative()
                     .min_h(rems(6.))
                     .w_full()
+                    // Tall enough that it cannot fit between the trigger and
+                    // the window top while this section is near the pane top,
+                    // so the Placement::Top fallback genuinely flips below.
                     .child(
                         div().absolute().top_0().left_6().child(
                             Button::new("tooltip-top-edge-trigger")
                                 .primary()
                                 .label("Hover for tooltip")
-                                .tooltip("This tooltip should appear below the trigger near the top edge.")
+                                .tooltip(
+                                    "This tooltip is intentionally tall:\n\
+                                     taller than the space that can remain\n\
+                                     between the trigger and the top of the\n\
+                                     window while this section is near the\n\
+                                     top of the pane.\n\
+                                     With no room above the trigger, the\n\
+                                     positioner flips the tooltip below it\n\
+                                     instead of clipping it or moving the\n\
+                                     trigger.\n\
+                                     The preferred placement is still Top:\n\
+                                     the flip is the fallback that keeps\n\
+                                     the tooltip inside the window.\n\
+                                     Scroll the pane down and hover again:\n\
+                                     with room above, it opens on top.",
+                                )
                                 .tooltip_placement(Placement::Top),
                         ),
                     )
@@ -198,8 +216,9 @@ impl Render for TooltipSection {
                             .max_w(rems(26.))
                             .text_color(cx.theme().muted_foreground)
                             .child(
-                                "Hover the top button. The tooltip flips below the trigger \
-                                 without changing the original visual gap.",
+                                "Keep this section near the top of the pane and hover the \
+                                 button: the tall tooltip cannot fit above, so it flips \
+                                 below the trigger without moving it.",
                             ),
                     ),
             )

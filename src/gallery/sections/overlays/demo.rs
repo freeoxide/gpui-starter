@@ -14,8 +14,8 @@ use gpui_kit::component::{
 use gpui_kit::{prelude::FluentBuilder as _, *};
 use serde::Deserialize;
 
-// Unhandled by design: the dialog and sheet stories dispatch it to prove
-// actions still route after an overlay closes.
+// The dialog and sheet sections dispatch this and answer it with a
+// notification, proving actions still route after an overlay closes.
 actions!(gallery_overlays, [ProbeAction]);
 
 /// Size knob from the upstream `AlertStory` options toolbar.

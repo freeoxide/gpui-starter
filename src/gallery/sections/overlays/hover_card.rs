@@ -43,7 +43,7 @@ impl Render for HoverCardSection {
                             .child(
                                 v_flex()
                                     .gap_1()
-                                    .w_80()
+                                    .w(rems(28.125))
                                     .child(
                                         div()
                                             .child("This is a hover card")
