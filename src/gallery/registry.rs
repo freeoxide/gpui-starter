@@ -63,7 +63,7 @@ impl GallerySection {
 /// (same lifecycle as the upstream story gallery and the app's own pages).
 pub(crate) fn sections(window: &mut Window, cx: &mut App) -> Vec<GallerySection> {
     let mut sections = Vec::new();
-    super::sections::buttons::register(&mut sections, window, cx);
     super::sections::welcome::register(&mut sections, window, cx);
+    super::sections::buttons::register(&mut sections, window, cx);
     sections
 }

@@ -13,8 +13,8 @@ use gpui_kit::component::{
     v_flex,
 };
 use gpui_kit::{
-    Action, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
-    IntoElement, ParentElement, Render, Styled, Window, div, rems,
+    Action, App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement,
+    Render, Styled, Window, div, rems,
 };
 use serde::Deserialize;
 
@@ -27,7 +27,6 @@ use super::demo::{DemoToggle, demo_toolbar, section, size_label};
 struct ToggleDisabled;
 
 pub struct ToolbarSection {
-    focus_handle: FocusHandle,
     size: Size,
     disabled: bool,
     formats: [bool; 3],
@@ -68,7 +67,6 @@ impl ToolbarSection {
             let query = cx.new(|cx| InputState::new(window, cx).placeholder("Search"));
 
             Self {
-                focus_handle: cx.focus_handle(),
                 size: Size::Medium,
                 disabled: false,
                 formats: [true, false, false],
@@ -78,12 +76,6 @@ impl ToolbarSection {
                 query,
             }
         })
-    }
-}
-
-impl Focusable for ToolbarSection {
-    fn focus_handle(&self, _: &App) -> FocusHandle {
-        self.focus_handle.clone()
     }
 }
 
@@ -151,6 +143,7 @@ impl Render for ToolbarSection {
                         Toolbar::new("toolbar-default-row")
                             .w_full()
                             .with_size(size)
+                            .disabled(disabled)
                             .border_1()
                             .border_color(cx.theme().border)
                             .rounded(cx.theme().radius)
@@ -244,6 +237,7 @@ impl Render for ToolbarSection {
                         Toolbar::new("toolbar-mixed-row")
                             .w_full()
                             .with_size(size)
+                            .disabled(disabled)
                             .border_1()
                             .border_color(cx.theme().border)
                             .rounded(cx.theme().radius)

@@ -2,7 +2,7 @@
 
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Selectable as _, Sizable as _,
-    button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _},
+    button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _, DropdownButton},
     h_flex,
     progress::ProgressCircle,
     v_flex,
@@ -37,6 +37,7 @@ impl ButtonSection {
 impl Render for ButtonSection {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let demo = &self.demo;
+        let multiple = self.toggle_multiple;
         let button = |id: &'static str| Button::new(id).with_size(demo.size);
 
         let custom_variant = ButtonCustomVariant::new(cx)
@@ -61,6 +62,18 @@ impl Render for ButtonSection {
             .child(demo_toolbar(vec![
                 size_dropdown("button-size", demo.size).into_any_element(),
                 options_dropdown("button-options", demo).into_any_element(),
+                // The shared Options dropdown takes no extras, so the story's
+                // "Multiple selection" check lives in this section's own menu.
+                DropdownButton::new("button-selection-options")
+                    .button(Button::new("button-selection-options-trigger").label("Selection"))
+                    .dropdown_menu(move |menu, _, _| {
+                        menu.menu_with_check(
+                            "Multiple selection",
+                            multiple,
+                            Box::new(ButtonToggle::Multiple),
+                        )
+                    })
+                    .into_any_element(),
             ]))
             .child(
                 section("button-variants", "Variants")
