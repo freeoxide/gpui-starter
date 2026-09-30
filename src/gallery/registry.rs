@@ -72,5 +72,6 @@ pub(crate) fn sections(window: &mut Window, cx: &mut App) -> Vec<GallerySection>
     super::sections::text::register(&mut sections, window, cx);
     super::sections::selection::register(&mut sections, window, cx);
     super::sections::editor::register(&mut sections, window, cx);
+    super::sections::markdown::register(&mut sections, window, cx);
     sections
 }
