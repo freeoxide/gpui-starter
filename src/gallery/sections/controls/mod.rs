@@ -1,5 +1,5 @@
 //! Selection-control sections, ported from the upstream stories: Checkbox,
-//! Switch, Toggle, Radio, Slider, ColorPicker, and Rating.
+//! Switch, Toggle, Radio, Slider, Color Picker, and Rating.
 
 mod checkbox;
 mod color_picker;

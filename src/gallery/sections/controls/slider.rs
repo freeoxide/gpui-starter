@@ -257,7 +257,13 @@ impl Render for SliderSection {
                                             .child(format!("{}", self.slider1_value)),
                                     ),
                             )
-                            .child(Slider::new(&self.slider1).disabled(self.disabled)),
+                            .child(Slider::new(&self.slider1).disabled(self.disabled))
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(format!("Released at {}", self.slider1_released_value)),
+                            ),
                     ),
             )
             .child(
@@ -286,7 +292,13 @@ impl Render for SliderSection {
                                             .child(format!("${}", self.slider3.read(cx).value())),
                                     ),
                             )
-                            .child(Slider::new(&self.slider3).disabled(self.disabled)),
+                            .child(Slider::new(&self.slider3).disabled(self.disabled))
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(format!("Released at ${}", self.slider3_released_value)),
+                            ),
                     ),
             )
             .child(
