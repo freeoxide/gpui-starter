@@ -290,8 +290,8 @@ impl SelectItem for Country {
     }
 }
 
-/// Groups the fixture by initial letter; the list is sorted, so equal
-/// prefixes are contiguous and a running group matches itertools chunk_by.
+/// A running group merges only consecutive equal prefixes, matching the
+/// upstream chunk_by grouping (not one group per distinct prefix).
 fn country_groups() -> SearchableVec<SelectGroup<Country>> {
     let mut groups: Vec<SelectGroup<Country>> = Vec::new();
     for (name, code) in COUNTRIES {
