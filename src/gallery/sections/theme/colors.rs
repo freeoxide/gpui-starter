@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, IndexPath, Theme, ThemeColor, ThemeRegistry,
+    ActiveTheme as _, Icon, IconName, IndexPath, StyledExt as _, Theme, ThemeColor, ThemeRegistry,
     ThemeStyled as _, WindowExt as _,
     button::{Button, ButtonVariants as _, DropdownButton},
     clipboard::Clipboard,
@@ -319,7 +319,7 @@ impl ThemeColorsSection {
                             .child(
                                 div()
                                     .text_sm()
-                                    .font_weight(FontWeight::MEDIUM)
+                                    .font_medium()
                                     .when(!is_explicit, |this: Div| {
                                         this.text_color(isolated_theme.muted_foreground)
                                     })
@@ -433,7 +433,7 @@ impl ThemeColorsSection {
                                             .child(
                                                 div()
                                                     .size_4()
-                                                    .rounded(cx.theme().radius)
+                                                    .rounded(cx.theme().radius.half())
                                                     .bg(color_value)
                                                     .border_1()
                                                     .border_color(cx.theme().border)
@@ -516,7 +516,7 @@ impl ThemeColorsSection {
                                         .child(
                                             div()
                                                 .text_base()
-                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .font_semibold()
                                                 .pb_2()
                                                 .border_b_1()
                                                 .border_color(isolated_theme.border)
