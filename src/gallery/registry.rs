@@ -85,5 +85,6 @@ pub(crate) fn sections(window: &mut Window, cx: &mut App) -> Vec<GallerySection>
     super::sections::messaging::register(&mut sections, window, cx);
     super::sections::theme::register(&mut sections, window, cx);
     super::sections::loading::register(&mut sections, window, cx);
+    super::sections::motion::register(&mut sections, window, cx);
     sections
 }
