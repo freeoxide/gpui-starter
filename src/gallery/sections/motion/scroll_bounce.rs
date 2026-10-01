@@ -35,7 +35,7 @@ impl MouseScroll {
     }
 }
 
-fn send_scroll(event: ScrollWheelEvent, window: &mut Window, cx: &mut App) {
+fn send_scroll(event: ScrollWheelEvent, window: &Window, cx: &mut App) {
     // Mouse listeners are temporarily taken out during dispatch. Re-entering
     // dispatch synchronously would miss the viewport's scroll listeners.
     window.defer(cx, move |window, cx| {
@@ -62,7 +62,7 @@ impl ScrollBounceSection {
         })
     }
 
-    fn begin_drag(&mut self, position: Point<Pixels>, window: &mut Window, cx: &mut App) {
+    fn begin_drag(&mut self, position: Point<Pixels>, window: &Window, cx: &mut App) {
         let mut drag = MouseScroll {
             anchor: position,
             previous: position,
@@ -71,7 +71,7 @@ impl ScrollBounceSection {
         self.drag = Some(drag);
     }
 
-    fn end_drag(&mut self, window: &mut Window, cx: &mut App) {
+    fn end_drag(&mut self, window: &Window, cx: &mut App) {
         if let Some(mut drag) = self.drag.take() {
             send_scroll(drag.event(drag.previous, TouchPhase::Ended), window, cx);
         }
@@ -147,6 +147,8 @@ impl ScrollBounceSection {
                     .child(
                         div()
                             .id("scroll-bounce-list")
+                            .flex()
+                            .flex_col()
                             .flex_1()
                             .min_h_0()
                             .border_1()
