@@ -13,6 +13,7 @@ pub mod layout;
 pub mod markdown;
 pub mod media;
 pub mod menus;
+pub mod messaging;
 pub mod overlays;
 pub mod pickers;
 pub mod selection;
