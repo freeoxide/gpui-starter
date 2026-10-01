@@ -9,6 +9,7 @@ pub mod editor;
 pub mod inputs;
 pub mod layout;
 pub mod markdown;
+pub mod menus;
 pub mod overlays;
 pub mod pickers;
 pub mod selection;
