@@ -9,5 +9,6 @@ pub mod markdown;
 pub mod overlays;
 pub mod pickers;
 pub mod selection;
+pub mod tables;
 pub mod text;
 pub mod welcome;
