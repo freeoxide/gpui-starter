@@ -50,8 +50,8 @@ impl Render for ImageSection {
             .child(
                 section("image-remote-url", "Remote URL")
                     .description(
-                        "This app installs no HTTP client, so every remote request fails and the \
-                         fallback view stays.",
+                        "On native the default HTTP client fails every request, so the fallback \
+                         view stays. The web build fetches through the browser instead.",
                     )
                     .w(rems(30.))
                     .child(preview_frame(

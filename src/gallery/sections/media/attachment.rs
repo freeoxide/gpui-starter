@@ -158,14 +158,16 @@ impl Render for AttachmentSection {
                             .status(AttachmentStatus::Processing)
                             .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
                             .content(
-                                AttachmentContent::new().title(
-                                    AttachmentTitle::new("transcript.pdf").with_shimmer_style(
-                                        ShimmerStyle::new()
-                                            .highlight_color(cx.theme().primary)
-                                            .spread(0.45)
-                                            .reverse(true),
-                                    ),
-                                ),
+                                AttachmentContent::new()
+                                    .title(
+                                        AttachmentTitle::new("transcript.pdf").with_shimmer_style(
+                                            ShimmerStyle::new()
+                                                .highlight_color(cx.theme().primary)
+                                                .spread(0.45)
+                                                .reverse(true),
+                                        ),
+                                    )
+                                    .description(AttachmentDescription::new("Processing document")),
                             ),
                     )
                     .child(
