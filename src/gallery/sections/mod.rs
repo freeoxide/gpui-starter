@@ -2,6 +2,7 @@
 //! registration line in `crate::gallery::registry::sections`.
 
 pub mod buttons;
+pub mod chrome;
 pub mod controls;
 pub mod editor;
 pub mod inputs;
