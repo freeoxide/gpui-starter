@@ -77,5 +77,6 @@ pub(crate) fn sections(window: &mut Window, cx: &mut App) -> Vec<GallerySection>
     super::sections::layout::register(&mut sections, window, cx);
     super::sections::tabs::register(&mut sections, window, cx);
     super::sections::chrome::register(&mut sections, window, cx);
+    super::sections::dock::register(&mut sections, window, cx);
     sections
 }
