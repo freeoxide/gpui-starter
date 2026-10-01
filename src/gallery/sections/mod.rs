@@ -11,6 +11,7 @@ pub mod forms;
 pub mod inputs;
 pub mod layout;
 pub mod markdown;
+pub mod media;
 pub mod menus;
 pub mod overlays;
 pub mod pickers;
