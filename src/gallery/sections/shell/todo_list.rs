@@ -368,8 +368,8 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     sections.push(GallerySection::new(
         "todo-list",
         "Todo List",
-        "The JavaScript todo example rebuilt natively with an input, checkboxes, and a \
-         confirm dialog.",
+        "A working todo list: type a task and press Enter, tick rows done, filter by \
+         state, and clear the finished rows through a confirm dialog.",
         TodoSection::view(window, cx),
     ));
 }

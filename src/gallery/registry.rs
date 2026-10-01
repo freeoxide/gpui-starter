@@ -12,8 +12,8 @@
 //! cx: &mut App)` that pushes its sections. Each section is a GPUI entity
 //! (`Render`) constructed once at page build; state lives in entities, never
 //! in render locals. Section `id`s and titles must be unique gallery-wide:
-//! titles are the sidebar labels and the search corpus, ids namespace
-//! element ids.
+//! titles are the sidebar labels, titles and descriptions are the search
+//! corpus, ids namespace element ids.
 
 use gpui_kit::{AnyView, App, SharedString, Window};
 

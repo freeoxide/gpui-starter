@@ -44,7 +44,10 @@ impl GalleryPage {
         self.sections
             .iter()
             .enumerate()
-            .filter(|(_, section)| section.title().to_lowercase().contains(query))
+            .filter(|(_, section)| {
+                section.title().to_lowercase().contains(query)
+                    || section.description().to_lowercase().contains(query)
+            })
             .map(|(ix, _)| ix)
             .collect()
     }

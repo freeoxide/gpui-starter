@@ -88,8 +88,9 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     sections.push(GallerySection::new(
         "shell",
         "Shell",
-        "The gpui-shell quote board story needs a scripting runtime this app does not \
-         depend on.",
+        "Why no script panel runs here: the host module a script view would read \
+         through, and the counters that show a script draws only when its data \
+         changes. The scripting runtime is not a dependency of this app.",
         ShellSection::view(window, cx),
     ));
 }

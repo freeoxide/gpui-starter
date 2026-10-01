@@ -108,8 +108,9 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     sections.push(GallerySection::new(
         "js-story",
         "JS Story Catalog",
-        "A JavaScript mirror of the story catalog over the unpublished script API; \
-         not portable here.",
+        "Why the catalog is Rust-only: the route manifest a script harness would \
+         load, quoted in full with the coverage audit that keeps it reviewable. \
+         The script API it targets is unpublished, so the harness does not run.",
         JsStorySection::view(window, cx),
     ));
 }
