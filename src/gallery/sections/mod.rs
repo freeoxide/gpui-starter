@@ -20,4 +20,5 @@ pub mod selection;
 pub mod tables;
 pub mod tabs;
 pub mod text;
+pub mod theme;
 pub mod welcome;

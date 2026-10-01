@@ -83,5 +83,6 @@ pub(crate) fn sections(window: &mut Window, cx: &mut App) -> Vec<GallerySection>
     super::sections::charts::register(&mut sections, window, cx);
     super::sections::media::register(&mut sections, window, cx);
     super::sections::messaging::register(&mut sections, window, cx);
+    super::sections::theme::register(&mut sections, window, cx);
     sections
 }
