@@ -10,6 +10,7 @@ pub mod editor;
 pub mod forms;
 pub mod inputs;
 pub mod layout;
+pub mod loading;
 pub mod markdown;
 pub mod media;
 pub mod menus;
