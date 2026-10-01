@@ -19,6 +19,7 @@ pub mod motion;
 pub mod overlays;
 pub mod pickers;
 pub mod selection;
+pub mod shell;
 pub mod tables;
 pub mod tabs;
 pub mod text;
