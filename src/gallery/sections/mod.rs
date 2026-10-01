@@ -6,6 +6,7 @@ pub mod chrome;
 pub mod controls;
 pub mod dock;
 pub mod editor;
+pub mod forms;
 pub mod inputs;
 pub mod layout;
 pub mod markdown;
