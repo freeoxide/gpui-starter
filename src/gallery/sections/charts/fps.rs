@@ -217,7 +217,8 @@ impl Render for HilbertScene {
                     .text_color(cx.theme().muted_foreground)
                     .child(
                         "Move the cursor over the canvas to tilt the view. The load buttons \
-                        change how many curves each frame paints.",
+                        change how many curves each frame paints. This scene comes from \
+                        fps_monitor; its gpui-fps HUD is not an app dependency.",
                     ),
             )
     }
@@ -401,7 +402,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     sections.push(GallerySection::new(
         "hilbert-curves",
         "Hilbert Curves",
-        "The fps_monitor example's rotating spline scene; its gpui-fps HUD is not an app dependency.",
+        "Rotating Hilbert-curve scene painted as short gradient paths, with a load knob for the per-frame draw.",
         HilbertScene::view(window, cx),
     ));
 }

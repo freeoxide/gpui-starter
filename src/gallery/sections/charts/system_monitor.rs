@@ -78,7 +78,7 @@ impl DeviceTableDelegate {
                     .sort(ColumnSort::Descending),
                 Column::new("mobile", "Mobile").width(80.).sortable(),
                 Column::new("tablet", "Tablet").width(80.).sortable(),
-                Column::new("watch", "Watch").width(80.),
+                Column::new("watch", "Watch").width(80.).sortable(),
             ],
             sort_field: DeviceSortField::Desktop,
             sort_order: ColumnSort::Descending,
@@ -447,7 +447,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     sections.push(GallerySection::new(
         "system-monitor",
         "System Monitor",
-        "The system_monitor example with its sysinfo and battery feeds replaced by fixture data.",
+        "Rolling visitor-share charts, a sortable devices table, and status gauges on a half-second loop.",
         SystemMonitorSection::view(window, cx),
     ));
 }
