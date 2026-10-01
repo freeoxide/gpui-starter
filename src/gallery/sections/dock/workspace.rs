@@ -109,9 +109,8 @@ const PANELS: &[PanelSpec] = &[
 /// gives up its slot until one is shown again.
 const TOGGLE_PANELS: [&PanelSpec; 4] = [&EXPLORER, &SEARCH, &OUTLINE, &INSPECTOR];
 
-/// Panels hidden through the workspace menu. A global because a panel rebuilt
-/// from a saved layout by the registry has no other route back to the section
-/// (the example keeps the same list in its app state).
+/// Panels hidden through the workspace menu. A global because a registry-built
+/// panel has no other route back to the section (upstream keeps it in app state).
 struct HiddenPanels(Entity<Vec<SharedString>>);
 
 impl Global for HiddenPanels {}
@@ -301,8 +300,7 @@ impl WorkspaceSection {
     fn save_layout_later(&mut self, cx: &mut Context<Self>) {
         let dock_area = self.dock_area.clone();
         // Replacing the pending task cancels its timer, so only the last edit
-        // of a burst reaches the snapshot (the example debounces to disk this
-        // way).
+        // of a burst reaches the snapshot (the example debounces this way).
         self._save_task = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(SAVE_DEBOUNCE).await;
             let _ = this.update(cx, |this, cx| this.save_layout(&dock_area, cx));
@@ -454,6 +452,7 @@ impl Render for WorkspaceSection {
                     .child(
                         Button::new("dock-workspace-add-panel")
                             .icon(IconName::LayoutDashboard)
+                            .tooltip("Add panel")
                             .small()
                             .ghost()
                             .dropdown_menu(move |menu, _, cx| {
@@ -519,8 +518,7 @@ impl Render for WorkspaceSection {
                                     .w_full()
                                     .h(rems(37.5))
                                     // The gallery pane is an unbounded scrolling
-                                    // column; a dock needs a definite height to
-                                    // split.
+                                    // column; a dock needs a definite height to split.
                                     .child(self.dock_area.clone()),
                             )
                             .child(
