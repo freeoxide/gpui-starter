@@ -10,11 +10,34 @@ use crate::gallery::registry::GallerySection;
 
 use super::demo::section;
 
+// Quoted verbatim from examples/js_story/catalog.js: the manifest's own point
+// is that nothing is elided, so the quote keeps all eight family imports.
 const CATALOG_SHAPE: &str = "```js
+// Keep every import explicit. A missing family module is a load error instead
+// of a silently incomplete gallery, which makes this the reviewable inventory.
 import { stories as foundations } from \"./stories/foundations.js\";
+import { stories as actions } from \"./stories/actions.js\";
+import { stories as inputs } from \"./stories/inputs.js\";
+import { stories as navigation } from \"./stories/navigation.js\";
+import { stories as content } from \"./stories/content.js\";
 import { stories as overlays } from \"./stories/overlays.js\";
+import { stories as collections } from \"./stories/collections.js\";
+import { stories as layouts } from \"./stories/layouts.js\";
+import { coveredBy } from \"./stories/coverage.js\";
 
-const byRustStory = [...foundations, ...overlays];
+export { coveredBy } from \"./stories/coverage.js\";
+
+/** The complete JavaScript Story route manifest, in Rust Story display order. */
+const byRustStory = [
+  ...foundations,
+  ...actions,
+  ...inputs,
+  ...navigation,
+  ...content,
+  ...overlays,
+  ...collections,
+  ...layouts,
+];
 ```";
 
 pub struct JsStorySection;
