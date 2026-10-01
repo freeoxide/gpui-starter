@@ -11,5 +11,6 @@ pub mod overlays;
 pub mod pickers;
 pub mod selection;
 pub mod tables;
+pub mod tabs;
 pub mod text;
 pub mod welcome;
