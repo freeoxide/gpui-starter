@@ -7,9 +7,9 @@ GPUI_QUERY_PATH="${GPUI_QUERY_PATH:-/Users/hmziq/fo/gpui-query}"
 
 MARKER_START="# >>> gpui-query-local >>>"
 MARKER_END="# <<< gpui-query-local <<<"
-# DEFAULT: branch gpui-pre-0.6 @1449ef2 = v0.2.1 (wasm support, published)
+# DEFAULT: branch gpui-pre-0.6 @e9e11f2 = v0.2.2 (perf campaign, published)
 # merged with the gpui-pre re-point (see Cargo.toml [patch.crates-io] comment).
-DEFAULT_LINE='gpui-query = { git = "https://github.com/hmziqagent/gpui-query", rev = "1449ef2" }'
+DEFAULT_LINE='gpui-query = { git = "https://github.com/hmziqagent/gpui-query", rev = "e9e11f2" }'
 LOCAL_LINE="gpui-query = { path = \"$GPUI_QUERY_PATH/crates/gpui-query\" }"
 
 usage() {
@@ -18,7 +18,7 @@ Usage: just gpui-query-local | just gpui-query-cratesio | just gpui-query-status
 
 Toggles the gpui-query [patch.crates-io] source between the live standalone
 checkout ($GPUI_QUERY_PATH — branch gpui-pre-0.6) and the default git rev
-(v0.2.1 content + the gpui-pre manifest swap; no published version carries
+(v0.2.2 content + the gpui-pre manifest swap; no published version carries
 the swap).
 
 Exactly ONE of the two lines in the marker block is active at a time —
@@ -79,7 +79,7 @@ status() {
     END { print (l ? "local" : (d ? "git" : "unknown")) }
   ' "$CARGO_TOML")" in
     local) echo "gpui-query source: LOCAL ($GPUI_QUERY_PATH)" ;;
-    git)   echo "gpui-query source: git hmziqagent/gpui-query@1449ef2 (branch gpui-pre-0.6: v0.2.1 + gpui-pre swap)" ;;
+    git)   echo "gpui-query source: git hmziqagent/gpui-query@e9e11f2 (branch gpui-pre-0.6: v0.2.2 + gpui-pre swap)" ;;
     *)     echo "gpui-query source: UNKNOWN (marker block has no active line)" >&2; exit 1 ;;
   esac
 }
@@ -92,7 +92,7 @@ case "${1:-status}" in
     ;;
   cratesio)
     toggle cratesio
-    echo "Toggled to default git rev (branch gpui-pre-0.6: v0.2.1 + gpui-pre swap)"
+    echo "Toggled to default git rev (branch gpui-pre-0.6: v0.2.2 + gpui-pre swap)"
     ;;
   status)
     status
