@@ -24,6 +24,7 @@
 pub mod app;
 pub mod features;
 pub mod foundation;
+pub mod gallery;
 pub mod persistence;
 pub mod platform;
 pub mod runtime;

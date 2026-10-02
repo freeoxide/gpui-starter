@@ -1,0 +1,91 @@
+//! Registration seam between the gallery page and content sections.
+//!
+//! A content area owns `src/gallery/sections/<name>/` and hooks in with two
+//! mechanical lines (Rust has no module autodiscovery and no linkme-style
+//! registry dep is allowed here):
+//!
+//! 1. `pub mod <name>;` in `src/gallery/sections/mod.rs`
+//! 2. `sections::<name>::register(&mut sections, window, cx);` below.
+//!
+//! Contract for every section module: expose
+//! `pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window,
+//! cx: &mut App)` that pushes its sections. Each section is a GPUI entity
+//! (`Render`) constructed once at page build; state lives in entities, never
+//! in render locals. Section `id`s and titles must be unique gallery-wide:
+//! titles are the sidebar labels, titles and descriptions are the search
+//! corpus, ids namespace element ids.
+
+use gpui_kit::{AnyView, App, SharedString, Window};
+
+/// One independently renderable gallery entry shown in the section navigator.
+pub(crate) struct GallerySection {
+    id: SharedString,
+    title: SharedString,
+    description: SharedString,
+    view: AnyView,
+}
+
+impl GallerySection {
+    /// `id` is a stable kebab-case slug (e.g. `"welcome"`); `view` is usually
+    /// `<Section>::view(window, cx)` following the kit constructor idiom.
+    pub(crate) fn new(
+        id: &'static str,
+        title: &'static str,
+        description: &'static str,
+        view: impl Into<AnyView>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            title: title.into(),
+            description: description.into(),
+            view: view.into(),
+        }
+    }
+
+    pub(crate) fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub(crate) fn title(&self) -> &str {
+        &self.title
+    }
+
+    pub(crate) fn description(&self) -> &str {
+        &self.description
+    }
+
+    pub(crate) fn view(&self) -> AnyView {
+        self.view.clone()
+    }
+}
+
+/// All gallery sections, built eagerly when `GalleryPage` is constructed
+/// (same lifecycle as the upstream story gallery and the app's own pages).
+pub(crate) fn sections(window: &mut Window, cx: &mut App) -> Vec<GallerySection> {
+    let mut sections = Vec::new();
+    super::sections::welcome::register(&mut sections, window, cx);
+    super::sections::buttons::register(&mut sections, window, cx);
+    super::sections::overlays::register(&mut sections, window, cx);
+    super::sections::inputs::register(&mut sections, window, cx);
+    super::sections::controls::register(&mut sections, window, cx);
+    super::sections::pickers::register(&mut sections, window, cx);
+    super::sections::text::register(&mut sections, window, cx);
+    super::sections::selection::register(&mut sections, window, cx);
+    super::sections::editor::register(&mut sections, window, cx);
+    super::sections::markdown::register(&mut sections, window, cx);
+    super::sections::tables::register(&mut sections, window, cx);
+    super::sections::layout::register(&mut sections, window, cx);
+    super::sections::tabs::register(&mut sections, window, cx);
+    super::sections::chrome::register(&mut sections, window, cx);
+    super::sections::dock::register(&mut sections, window, cx);
+    super::sections::menus::register(&mut sections, window, cx);
+    super::sections::forms::register(&mut sections, window, cx);
+    super::sections::charts::register(&mut sections, window, cx);
+    super::sections::media::register(&mut sections, window, cx);
+    super::sections::messaging::register(&mut sections, window, cx);
+    super::sections::theme::register(&mut sections, window, cx);
+    super::sections::loading::register(&mut sections, window, cx);
+    super::sections::motion::register(&mut sections, window, cx);
+    super::sections::shell::register(&mut sections, window, cx);
+    sections
+}

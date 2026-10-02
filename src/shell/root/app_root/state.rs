@@ -1,5 +1,6 @@
 use gpui_kit::{prelude::*, *};
 
+use crate::gallery::GalleryPage;
 use crate::sidebar::Page;
 use crate::title_bar::AppTitleBar;
 use crate::views::{
@@ -27,6 +28,7 @@ pub struct AppRoot {
     pub(crate) query_playground_page: Entity<QueryPlaygroundPage>,
     pub(crate) query_devtools_v2_page: Entity<QueryDevToolsV2Page>,
     pub(crate) about_page: Entity<AboutPage>,
+    pub(crate) gallery_page: Entity<GalleryPage>,
 
     /// When true, the error fallback view replaces the active page; set on a
     /// render panic, cleared by "Reload Page" or navigation.
@@ -51,6 +53,7 @@ impl AppRoot {
         let query_playground_page = cx.new(|cx| QueryPlaygroundPage::new(window, cx));
         let query_devtools_v2_page = cx.new(|cx| QueryDevToolsV2Page::new(window, cx));
         let about_page = cx.new(|_| AboutPage::new());
+        let gallery_page = cx.new(|cx| GalleryPage::new(window, cx));
 
         // Register the v2 QueryClient global so DevTools/Playground pages can observe it.
         if !cx.has_global::<gpui_query::client::QueryClient>() {
@@ -176,6 +179,7 @@ impl AppRoot {
             query_playground_page,
             query_devtools_v2_page,
             about_page,
+            gallery_page,
             render_error: false,
             error_page: None,
         }
@@ -215,6 +219,7 @@ impl AppRoot {
             Page::QueryPlayground => self.query_playground_page.clone().into(),
             Page::QueryDevToolsV2 => self.query_devtools_v2_page.clone().into(),
             Page::About => self.about_page.clone().into(),
+            Page::Gallery => self.gallery_page.clone().into(),
         }
     }
 

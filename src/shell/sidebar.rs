@@ -12,6 +12,7 @@ pub enum Page {
     QueryDevToolsV2,
     ErrorPlayground,
     About,
+    Gallery,
 }
 
 impl Page {
@@ -26,6 +27,7 @@ impl Page {
             Page::QueryDevToolsV2 => "Query DevTools V2",
             Page::ErrorPlayground => "Error Playground",
             Page::About => "About",
+            Page::Gallery => "Gallery",
         }
     }
 
@@ -42,6 +44,7 @@ impl Page {
             Page::QueryPlayground => "query-playground",
             Page::QueryDevToolsV2 => "query-devtools-v2",
             Page::About => "about",
+            Page::Gallery => "gallery",
         }
     }
 
@@ -61,6 +64,7 @@ impl Page {
             Page::QueryDevToolsV2 => IconName::LayoutDashboard,
             Page::ErrorPlayground => IconName::TriangleAlert,
             Page::About => IconName::Info,
+            Page::Gallery => IconName::GalleryVerticalEnd,
         }
     }
 
@@ -75,6 +79,7 @@ impl Page {
             Page::QueryDevToolsV2,
             Page::ErrorPlayground,
             Page::About,
+            Page::Gallery,
         ]
     }
 }

@@ -11,8 +11,13 @@ use gpui_starter::sidebar::Page;
 #[test]
 fn test_sidebar_pages_exist() {
     let all = Page::all();
-    // The app must expose exactly nine pages.
-    assert_eq!(all.len(), 9, "expected 9 sidebar pages, got {}", all.len());
+    // The app must expose exactly ten pages (nine feature pages + Gallery).
+    assert_eq!(
+        all.len(),
+        10,
+        "expected 10 sidebar pages, got {}",
+        all.len()
+    );
 
     // Every page variant that AppRoot::active_page_view matches on must be
     // present in the canonical list.
