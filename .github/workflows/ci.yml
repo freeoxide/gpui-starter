@@ -198,31 +198,27 @@ jobs:
   # hour (every crate's tests pull gpui's TestAppContext) and not viable in CI,
   # but `cargo test -p gpui-starter --lib` compiles ONLY this crate's lib test
   # target — pure unit tests (no gpui TestAppContext, no live D-Bus) — which
-  # sccache + a dedicated rust-cache key keep fast on repeat runs. Binding now
+  # kache + a dedicated rust-cache key keep fast on repeat runs. Binding now
   # that the glob-shadow stack overflow is fixed (231 lib tests pass clean).
   # ---------------------------------------------------------------------
   test:
     name: Test (lib, Linux)
     runs-on: ubuntu-24.04
-    # Full codegen of the gpui dependency graph. A warm rust-cache + sccache
+    # Full codegen of the gpui dependency graph. A warm rust-cache + kache
     # keeps this well under 30 min, but ANY Cargo.lock change (dep bump, new
     # pin) invalidates the key and the cold rebuild needs 60-100+ min at
     # CARGO_BUILD_JOBS=2 — the original 30-min cap killed exactly that run
     # (PR #6's first attempt: cancelled at 30m17s with rustc mid-compile).
     timeout-minutes: 120
     env:
-      # RUSTC_WRAPPER must stay identical on master and PR runs: cargo mixes
-      # the wrapper into its build fingerprints, so flipping it per-event
-      # would invalidate the target/ dir restored from the master rust-cache.
-      RUSTC_WRAPPER: sccache
-      # SCCACHE_GHA_ENABLED is what persists sccache hits across runs — the
-      # sccache-action only installs the binary (it does NOT set this itself;
-      # before this was set, sccache silently used a throwaway per-run disk
-      # cache and cached nothing). Backend writes are master-only so PR runs
-      # never create cache entries; PR speed comes from the restored target/
-      # dir instead. Reads on PRs would work (base-branch scope) but every
-      # compile miss would be written back as PR-scoped quota junk.
-      SCCACHE_GHA_ENABLED: ${{ github.ref == 'refs/heads/master' && 'true' || 'false' }}
+      # Same fingerprint rule as the sccache era, now guaranteed by kache:
+      # RUSTC_WRAPPER must stay identical on master and PR runs (cargo mixes
+      # the wrapper into its build fingerprints), so it is pinned here and by
+      # kache-action — never per-event. Persistence goes through kache-action
+      # and the GitHub cache service; kache forces PR runs read-only, so PR
+      # speed comes from the restored target/ dir without PR-scoped cache
+      # quota junk (the manual master-only gate sccache needed).
+      RUSTC_WRAPPER: kache
     steps:
       - uses: actions/checkout@v7
 
@@ -231,7 +227,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@nightly
 
-      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: kunobi-ninja/kache-action@v1
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -260,19 +256,18 @@ jobs:
     timeout-minutes: 120
     env:
       # Same wrapper/fingerprint discipline as the Linux test lane.
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: ${{ github.ref == 'refs/heads/master' && 'true' || 'false' }}
+      RUSTC_WRAPPER: kache
       # Short CARGO_HOME: same gpui-form MAX_PATH fix as check-windows.
       CARGO_HOME: 'C:\cargo'
-      # sccache expands cargo's @response-file when respawning rustc; C:\t keeps
-      # the line ~22k chars, under CreateProcessW's 32767 cap (mozilla/sccache#2397).
+      # C:\t keeps target-dir paths short for the same MAX_PATH reason; the
+      # @response-file length cap it also served was sccache-specific.
       CARGO_TARGET_DIR: 'C:\t'
     steps:
       - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@nightly
 
-      - uses: mozilla-actions/sccache-action@v0.0.11
+      - uses: kunobi-ninja/kache-action@v1
 
       - uses: Swatinem/rust-cache@v2
         with:
