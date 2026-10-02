@@ -1,0 +1,166 @@
+name: PR Builds
+
+# Runnable debug binaries as PR-check artifacts, so UI work (e.g. the
+# example gallery) can be tested from the Checks page without a local
+# cargo build. Quality gates stay in ci.yml; release distributions stay
+# in release.yml — this file only produces throwaway test builds.
+on:
+  pull_request:
+    branches: [master]
+  # Master pushes do NOT upload; they exist to keep the rust-cache lines
+  # warm that PR runs restore (same quota discipline as ci.yml: saves are
+  # master-only, exactly one warm line per lane).
+  push:
+    branches: [master]
+
+# Cancel a superseded run when the same PR is pushed to again mid-build —
+# these lanes are long enough that stale runs are pure waste.
+concurrency:
+  group: pr-builds-${{ github.ref }}
+  cancel-in-progress: true
+
+# Same env discipline as ci.yml (peak-RSS / target-hygiene knobs for the
+# 14 GB runners; see the long note there). Dev profile: this is a test
+# build, not a distribution — release-only cfg divergence is already
+# caught by the release-profile `cargo check` in ci.yml.
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: "2"
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_CODEGEN_UNITS: "256"
+  CARGO_PROFILE_DEV_DEBUG: none
+  RUST_BACKTRACE: "1"
+  # GPUI_UPDATE_MANIFEST_URL is deliberately unset: option_env! in
+  # src/services/updater/types.rs disables the updater when absent, so a
+  # test build never checks the published manifest.
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Linux x86_64: raw binary + $ORIGIN/lib rpath + bundled non-system
+  # .so files (trimmed from the release.yml bundling step). Without the
+  # rpath/bundle a Linux artifact fails to start on any machine lacking
+  # the exact system libs — a test build that won't launch is worse than
+  # none. Runners pinned to ubuntu-24.04 for the same reason as ci.yml
+  # (ubuntu-latest flips to Ubuntu 26 on 2026-10-19).
+  # ---------------------------------------------------------------------
+  build-linux:
+    name: Build (Linux x86_64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux build dependencies
+        run: ./scripts/install-linux-deps.sh
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "v2-linux-prbuild"
+          # Master-only saves; PRs restore only (see ci.yml check job).
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - name: Build debug binary
+        run: cargo build
+
+      - name: Relink rpath and bundle shared libraries
+        run: |
+          set -euo pipefail
+          STAGE="stage/gpui-starter"
+          mkdir -p "$STAGE/lib" stage
+          cp "target/debug/gpui-starter" "$STAGE/gpui-starter"
+          patchelf --set-rpath '$ORIGIN/lib' "$STAGE/gpui-starter"
+          # Bundle the non-system shared libs the binary needs; glibc /
+          # ld-linux stay on the system (bundling those breaks across
+          # glibc versions).
+          for lib in $(ldd "$STAGE/gpui-starter" | awk '/=> \// {print $3}'); do
+            base="$(basename "$lib")"
+            case "$base" in
+              libc.so*|libm.so*|libdl.so*|librt.so*|libpthread.so*|ld-linux*|libgcc_s.so*|libutil.so*|libresolv.so*)
+                continue
+                ;;
+            esac
+            [ -f "$STAGE/lib/$base" ] || cp -L "$lib" "$STAGE/lib/"
+          done
+          # GITHUB_SHA on a PR event is the merge commit, so this labels
+          # exactly the combination the artifact was tested as.
+          tar -czf "stage/gpui-starter-${GITHUB_SHA:0:12}-linux-x86_64-debug.tar.gz" -C stage gpui-starter
+
+      - name: Upload Linux artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: gpui-starter-linux-x86_64-debug
+          path: stage/*.tar.gz
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------
+  # Windows x64: the linked .exe alone. MSVC's runtime (vcruntime) is
+  # dynamically linked and expected on the test machine (standard VC++
+  # redist). Default pwsh shell, never `shell: bash` — see the
+  # check-windows note in ci.yml on Git Bash link.exe shadowing.
+  # ---------------------------------------------------------------------
+  build-windows:
+    name: Build (Windows x64)
+    runs-on: windows-latest
+    timeout-minutes: 240
+    env:
+      # Same CARGO_HOME / CARGO_TARGET_DIR quirks as the ci.yml Windows
+      # lanes: MAX_PATH (266 > 260) and sccache's response-file cap.
+      CARGO_HOME: 'C:\cargo'
+      CARGO_TARGET_DIR: 'C:\t'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "v2-windows-prbuild"
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+          # v2 does not read CARGO_TARGET_DIR; point the cache at C:\t
+          # (same reasoning as the test-windows lane in ci.yml).
+          cache-directories: 'C:\t'
+
+      - name: Build debug binary
+        run: cargo build
+
+      - name: Upload Windows artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: gpui-starter-windows-x64-debug
+          path: 'C:\t\debug\gpui-starter.exe'
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------
+  # macOS (host arch, arm64 on macos-latest): plain binary, no .app
+  # bundle / codesign / DMG — those are release.yml's job. Ad-hoc
+  # signature is applied by the linker, so macOS Gatekeeper may still
+  # ask on first launch; right-click > Open accepts it for a test build.
+  # ---------------------------------------------------------------------
+  build-macos:
+    name: Build (macOS arm64)
+    runs-on: macos-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "v2-macos-prbuild"
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - name: Build debug binary
+        run: cargo build
+
+      - name: Upload macOS artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: gpui-starter-macos-arm64-debug
+          path: target/debug/gpui-starter
+          if-no-files-found: error
