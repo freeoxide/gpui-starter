@@ -118,6 +118,11 @@ ai-chat = []
 # org.freedesktop.portal.Notification via ashpd (reuses the transitive 0.13.x
 # already compiled via gpui_linux/oo7). Native installs never need this.
 notifications-portal = ["dep:ashpd"]
+# PR artifact builds (.github/workflows/pr-builds.yml): debug binaries leave
+# the build machine, and rust-embed's live-fs debug mode finds nothing there —
+# feature-unified across the graph, so the kit icons and fluent bundles
+# embed too.
+artifact = ["rust-embed/debug-embed"]
 
 [dependencies]
 gpui.workspace = true
