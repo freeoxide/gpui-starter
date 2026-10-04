@@ -234,7 +234,7 @@ fn gpui_form_pins_migrated_freeoxide_repo() {
     );
     assert!(
         manifest.contains(
-            "gpui-query = { git = \"https://github.com/hmziqagent/gpui-query\", rev = \"1449ef2\" }"
+            "gpui-query = { git = \"https://github.com/hmziqagent/gpui-query\", rev = \"69a071f\" }"
         ),
         "the gpui-query [patch.crates-io] override must stay untouched"
     );
@@ -256,7 +256,7 @@ fn gpui_form_pins_migrated_freeoxide_repo() {
         "expected exactly one gpui-query in Cargo.lock"
     );
     assert!(
-        query[0].contains("source = \"git+https://github.com/hmziqagent/gpui-query?rev=1449ef2"),
+        query[0].contains("source = \"git+https://github.com/hmziqagent/gpui-query?rev=69a071f"),
         "gpui-query must resolve from the hmziqagent git source"
     );
 }

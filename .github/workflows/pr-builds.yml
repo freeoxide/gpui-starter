@@ -3,7 +3,9 @@ name: PR Builds
 # Runnable debug binaries as PR-check artifacts, so UI work (e.g. the
 # example gallery) can be tested from the Checks page without a local
 # cargo build. Quality gates stay in ci.yml; release distributions stay
-# in release.yml — this file only produces throwaway test builds.
+# in release.yml — this file only produces throwaway test builds. The
+# artifact feature embeds assets that debug rust-embed would otherwise
+# read from this runner's fs (missing on the download machine).
 on:
   pull_request:
     branches: [master]
@@ -69,7 +71,9 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Build debug binary
-        run: cargo build
+        # --features artifact: the binary leaves this runner, and rust-embed
+        # only embeds at compile time in release or with debug-embed.
+        run: cargo build --features artifact
 
       - name: Relink rpath and bundle shared libraries
         run: |
@@ -147,7 +151,9 @@ jobs:
           cache-directories: 'C:\t'
 
       - name: Build debug binary
-        run: cargo build
+        # --features artifact: the binary leaves this runner, and rust-embed
+        # only embeds at compile time in release or with debug-embed.
+        run: cargo build --features artifact
 
       - name: Upload Windows artifact
         if: github.event_name == 'pull_request'
@@ -189,7 +195,9 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Build debug binary
-        run: cargo build
+        # --features artifact: the binary leaves this runner, and rust-embed
+        # only embeds at compile time in release or with debug-embed.
+        run: cargo build --features artifact
 
       - name: Upload macOS artifact
         if: github.event_name == 'pull_request'

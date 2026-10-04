@@ -118,15 +118,20 @@ ai-chat = []
 # org.freedesktop.portal.Notification via ashpd (reuses the transitive 0.13.x
 # already compiled via gpui_linux/oo7). Native installs never need this.
 notifications-portal = ["dep:ashpd"]
+# PR artifact builds (.github/workflows/pr-builds.yml): debug binaries leave
+# the build machine, and rust-embed's live-fs debug mode finds nothing there —
+# feature-unified across the graph, so the kit icons and fluent bundles
+# embed too.
+artifact = ["rust-embed/debug-embed"]
 
 [dependencies]
 gpui.workspace = true
 # Version is a range (not `^0.1.4`) so the git override in [patch.crates-io]
-# (branch gpui-pre-0.6 = v0.2.1 wasm support + release-profile fix + gpui-pre swap)
+# (branch gpui-pre-0.6 = the v0.3.0 release line merged onto the gpui-pre swap)
 # actually satisfies this requirement and is applied. With a strict
 # `^0.1.4`-only pin Cargo can silently drop a future patch as
 # `[[patch.unused]]` and build the registry version regardless.
-gpui-query = { version = ">=0.1.4, <0.3.0", features = ["hook"] }
+gpui-query = { version = ">=0.1.4, <0.4.0", features = ["hook"] }
 gpui-kit.workspace = true
 anyhow.workspace = true
 serde.workspace = true
@@ -380,15 +385,15 @@ gpui-pre-macros = { opt-level = 3 }
 
 [patch.crates-io]
 # gpui-query source toggle: `just gpui-query-local` / `just gpui-query-cratesio`.
-# DEFAULT (git): hmziqagent/gpui-query branch `gpui-pre-0.6` @1449ef2 =
-# v0.2.1 (wasm support, published) merged with the gpui-pre re-point; the
+# DEFAULT (git): hmziqagent/gpui-query branch `gpui-pre-0.6` @69a071f =
+# v0.3.0 (perf campaign, published) merged with the gpui-pre re-point; the
 # workspace root pins `gpui = { package = "gpui-pre", version = "0.3" }` — no published or upstream version targets gpui-pre yet, so this
-# patch carries the release fix AND re-points the crate onto registry gpui-pre
+# patch carries the 0.3.0 line AND re-points the crate onto registry gpui-pre
 # (keeping the graph at ONE gpui). Drop this patch once upstream ships
 # gpui-pre support on crates.io. The old 0.1.4-based fix (f84eac4) remains on
 # branch fix/release-appcontext as the Phase-1 rollback pin. Keep exactly ONE
 # line active — a duplicate gpui-query key is a TOML error.
 # >>> gpui-query-local >>>
-gpui-query = { git = "https://github.com/hmziqagent/gpui-query", rev = "1449ef2" }
+gpui-query = { git = "https://github.com/hmziqagent/gpui-query", rev = "69a071f" }
 # gpui-query = { path = "/Users/hmziq/fo/gpui-query/crates/gpui-query" }
 # <<< gpui-query-local <<<

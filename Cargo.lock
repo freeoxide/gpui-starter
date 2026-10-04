@@ -3063,7 +3063,7 @@ dependencies = [
  "log",
  "presser",
  "thiserror 2.0.18",
- "windows 0.62.2",
+ "windows 0.58.0",
 ]
 
 [[package]]
@@ -3811,8 +3811,8 @@ checksum = "829258540ea51bb9ea4a71686beffe5c99586901ba9f39944d06e4a180ab63fe"
 
 [[package]]
 name = "gpui-query"
-version = "0.2.1"
-source = "git+https://github.com/hmziqagent/gpui-query?rev=1449ef2#1449ef203af1192ff5dcd370c8db6227f83efd8d"
+version = "0.3.0"
+source = "git+https://github.com/hmziqagent/gpui-query?rev=69a071f#69a071fe0c86cb62a4978a967f74fecc98661f3d"
 dependencies = [
  "ahash 0.8.12",
  "gpui-pre",
@@ -7172,7 +7172,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "syn 2.0.118",
