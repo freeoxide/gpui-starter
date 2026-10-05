@@ -6,6 +6,11 @@ name: PR Builds
 # in release.yml — this file only produces throwaway test builds. The
 # artifact feature embeds assets that debug rust-embed would otherwise
 # read from this runner's fs (missing on the download machine).
+#
+# Master pushes reuse the same lanes to keep the rust-cache lines warm AND
+# republish the rolling `latest` release (see publish-latest): one release,
+# stable asset names, replaced on every push so it always holds the newest
+# master build — whether that arrived as a merge or a direct commit.
 on:
   pull_request:
     branches: [master]
@@ -14,6 +19,12 @@ on:
   # master-only, exactly one warm line per lane).
   push:
     branches: [master]
+
+# contents:write covers the publish-latest release upsert; PR runs never
+# publish (every publish step is push-gated), and fork PR tokens are
+# read-only regardless.
+permissions:
+  contents: write
 
 # Cancel a superseded run when the same PR is pushed to again mid-build —
 # these lanes are long enough that stale runs are pure waste.
@@ -99,7 +110,6 @@ jobs:
           tar -czf "stage/gpui-starter-${GITHUB_SHA:0:12}-linux-x86_64-debug.tar.gz" -C stage gpui-starter
 
       - name: Upload Linux artifact
-        if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v7
         with:
           name: gpui-starter-linux-x86_64-debug
@@ -156,7 +166,6 @@ jobs:
         run: cargo build --features artifact
 
       - name: Upload Windows artifact
-        if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v7
         with:
           name: gpui-starter-windows-x64-debug
@@ -200,7 +209,6 @@ jobs:
         run: cargo build --features artifact
 
       - name: Upload macOS artifact
-        if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v7
         with:
           name: gpui-starter-macos-arm64-debug
@@ -217,3 +225,56 @@ jobs:
             echo "Artifacts live on the run page, not on this job page: $RUN_URL"
             echo "Artifact: gpui-starter-macos-arm64-debug — bare arm64 binary (chmod +x before running; unsigned test build)."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------
+  # Rolling `latest` release: every master push replaces the assets of the
+  # single `latest` release, so it always holds the newest master build
+  # (merge or direct commit — both land as pushes). Stable asset names are
+  # what make replacement work: softprops swaps same-named files, while a
+  # sha-per-file name would only accumulate. The tag moves to the built
+  # commit first, so the release always points at what it ships.
+  # ---------------------------------------------------------------------
+  publish-latest:
+    name: Publish latest builds
+    if: github.event_name == 'push'
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: gpui-starter-*-debug
+          merge-multiple: true
+          path: ./artifacts
+
+      - name: Stage stable-named release files
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp artifacts/gpui-starter-*-linux-x86_64-debug.tar.gz \
+            release/gpui-starter-linux-x86_64-debug.tar.gz
+          cp artifacts/gpui-starter.exe \
+            release/gpui-starter-windows-x64-debug.exe
+          cp artifacts/gpui-starter \
+            release/gpui-starter-macos-arm64-debug
+
+      - name: Move the latest tag to this build
+        run: |
+          git tag -fa latest -m "Rolling latest master build" "${GITHUB_SHA}"
+          git push -f origin "refs/tags/latest"
+
+      - name: Upsert the latest release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: latest
+          name: Latest master builds
+          prerelease: true
+          body: |
+            Rolling build of master @ ${{ github.sha }}.
+            Assets are replaced on every push to master — always the newest build.
+          files: |
+            release/gpui-starter-linux-x86_64-debug.tar.gz
+            release/gpui-starter-windows-x64-debug.exe
+            release/gpui-starter-macos-arm64-debug
