@@ -126,12 +126,11 @@ artifact = ["rust-embed/debug-embed"]
 
 [dependencies]
 gpui.workspace = true
-# Version is a range (not `^0.1.4`) so the git override in [patch.crates-io]
-# (branch gpui-pre-0.6 = the v0.3.0 release line merged onto the gpui-pre swap)
-# actually satisfies this requirement and is applied. With a strict
-# `^0.1.4`-only pin Cargo can silently drop a future patch as
-# `[[patch.unused]]` and build the registry version regardless.
-gpui-query = { version = ">=0.1.4, <0.4.0", features = ["hook"] }
+# Version tracks the bridge's stamped crate version: the [patch.crates-io]
+# override below swaps the source, and cargo silently demotes a patch to
+# `[[patch.unused]]` when the pinned source's version doesn't satisfy this
+# requirement. Move both together — tests/qa_migration.rs guards the rev.
+gpui-query = { version = "0.3", features = ["hook"] }
 gpui-kit.workspace = true
 anyhow.workspace = true
 serde.workspace = true

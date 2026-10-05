@@ -233,6 +233,10 @@ fn gpui_form_pins_migrated_freeoxide_repo() {
         "gpui-form-collection has no counterpart in the migrated repo"
     );
     assert!(
+        manifest.contains("gpui-query = { version = \"0.3\", features = [\"hook\"] }"),
+        "the gpui-query requirement must keep matching the bridge's stamped version"
+    );
+    assert!(
         manifest.contains(
             "gpui-query = { git = \"https://github.com/hmziqagent/gpui-query\", rev = \"69a071f\" }"
         ),
