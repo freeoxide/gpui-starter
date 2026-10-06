@@ -87,9 +87,9 @@ impl Render for SettingsPage {
         let is_dark = self.dark_mode;
         let notifications_snapshot = self.notifications.clone();
         let app_config = app_state::config(cx);
-        let title = crate::i18n::localize("settings_title", None);
-        let dark_mode_label = crate::i18n::localize("settings_dark_mode", None);
-        let language_label = crate::i18n::localize("settings_language", None);
+        let title = crate::i18n::localize("settings_title");
+        let dark_mode_label = crate::i18n::localize("settings_dark_mode");
+        let language_label = crate::i18n::localize("settings_language");
 
         v_flex()
             .min_h_full()
@@ -142,7 +142,7 @@ impl Render for SettingsPage {
                                     .outline()
                                     .selected(locale.as_ref() == LOCALE_EN)
                                     .toggled(locale.as_ref() == LOCALE_EN)
-                                    .label(crate::i18n::localize("settings_language_english", None))
+                                    .label(crate::i18n::localize("settings_language_english"))
                                     .on_click(|_, _, cx| {
                                         app::set_locale(LOCALE_EN, cx);
                                     }),
@@ -154,7 +154,6 @@ impl Render for SettingsPage {
                                     .toggled(locale.as_ref() == LOCALE_ZH_CN)
                                     .label(crate::i18n::localize(
                                         "settings_language_simplified_chinese",
-                                        None,
                                     ))
                                     .on_click(|_, _, cx| {
                                         app::set_locale(LOCALE_ZH_CN, cx);

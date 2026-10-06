@@ -28,8 +28,8 @@ impl Render for HomePage {
         let first_run_pending = crate::first_run::is_pending(cx);
         let locale = crate::app::current_locale(cx);
         let notifications_enabled = crate::notifications::snapshot(cx).enabled_by_user;
-        let title = crate::i18n::localize("home_title", None);
-        let subtitle = crate::i18n::localize("home_subtitle", None);
+        let title = crate::i18n::localize("home_title");
+        let subtitle = crate::i18n::localize("home_subtitle");
 
         v_flex()
             .min_h_full()
@@ -55,7 +55,7 @@ impl Render for HomePage {
             .child(
                 Button::new("get-started")
                     .primary()
-                    .label(crate::i18n::localize("home_get_started", None))
+                    .label(crate::i18n::localize("home_get_started"))
                     .on_click(|_, _, _| {
                         tracing::info!("Get Started clicked");
                     }),
