@@ -82,9 +82,9 @@ Keep the subject line under 72 characters. Use the body for anything that needs 
 
 ### New Locale
 
-1. Create a directory under `i18n/` named after the locale code (e.g. `i18n/fr/`).
-2. Add a `.ftl` (Fluent) file inside it mirroring the structure of `i18n/en/gpui-starter.ftl`.
-3. Register the locale in the i18n setup within `src/i18n.rs`.
+1. Add a `locales/<code>.yml` file mirroring the keys of `locales/en.yml` (e.g. `locales/fr.yml`). The crate-root `rust_i18n::i18n!` macro in `src/lib.rs` embeds every file under `locales/` at compile time; there is no locale registry to edit.
+2. Add a locale constant in `src/app/locale.rs` (alongside `LOCALE_EN`, `LOCALE_ZH_CN`), add it to `KNOWN_LOCALES` in `src/state/config_validation.rs`, and extend the locale check in `AppConfig::normalized()` (`src/state/config_store.rs`); unknown locales are reset to English on load.
+3. Add the locale to the language menus; the settings and home pages enumerate the supported locales explicitly.
 
 ## Pull Request Process
 

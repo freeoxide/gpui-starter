@@ -4,11 +4,11 @@ GPUI Starter is a desktop application boilerplate built with the [GPUI](https://
 
 ## Dependency Foundations
 
-The UI foundation is [GPUI Kit](https://github.com/longbridge/gpui-kit) 0.7.0 from crates.io (`gpui-kit` + `gpui-component` + `gpui-kit-assets`), built on the `gpui-pre` 0.3.7 family — the crates.io snapshot of Zed's `gpui` (package renamed `gpui-pre`, lib name still `gpui`; kit 0.7 pins the whole snapshot family at `=0.3.7`). Every crate in the graph resolves to exactly ONE gpui copy and ONE kit copy; that single-copy discipline drives every override below. Supply-chain note: `gpui-pre` is published by the kit maintainer as a snapshot of `zed-industries/zed`, so the UI foundation depends on that publishing pipeline rather than on Zed's own crates.io releases (which stop at 0.2.x).
+The UI foundation is [GPUI Kit](https://github.com/longbridge/gpui-kit) 0.7.1 from crates.io (`gpui-kit` + `gpui-component` + `gpui-kit-assets`), built on the `gpui-pre` 0.3.8 family — the crates.io snapshot of Zed's `gpui` (package renamed `gpui-pre`, lib name still `gpui`; kit 0.7 pins the whole snapshot family at `=0.3.8`). Every crate in the graph resolves to exactly ONE gpui copy and ONE kit copy; that single-copy discipline drives every override below. Supply-chain note: `gpui-pre` is published by the kit maintainer as a snapshot of `zed-industries/zed`, so the UI foundation depends on that publishing pipeline rather than on Zed's own crates.io releases (which stop at 0.2.x).
 
 Two libraries are overridden because no upstream release targets this kit line yet. The rule is no vendoring (copying sources into this repo as path deps forks maintenance and defeats review/update); both overrides sit on top of a real remote pin and are deleted when upstream catches up:
 
-- **gpui-form** — pinned to the freeoxide fork @`f7e2fb0b`, the `sync/gpui-kit-0.7.0` migration branch HEAD (gpui-form 0.5.2 on `gpui-kit` 0.7.0 / `gpui-pre` `=0.3.7`). The fork carries the kit-0.7 migration because no stayhydated rev targets kit 0.7 and the stayhydated git pin drags a second `gpui-kit-assets` into the graph, which cargo's `links = "gpui-kit-default-icons"` one-copy rule rejects. The rev is merged into freeoxide `master`, so the git pin resolves as written; the temporary `[patch."https://github.com/freeoxide/gpui-form"]` table that bridged the pre-merge window by resolving from the sibling checkout `../gpui-form/crates/gpui-form` is deleted and re-locked (the run-1 vendor tree and the stayhydated patch table are likewise gone, and `tests/qa_migration.rs` fails if the patch table reappears). Satellites follow the migrated graph's single-copy registry lines: `koruma` 0.9 and `es-fluent` 0.16 from crates.io (`gpui-form-derive` emits consumer-resolved koruma code, so a second koruma copy would type that code against a different API), and the i18n service is ported to es-fluent 0.16's `localize_in_domain`, trading the retired 0.18 static registry's eager id check for a runtime id-string fallback.
+- **gpui-form** — pinned to the freeoxide fork @`710b524`, the freeoxide `master` HEAD where the fluent-to-rust-i18n migration landed (gpui-form 0.5.2 on `gpui-kit` 0.7.1 / `gpui-pre` `=0.3.8`). The fork carries the kit-0.7 migration because no stayhydated rev targets kit 0.7 and the stayhydated git pin drags a second `gpui-kit-assets` into the graph, which cargo's `links = "gpui-kit-default-icons"` one-copy rule rejects. The rev is merged into freeoxide `master`, so the git pin resolves as written; the temporary `[patch."https://github.com/freeoxide/gpui-form"]` table that bridged the pre-merge window by resolving from the sibling checkout `../gpui-form/crates/gpui-form` is deleted and re-locked (the run-1 vendor tree and the stayhydated patch table are likewise gone, and `tests/qa_migration.rs` fails if the patch table reappears). Satellites follow the fork's migrated graph: `koruma` 0.9 from crates.io with no fluent features (`gpui-form-derive` emits consumer-resolved koruma code, so a second koruma copy would type that code against a different API); the only `es-fluent-*` crates left in the lock are koruma-collection's non-optional build chain, and no app-facing es-fluent crate remains. The fork's migration also replaced the app's message stack: app-owned strings live in `locales/{en,zh-CN}.yml`, embedded at compile time by the crate-root `rust_i18n::i18n!` backend in `src/lib.rs` and read through the `crate::i18n::localize` facade (`src/services/i18n.rs`). rust-i18n 4 is the only i18n crate in the graph, and it is the same backend gpui-kit and gpui-form use; `app::set_locale` drives every translation set through the process-wide rust-i18n locale plus the `gpui_form::i18n` bridge, which also switches gpui-kit's component locale.
 - **gpui-query** — no published or upstream version targets gpui-pre, so a `[patch.crates-io]` override points the registry requirement (`0.3`, kept in lockstep with the bridge's stamped version) at our fork branch `gpui-pre-0.6` @`69a071f` on hmziqagent/gpui-query: published v0.3.0 (perf campaign) merged with the gpui-pre re-point, ONE root-manifest line swapped to `gpui = { package = "gpui-pre", version = "0.3" }` plus call-site fixes for the snapshot's infallible context methods. The branch is purely additive and upstreamable — drop the patch once gpui-query ships gpui-pre support on crates.io.
 
 `git revert 32bc8c4` was the Phase-2 swap's rollback before the kit-0.7 series landed on top (also restoring the Phase-1 `gpui-query` pin `f84eac4`, orphaned but still fetchable); rolling back the kit-0.7 migration means reverting its commit series, `6421c0d` through `HEAD`. Under gpui-form 0.5.2 the generated `<N>FormFields`/`<N>FormComponents` members use `{field}_{component}` names (`name_input`, not form 0.6's raw field names).
@@ -36,7 +36,7 @@ Every module lives under `src/`. Modules that depend on other modules are noted 
 | `tasks` | Background task registry with drain-on-shutdown. | `ids`, `time`, `capabilities` |
 | `connectivity` | Network connectivity probing. | `capabilities` |
 | `session` | Session tracking (start time, uptime). | `capabilities`, `time` |
-| `i18n` | Internationalization via `es-fluent` and `rust_i18n`. | — |
+| `i18n` | Internationalization: the `crate::i18n::localize` facade over the crate's rust-i18n backend (`locales/*.yml`). | — |
 | `logging` | Structured logging initialization and shutdown. | `paths` |
 | `paths` | Platform-aware directories for config, data, logs. | — |
 | `errors` | `AppError` enum and `AppErrorSeverity` classification. | — |
@@ -69,8 +69,8 @@ Every module lives under `src/`. Modules that depend on other modules are noted 
 3.  app_state::initialize(cx)                          -- loads persisted config from disk
 4.  logging::initialize(cx)                            -- sets up tracing subscriber
 5.  capabilities::initialize(cx)                       -- empty registry, populated below
-6.  i18n::init_i18n(...)                               -- es-fluent language selection
-7.  set_locale(&persisted.locale, cx)                  -- restores saved language
+6.  gpui_form::i18n::init(cx)                          -- installs the gpui-form i18n global (locale bridge)
+7.  set_locale(&locale_to_use, cx)                     -- persisted locale, or system-detected on first run
 8.  ThemeRegistry::watch_dir(themes/, ...)             -- hot-reloadable theme files
 9.  Theme scrollbar_show restore                       -- from persisted config
 10. cx.observe_global::<Theme>(...)                    -- auto-persist theme changes
@@ -264,10 +264,11 @@ Re-render
 
 ### Add a new locale
 
-1. Add translation files under the assets dir `i18n.toml` points at (`i18n/`).
-2. Add the locale code constant to `src/app/locale.rs` (alongside `LOCALE_EN`, `LOCALE_ZH_CN`).
-3. Update `AppConfig::normalized()` to validate against the new locale.
-4. Add an `es-fluent` language variant in `src/app/actions.rs` (`Languages` enum) and corresponding FTL files.
+1. Add `locales/<code>.yml` mirroring the keys of `locales/en.yml`. The crate-root `rust_i18n::i18n!` macro (`src/lib.rs`) embeds every file under `locales/` at compile time; there is no locale registry.
+2. Add the locale constant to `src/app/locale.rs` (alongside `LOCALE_EN`, `LOCALE_ZH_CN`), add it to `KNOWN_LOCALES` in `src/state/config_validation.rs`, and extend the locale check in `AppConfig::normalized()` (`src/state/config_store.rs`).
+3. Add the locale to the language menus; the settings and home pages enumerate the supported locales explicitly.
+
+Switching goes through `app::set_locale` (`src/app/locale.rs`): it sets the process-wide rust-i18n locale, forwards it through `gpui_form::i18n::change_locale` (which also switches gpui-kit's component locale), persists the choice, and refreshes windows.
 
 ## Key Patterns
 

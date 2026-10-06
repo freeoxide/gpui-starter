@@ -116,7 +116,7 @@ cargo run
 
 ### Internationalization
 
-- Fluent translations via `es-fluent`
+- Translations via `rust-i18n` (`locales/*.yml` message catalogs), the same backend gpui-kit and gpui-form use
 - English (`en`) and Chinese Simplified (`zh-CN`) locales
 
 ### Developer Experience
