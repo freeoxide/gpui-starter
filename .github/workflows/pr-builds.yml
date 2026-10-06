@@ -262,7 +262,11 @@ jobs:
 
       - name: Move the latest tag to this build
         run: |
-          git tag -fa latest -m "Rolling latest master build" "${GITHUB_SHA}"
+          # Runners have no git ident configured; tag creation hard-fails
+          # without one (release.yml sets the same identity for gh-pages).
+          git -c user.name="github-actions[bot]" \
+              -c user.email="github-actions[bot]@users.noreply.github.com" \
+            tag -fa latest -m "Rolling latest master build" "${GITHUB_SHA}"
           git push -f origin "refs/tags/latest"
 
       - name: Upsert the latest release
