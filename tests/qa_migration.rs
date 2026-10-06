@@ -1,4 +1,4 @@
-//! Kit 0.7 migration invariants the compiler cannot check: manifest pins,
+//! Kit 0.7.1 migration invariants the compiler cannot check: manifest pins,
 //! the single-kit lock graph (the round-1 links-conflict failure mode), the
 //! gpui-form re-pin to the migrated freeoxide repo, and the kit-facade
 //! import surface.
@@ -35,9 +35,9 @@ fn block_name(block: &str) -> &str {
 }
 
 /// Returns every `.rs` file the crate compiles or runs as a test target —
-/// the src/ tree, build.rs, and tests/*.rs — minus this file, whose own
-/// assertions spell the banned paths they check for. Sorted so failures name
-/// files stably.
+/// the src/ tree, build.rs when present, and tests/*.rs — minus this file,
+/// whose own assertions spell the banned paths they check for. Sorted so
+/// failures name files stably.
 fn app_sources() -> Vec<(String, String)> {
     let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let mut files = Vec::new();
@@ -59,10 +59,12 @@ fn app_sources() -> Vec<(String, String)> {
         }
     }
     let build = root.join("build.rs");
-    files.push((
-        build.display().to_string(),
-        std::fs::read_to_string(&build).expect("read build.rs"),
-    ));
+    if build.exists() {
+        files.push((
+            build.display().to_string(),
+            std::fs::read_to_string(&build).expect("read build.rs"),
+        ));
+    }
     let mut tests: Vec<_> = std::fs::read_dir(root.join("tests"))
         .unwrap_or_else(|e| panic!("read dir {}: {e}", root.join("tests").display()))
         .map(|e| e.unwrap().path())
@@ -104,12 +106,12 @@ fn manifest_declares_only_justified_kit_deps() {
     // gpui stays beside gpui-kit for one reason: the pinned gpui-form rev's
     // derives emit ::gpui::Entity/Window/Context into this crate.
     assert!(
-        manifest.contains("package = \"gpui-pre\", version = \"0.3.7\""),
-        "gpui (gpui-pre) must stay on the kit-0.7 snapshot"
+        manifest.contains("package = \"gpui-pre\", version = \"0.3.8\""),
+        "gpui (gpui-pre) must stay on the kit-0.7.1 snapshot"
     );
     assert!(
-        manifest.contains("\ngpui-kit = \"0.7.0\""),
-        "Cargo.toml must pin gpui-kit to 0.7.0"
+        manifest.contains("\ngpui-kit = \"0.7.1\""),
+        "Cargo.toml must pin gpui-kit to 0.7.1"
     );
     // The layer crates are reached through gpui-kit's own re-exports; the
     // anchor is line start so Cargo.toml's comment prose cannot trip this.
@@ -131,13 +133,13 @@ fn lock_graph_holds_one_kit_family() {
     let lock = repo_file("Cargo.lock");
 
     for (package, version) in [
-        ("gpui-kit", "0.7.0"),
-        ("gpui-component", "0.7.0"),
-        ("gpui-component-macros", "0.7.0"),
-        ("gpui-base", "0.7.0"),
-        ("gpui-kit-assets", "0.7.0"),
-        ("gpui-pre", "0.3.7"),
-        ("gpui-pre-platform", "0.3.7"),
+        ("gpui-kit", "0.7.1"),
+        ("gpui-component", "0.7.1"),
+        ("gpui-component-macros", "0.7.1"),
+        ("gpui-base", "0.7.1"),
+        ("gpui-kit-assets", "0.7.1"),
+        ("gpui-pre", "0.3.8"),
+        ("gpui-pre-platform", "0.3.8"),
     ] {
         assert_single_version(&lock, package, version);
     }
@@ -204,8 +206,8 @@ fn gpui_pre_snapshot_family_is_unified() {
             continue;
         }
         assert!(
-            block.contains("\nversion = \"0.3.7\""),
-            "{name} must sit on the unified 0.3.7 snapshot"
+            block.contains("\nversion = \"0.3.8\""),
+            "{name} must sit on the unified 0.3.8 snapshot"
         );
     }
 }
@@ -220,9 +222,9 @@ fn gpui_form_pins_migrated_freeoxide_repo() {
     assert!(
         manifest.contains(
             "gpui-form = { git = \"https://github.com/freeoxide/gpui-form\", \
-             rev = \"f7e2fb0b30c1285638f1a877489dc03ad084319a\" }"
+             rev = \"710b52439f0a4bb7756b6c15eff83c1340d2e157\" }"
         ),
-        "gpui-form must pin the freeoxide migration-branch HEAD byte-exact"
+        "gpui-form must pin the freeoxide fluent-to-rust-i18n merge byte-exact"
     );
     assert!(
         !manifest.contains("stayhydated"),
@@ -268,38 +270,86 @@ fn gpui_form_pins_migrated_freeoxide_repo() {
 #[test]
 fn satellites_stay_on_form_repo_registry_lines() {
     let lock = repo_file("Cargo.lock");
-    for (prefix, version) in [("koruma", "0.9.0"), ("es-fluent", "0.16.0")] {
-        let family: Vec<&str> = lock
-            .split("[[package]]")
-            .skip(1)
-            .filter(|block| {
-                let name = block_name(block);
-                name == prefix || name.starts_with(&format!("{prefix}-"))
-            })
-            .collect();
-        assert!(
-            family.len() >= 2,
-            "expected the {prefix} family in Cargo.lock, found {}",
-            family.len()
-        );
-        for block in &family {
+
+    let koruma: Vec<&str> = lock
+        .split("[[package]]")
+        .skip(1)
+        .filter(|block| {
             let name = block_name(block);
-            assert_eq!(
-                lock_blocks(&lock, name).len(),
-                1,
-                "{name} must exist as exactly one copy in Cargo.lock"
-            );
-            assert!(
-                block.contains(&format!("\nversion = \"{version}\"")),
-                "{name} must resolve to {version}"
-            );
-            assert!(
-                block
-                    .contains("source = \"registry+https://github.com/rust-lang/crates.io-index\""),
-                "{name} must resolve from the registry, not a git/path duplicate"
-            );
-        }
+            name == "koruma" || name.starts_with("koruma-")
+        })
+        .collect();
+    assert!(
+        koruma.len() >= 2,
+        "expected the koruma family in Cargo.lock, found {}",
+        koruma.len()
+    );
+    for block in &koruma {
+        let name = block_name(block);
+        assert_eq!(
+            lock_blocks(&lock, name).len(),
+            1,
+            "{name} must exist as exactly one copy in Cargo.lock"
+        );
+        assert!(
+            block.contains("\nversion = \"0.9.0\""),
+            "{name} must resolve to 0.9.0"
+        );
+        assert!(
+            block.contains("source = \"registry+https://github.com/rust-lang/crates.io-index\""),
+            "{name} must resolve from the registry, not a git/path duplicate"
+        );
     }
+
+    let own = lock_blocks(&lock, "gpui-starter");
+    assert_eq!(
+        own.len(),
+        1,
+        "expected one gpui-starter block in Cargo.lock"
+    );
+    assert!(
+        !own[0].contains("es-fluent"),
+        "gpui-starter must declare no es-fluent dependency; i18n runs on rust-i18n"
+    );
+
+    let mut es_fluent: Vec<&str> = lock
+        .split("[[package]]")
+        .skip(1)
+        .map(block_name)
+        .filter(|name| name.starts_with("es-fluent"))
+        .collect();
+    es_fluent.sort_unstable();
+    assert_eq!(
+        es_fluent,
+        ["es-fluent-build", "es-fluent-shared", "es-fluent-toml"],
+        "the app-facing es-fluent crates left with the rust-i18n migration; only \
+         koruma-collection 0.9.0's non-optional build chain legitimately remains"
+    );
+    for name in es_fluent {
+        let blocks = lock_blocks(&lock, name);
+        assert_eq!(
+            blocks.len(),
+            1,
+            "{name} must exist as exactly one copy in Cargo.lock"
+        );
+        assert!(
+            blocks[0]
+                .contains("source = \"registry+https://github.com/rust-lang/crates.io-index\""),
+            "{name} must resolve from the registry, not a git/path duplicate"
+        );
+    }
+
+    let i18n = lock_blocks(&lock, "rust-i18n");
+    assert_eq!(
+        i18n.len(),
+        1,
+        "expected exactly one rust-i18n in Cargo.lock — the app, gpui-kit, and \
+         the gpui-form bridge must share one backend"
+    );
+    assert!(
+        i18n[0].contains("\nversion = \"4."),
+        "rust-i18n must resolve to major 4, the line gpui-kit 0.7.1 builds against"
+    );
 }
 
 #[test]
@@ -320,7 +370,7 @@ fn gpui_form_resolves_from_freeoxide_git_unpatched() {
     );
     assert!(
         blocks[0].contains(
-            "source = \"git+https://github.com/freeoxide/gpui-form?rev=f7e2fb0b30c1285638f1a877489dc03ad084319a"
+            "source = \"git+https://github.com/freeoxide/gpui-form?rev=710b52439f0a4bb7756b6c15eff83c1340d2e157"
         ),
         "gpui-form must resolve from the freeoxide git source at the pinned rev"
     );
