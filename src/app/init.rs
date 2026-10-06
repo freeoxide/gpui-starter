@@ -120,12 +120,7 @@ pub fn init(cx: &mut App) {
         system_locale = %system_locale,
         "detected system locale"
     );
-    if let Err(err) = crate::i18n::init_i18n(<_ as Into<
-        es_fluent::unic_langid::LanguageIdentifier,
-    >>::into(crate::app::Languages::default()))
-    {
-        tracing::error!("i18n initialization failed: {err}, using fallback locale");
-    }
+    gpui_form::i18n::init(cx);
 
     let persisted = crate::app_state::config(cx);
     let locale_to_use = if persisted.locale.is_empty() {

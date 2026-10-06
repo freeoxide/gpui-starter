@@ -21,6 +21,10 @@
     clippy::redundant_closure_call
 )]
 
+// Must stay at the crate root: rust_i18n::t! (also emitted inside gpui-form
+// derive output) resolves crate::_rust_i18n_t! relative to this module.
+rust_i18n::i18n!("locales", fallback = "en");
+
 pub mod app;
 pub mod features;
 pub mod foundation;

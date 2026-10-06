@@ -1,44 +1,7 @@
-use std::collections::HashMap;
-use std::sync::OnceLock;
-
-use es_fluent::{FluentLocalizer as _, FluentMessage, FluentValue};
-use es_fluent_manager_embedded::EmbeddedI18n;
-
-es_fluent_manager_embedded::define_i18n_module!();
-
-static I18N: OnceLock<EmbeddedI18n> = OnceLock::new();
-
-#[derive(Debug, thiserror::Error)]
-pub enum I18nError {
-    #[error("i18n initialization failed: {0}")]
-    InitFailed(#[source] Box<dyn std::error::Error + Send + Sync>),
-}
-
-pub fn init_i18n(lang: es_fluent::unic_langid::LanguageIdentifier) -> Result<(), I18nError> {
-    EmbeddedI18n::try_new_with_language(lang)
-        .map_err(|e| I18nError::InitFailed(Box::new(e)))
-        .map(|i18n| {
-            let _ = I18N.set(i18n);
-        })
-}
-
-pub fn i18n() -> &'static EmbeddedI18n {
-    I18N.get_or_init(|| {
-        tracing::warn!("i18n not initialized, using fallback");
-        EmbeddedI18n::try_new().expect("embedded i18n fallback must succeed")
-    })
-}
-
-/// Localizes a message `id` from this crate's Fluent bundle; the embedded
-/// manager registers the bundle under the `CARGO_PKG_NAME` domain.
-pub fn localize<'a>(id: &'static str, args: Option<&HashMap<&str, FluentValue<'a>>>) -> String {
-    i18n()
-        .localize_in_domain(env!("CARGO_PKG_NAME"), id, args)
-        .unwrap_or_else(|| id.to_string())
-}
-
-pub fn localize_message<T: FluentMessage + ?Sized>(message: &T) -> String {
-    i18n().localize_message(message)
+/// Localizes an app-owned message key via this crate's rust-i18n backend
+/// (initialized in `src/lib.rs`); a missing key renders as the key itself.
+pub fn localize(id: &str) -> String {
+    rust_i18n::t!(id).to_string()
 }
 
 pub fn detect_system_locale() -> String {
