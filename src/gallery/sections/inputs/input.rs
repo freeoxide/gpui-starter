@@ -15,7 +15,7 @@ use regex::Regex;
 use crate::gallery::registry::GallerySection;
 
 use super::demo::{DemoToggle, demo_toolbar, section, size_dropdown};
-use super::tokens::TokenComposer;
+use super::tokens::{TokenComposer, TokenHover};
 
 const DEMO_TEXT: &str = "Hello 世界，this is GPUI Kit, this is a long text.";
 
@@ -53,6 +53,7 @@ pub struct InputSection {
     color_input: Entity<InputState>,
     content_type_inputs: Vec<ContentTypeInput>,
     tokens: Entity<TokenComposer>,
+    token_hover: Entity<TokenHover>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -297,6 +298,7 @@ impl InputSection {
             color_input,
             content_type_inputs,
             tokens: TokenComposer::new("input", false, window, cx),
+            token_hover: TokenHover::new(false, window, cx),
             _subscriptions: subscriptions,
         }
     }
@@ -642,10 +644,11 @@ impl Render for InputSection {
             .child(
                 section("input-tokens", "Atomic inline tokens")
                     .description(
-                        "References keep their identity through selection, deletion and undo. Copy returns the underlying text.",
+                        "References keep their identity through selection, deletion and undo. The plain field reports the token under the pointer.",
                     )
                     .w_full()
-                    .child(self.tokens.clone()),
+                    .child(self.tokens.clone())
+                    .child(self.token_hover.clone()),
             )
     }
 }

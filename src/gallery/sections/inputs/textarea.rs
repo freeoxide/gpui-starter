@@ -17,7 +17,7 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 use crate::gallery::registry::GallerySection;
 
 use super::demo::{DemoToggle, demo_toolbar, section, size_dropdown};
-use super::tokens::TokenComposer;
+use super::tokens::{TokenComposer, TokenHover};
 
 const DEMO_TEXT: &str = "\
 Hello 世界，this is GPUI Kit.
@@ -60,6 +60,7 @@ struct ComposerAttachment {
 
 pub struct TextareaSection {
     tokens: Entity<TokenComposer>,
+    token_hover: Entity<TokenHover>,
     textarea: Entity<TextareaState>,
     textarea_auto_grow: Entity<TextareaState>,
     textarea_no_wrap: Entity<TextareaState>,
@@ -144,6 +145,7 @@ impl TextareaSection {
 
         Self {
             tokens: TokenComposer::new("textarea", true, window, cx),
+            token_hover: TokenHover::new(true, window, cx),
             textarea,
             textarea_auto_grow,
             textarea_no_wrap,
@@ -372,10 +374,11 @@ impl Render for TextareaSection {
             .child(
                 section("textarea-tokens", "Atomic inline tokens")
                     .description(
-                        "References keep their identity through selection, deletion and undo. Copy returns the underlying text.",
+                        "References keep their identity through selection, deletion and undo. The plain field reports the token under the pointer.",
                     )
                     .w_full()
-                    .child(self.tokens.clone()),
+                    .child(self.tokens.clone())
+                    .child(self.token_hover.clone()),
             )
     }
 }
