@@ -4,7 +4,7 @@ use gpui_kit::component::{
     AxisExt, IndexPath, Sizable as _, Size,
     button::{Button, DropdownButton},
     checkbox::Checkbox,
-    color_picker::{ColorPicker, ColorPickerState},
+    color_picker::{ColorPickerState, ColorSelect},
     date_picker::{DatePicker, DatePickerState},
     form::{field, v_form},
     indigo_500,
@@ -202,7 +202,7 @@ impl Render for FormSection {
                     .child(
                         field()
                             .label("Theme color")
-                            .child(ColorPicker::new(&self.color_state).with_size(self.size)),
+                            .child(ColorSelect::new(&self.color_state).with_size(self.size)),
                     )
                     .child(
                         field()
