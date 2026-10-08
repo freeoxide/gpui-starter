@@ -4,7 +4,7 @@
 use std::rc::Rc;
 
 use gpui_kit::component::{
-    ActiveTheme as _, Colorize as _, IconName, Sizable as _,
+    ActiveTheme as _, Colorize as _, ElementExt, IconName, Sizable as _,
     button::Button,
     checkbox::Checkbox,
     h_flex,
@@ -221,21 +221,24 @@ impl BrushSection {
 
         div()
             .id("brush-canvas")
-            .size_full()
+            .w_full()
+            // The GroupBox content area auto-sizes, so a percentage height
+            // collapses to zero; the canvas needs an explicit frame.
+            .h(rems(24.))
             .bg(theme.background)
             .cursor_crosshair()
             .relative()
             .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
             .on_mouse_move(cx.listener(Self::handle_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
+            .on_prepaint(move |bounds, _window, cx| {
+                state_entity.update(cx, |state, _| {
+                    state.canvas_bounds = Some(bounds);
+                })
+            })
             .child(
                 canvas(
-                    move |bounds, _, cx| {
-                        // The published kit has no element on_prepaint hook,
-                        // so the canvas records its own resolved bounds here.
-                        state_entity.update(cx, |state, _| {
-                            state.canvas_bounds = Some(bounds);
-                        });
+                    move |bounds, _window, _cx| {
                         (
                             strokes_for_prepaint,
                             current_stroke_for_prepaint,
@@ -403,12 +406,7 @@ impl Render for BrushSection {
                         ),
                 ),
             )
-            .child(
-                section("brush-canvas-box", "Drawing Canvas")
-                    .child(self.render_canvas(cx))
-                    .flex_1()
-                    .min_h_0(),
-            )
+            .child(section("brush-canvas-box", "Drawing Canvas").child(self.render_canvas(cx)))
     }
 }
 
@@ -420,3 +418,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
         BrushSection::view(window, cx),
     ));
 }
+
+#[cfg(test)]
+#[path = "brush.test.rs"]
+mod brush_test;
