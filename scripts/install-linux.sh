@@ -32,16 +32,35 @@ find_asset() {
 }
 
 DESKTOP_SRC="$(find_asset "${APP_ID}.desktop")"
-ICON_SRC="$(find_asset "${ICON_NAME}.png")"
+
+# Full multi-size set (repo layout, or shipped inside the tarball as hicolor/
+# next to this script); fall back to the legacy single PNG otherwise.
+HICOLOR_SRC=""
+for p in "$SCRIPT_DIR/hicolor" "$SCRIPT_DIR/assets/app-icon/hicolor" "$SCRIPT_DIR/../assets/app-icon/hicolor"; do
+    if [ -d "$p" ]; then
+        HICOLOR_SRC="$p"
+        break
+    fi
+done
 
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}"
 APPS_DIR="${DATA_DIR}/applications"
-ICON_DIR="${DATA_DIR}/icons/hicolor/512x512/apps"
+ICON_BASE="${DATA_DIR}/icons/hicolor"
 
-mkdir -p "$APPS_DIR" "$ICON_DIR"
+mkdir -p "$APPS_DIR"
 
 install -Dm644 "$DESKTOP_SRC" "${APPS_DIR}/${APP_ID}.desktop"
-install -Dm644 "$ICON_SRC" "${ICON_DIR}/${ICON_NAME}.png"
+
+if [ -n "$HICOLOR_SRC" ]; then
+    while IFS= read -r f; do
+        install -Dm644 "$f" "$ICON_BASE/${f#"$HICOLOR_SRC"/}"
+    done < <(find "$HICOLOR_SRC" -type f)
+    ICON_INSTALLED="$ICON_BASE (full hicolor set)"
+else
+    ICON_SRC="$(find_asset "${ICON_NAME}.png")"
+    install -Dm644 "$ICON_SRC" "$ICON_BASE/512x512/apps/${ICON_NAME}.png"
+    ICON_INSTALLED="$ICON_BASE/512x512/apps/${ICON_NAME}.png"
+fi
 
 # Refresh the desktop + icon caches (best-effort; ignore if tools are absent).
 if command -v update-desktop-database >/dev/null 2>&1; then
@@ -54,5 +73,5 @@ if [ -n "$GTK_ICC" ]; then
 fi
 
 echo "Installed ${APP_ID}.desktop  -> ${APPS_DIR}"
-echo "Installed ${ICON_NAME}.png  -> ${ICON_DIR}"
+echo "Installed icons              -> ${ICON_INSTALLED}"
 echo "Done. The desktop should now group the window + notifications under 'GPUI Starter'."

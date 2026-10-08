@@ -17,18 +17,23 @@ BUILD_NUMBER="$(echo "$VERSION" | tr -d '.')"
 
 ARM_BIN="$ROOT_DIR/target/aarch64-apple-darwin/release/gpui-starter"
 X86_BIN="$ROOT_DIR/target/x86_64-apple-darwin/release/gpui-starter"
+ICON_SRC="$ROOT_DIR/assets/app-icon/gpui-starter.icns"
 for b in "$ARM_BIN" "$X86_BIN"; do
   [ -f "$b" ] || { echo "Error: expected build output not found: $b" >&2; exit 1; }
 done
+[ -f "$ICON_SRC" ] || { echo "Error: app icon not found: $ICON_SRC (generate it with scripts/gen-icons.sh)" >&2; exit 1; }
 
 # Stage each arch under its own dir so the three .app bundles don't collide;
 # the .app inside is always "GPUI Starter.app" (the name users see in the DMG).
 APP_DIR="$TARGET_DIR/dist/$ARCH/$APP_NAME.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
+RESOURCES_DIR="$CONTENTS_DIR/Resources"
 
 rm -rf "$APP_DIR"
-mkdir -p "$MACOS_DIR"
+mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+
+cp "$ICON_SRC" "$RESOURCES_DIR/gpui-starter.icns"
 
 # universal = fat Mach-O (arm64 + x86_64 slices, the default download); the
 # slim builds copy a single arch for users who want a smaller download.
@@ -58,6 +63,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
   <string>en</string>
   <key>CFBundleExecutable</key>
   <string>$APP_NAME</string>
+  <key>CFBundleIconFile</key>
+  <string>gpui-starter.icns</string>
   <key>CFBundleIdentifier</key>
   <string>$BUNDLE_ID</string>
   <key>CFBundleName</key>
