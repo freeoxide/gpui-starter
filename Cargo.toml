@@ -264,6 +264,27 @@ libc = "0.2"
 single-instance = "0.3.3"
 interprocess = "2.4.2"
 network-interface = "2.0.3"
+# Gallery editor highlighting: grammars for the sample languages (json rides
+# on tree-sitter-javascript). Wasm compiles without grammars — the editors
+# render plain there, matching the kit's own story app.
+gpui-kit = { workspace = true, features = [
+    "tree-sitter-astro",
+    "tree-sitter-c",
+    "tree-sitter-go",
+    "tree-sitter-html",
+    "tree-sitter-javascript",
+    "tree-sitter-kotlin",
+    "tree-sitter-lua",
+    "tree-sitter-markdown",
+    "tree-sitter-php",
+    "tree-sitter-python",
+    "tree-sitter-ruby",
+    "tree-sitter-rust",
+    "tree-sitter-sql",
+    "tree-sitter-svelte",
+    "tree-sitter-typescript",
+    "tree-sitter-zig",
+] }
 # Per-platform credential stores; a platform left without its store feature
 # silently falls back to keyring's per-entry mock (writes vanish, reads miss).
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native"] }

@@ -491,7 +491,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     sections.push(GallerySection::new(
         "editor-workspace",
         "Editor Workspace",
-        "A resizable split of a file tree and the editor it loads samples into, with gutter, wrap, whitespace, and scrolling options plus a go-to-line dialog. The status bar button shows the cursor position; selecting a file switches the editor's language. Syntax highlighting and fold markers need the crate's tree-sitter features, which this app does not enable.",
+        "A resizable split of a file tree and the editor it loads samples into, with gutter, wrap, whitespace, and scrolling options plus a go-to-line dialog. The status bar button shows the cursor position; selecting a file switches the editor's language. Syntax highlighting and fold markers come from the crate's tree-sitter grammars on native builds; the wasm target renders plain.",
         EditorWorkspaceSection::view(window, cx),
     ));
 }
