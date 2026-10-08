@@ -1,5 +1,6 @@
 use gpui_kit::component::{Selectable, button::Button};
 use gpui_kit::*;
+use gpui_query::core::QueryStatus;
 
 use super::dashboard::QueryDevToolsV2Page;
 
@@ -33,27 +34,41 @@ pub(super) fn sort_button(
 }
 
 pub(super) fn filter_button(
-    target: Option<&str>,
-    current: &Option<String>,
+    target: Option<QueryStatus>,
+    current: &Option<QueryStatus>,
     cx: &mut Context<QueryDevToolsV2Page>,
 ) -> Button {
-    let label = target.unwrap_or("All");
-    let active = match (current, target) {
-        (None, None) => true,
-        (Some(cur), Some(tgt)) => cur == tgt,
-        _ => false,
+    let active = *current == target;
+    let label = match target {
+        None => crate::i18n::localize("query_devtools_filter_all"),
+        Some(status) => status_label(status),
     };
-    let id = format!("v2-filter-{}", target.unwrap_or("all"));
-    let target_owned = target.map(|s| s.to_string());
+    let id = format!(
+        "v2-filter-{}",
+        target
+            .map(|status| format!("{status:?}"))
+            .unwrap_or_else(|| "all".to_string())
+    );
     let mut btn = Button::new(id).outline().label(label).toggled(active);
     if active {
         btn = btn.selected(true);
     }
     btn.on_click(cx.listener(move |this, _, _, _cx| {
-        this.status_filter = target_owned.clone();
+        this.status_filter = target;
         this.expanded_key = None;
         _cx.notify();
     }))
+}
+
+pub(super) fn status_label(status: QueryStatus) -> String {
+    let key = match status {
+        QueryStatus::Idle => "query_devtools_status_idle",
+        QueryStatus::LoadingEmpty | QueryStatus::LoadingWithData => "query_devtools_status_loading",
+        QueryStatus::Success => "query_devtools_status_success",
+        QueryStatus::Failure => "query_devtools_status_failure",
+        QueryStatus::Cancelled => "query_devtools_status_cancelled",
+    };
+    crate::i18n::localize(key)
 }
 
 pub(super) fn format_cache_age(age_ms: Option<u64>) -> String {

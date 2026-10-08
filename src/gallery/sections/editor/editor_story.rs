@@ -211,8 +211,9 @@ impl Render for EditorSection {
                     )
                     .child(self.render_toolbar(cx)),
             )
-            // No tree-sitter features are enabled, so no highlighter exists and
-            // fold arrows never appear; gutter, decorations, and font controls are unaffected.
+            // Native builds highlight via the kit's tree-sitter grammars; the
+            // wasm target compiles without them and renders plain. Gutter,
+            // decorations, and font controls are unaffected either way.
             .child(div().min_h_0().h(rems(30.)).child(if self.active_tab == 0 {
                 Editor::new(&self.editor_state)
                     .when_some(self.font_family.clone(), |this, family| {
@@ -239,7 +240,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     sections.push(GallerySection::new(
         "editor",
         "Editor",
-        "A code editor with gutter, readonly state, and font controls, plus a decorations tab showing styled text ranges and tracked fill and frame ranges. Syntax highlighting and folding need the crate's tree-sitter features, which this app does not enable, so the buffers render plain.",
+        "A code editor with gutter, readonly state, and font controls, plus a decorations tab showing styled text ranges and tracked fill and frame ranges. Syntax highlighting and folding come from the crate's tree-sitter grammars on native builds; the wasm target compiles without them and renders plain.",
         EditorSection::view(window, cx),
     ));
 }

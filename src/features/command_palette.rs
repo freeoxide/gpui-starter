@@ -146,7 +146,7 @@ impl Render for Launcher {
                     },
                 )
             }))
-            .placeholder("Search pages and commands…")
+            .placeholder(crate::i18n::localize("palette_placeholder"))
             .filterable(false)
             .empty(|_: &CommandState, _: &mut Window, cx: &mut App| render_no_results(cx))
             .footer(move |state: &CommandState, _: &mut Window, cx: &mut App| {
@@ -179,7 +179,7 @@ impl Render for Launcher {
 
         let surface = div()
             .id("launcher-surface")
-            .a11y(Role::Dialog, "Command palette")
+            .a11y(Role::Dialog, crate::i18n::localize("palette_dialog"))
             .size_full()
             .child(command);
 
@@ -233,9 +233,10 @@ fn render_row(icon: IconName, title: SharedString, subtitle: SharedString, cx: &
 }
 
 fn render_no_results(cx: &App) -> Stateful<Div> {
+    let label = crate::i18n::localize("palette_no_results");
     div()
         .id("launcher-no-results")
-        .a11y(Role::Paragraph, "No results")
+        .a11y(Role::Paragraph, label.clone())
         .px_4()
         .py_8()
         .w_full()
@@ -244,7 +245,7 @@ fn render_no_results(cx: &App) -> Stateful<Div> {
         .justify_center()
         .text_sm()
         .text_color(cx.theme().muted_foreground)
-        .child("No results")
+        .child(label)
 }
 
 /// Palette footer: a live-region status announcing the selection and result
@@ -252,16 +253,23 @@ fn render_no_results(cx: &App) -> Stateful<Div> {
 fn render_footer(state: &CommandState, titles: &[SharedString], cx: &App) -> Div {
     let count = state.matched_count();
     let status_text = if count > 0 {
-        format!("{count} results")
+        format!("{count} {}", crate::i18n::localize("palette_results"))
     } else {
-        "No results".to_string()
+        crate::i18n::localize("palette_no_results")
     };
     // The live-region label must change only when the selection or the
     // filtered set changes, or every keystroke would be announced.
     let status_label = match state.selected_index() {
         Some(path) => titles
             .get(path.row)
-            .map(|title| format!("{title}, {} of {}", path.row + 1, count))
+            .map(|title| {
+                format!(
+                    "{title}, {} {} {}",
+                    path.row + 1,
+                    crate::i18n::localize("palette_of"),
+                    count
+                )
+            })
             .unwrap_or_else(|| status_text.clone()),
         None => status_text.clone(),
     };
@@ -287,12 +295,18 @@ fn render_footer(state: &CommandState, titles: &[SharedString], cx: &App) -> Div
                 .id("launcher-hints")
                 .a11y(
                     Role::Paragraph,
-                    "Keyboard: up and down navigate, Enter opens, Escape closes",
+                    crate::i18n::localize("palette_keyboard_help"),
                 )
                 .gap_4()
-                .child("↑↓  navigate")
-                .child("↵  open")
-                .child("esc  close"),
+                .child(format!(
+                    "↑↓  {}",
+                    crate::i18n::localize("palette_hint_navigate")
+                ))
+                .child(format!("↵  {}", crate::i18n::localize("palette_hint_open")))
+                .child(format!(
+                    "esc  {}",
+                    crate::i18n::localize("palette_hint_close")
+                )),
         )
 }
 
@@ -462,7 +476,7 @@ pub fn open_launcher(cx: &mut App) {
                 window.activate_window();
                 // WindowOptions has no title field; this is what names both
                 // the WM window and the a11y root node.
-                window.set_window_title("Command Palette");
+                window.set_window_title(&crate::i18n::localize("palette_window_title"));
             })
             .ok();
 

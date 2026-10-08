@@ -23,10 +23,7 @@ const QUIT_MENU_ID: &str = "gpui-starter-quit";
 /// One row of the tray menu, kept as data so the item set stays testable
 /// without building OS menu handles.
 enum MenuItemSpec {
-    Action {
-        id: &'static str,
-        label: &'static str,
-    },
+    Action { id: &'static str, label: String },
     Separator,
 }
 
@@ -34,16 +31,16 @@ fn menu_items() -> Vec<MenuItemSpec> {
     vec![
         MenuItemSpec::Action {
             id: SHOW_MENU_ID,
-            label: "Show Window",
+            label: crate::i18n::localize("tray_show_window"),
         },
         MenuItemSpec::Action {
             id: SETTINGS_MENU_ID,
-            label: "Open Settings",
+            label: crate::i18n::localize("tray_open_settings"),
         },
         MenuItemSpec::Separator,
         MenuItemSpec::Action {
             id: QUIT_MENU_ID,
-            label: "Quit",
+            label: crate::i18n::localize("tray_quit"),
         },
     ]
 }

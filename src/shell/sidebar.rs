@@ -31,6 +31,27 @@ impl Page {
         }
     }
 
+    /// Catalog key for the localized display title; [`title`](Self::title)
+    /// stays the English label for logs and not-yet-localized surfaces.
+    pub const fn title_key(self) -> &'static str {
+        match self {
+            Page::Home => "nav_home",
+            Page::Form => "nav_form",
+            Page::Settings => "nav_settings",
+            Page::Notifications => "nav_notifications",
+            Page::Diagnostics => "nav_diagnostics",
+            Page::QueryPlayground => "nav_query_playground",
+            Page::QueryDevToolsV2 => "nav_query_devtools_v2",
+            Page::ErrorPlayground => "nav_error_playground",
+            Page::About => "nav_about",
+            Page::Gallery => "nav_gallery",
+        }
+    }
+
+    pub fn localized_title(&self) -> String {
+        crate::i18n::localize(self.title_key())
+    }
+
     /// Deep-link host segment; the single source of truth for the `Page` ↔
     /// host mapping (exhaustive match forces updates on new variants).
     pub const fn host(self) -> &'static str {

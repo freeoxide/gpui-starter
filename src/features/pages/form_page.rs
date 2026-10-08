@@ -1,4 +1,3 @@
-use es_fluent::EsFluentVariants;
 use gpui_form::GpuiForm;
 use gpui_kit::component::{
     ActiveTheme as _, WindowExt as _,
@@ -10,7 +9,7 @@ use gpui_kit::component::{
     v_flex,
 };
 use gpui_kit::{prelude::*, *};
-use koruma::{Koruma, KorumaAllFluent};
+use koruma::Koruma;
 use koruma_collection::{
     collection::NonEmptyValidation,
     format::{EmailValidation, PhoneNumberValidation, UrlValidation},
@@ -18,8 +17,7 @@ use koruma_collection::{
 
 use crate::accessibility::A11yExt as _;
 
-#[derive(Clone, Debug, Default, EsFluentVariants, GpuiForm, Koruma, KorumaAllFluent)]
-#[fluent_variants(keys = ["description", "label"])]
+#[derive(Clone, Debug, Default, GpuiForm, Koruma)]
 #[gpui_form(koruma(fluent))]
 pub struct RegistrationForm {
     #[gpui_form(component(input))]
@@ -74,6 +72,33 @@ impl FormField {
             FormField::Website => holder.website = value,
         }
     }
+
+    fn label_key(self) -> &'static str {
+        match self {
+            FormField::Name => RegistrationFormFormValueHolder::NAME_LABEL_KEY,
+            FormField::Email => RegistrationFormFormValueHolder::EMAIL_LABEL_KEY,
+            FormField::Password => RegistrationFormFormValueHolder::PASSWORD_LABEL_KEY,
+            FormField::Phone => RegistrationFormFormValueHolder::PHONE_LABEL_KEY,
+            FormField::Website => RegistrationFormFormValueHolder::WEBSITE_LABEL_KEY,
+        }
+    }
+
+    fn description_key(self) -> &'static str {
+        match self {
+            FormField::Name => "registration_form.name_description",
+            FormField::Email => "registration_form.email_description",
+            FormField::Password => "registration_form.password_description",
+            FormField::Phone => "registration_form.phone_description",
+            FormField::Website => "registration_form.website_description",
+        }
+    }
+}
+
+fn field_error_keys<E>(
+    errs: &[E],
+    key_of: impl Fn(&E) -> &'static str,
+) -> Option<Vec<&'static str>> {
+    (!errs.is_empty()).then(|| errs.iter().map(key_of).collect())
 }
 
 pub struct FormPage {
@@ -85,8 +110,9 @@ pub struct FormPage {
     /// True when `current_data` has changed since the cached validation was
     /// (re)computed. Gates `validate()` so it runs at most once per edit.
     dirty: bool,
-    /// Per-field localized error strings, recomputed only when `dirty && touched`.
-    cached_errors: [Option<String>; 5],
+    /// Per-field error catalog keys, recomputed only when `dirty && touched`;
+    /// rendering resolves them per frame so locale switches stay live.
+    cached_errors: [Option<Vec<&'static str>>; 5],
     _subscriptions: Vec<Subscription>,
 }
 
@@ -177,58 +203,66 @@ impl FormPage {
             .update(cx, |s, cx| s.set_value("", window, cx));
     }
 
-    /// Returns the cached localized error string for `field` (rebuilt only when
-    /// the page is dirty and touched — see `recompute_validation`).
+    /// Returns the localized error text for `field`, resolved from the cached
+    /// keys on every call (rebuilt only when dirty and touched).
     fn error_for_field(&self, field: FormField) -> Option<String> {
-        self.cached_errors[field as usize].clone()
+        self.cached_errors[field as usize].as_ref().map(|keys| {
+            keys.iter()
+                .map(|k| crate::i18n::localize(k))
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
     }
 
     /// Recomputes `cached_errors` from `current_data.validate()` and clears the
     /// dirty flag; called from `render` (when dirty && touched) and on submit.
     fn recompute_validation(&mut self) {
         if let Some(e) = self.current_data.validate().err() {
-            let to_err = |msgs: Vec<String>| {
-                if msgs.is_empty() {
-                    None
-                } else {
-                    Some(msgs.join("\n"))
-                }
-            };
-            self.cached_errors[FormField::Name as usize] = to_err(
-                e.name()
-                    .all()
-                    .into_iter()
-                    .map(|m| crate::i18n::localize_message(&m))
-                    .collect::<Vec<String>>(),
-            );
-            self.cached_errors[FormField::Email as usize] = to_err(
-                e.email()
-                    .all()
-                    .into_iter()
-                    .map(|m| crate::i18n::localize_message(&m))
-                    .collect::<Vec<String>>(),
-            );
-            self.cached_errors[FormField::Password as usize] = to_err(
-                e.password()
-                    .all()
-                    .into_iter()
-                    .map(|m| crate::i18n::localize_message(&m))
-                    .collect::<Vec<String>>(),
-            );
-            self.cached_errors[FormField::Phone as usize] = to_err(
-                e.phone()
-                    .all()
-                    .into_iter()
-                    .map(|m| crate::i18n::localize_message(&m))
-                    .collect::<Vec<String>>(),
-            );
-            self.cached_errors[FormField::Website as usize] = to_err(
-                e.website()
-                    .all()
-                    .into_iter()
-                    .map(|m| crate::i18n::localize_message(&m))
-                    .collect::<Vec<String>>(),
-            );
+            self.cached_errors[FormField::Name as usize] =
+                field_error_keys(&e.name().all(), |v| match v {
+                    RegistrationFormFormValueHolderNameKorumaValidator::RequiredValidation(_) => {
+                        "validation.required"
+                    }
+                    RegistrationFormFormValueHolderNameKorumaValidator::NonEmptyValidation(_) => {
+                        "validation.non_empty"
+                    }
+                });
+            self.cached_errors[FormField::Email as usize] =
+                field_error_keys(&e.email().all(), |v| match v {
+                    RegistrationFormFormValueHolderEmailKorumaValidator::RequiredValidation(_) => {
+                        "validation.required"
+                    }
+                    RegistrationFormFormValueHolderEmailKorumaValidator::EmailValidation(_) => {
+                        "validation.email"
+                    }
+                });
+            self.cached_errors[FormField::Password as usize] =
+                field_error_keys(&e.password().all(), |v| match v {
+                    RegistrationFormFormValueHolderPasswordKorumaValidator::RequiredValidation(
+                        _,
+                    ) => "validation.required",
+                    RegistrationFormFormValueHolderPasswordKorumaValidator::NonEmptyValidation(
+                        _,
+                    ) => "validation.non_empty",
+                });
+            self.cached_errors[FormField::Phone as usize] =
+                field_error_keys(&e.phone().all(), |v| match v {
+                    RegistrationFormFormValueHolderPhoneKorumaValidator::RequiredValidation(_) => {
+                        "validation.required"
+                    }
+                    RegistrationFormFormValueHolderPhoneKorumaValidator::PhoneNumberValidation(
+                        _,
+                    ) => "validation.phone_number",
+                });
+            self.cached_errors[FormField::Website as usize] =
+                field_error_keys(&e.website().all(), |v| match v {
+                    RegistrationFormFormValueHolderWebsiteKorumaValidator::RequiredValidation(
+                        _,
+                    ) => "validation.required",
+                    RegistrationFormFormValueHolderWebsiteKorumaValidator::UrlValidation(_) => {
+                        "validation.url"
+                    }
+                });
         } else {
             self.cached_errors = Default::default();
         }
@@ -238,30 +272,16 @@ impl FormPage {
     /// Renders a single form `field()` row, keyed on the enum so the label,
     /// description, required flag, input, and cached error all stay in sync.
     fn render_field(&self, field_kind: FormField, danger: Hsla) -> Field {
-        let label = match field_kind {
-            FormField::Name => RegistrationFormLabelVariants::Name,
-            FormField::Email => RegistrationFormLabelVariants::Email,
-            FormField::Password => RegistrationFormLabelVariants::Password,
-            FormField::Phone => RegistrationFormLabelVariants::Phone,
-            FormField::Website => RegistrationFormLabelVariants::Website,
-        };
-        let description = match field_kind {
-            FormField::Name => RegistrationFormDescriptionVariants::Name,
-            FormField::Email => RegistrationFormDescriptionVariants::Email,
-            FormField::Password => RegistrationFormDescriptionVariants::Password,
-            FormField::Phone => RegistrationFormDescriptionVariants::Phone,
-            FormField::Website => RegistrationFormDescriptionVariants::Website,
-        };
         let required = !matches!(field_kind, FormField::Website);
         let error = self.error_for_field(field_kind);
-        let description_text = crate::i18n::localize_message(&description);
-        let label_text = crate::i18n::localize_message(&label);
+        let description_text = crate::i18n::localize(field_kind.description_key());
+        let label_text = crate::i18n::localize(field_kind.label_key());
         let error_id: ElementId =
             ElementId::Name(SharedString::from(format!("form-error-{:?}", field_kind)));
         let input = self.field_input(field_kind);
 
         field()
-            .label(crate::i18n::localize_message(&label))
+            .label(label_text.clone())
             .required(required)
             .description_fn(move |_, _| {
                 div()
@@ -292,8 +312,8 @@ impl Render for FormPage {
         }
 
         let danger = cx.theme().danger;
-        let title = crate::i18n::localize("form_page_title", None);
-        let subtitle = crate::i18n::localize("form_page_subtitle", None);
+        let title = crate::i18n::localize("form_page_title");
+        let subtitle = crate::i18n::localize("form_page_subtitle");
 
         v_flex()
             .min_h_full()
@@ -317,7 +337,7 @@ impl Render for FormPage {
                     .child(subtitle),
             )
             .when(self.submitted, |this| {
-                let success = crate::i18n::localize("form_page_success", None);
+                let success = crate::i18n::localize("form_page_success");
                 this.child(
                     div()
                         .id("form-success")
@@ -343,7 +363,7 @@ impl Render for FormPage {
                     .child(
                         field().label_indent(false).child(
                             Checkbox::new("agree-terms")
-                                .label(crate::i18n::localize("form_agree_terms", None))
+                                .label(crate::i18n::localize("form_agree_terms"))
                                 .checked(self.agree_terms)
                                 .on_click(cx.listener(|this, checked: &bool, _, cx| {
                                     this.agree_terms = *checked;
@@ -359,7 +379,7 @@ impl Render for FormPage {
                                 .child(
                                     Button::new("submit")
                                         .primary()
-                                        .label(crate::i18n::localize("form_submit", None))
+                                        .label(crate::i18n::localize("form_submit"))
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.touched = true;
                                             this.recompute_validation();
@@ -370,7 +390,6 @@ impl Render for FormPage {
                                                 window.push_notification(
                                                     crate::i18n::localize(
                                                         "form_notification_submitted",
-                                                        None,
                                                     ),
                                                     cx,
                                                 );
@@ -378,7 +397,6 @@ impl Render for FormPage {
                                                 window.push_notification(
                                                     crate::i18n::localize(
                                                         "form_notification_agree_terms",
-                                                        None,
                                                     ),
                                                     cx,
                                                 );
@@ -386,7 +404,6 @@ impl Render for FormPage {
                                                 window.push_notification(
                                                     crate::i18n::localize(
                                                         "form_notification_fix_errors",
-                                                        None,
                                                     ),
                                                     cx,
                                                 );
@@ -397,7 +414,7 @@ impl Render for FormPage {
                                 .child(
                                     Button::new("reset")
                                         .ghost()
-                                        .label(crate::i18n::localize("form_reset", None))
+                                        .label(crate::i18n::localize("form_reset"))
                                         .on_click(cx.listener(|this, _, window, cx| {
                                             this.on_reset(window, cx);
                                         })),

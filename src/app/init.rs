@@ -120,12 +120,7 @@ pub fn init(cx: &mut App) {
         system_locale = %system_locale,
         "detected system locale"
     );
-    if let Err(err) = crate::i18n::init_i18n(<_ as Into<
-        es_fluent::unic_langid::LanguageIdentifier,
-    >>::into(crate::app::Languages::default()))
-    {
-        tracing::error!("i18n initialization failed: {err}, using fallback locale");
-    }
+    gpui_form::i18n::init(cx);
 
     let persisted = crate::app_state::config(cx);
     let locale_to_use = if persisted.locale.is_empty() {
@@ -377,10 +372,16 @@ pub fn init(cx: &mut App) {
                             window.open_alert_dialog(cx, |alert, _, _| {
                                 // env!, not a literal: must track Cargo.toml
                                 // and features/pages/about.rs.
-                                alert.title("About").description(markdown(format!(
-                                    "GPUI Starter\n\nVersion {}\n\nA boilerplate for GPUI desktop apps.",
-                                    env!("CARGO_PKG_VERSION")
-                                )))
+                                alert
+                                    .title(crate::i18n::localize("about_title"))
+                                    .description(markdown(format!(
+                                        "GPUI Starter\n\n{}\n\n{}",
+                                        crate::i18n::localize_with_args(
+                                            "about_version",
+                                            &[("version", env!("CARGO_PKG_VERSION"))]
+                                        ),
+                                        crate::i18n::localize("about_tagline")
+                                    )))
                             });
                         });
                     })

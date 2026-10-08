@@ -7,7 +7,7 @@ use crate::{
     logging, notifications, secure_storage, session, shortcuts, storage, telemetry, undo_stack,
 };
 
-use super::row;
+use super::{capability_row, row};
 
 pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
     let lifecycle = cx
@@ -29,6 +29,7 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
     let latest_error = error_surface::latest(cx);
     let crash_snap = crash_report::snapshot(cx);
 
+    let none_label = crate::i18n::localize("diagnostics_none");
     let command_registry = commands::registry();
     let mut command_titles = Vec::with_capacity(command_registry.len());
     let mut command_states = Vec::with_capacity(command_registry.len());
@@ -38,7 +39,7 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
         let reason = availability
             .disabled_reason
             .map(|value| value.to_string())
-            .unwrap_or_else(|| "-".to_string());
+            .unwrap_or_else(|| crate::i18n::localize("diagnostics_no_reason"));
         command_states.push(format!(
             "{}: enabled={} reason={}",
             command.title, availability.enabled, reason
@@ -51,246 +52,287 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
         .past
         .last()
         .map(|entry| (entry.label.clone(), entry.created_at.to_rfc3339()))
-        .unwrap_or_else(|| ("None".to_string(), "None".to_string()));
+        .unwrap_or_else(|| (none_label.clone(), none_label.clone()));
 
-    let lifecycle_label = match lifecycle.stage {
-        LifecycleStage::Starting => "Starting",
-        LifecycleStage::Running => "Running",
-        LifecycleStage::ShuttingDown => "ShuttingDown",
-        LifecycleStage::Crashed => "Crashed",
+    let lifecycle_label = crate::i18n::localize(match lifecycle.stage {
+        LifecycleStage::Starting => "diagnostics_lifecycle_starting",
+        LifecycleStage::Running => "diagnostics_lifecycle_running",
+        LifecycleStage::ShuttingDown => "diagnostics_lifecycle_shutting_down",
+        LifecycleStage::Crashed => "diagnostics_lifecycle_crashed",
+    });
+    let permission_label = match &notifications.permission {
+        notifications::NotificationPermissionState::Unknown => {
+            crate::i18n::localize("diagnostics_permission_unknown")
+        }
+        notifications::NotificationPermissionState::Unsupported => {
+            crate::i18n::localize("diagnostics_permission_unsupported")
+        }
+        notifications::NotificationPermissionState::Unavailable(reason) => format!(
+            "{}: {reason}",
+            crate::i18n::localize("diagnostics_permission_unavailable")
+        ),
+        notifications::NotificationPermissionState::NotDetermined => {
+            crate::i18n::localize("diagnostics_permission_not_determined")
+        }
+        notifications::NotificationPermissionState::Denied => {
+            crate::i18n::localize("diagnostics_permission_denied")
+        }
+        notifications::NotificationPermissionState::Authorized => {
+            crate::i18n::localize("diagnostics_permission_authorized")
+        }
     };
     let lifecycle_panic_summary =
-        crate::lifecycle::last_panic_summary().unwrap_or_else(|| "None".to_string());
+        crate::lifecycle::last_panic_summary().unwrap_or(none_label.clone());
 
     let mut rows: Vec<Stateful<Div>> = vec![
-        row("App", env!("CARGO_PKG_NAME")),
-        row("Version", env!("CARGO_PKG_VERSION")),
-        row("Lifecycle", lifecycle_label),
+        row("diagnostics_app", env!("CARGO_PKG_NAME")),
+        row("diagnostics_version", env!("CARGO_PKG_VERSION")),
+        row("diagnostics_lifecycle", &lifecycle_label),
         row(
-            "Lifecycle Startup Step",
-            lifecycle.startup_step.as_deref().unwrap_or("None"),
+            "diagnostics_lifecycle_startup_step",
+            lifecycle
+                .startup_step
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ),
         row(
-            "Lifecycle Shutdown Step",
-            lifecycle.shutdown_step.as_deref().unwrap_or("None"),
+            "diagnostics_lifecycle_shutdown_step",
+            lifecycle
+                .shutdown_step
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ),
         row(
-            "Lifecycle Startup Error",
-            lifecycle.last_startup_error.as_deref().unwrap_or("None"),
+            "diagnostics_lifecycle_startup_error",
+            lifecycle
+                .last_startup_error
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ),
         row(
-            "Lifecycle Shutdown Error",
-            lifecycle.last_shutdown_error.as_deref().unwrap_or("None"),
+            "diagnostics_lifecycle_shutdown_error",
+            lifecycle
+                .last_shutdown_error
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ),
-        row("Lifecycle Panic Summary", &lifecycle_panic_summary),
         row(
-            "Notification Backend",
+            "diagnostics_lifecycle_panic_summary",
+            &lifecycle_panic_summary,
+        ),
+        row(
+            "diagnostics_notification_backend",
             &notifications.active_backend.to_string(),
         ),
+        row("diagnostics_notification_permission", &permission_label),
         row(
-            "Notification Permission",
-            notifications.permission.label().as_ref(),
+            "diagnostics_notification_degraded",
+            notifications
+                .degraded_reason
+                .as_deref()
+                .unwrap_or(&yes_no(false)),
         ),
         row(
-            "Notification Degraded",
-            notifications.degraded_reason.as_deref().unwrap_or("No"),
-        ),
-        row("Connectivity", &format!("{:?}", connectivity.state)),
-        row("Connectivity Probe URL", &connectivity.probe_url),
-        row(
-            "Connectivity Last Error",
-            connectivity.last_error.as_deref().unwrap_or("None"),
+            "diagnostics_connectivity",
+            &format!("{:?}", connectivity.state),
         ),
         row(
-            "Secure Storage Available",
-            if secure_storage.available {
-                "Yes"
-            } else {
-                "No"
-            },
+            "diagnostics_connectivity_probe_url",
+            &connectivity.probe_url,
         ),
         row(
-            "Secure Storage Error",
-            secure_storage.last_error.as_deref().unwrap_or("None"),
-        ),
-        row("Session", &format!("{:?}", session.state)),
-        row("Commands", &command_registry.len().to_string()),
-        row("Command Titles", &command_titles),
-        row("Command Availability", &command_states),
-        row(
-            "First Run Pending",
-            if crate::first_run::is_pending(cx) {
-                "Yes"
-            } else {
-                "No"
-            },
+            "diagnostics_connectivity_last_error",
+            connectivity
+                .last_error
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ),
         row(
-            "Logging Enabled",
-            if logging.enabled { "Yes" } else { "No" },
+            "diagnostics_secure_storage_available",
+            &yes_no(secure_storage.available),
         ),
         row(
-            "Logging Guard Active",
-            if logging.has_guard { "Yes" } else { "No" },
+            "diagnostics_secure_storage_error",
+            secure_storage
+                .last_error
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
+        ),
+        row("diagnostics_session", &format!("{:?}", session.state)),
+        row("diagnostics_commands", &command_registry.len().to_string()),
+        row("diagnostics_command_titles", &command_titles),
+        row("diagnostics_command_availability", &command_states),
+        row(
+            "diagnostics_first_run_pending",
+            &yes_no(crate::first_run::is_pending(cx)),
+        ),
+        row("diagnostics_logging_enabled", &yes_no(logging.enabled)),
+        row(
+            "diagnostics_logging_guard_active",
+            &yes_no(logging.has_guard),
         ),
         row(
-            "Logging Error",
-            logging.last_error.as_deref().unwrap_or("None"),
+            "diagnostics_logging_error",
+            logging.last_error.as_deref().unwrap_or(none_label.as_str()),
         ),
+        row("diagnostics_storage_available", &yes_no(storage.available)),
+        row("diagnostics_storage_healthy", &yes_no(storage.healthy)),
+        row("diagnostics_storage_db_path", &storage.db_path),
         row(
-            "Storage Available",
-            if storage.available { "Yes" } else { "No" },
-        ),
-        row(
-            "Storage Healthy",
-            if storage.healthy { "Yes" } else { "No" },
-        ),
-        row("Storage DB Path", &storage.db_path),
-        row(
-            "Storage Schema Version",
+            "diagnostics_storage_schema_version",
             &storage.schema_version.to_string(),
         ),
         row(
-            "Storage Last Maintenance",
-            storage.last_maintenance_at.as_deref().unwrap_or("None"),
+            "diagnostics_storage_last_maintenance",
+            storage
+                .last_maintenance_at
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ),
         row(
-            "Storage Last Migration",
-            storage.last_migration_result.as_deref().unwrap_or("None"),
+            "diagnostics_storage_last_migration",
+            storage
+                .last_migration_result
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ),
         row(
-            "Storage Error",
-            storage.last_error.as_deref().unwrap_or("None"),
+            "diagnostics_storage_error",
+            storage.last_error.as_deref().unwrap_or(none_label.as_str()),
         ),
         row(
-            "Telemetry Compiled",
-            if telemetry.compiled { "Yes" } else { "No" },
+            "diagnostics_telemetry_compiled",
+            &yes_no(telemetry.compiled),
         ),
         row(
-            "Telemetry Consented",
-            if telemetry.consented { "Yes" } else { "No" },
+            "diagnostics_telemetry_consented",
+            &yes_no(telemetry.consented),
+        ),
+        row("diagnostics_telemetry_enabled", &yes_no(telemetry.enabled)),
+        row(
+            "diagnostics_telemetry_mode",
+            &format!("{:?}", telemetry.mode),
         ),
         row(
-            "Telemetry Enabled",
-            if telemetry.enabled { "Yes" } else { "No" },
-        ),
-        row("Telemetry Mode", &format!("{:?}", telemetry.mode)),
-        row(
-            "Telemetry Endpoint",
-            telemetry.endpoint_redacted.as_deref().unwrap_or("None"),
+            "diagnostics_telemetry_endpoint",
+            telemetry
+                .endpoint_redacted
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ),
         row(
-            "Telemetry Error",
-            telemetry.last_error.as_deref().unwrap_or("None"),
+            "diagnostics_telemetry_error",
+            telemetry
+                .last_error
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ),
         row(
-            "Telemetry Export Error",
-            telemetry.last_export_error.as_deref().unwrap_or("None"),
+            "diagnostics_telemetry_export_error",
+            telemetry
+                .last_export_error
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ),
         row(
-            "Telemetry Events Recorded",
+            "diagnostics_telemetry_events_recorded",
             &telemetry.events_recorded.to_string(),
         ),
         row(
-            "Accessibility AccessKit Linked",
-            if accessibility.accesskit_linked {
-                "Yes"
-            } else {
-                "No"
-            },
+            "diagnostics_accessibility_accesskit_linked",
+            &yes_no(accessibility.accesskit_linked),
         ),
         row(
-            "Accessibility Bridge Enabled",
-            if accessibility.bridge_enabled {
-                "Yes"
-            } else {
-                "No"
-            },
+            "diagnostics_accessibility_bridge_enabled",
+            &yes_no(accessibility.bridge_enabled),
         ),
-        row("Accessibility Status", &accessibility.status),
+        row("diagnostics_accessibility_status", &accessibility.status),
         row(
-            "Desktop Clipboard Available",
-            if desktop_actions.clipboard_available {
-                "Yes"
-            } else {
-                "No"
-            },
+            "diagnostics_desktop_clipboard_available",
+            &yes_no(desktop_actions.clipboard_available),
         ),
         row(
-            "Desktop Picker Available",
-            if desktop_actions.picker_available {
-                "Yes"
-            } else {
-                "No"
-            },
+            "diagnostics_desktop_picker_available",
+            &yes_no(desktop_actions.picker_available),
         ),
         row(
-            "Desktop Opener Available",
-            if desktop_actions.opener_available {
-                "Yes"
-            } else {
-                "No"
-            },
+            "diagnostics_desktop_opener_available",
+            &yes_no(desktop_actions.opener_available),
         ),
         row(
-            "Desktop Active Watchers",
+            "diagnostics_desktop_active_watchers",
             &desktop_actions.active_watchers.to_string(),
         ),
         row(
-            "Desktop Last Error",
-            desktop_actions.last_error.as_deref().unwrap_or("None"),
+            "diagnostics_desktop_last_error",
+            desktop_actions
+                .last_error
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ),
-        row("Undo Stack Size", &undo.past.len().to_string()),
-        row("Redo Stack Size", &undo.future.len().to_string()),
-        row("Undo Last Label", &undo_last_label),
-        row("Undo Last Timestamp", &undo_last_timestamp),
+        row("diagnostics_undo_stack_size", &undo.past.len().to_string()),
         row(
-            "Undo Last Rejected",
-            undo.last_rejected.as_deref().unwrap_or("None"),
+            "diagnostics_redo_stack_size",
+            &undo.future.len().to_string(),
         ),
+        row("diagnostics_undo_last_label", &undo_last_label),
+        row("diagnostics_undo_last_timestamp", &undo_last_timestamp),
         row(
-            "Shortcut Enabled (Config)",
-            if shortcuts.enabled { "Yes" } else { "No" },
-        ),
-        row(
-            "Shortcut Registered",
-            if shortcuts.registered { "Yes" } else { "No" },
-        ),
-        row("Shortcut Accelerator", &shortcuts.accelerator),
-        row(
-            "Shortcut Error",
-            shortcuts.last_error.as_deref().unwrap_or("None"),
+            "diagnostics_undo_last_rejected",
+            undo.last_rejected.as_deref().unwrap_or(none_label.as_str()),
         ),
         row(
-            "Error Surface Count",
+            "diagnostics_shortcut_enabled_config",
+            &yes_no(shortcuts.enabled),
+        ),
+        row(
+            "diagnostics_shortcut_registered",
+            &yes_no(shortcuts.registered),
+        ),
+        row("diagnostics_shortcut_accelerator", &shortcuts.accelerator),
+        row(
+            "diagnostics_shortcut_error",
+            shortcuts
+                .last_error
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
+        ),
+        row(
+            "diagnostics_error_surface_count",
             &error_surface::record_count(cx).to_string(),
         ),
         row(
-            "Latest Error",
+            "diagnostics_latest_error",
             latest_error
                 .as_ref()
                 .map(|error| error.message.as_str())
-                .unwrap_or("None"),
+                .unwrap_or(none_label.as_str()),
         ),
         row(
-            "Crash Reports Pending",
+            "diagnostics_crash_reports_pending",
             &crash_snap.pending_count.to_string(),
         ),
         row(
-            "Crash Reports Last Timestamp",
-            crash_snap.last_crash_timestamp.as_deref().unwrap_or("None"),
+            "diagnostics_crash_reports_last_timestamp",
+            crash_snap
+                .last_crash_timestamp
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ),
         row(
-            "Crash Reports Upload Endpoint",
+            "diagnostics_crash_reports_upload_endpoint",
             if crash_snap.upload_endpoint.is_empty() {
-                "None"
+                none_label.as_str()
             } else {
                 &crash_snap.upload_endpoint
             },
         ),
         row(
-            "Crash Reports Last Upload Error",
-            crash_snap.last_upload_error.as_deref().unwrap_or("None"),
+            "diagnostics_crash_reports_last_upload_error",
+            crash_snap
+                .last_upload_error
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ),
     ];
 
@@ -302,27 +344,43 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
         } else {
             logging.log_dir.as_str()
         };
-        rows.push(row("Config Dir", &paths.config_dir.display().to_string()));
-        rows.push(row("Data Dir", &paths.data_dir.display().to_string()));
-        rows.push(row("Cache Dir", &paths.cache_dir.display().to_string()));
-        rows.push(row("Log Dir", display_log_dir));
-        rows.push(row("Log File Prefix", &logging.file_prefix));
-        rows.push(row("State File", &paths.state_file.display().to_string()));
         rows.push(row(
-            "Active Route",
+            "diagnostics_config_dir",
+            &paths.config_dir.display().to_string(),
+        ));
+        rows.push(row(
+            "diagnostics_data_dir",
+            &paths.data_dir.display().to_string(),
+        ));
+        rows.push(row(
+            "diagnostics_cache_dir",
+            &paths.cache_dir.display().to_string(),
+        ));
+        rows.push(row("diagnostics_log_dir", display_log_dir));
+        rows.push(row("diagnostics_log_file_prefix", &logging.file_prefix));
+        rows.push(row(
+            "diagnostics_state_file",
+            &paths.state_file.display().to_string(),
+        ));
+        rows.push(row(
+            "diagnostics_active_route",
             &app_state::with_config(cx, |config| config.active_route.to_url().to_string()),
         ));
         rows.push(row(
-            "Config Version",
+            "diagnostics_config_version",
             &app_state::with_config(cx, |config| config.version.to_string()),
         ));
         rows.push(row(
-            "State Load Error",
-            app_state::load_error(cx).as_deref().unwrap_or("None"),
+            "diagnostics_state_load_error",
+            app_state::load_error(cx)
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ));
         rows.push(row(
-            "State Save Error",
-            app_state::save_error(cx).as_deref().unwrap_or("None"),
+            "diagnostics_state_save_error",
+            app_state::save_error(cx)
+                .as_deref()
+                .unwrap_or(none_label.as_str()),
         ));
     }
 
@@ -335,8 +393,16 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
             status.reason.as_deref().unwrap_or("-"),
             status.last_error.as_deref().unwrap_or("-")
         );
-        rows.push(row(&format!("Capability:{name}"), &value));
+        rows.push(capability_row(&name, &value));
     }
 
     rows
+}
+
+fn yes_no(value: bool) -> String {
+    crate::i18n::localize(if value {
+        "diagnostics_yes"
+    } else {
+        "diagnostics_no"
+    })
 }

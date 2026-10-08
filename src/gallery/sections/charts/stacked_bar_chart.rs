@@ -4,7 +4,7 @@
 use gpui_kit::component::{
     ActiveTheme as _,
     plot::{
-        AxisText, Grid, IntoPlot, Plot, PlotAxis, axis_gutter,
+        AxisText, Grid, IntoPlot, Plot, PlotAppear, PlotAxis, axis_gutter,
         label::TEXT_SIZE,
         scale::{Scale, ScaleBand, ScaleLinear, ScaleOrdinal},
         shape::{Bar, Stack, StackSeries},
@@ -25,6 +25,7 @@ fn axis_gap() -> f32 {
 pub(super) struct StackedBarChart {
     data: Vec<DailyDevice>,
     series: Vec<StackSeries<DailyDevice>>,
+    appear: PlotAppear,
 }
 
 impl StackedBarChart {
@@ -42,7 +43,11 @@ impl StackedBarChart {
             })
             .series();
 
-        Self { data, series }
+        Self {
+            data,
+            series,
+            appear: PlotAppear::complete(),
+        }
     }
 }
 
@@ -100,7 +105,9 @@ impl Plot for StackedBarChart {
             .dash_array(&[px(4.), px(2.)])
             .paint(&bounds, window);
 
-        // 6. Draw stacked bars
+        // 6. Draw stacked bars. Columns grow out of the zero line as the
+        // chart appears.
+        let appear = self.appear.progress();
         for series in self.series.iter() {
             let x = x.clone();
             let y0 = y.clone();
@@ -113,8 +120,14 @@ impl Plot for StackedBarChart {
                 .data(&series.points)
                 .band_width(band_width)
                 .cross(move |d| x.tick(&d.data.date.clone()))
-                .base(move |d| y0.tick(&(d.y0 as f64)).unwrap_or(height))
-                .value(move |d| y1.tick(&(d.y1 as f64)))
+                .base(move |d| {
+                    let y = y0.tick(&(d.y0 as f64)).unwrap_or(height);
+                    height + (y - height) * appear
+                })
+                .value(move |d| {
+                    y1.tick(&(d.y1 as f64))
+                        .map(|y| height + (y - height) * appear)
+                })
                 .fill(move |_, _, _| fill)
                 .paint(&bounds, window, cx);
         }
@@ -122,6 +135,14 @@ impl Plot for StackedBarChart {
 
     fn id(&self) -> Option<ElementId> {
         Some("chart-stacked-bar-chart".into())
+    }
+
+    fn appear(&mut self, appear: PlotAppear, _window: &mut Window, _cx: &mut App) {
+        self.appear = appear;
+    }
+
+    fn appear_generation(&self) -> Option<u64> {
+        Some(0)
     }
 
     fn tooltip_state(

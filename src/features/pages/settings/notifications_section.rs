@@ -57,7 +57,7 @@ pub(super) fn render_notifications_section(
             ));
 
     let notifications_snapshot = notifications_snapshot.clone();
-    let enabled_label = crate::i18n::localize("settings_native_notifications", None);
+    let enabled_label = crate::i18n::localize("settings_native_notifications");
 
     super::dev_sections::settings_card_base(cx)
         .child(
@@ -77,12 +77,12 @@ pub(super) fn render_notifications_section(
         )
         .child(status_row(
             "backend",
-            crate::i18n::localize("settings_native_backend", None),
+            crate::i18n::localize("settings_native_backend"),
             notifications_snapshot.active_backend.to_string(),
         ))
         .child(status_row(
             "permission",
-            crate::i18n::localize("settings_permission", None),
+            crate::i18n::localize("settings_permission"),
             notifications_snapshot.permission.label(),
         ))
         .when_some(
@@ -90,21 +90,27 @@ pub(super) fn render_notifications_section(
             |this, reason| {
                 this.child(status_row(
                     "degraded",
-                    crate::i18n::localize("settings_degraded", None),
+                    crate::i18n::localize("settings_degraded"),
                     reason,
                 ))
             },
         )
         .when_some(
             notifications_snapshot.last_backend_error.clone(),
-            |this, error| this.child(status_row("backend-error", "Last backend error", error)),
+            |this, error| {
+                this.child(status_row(
+                    "backend-error",
+                    crate::i18n::localize("settings_last_backend_error"),
+                    error,
+                ))
+            },
         )
         .when_some(
             notifications_snapshot.daemon_capabilities.clone(),
             |this, caps| {
                 this.child(status_row(
                     "daemon-capabilities",
-                    "Daemon capabilities",
+                    crate::i18n::localize("settings_daemon_capabilities"),
                     caps,
                 ))
             },
@@ -118,18 +124,12 @@ pub(super) fn render_notifications_section(
                 .child(
                     Button::new("test-native-notification")
                         .primary()
-                        .label(crate::i18n::localize(
-                            "settings_test_native_notification",
-                            None,
-                        ))
+                        .label(crate::i18n::localize("settings_test_native_notification"))
                         .on_click(|_, window, cx| {
                             notifications::send_from_window(
                                 NotificationRequest::test_notification(
-                                    crate::i18n::localize(
-                                        "settings_test_native_notification",
-                                        None,
-                                    ),
-                                    crate::i18n::localize("settings_hello_notification", None),
+                                    crate::i18n::localize("settings_test_native_notification"),
+                                    crate::i18n::localize("settings_hello_notification"),
                                 ),
                                 window,
                                 cx,
@@ -140,7 +140,7 @@ pub(super) fn render_notifications_section(
                     Button::new("request-notification-permission")
                         .outline()
                         .disabled(!can_request_permission)
-                        .label(crate::i18n::localize("settings_request_permission", None))
+                        .label(crate::i18n::localize("settings_request_permission"))
                         .on_click(|_, window, cx| {
                             notifications::request_permission_from_window(window, cx);
                         }),
@@ -149,10 +149,7 @@ pub(super) fn render_notifications_section(
                     Button::new("open-notification-settings")
                         .outline()
                         .disabled(!can_open_settings)
-                        .label(crate::i18n::localize(
-                            "settings_open_notification_settings",
-                            None,
-                        ))
+                        .label(crate::i18n::localize("settings_open_notification_settings"))
                         .on_click(|_, _, cx| {
                             notifications::open_system_settings(cx);
                         }),
@@ -167,21 +164,12 @@ pub(super) fn render_notifications_section(
                 .child(
                     Button::new("test-action-notification")
                         .outline()
-                        .label(crate::i18n::localize(
-                            "settings_test_action_notification",
-                            None,
-                        ))
+                        .label(crate::i18n::localize("settings_test_action_notification"))
                         .on_click(|_, window, cx| {
                             notifications::send_from_window(
                                 NotificationRequest::action_buttons(
-                                    crate::i18n::localize(
-                                        "settings_test_action_notification",
-                                        None,
-                                    ),
-                                    crate::i18n::localize(
-                                        "settings_action_notification_body",
-                                        None,
-                                    ),
+                                    crate::i18n::localize("settings_test_action_notification"),
+                                    crate::i18n::localize("settings_action_notification_body"),
                                 ),
                                 window,
                                 cx,
@@ -191,15 +179,12 @@ pub(super) fn render_notifications_section(
                 .child(
                     Button::new("test-reply-notification")
                         .outline()
-                        .label(crate::i18n::localize(
-                            "settings_test_reply_notification",
-                            None,
-                        ))
+                        .label(crate::i18n::localize("settings_test_reply_notification"))
                         .on_click(|_, window, cx| {
                             notifications::send_from_window(
                                 NotificationRequest::reply(
-                                    crate::i18n::localize("settings_test_reply_notification", None),
-                                    crate::i18n::localize("settings_reply_notification_body", None),
+                                    crate::i18n::localize("settings_test_reply_notification"),
+                                    crate::i18n::localize("settings_reply_notification_body"),
                                 ),
                                 window,
                                 cx,
@@ -211,19 +196,12 @@ pub(super) fn render_notifications_section(
                         .outline()
                         .label(crate::i18n::localize(
                             "settings_test_background_notification",
-                            None,
                         ))
                         .on_click(|_, window, cx| {
                             notifications::send_from_window(
                                 NotificationRequest::background_worthy(
-                                    crate::i18n::localize(
-                                        "settings_test_background_notification",
-                                        None,
-                                    ),
-                                    crate::i18n::localize(
-                                        "settings_background_notification_body",
-                                        None,
-                                    ),
+                                    crate::i18n::localize("settings_test_background_notification"),
+                                    crate::i18n::localize("settings_background_notification_body"),
                                 ),
                                 window,
                                 cx,
@@ -236,27 +214,21 @@ pub(super) fn render_notifications_section(
                 .id("settings-in-app-note")
                 .a11y(
                     Role::Paragraph,
-                    crate::i18n::localize("settings_in_app_notifications_note", None),
+                    crate::i18n::localize("settings_in_app_notifications_note"),
                 )
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
-                .child(crate::i18n::localize(
-                    "settings_in_app_notifications_note",
-                    None,
-                )),
+                .child(crate::i18n::localize("settings_in_app_notifications_note")),
         )
         .child(
             div()
                 .id("settings-push-note")
                 .a11y(
                     Role::Paragraph,
-                    crate::i18n::localize("settings_push_notifications_note", None),
+                    crate::i18n::localize("settings_push_notifications_note"),
                 )
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
-                .child(crate::i18n::localize(
-                    "settings_push_notifications_note",
-                    None,
-                )),
+                .child(crate::i18n::localize("settings_push_notifications_note")),
         )
 }

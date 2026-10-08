@@ -6,20 +6,21 @@ pub fn render_shortcuts_section(
     cx: &mut Context<super::super::SettingsPage>,
 ) -> impl IntoElement {
     let app_config = app_config.clone();
+    let shortcut_label = crate::i18n::localize("settings_global_shortcut");
     super::settings_card_base(cx)
         .child(super::section_heading(
             "settings-shortcuts-title",
-            "Shortcuts",
+            crate::i18n::localize("settings_shortcuts"),
         ))
         .child(
             div()
                 .flex()
                 .items_center()
                 .justify_between()
-                .child(Label::new("Enable global launcher shortcut"))
+                .child(Label::new(shortcut_label.clone()))
                 .child(
                     Switch::new("global-shortcut-enabled")
-                        .accessibility_label("Enable global launcher shortcut")
+                        .accessibility_label(shortcut_label)
                         .checked(app_config.global_shortcut_enabled)
                         .on_click(|checked, _, cx| {
                             crate::app_state::update_config(cx, |config| {
@@ -33,7 +34,10 @@ pub fn render_shortcuts_section(
 
 pub fn render_storage_section(cx: &mut Context<super::super::SettingsPage>) -> impl IntoElement {
     super::settings_card_base(cx)
-        .child(super::section_heading("settings-storage-title", "Storage"))
+        .child(super::section_heading(
+            "settings-storage-title",
+            crate::i18n::localize("settings_storage"),
+        ))
         .child(
             div()
                 .flex()
@@ -43,7 +47,7 @@ pub fn render_storage_section(cx: &mut Context<super::super::SettingsPage>) -> i
                 .child(
                     Button::new("storage-health-check")
                         .outline()
-                        .label("Run Health Check")
+                        .label(crate::i18n::localize("settings_run_health_check"))
                         .on_click(|_, _, cx| {
                             crate::storage::run_health_check(cx);
                         }),
@@ -51,7 +55,7 @@ pub fn render_storage_section(cx: &mut Context<super::super::SettingsPage>) -> i
                 .child(
                     Button::new("storage-maintenance")
                         .outline()
-                        .label("Run Maintenance")
+                        .label(crate::i18n::localize("settings_run_maintenance"))
                         .on_click(|_, _, cx| {
                             crate::storage::run_maintenance(cx);
                         }),
@@ -64,20 +68,21 @@ pub fn render_developer_section(
     cx: &mut Context<super::super::SettingsPage>,
 ) -> impl IntoElement {
     let app_config = app_config.clone();
+    let frame_time_label = crate::i18n::localize("settings_show_frame_time");
     super::settings_card_base(cx)
         .child(super::section_heading(
             "settings-developer-title",
-            "Developer",
+            crate::i18n::localize("settings_developer"),
         ))
         .child(
             div()
                 .flex()
                 .items_center()
                 .justify_between()
-                .child(Label::new("Show Frame Time"))
+                .child(Label::new(frame_time_label.clone()))
                 .child(
                     Switch::new("show-frame-time")
-                        .accessibility_label("Show Frame Time")
+                        .accessibility_label(frame_time_label)
                         .checked(app_config.show_frame_time)
                         .on_click(|checked, _, cx| {
                             crate::app_state::update_config(cx, |config| {

@@ -28,8 +28,8 @@ impl Render for HomePage {
         let first_run_pending = crate::first_run::is_pending(cx);
         let locale = crate::app::current_locale(cx);
         let notifications_enabled = crate::notifications::snapshot(cx).enabled_by_user;
-        let title = crate::i18n::localize("home_title", None);
-        let subtitle = crate::i18n::localize("home_subtitle", None);
+        let title = crate::i18n::localize("home_title");
+        let subtitle = crate::i18n::localize("home_subtitle");
 
         v_flex()
             .min_h_full()
@@ -55,7 +55,7 @@ impl Render for HomePage {
             .child(
                 Button::new("get-started")
                     .primary()
-                    .label(crate::i18n::localize("home_get_started", None))
+                    .label(crate::i18n::localize("home_get_started"))
                     .on_click(|_, _, _| {
                         tracing::info!("Get Started clicked");
                     }),
@@ -63,7 +63,7 @@ impl Render for HomePage {
             .child(
                 Button::new("start-demo-task")
                     .outline()
-                    .label("Start Demo Task")
+                    .label(crate::i18n::localize("command_start_demo_task"))
                     .on_click(cx.listener(|_, _, window, cx| {
                         tracing::info!(
                             target: "gpui_starter::features::pages::home",
@@ -74,10 +74,13 @@ impl Render for HomePage {
                     })),
             )
             .when(first_run_pending, |this| {
+                let first_run_title = crate::i18n::localize("first_run_title");
+                let locale_label = crate::i18n::localize("first_run_locale");
+                let native_notifications = crate::i18n::localize("first_run_native_notifications");
                 this.child(
                     v_flex()
                         .id("first-run-setup")
-                        .a11y(Role::Group, "First-run setup")
+                        .a11y(Role::Group, first_run_title.clone())
                         .w_full()
                         .max_w(px(520.))
                         .gap_3()
@@ -87,26 +90,24 @@ impl Render for HomePage {
                         .child(
                             div()
                                 .id("first-run-title")
-                                .a11y(Role::Heading, "First-run setup")
+                                .a11y(Role::Heading, first_run_title.clone())
                                 .aria_level(2)
                                 .text_lg()
                                 .font_weight(FontWeight::BOLD)
-                                .child("First-run setup"),
+                                .child(first_run_title),
                         )
-                        .child(Label::new(
-                            "Choose defaults now. You can change these later in Settings.",
-                        ))
+                        .child(Label::new(crate::i18n::localize("first_run_description")))
                         .child(
                             div()
                                 .flex()
                                 .flex_wrap()
                                 .items_center()
                                 .justify_between()
-                                .child(Label::new("Locale"))
+                                .child(Label::new(locale_label.clone()))
                                 .child(
                                     div()
                                         .id("first-run-locale")
-                                        .a11y(Role::Group, "Locale")
+                                        .a11y(Role::Group, locale_label)
                                         .flex()
                                         .gap_2()
                                         .child(
@@ -147,10 +148,10 @@ impl Render for HomePage {
                                 .flex_wrap()
                                 .items_center()
                                 .justify_between()
-                                .child(Label::new("Native notifications"))
+                                .child(Label::new(native_notifications.clone()))
                                 .child(
                                     Switch::new("first-run-notifications")
-                                        .accessibility_label("Native notifications")
+                                        .accessibility_label(native_notifications)
                                         .checked(notifications_enabled)
                                         .on_click(|checked, _, cx| {
                                             crate::notifications::set_native_notifications_enabled(
@@ -163,7 +164,7 @@ impl Render for HomePage {
                             div().flex().items_center().gap_2().child(
                                 Button::new("first-run-complete")
                                     .primary()
-                                    .label("Finish setup")
+                                    .label(crate::i18n::localize("first_run_finish"))
                                     .on_click(|_, _, cx| {
                                         crate::first_run::complete(cx);
                                     }),

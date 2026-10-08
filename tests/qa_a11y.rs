@@ -109,8 +109,12 @@ fn checklist_bridge_claims_anchor_in_code() {
     let shell =
         std::fs::read_to_string("src/shell/root/app_root/render.rs").expect("read shell render");
     assert!(
-        shell.contains("Main navigation"),
+        shell.contains("Role::Navigation"),
         "navigation landmark must exist as documented"
+    );
+    assert!(
+        shell.contains("sidebar_main_navigation"),
+        "the landmark's name must carry the localization key"
     );
 
     let virtual_list =

@@ -5,21 +5,19 @@ use crate::accessibility::A11yExt as _;
 use crate::telemetry::{self, TelemetryMode};
 
 pub fn render_telemetry_section(cx: &mut Context<super::super::SettingsPage>) -> impl IntoElement {
+    let consent_note = crate::i18n::localize("settings_telemetry_consent_note");
     super::settings_card_base(cx)
         .child(super::section_heading(
             "settings-telemetry-title",
-            "Telemetry",
+            crate::i18n::localize("settings_telemetry"),
         ))
         .child(
             div()
                 .id("settings-telemetry-desc")
-                .a11y(
-                    Role::Paragraph,
-                    "Telemetry export is disabled by default until explicit consent.",
-                )
+                .a11y(Role::Paragraph, consent_note.clone())
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
-                .child("Telemetry export is disabled by default until explicit consent."),
+                .child(consent_note),
         )
         .child(
             div()
@@ -30,7 +28,7 @@ pub fn render_telemetry_section(cx: &mut Context<super::super::SettingsPage>) ->
                 .child(
                     Button::new("telemetry-disable")
                         .outline()
-                        .label("Disable")
+                        .label(crate::i18n::localize("settings_telemetry_disable"))
                         .on_click(|_, _, cx| {
                             telemetry::set_mode(TelemetryMode::Disabled, false, None, cx);
                         }),
@@ -38,7 +36,7 @@ pub fn render_telemetry_section(cx: &mut Context<super::super::SettingsPage>) ->
                 .child(
                     Button::new("telemetry-local")
                         .outline()
-                        .label("Local Only")
+                        .label(crate::i18n::localize("settings_telemetry_local_only"))
                         .on_click(|_, _, cx| {
                             telemetry::set_mode(TelemetryMode::LocalOnly, true, None, cx);
                         }),
@@ -46,7 +44,7 @@ pub fn render_telemetry_section(cx: &mut Context<super::super::SettingsPage>) ->
                 .child(
                     Button::new("telemetry-remote")
                         .outline()
-                        .label("Remote")
+                        .label(crate::i18n::localize("settings_telemetry_remote"))
                         .on_click(|_, _, cx| {
                             telemetry::set_mode(
                                 TelemetryMode::Remote,
@@ -65,7 +63,7 @@ pub fn render_telemetry_runtime_section(
     super::settings_card_base(cx)
         .child(super::section_heading(
             "settings-telemetry-runtime-title",
-            "Telemetry Runtime",
+            crate::i18n::localize("settings_telemetry_runtime"),
         ))
         .child(
             div()
@@ -76,7 +74,7 @@ pub fn render_telemetry_runtime_section(
                 .child(
                     Button::new("telemetry-record-event")
                         .outline()
-                        .label("Record Test Event")
+                        .label(crate::i18n::localize("settings_record_test_event"))
                         .on_click(|_, _, cx| {
                             telemetry::record_event("settings_test_event", cx);
                         }),
@@ -84,7 +82,7 @@ pub fn render_telemetry_runtime_section(
                 .child(
                     Button::new("telemetry-record-error")
                         .outline()
-                        .label("Record Test Error")
+                        .label(crate::i18n::localize("settings_record_test_error"))
                         .on_click(|_, _, cx| {
                             telemetry::record_error("settings_test_error", cx);
                         }),
@@ -92,7 +90,7 @@ pub fn render_telemetry_runtime_section(
                 .child(
                     Button::new("telemetry-set-user-property")
                         .outline()
-                        .label("Set Test User Property")
+                        .label(crate::i18n::localize("settings_set_test_user_property"))
                         .on_click(|_, _, cx| {
                             telemetry::set_user_property("plan_phase", "phase21", cx);
                         }),
@@ -100,7 +98,7 @@ pub fn render_telemetry_runtime_section(
                 .child(
                     Button::new("telemetry-flush")
                         .outline()
-                        .label("Flush Telemetry")
+                        .label(crate::i18n::localize("settings_flush_telemetry"))
                         .on_click(|_, _, cx| {
                             telemetry::flush(cx);
                         }),

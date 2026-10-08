@@ -1,13 +1,14 @@
 //! Input-family sections, ported from the upstream stories: Input (with the
 //! standalone `input` example folded in), Input Group, Number Input, OTP
-//! Input, Stepper, and Textarea, plus the atomic-inline-token composer the
-//! Input and Textarea stories share.
+//! Input, Speech, Stepper, and Textarea, plus the atomic-inline-token
+//! composer the Input and Textarea stories share.
 
 mod demo;
 mod input;
 mod input_group;
 mod number_input;
 mod otp_input;
+mod speech;
 mod stepper;
 mod textarea;
 mod tokens;
@@ -21,6 +22,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     input_group::register(sections, window, cx);
     number_input::register(sections, window, cx);
     otp_input::register(sections, window, cx);
+    speech::register(sections, window, cx);
     stepper::register(sections, window, cx);
     textarea::register(sections, window, cx);
 }

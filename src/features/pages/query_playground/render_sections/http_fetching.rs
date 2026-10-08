@@ -35,9 +35,9 @@ impl QueryPlaygroundPage {
         let danger = theme.danger;
 
         section_card(
-            "HTTP Fetching",
-            "Real network requests via reqwest (httpbin.org), bridged onto the tokio runtime. \
-             LatestWins cancels in-flight on a new click.",
+            "http-fetching",
+            &crate::i18n::localize("query_playground_http_fetching_title"),
+            &crate::i18n::localize("query_playground_http_fetching_description"),
             cx,
         )
         .child(
@@ -96,7 +96,7 @@ impl QueryPlaygroundPage {
                 .child(
                     Button::new("pg-http-reset")
                         .outline()
-                        .label("Reset")
+                        .label(crate::i18n::localize("query_playground_reset"))
                         .on_click(cx.listener(|this, _, _, cx| this.reset_http(cx))),
                 ),
         )
@@ -133,7 +133,10 @@ impl QueryPlaygroundPage {
                 el.child(
                     div()
                         .id("pg-http-body")
-                        .a11y(Role::Code, "Response body")
+                        .a11y(
+                            Role::Code,
+                            crate::i18n::localize("query_playground_response_body"),
+                        )
                         .mx_4()
                         .mb_4()
                         .p_3()
@@ -150,7 +153,10 @@ impl QueryPlaygroundPage {
             el.child(
                 div()
                     .id("pg-http-error")
-                    .a11y(Role::Paragraph, format!("error: {err}"))
+                    .a11y(
+                        Role::Paragraph,
+                        format!("{}: {err}", crate::i18n::localize("query_playground_error")),
+                    )
                     .a11y_live(accesskit::Live::Polite)
                     .mx_4()
                     .mb_4()

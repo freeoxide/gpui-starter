@@ -177,3 +177,21 @@ fn hash_and_url_forms_agree_on_the_route_set() {
         format!("#/{}", route.to_url().trim_start_matches("gpui-starter://"))
     );
 }
+
+#[test]
+fn page_title_keys_are_distinct() {
+    let keys: Vec<&str> = Page::all().iter().map(|page| page.title_key()).collect();
+    assert!(keys.iter().all(|key| key.starts_with("nav_")));
+    let mut unique = keys.clone();
+    unique.sort_unstable();
+    unique.dedup();
+    assert_eq!(keys.len(), unique.len(), "every Page needs its own key");
+}
+
+#[test]
+fn settings_notifications_localizes_as_settings_page() {
+    assert_eq!(
+        AppRoute::SettingsNotifications.localized_title(),
+        crate::i18n::localize(Page::Settings.title_key()),
+    );
+}

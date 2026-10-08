@@ -36,12 +36,12 @@ pub fn install(cx: &mut App) {
 /// Recompute title + favicon from the current globals and apply them.
 fn update(cx: &App) {
     let route_title = crate::app_state::config_handle(cx)
-        .map(|config| config.active_route.title())
-        .unwrap_or_else(|| AppRoute::default().title());
+        .map(|config| config.active_route.localized_title())
+        .unwrap_or_else(|| AppRoute::default().localized_title());
     let unread = crate::notifications::inbox::unread_count(cx);
     let state = crate::connectivity::snapshot(cx).state;
 
-    set_title(&compose_title(route_title, unread, &state));
+    set_title(&compose_title(&route_title, unread, &state));
 
     let changed = match LAST.lock().as_deref() {
         Ok(Some(last)) => *last != (unread, state.clone()),
@@ -65,8 +65,18 @@ fn compose_title(route_title: &str, unread: usize, state: &ConnectivityState) ->
         title.push_str(&format!(" ({unread})"));
     }
     match state {
-        ConnectivityState::Offline => title.push_str(" — Offline"),
-        ConnectivityState::CaptiveOrFiltered => title.push_str(" — Filtered"),
+        ConnectivityState::Offline => {
+            title.push_str(&format!(
+                " — {}",
+                crate::i18n::localize("tab_title_offline")
+            ));
+        }
+        ConnectivityState::CaptiveOrFiltered => {
+            title.push_str(&format!(
+                " — {}",
+                crate::i18n::localize("tab_title_filtered")
+            ));
+        }
         _ => {}
     }
     title

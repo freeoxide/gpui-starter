@@ -12,7 +12,7 @@ use gpui_query::client::{ClientDiagnostic, QueryDiagnostic};
 use gpui_query::core::QueryStatus;
 
 use super::dashboard::QueryDevToolsV2Page;
-use super::helpers::{QuerySort, filter_button, format_cache_age, sort_button};
+use super::helpers::{QuerySort, filter_button, format_cache_age, sort_button, status_label};
 
 // `v_virtual_list` positions items purely from `item_sizes`, so rows/details
 // are pinned to these heights — keep in sync with the row renderers.
@@ -37,7 +37,7 @@ struct RegistryRow {
 pub(super) struct RegistryRowCache {
     signature: u64,
     sort: Option<QuerySort>,
-    filter: Option<String>,
+    filter: Option<QueryStatus>,
     rows: Rc<Vec<RegistryRow>>,
 }
 
@@ -61,12 +61,12 @@ fn cached_registry_rows(
     cache: &mut RegistryRowCache,
     diagnostic: &Option<ClientDiagnostic>,
     sort_by: QuerySort,
-    status_filter: &Option<String>,
+    status_filter: &Option<QueryStatus>,
 ) -> Rc<Vec<RegistryRow>> {
     let signature = diagnostic.as_ref().map(diagnostic_signature).unwrap_or(0);
     let hit = cache.signature == signature
         && cache.sort == Some(sort_by)
-        && cache.filter.as_deref() == status_filter.as_deref();
+        && cache.filter == *status_filter;
     if hit {
         return cache.rows.clone();
     }
@@ -76,25 +76,8 @@ fn cached_registry_rows(
         .map(|d| d.queries.clone())
         .unwrap_or_default();
 
-    if let Some(filter) = status_filter {
-        let filter_status = match filter.as_str() {
-            "Idle" => Some(QueryStatus::Idle),
-            "LoadingEmpty" => Some(QueryStatus::LoadingEmpty),
-            "LoadingWithData" => Some(QueryStatus::LoadingWithData),
-            "Success" => Some(QueryStatus::Success),
-            "Failure" => Some(QueryStatus::Failure),
-            "Cancelled" => Some(QueryStatus::Cancelled),
-            _ => {
-                tracing::warn!(
-                    "QueryDevToolsV2: unknown status_filter value {:?}; clearing filter",
-                    filter
-                );
-                None
-            }
-        };
-        if let Some(fs) = filter_status {
-            queries.retain(|q| q.status == fs);
-        }
+    if let Some(fs) = *status_filter {
+        queries.retain(|q| q.status == fs);
     }
 
     match sort_by {
@@ -127,7 +110,7 @@ fn cached_registry_rows(
 
     cache.signature = signature;
     cache.sort = Some(sort_by);
-    cache.filter = status_filter.clone();
+    cache.filter = *status_filter;
     cache.rows = Rc::new(rows);
     cache.rows.clone()
 }
@@ -136,7 +119,7 @@ pub(super) fn render_query_registry(
     diagnostic: &Option<ClientDiagnostic>,
     expanded_key: &Option<String>,
     sort_by: QuerySort,
-    status_filter: &Option<String>,
+    status_filter: &Option<QueryStatus>,
     row_cache: &mut RegistryRowCache,
     scroll_handle: &VirtualListScrollHandle,
     cx: &mut Context<QueryDevToolsV2Page>,
@@ -149,30 +132,52 @@ pub(super) fn render_query_registry(
 
     let sort_controls = h_flex()
         .id("v2-sort-group")
-        .a11y(Role::Group, "Sort")
+        .a11y(Role::Group, crate::i18n::localize("query_devtools_sort"))
         .gap_2()
         .flex_wrap()
         .children(vec![
-            sort_button("By Key", QuerySort::Key, sort_by, cx),
-            sort_button("By Status", QuerySort::Status, sort_by, cx),
-            sort_button("By Cache Age", QuerySort::CacheAge, sort_by, cx),
-            sort_button("By Cache Hits", QuerySort::CacheHits, sort_by, cx),
+            sort_button(
+                &crate::i18n::localize("query_devtools_sort_by_key"),
+                QuerySort::Key,
+                sort_by,
+                cx,
+            ),
+            sort_button(
+                &crate::i18n::localize("query_devtools_sort_by_status"),
+                QuerySort::Status,
+                sort_by,
+                cx,
+            ),
+            sort_button(
+                &crate::i18n::localize("query_devtools_sort_by_cache_age"),
+                QuerySort::CacheAge,
+                sort_by,
+                cx,
+            ),
+            sort_button(
+                &crate::i18n::localize("query_devtools_sort_by_cache_hits"),
+                QuerySort::CacheHits,
+                sort_by,
+                cx,
+            ),
         ]);
 
-    // Status filter options matching v2 QueryStatus variants
-    let status_options: Vec<Option<&str>> = vec![
+    let status_options = [
         None,
-        Some("Idle"),
-        Some("LoadingEmpty"),
-        Some("LoadingWithData"),
-        Some("Success"),
-        Some("Failure"),
-        Some("Cancelled"),
+        Some(QueryStatus::Idle),
+        Some(QueryStatus::LoadingEmpty),
+        Some(QueryStatus::LoadingWithData),
+        Some(QueryStatus::Success),
+        Some(QueryStatus::Failure),
+        Some(QueryStatus::Cancelled),
     ];
 
     let filter_controls = h_flex()
         .id("v2-filter-group")
-        .a11y(Role::Group, "Status filter")
+        .a11y(
+            Role::Group,
+            crate::i18n::localize("query_devtools_status_filter"),
+        )
         .gap_2()
         .flex_wrap()
         .children(
@@ -190,32 +195,32 @@ pub(super) fn render_query_registry(
             .text_xs()
             .font_weight(FontWeight::BOLD)
             .flex_1()
-            .child("Key"),
+            .child(crate::i18n::localize("query_devtools_col_key")),
         div()
             .text_xs()
             .font_weight(FontWeight::BOLD)
             .flex_1()
-            .child("Status"),
+            .child(crate::i18n::localize("query_devtools_col_status")),
         div()
             .text_xs()
             .font_weight(FontWeight::BOLD)
             .flex_1()
-            .child("Cache Policy"),
+            .child(crate::i18n::localize("query_devtools_col_cache_policy")),
         div()
             .text_xs()
             .font_weight(FontWeight::BOLD)
             .flex_1()
-            .child("Cache Age"),
+            .child(crate::i18n::localize("query_devtools_col_cache_age")),
         div()
             .text_xs()
             .font_weight(FontWeight::BOLD)
             .flex_1()
-            .child("Cache Hits"),
+            .child(crate::i18n::localize("query_devtools_col_cache_hits")),
         div()
             .text_xs()
             .font_weight(FontWeight::BOLD)
             .flex_1()
-            .child("Retry Count"),
+            .child(crate::i18n::localize("query_devtools_col_retry_count")),
     ]);
 
     // Virtualized: only visible rows are laid out and painted, so adding
@@ -235,14 +240,15 @@ pub(super) fn render_query_registry(
     let item_sizes = variable_item_sizes(&item_heights);
     let list_h = bounded_list_height(&item_sizes, px(REGISTRY_LIST_GAP), px(REGISTRY_MAX_LIST_H));
 
+    let registry_empty = crate::i18n::localize("query_devtools_registry_empty");
     let registry_content = if queries.is_empty() {
         div().py_6().flex().justify_center().child(
             div()
                 .id("v2-registry-empty")
-                .a11y(Role::Paragraph, "No queries match the current filter.")
+                .a11y(Role::Paragraph, registry_empty.clone())
                 .text_sm()
                 .text_color(muted_foreground)
-                .child("No queries match the current filter."),
+                .child(registry_empty),
         )
     } else {
         let scroll_handle = scroll_handle.clone();
@@ -289,6 +295,8 @@ pub(super) fn render_query_registry(
         )
     };
 
+    let registry_title = crate::i18n::localize("query_devtools_registry_title");
+
     div()
         .rounded(radius_lg)
         .border_1()
@@ -298,12 +306,12 @@ pub(super) fn render_query_registry(
         .child(
             div()
                 .id("v2-registry-title")
-                .a11y(Role::Heading, "Query Registry")
+                .a11y(Role::Heading, registry_title.clone())
                 .aria_level(2)
                 .text_sm()
                 .font_weight(FontWeight::SEMIBOLD)
                 .mb_2()
-                .child("Query Registry"),
+                .child(registry_title),
         )
         .child(
             v_flex()
@@ -312,7 +320,12 @@ pub(super) fn render_query_registry(
                 .child(
                     v_flex()
                         .gap_1()
-                        .child(div().text_xs().text_color(muted_foreground).child("Sort:"))
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(muted_foreground)
+                                .child(crate::i18n::localize("query_devtools_sort_label")),
+                        )
                         .child(sort_controls),
                 )
                 .child(
@@ -322,7 +335,7 @@ pub(super) fn render_query_registry(
                             div()
                                 .text_xs()
                                 .text_color(muted_foreground)
-                                .child("Status:"),
+                                .child(crate::i18n::localize("query_devtools_status_label")),
                         )
                         .child(filter_controls),
                 ),
@@ -357,7 +370,7 @@ fn query_row(
         QueryStatus::Failure => danger,
     };
 
-    let status_label = status_label(&q.status);
+    let status_str = status_label(q.status);
 
     let chevron = if is_expanded { "\u{25BE}" } else { "\u{25B8}" };
 
@@ -403,7 +416,7 @@ fn query_row(
                     .font_weight(FontWeight::SEMIBOLD)
                     .px_1()
                     .text_color(status_color)
-                    .child(status_label.to_string()),
+                    .child(status_str),
                 div()
                     .text_xs()
                     .px_1()
@@ -426,43 +439,53 @@ fn query_row(
         )
 }
 
-fn status_label(status: &QueryStatus) -> &'static str {
-    match status {
-        QueryStatus::Idle => "Idle",
-        QueryStatus::LoadingEmpty | QueryStatus::LoadingWithData => "Loading",
-        QueryStatus::Success => "Success",
-        QueryStatus::Failure => "Failure",
-        QueryStatus::Cancelled => "Cancelled",
-    }
-}
-
 /// The text an assistive reader announces for one registry row; row children
 /// are plain text divs that produce no a11y nodes on their own.
 fn registry_row_label(row: &RegistryRow) -> String {
     let q = &row.query;
     format!(
-        "{}: status {}, policy {}, cache age {}, {} hits, {} retries",
+        "{}: {} {}, {} {}, {} {}, {} {}, {} {}",
         q.key,
-        status_label(&q.status),
+        crate::i18n::localize("query_devtools_col_status"),
+        status_label(q.status),
+        crate::i18n::localize("query_devtools_col_cache_policy"),
         q.cache_policy,
+        crate::i18n::localize("query_devtools_col_cache_age"),
         format_cache_age(q.cache_age_ms),
+        crate::i18n::localize("query_devtools_col_cache_hits"),
         row.cache_hits_str,
+        crate::i18n::localize("query_devtools_col_retry_count"),
         row.retry_count_str,
     )
 }
 
 fn query_expanded_detail(row: &RegistryRow, radius: Pixels, secondary: Hsla) -> Div {
     let q = &row.query;
-    let fields: Vec<(&str, SharedString)> = vec![
-        ("Key", SharedString::from(q.key.clone())),
-        ("Status", SharedString::from(format!("{:?}", q.status))),
-        ("Cache Policy", SharedString::from(q.cache_policy.clone())),
+    let fields: Vec<(String, SharedString)> = vec![
         (
-            "Cache Age",
+            crate::i18n::localize("query_devtools_col_key"),
+            SharedString::from(q.key.clone()),
+        ),
+        (
+            crate::i18n::localize("query_devtools_col_status"),
+            SharedString::from(format!("{:?}", q.status)),
+        ),
+        (
+            crate::i18n::localize("query_devtools_col_cache_policy"),
+            SharedString::from(q.cache_policy.clone()),
+        ),
+        (
+            crate::i18n::localize("query_devtools_col_cache_age"),
             SharedString::from(format_cache_age(q.cache_age_ms)),
         ),
-        ("Cache Hits", row.cache_hits_str.clone()),
-        ("Retry Count", row.retry_count_str.clone()),
+        (
+            crate::i18n::localize("query_devtools_col_cache_hits"),
+            row.cache_hits_str.clone(),
+        ),
+        (
+            crate::i18n::localize("query_devtools_col_retry_count"),
+            row.retry_count_str.clone(),
+        ),
     ];
 
     div()

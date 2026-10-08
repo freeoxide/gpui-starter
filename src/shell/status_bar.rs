@@ -19,7 +19,8 @@ pub fn render(route: &AppRoute, cx: &App) -> impl IntoElement {
         .try_global::<notifications::NativeNotificationState>()
         .map(|s| s.snapshot.degraded_reason.as_deref())
         .flatten()
-        .unwrap_or("No");
+        .map(|reason| reason.to_string())
+        .unwrap_or_else(|| crate::i18n::localize("status_no"));
     let active_backend = cx
         .try_global::<notifications::NativeNotificationState>()
         .map(|s| s.snapshot.active_backend)
@@ -27,47 +28,61 @@ pub fn render(route: &AppRoute, cx: &App) -> impl IntoElement {
     let session_state = cx
         .try_global::<session::SessionSnapshot>()
         .map(|s| &s.state);
-    let latest_error =
-        crate::error_surface::latest_message(cx).unwrap_or_else(|| "None".to_string());
+    let latest_error = crate::error_surface::latest_message(cx)
+        .unwrap_or_else(|| crate::i18n::localize("status_none"));
 
     let updater_status = cx
         .try_global::<updater::UpdateSnapshot>()
         .map(|s| &s.status);
-    let updater_label = match updater_status {
-        Some(updater::UpdateStatus::Available { version, .. }) => {
-            Some(format!("Update: {version} available"))
-        }
-        Some(updater::UpdateStatus::Downloading { progress }) => {
-            Some(format!("Update: downloading {progress}%"))
-        }
-        Some(updater::UpdateStatus::Downloaded { version, .. }) => {
-            Some(format!("Update: {version} ready"))
-        }
+    let updater_detail = match updater_status {
+        Some(updater::UpdateStatus::Available { version, .. }) => Some(format!(
+            "{version} {}",
+            crate::i18n::localize("status_update_available")
+        )),
+        Some(updater::UpdateStatus::Downloading { progress }) => Some(format!(
+            "{} {progress}%",
+            crate::i18n::localize("status_update_downloading")
+        )),
+        Some(updater::UpdateStatus::Downloaded { version, .. }) => Some(format!(
+            "{version} {}",
+            crate::i18n::localize("status_update_ready")
+        )),
         Some(updater::UpdateStatus::ReadyToInstall) => {
-            Some("Update: restart to install".to_string())
+            Some(crate::i18n::localize("status_update_restart"))
         }
-        Some(updater::UpdateStatus::Error(err)) => {
-            Some(format!("Update: error ({})", truncate_error(err, 30)))
+        Some(updater::UpdateStatus::Error(err)) => Some(format!(
+            "{} ({})",
+            crate::i18n::localize("status_update_error"),
+            truncate_error(err, 30)
+        )),
+        Some(updater::UpdateStatus::Checking) => {
+            Some(crate::i18n::localize("status_update_checking"))
         }
-        Some(updater::UpdateStatus::Checking) => Some("Update: checking...".to_string()),
         _ => None,
     };
 
     let session_label = match session_state {
-        Some(session::SessionState::SignedOut) => "SignedOut".to_string(),
-        Some(session::SessionState::SigningIn) => "SigningIn".to_string(),
-        Some(session::SessionState::SignedIn { account_label }) => {
-            format!("SignedIn({account_label})")
+        Some(session::SessionState::SignedOut) => {
+            crate::i18n::localize("status_session_signed_out")
         }
-        Some(session::SessionState::Error(error)) => format!("Error({error})"),
-        None => "Unknown".to_string(),
+        Some(session::SessionState::SigningIn) => {
+            crate::i18n::localize("status_session_signing_in")
+        }
+        Some(session::SessionState::SignedIn { account_label }) => format!(
+            "{}({account_label})",
+            crate::i18n::localize("status_session_signed_in")
+        ),
+        Some(session::SessionState::Error(error)) => {
+            format!("{}({error})", crate::i18n::localize("status_session_error"))
+        }
+        None => crate::i18n::localize("status_unknown"),
     };
 
     let frame_time_el = render_frame_time(cx);
 
     div()
         .id("status-bar")
-        .a11y(Role::Status, "Status")
+        .a11y(Role::Status, crate::i18n::localize("status_a11y"))
         .w_full()
         .px_3()
         .py_2()
@@ -79,29 +94,66 @@ pub fn render(route: &AppRoute, cx: &App) -> impl IntoElement {
         .text_xs()
         .child({
             let mut children: Vec<Stateful<Div>> = vec![
-                status_row("status-route", format!("Route: {}", route.title())),
-                status_row("status-tasks", format!("Tasks: {tasks_active}")),
-                status_row("status-unread", format!("Unread: {unread}")),
+                status_row(
+                    "status-route",
+                    format!(
+                        "{}: {}",
+                        crate::i18n::localize("status_route"),
+                        route.localized_title()
+                    ),
+                ),
+                status_row(
+                    "status-tasks",
+                    format!("{}: {tasks_active}", crate::i18n::localize("status_tasks")),
+                ),
+                status_row(
+                    "status-unread",
+                    format!("{}: {unread}", crate::i18n::localize("status_unread")),
+                ),
                 status_row(
                     "status-connectivity",
                     format!(
-                        "Connectivity: {:?}",
-                        connectivity_state.unwrap_or(&connectivity::ConnectivityState::Unknown)
+                        "{}: {}",
+                        crate::i18n::localize("status_connectivity"),
+                        connectivity_state
+                            .map(connectivity_label)
+                            .unwrap_or_else(|| crate::i18n::localize("status_unknown"))
                     ),
                 ),
-                status_row("status-session", format!("Session: {session_label}")),
+                status_row(
+                    "status-session",
+                    format!(
+                        "{}: {session_label}",
+                        crate::i18n::localize("status_session")
+                    ),
+                ),
                 status_row(
                     "status-notifications",
-                    format!("Notifications: {active_backend}"),
+                    format!(
+                        "{}: {active_backend}",
+                        crate::i18n::localize("status_notifications")
+                    ),
                 ),
-                status_row("status-degraded", format!("Degraded: {degraded}")),
+                status_row(
+                    "status-degraded",
+                    format!("{}: {degraded}", crate::i18n::localize("status_degraded")),
+                ),
                 // New errors should be spoken; the rest of the bar is
                 // browse-only, so no other row is live.
-                status_row("status-last-error", format!("LastError: {latest_error}"))
-                    .a11y_live(Live::Polite),
+                status_row(
+                    "status-last-error",
+                    format!(
+                        "{}: {latest_error}",
+                        crate::i18n::localize("status_last_error")
+                    ),
+                )
+                .a11y_live(Live::Polite),
             ];
-            if let Some(label) = updater_label {
-                children.push(status_row("status-updater", label));
+            if let Some(detail) = updater_detail {
+                children.push(status_row(
+                    "status-updater",
+                    format!("{}: {detail}", crate::i18n::localize("status_update")),
+                ));
             }
             let mut segments: Vec<AnyElement> = Vec::with_capacity(children.len() * 2);
             if let Some(frame_time_el) = frame_time_el {
@@ -145,6 +197,21 @@ fn separator(cx: &App) -> Div {
         .px_2()
         .text_color(cx.theme().foreground.opacity(0.45))
         .child("·")
+}
+
+fn connectivity_label(state: &connectivity::ConnectivityState) -> String {
+    match state {
+        connectivity::ConnectivityState::Online => {
+            crate::i18n::localize("status_connectivity_online")
+        }
+        connectivity::ConnectivityState::Offline => {
+            crate::i18n::localize("status_connectivity_offline")
+        }
+        connectivity::ConnectivityState::CaptiveOrFiltered => {
+            crate::i18n::localize("status_connectivity_captive")
+        }
+        connectivity::ConnectivityState::Unknown => crate::i18n::localize("status_unknown"),
+    }
 }
 
 fn truncate_error(s: &str, max_len: usize) -> &str {

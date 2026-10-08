@@ -1,5 +1,5 @@
 use gpui_kit::component::{ActiveTheme as _, label::Label, v_flex};
-use gpui_kit::{Context, Div, Role, Stateful, div, prelude::*};
+use gpui_kit::{Context, Div, Role, SharedString, Stateful, div, prelude::*};
 
 use crate::accessibility::A11yExt as _;
 
@@ -32,10 +32,11 @@ pub(crate) fn settings_card_base(cx: &Context<SettingsPage>) -> Div {
 
 /// Card section title: a level-2 heading node, since `Label` text alone
 /// produces no accessibility node.
-pub(crate) fn section_heading(id: &'static str, title: &'static str) -> Stateful<Div> {
+pub(crate) fn section_heading(id: &'static str, title: impl Into<SharedString>) -> Stateful<Div> {
+    let title = title.into();
     div()
         .id(id)
-        .a11y(Role::Heading, title)
+        .a11y(Role::Heading, title.clone())
         .aria_level(2)
         .child(Label::new(title))
 }

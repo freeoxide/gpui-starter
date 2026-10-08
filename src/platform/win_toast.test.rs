@@ -5,7 +5,11 @@ fn actions_category_adds_buttons() {
     let xml = toast_xml(&NotificationRequest::action_buttons("Title", "Body"));
     assert_eq!(
         actions_xml(&NotificationRequest::action_buttons("Title", "Body")),
-        r#"<actions><action content="Open" arguments="settings.open" activationType="foreground"/><action content="Snooze" arguments="settings.snooze" activationType="foreground"/></actions>"#,
+        format!(
+            r#"<actions><action content="{}" arguments="settings.open" activationType="foreground"/><action content="{}" arguments="settings.snooze" activationType="foreground"/></actions>"#,
+            crate::i18n::localize("toast_open"),
+            crate::i18n::localize("toast_snooze"),
+        ),
         "button ids must match the macOS category registrations"
     );
     assert!(xml.contains(r#"<text id="1">Title</text>"#));
@@ -17,7 +21,11 @@ fn reply_category_adds_input_bound_to_send() {
     let xml = actions_xml(&NotificationRequest::reply("Title", "Body"));
     assert_eq!(
         xml,
-        r#"<actions><input id="reply" type="text" placeHolderContent="Type a reply"/><action content="Send" arguments="settings.reply" hint-inputId="reply"/></actions>"#,
+        format!(
+            r#"<actions><input id="reply" type="text" placeHolderContent="{}"/><action content="{}" arguments="settings.reply" hint-inputId="reply"/></actions>"#,
+            crate::i18n::localize("toast_reply_placeholder"),
+            crate::i18n::localize("toast_send"),
+        ),
         "the Send button must submit the reply input box"
     );
 }

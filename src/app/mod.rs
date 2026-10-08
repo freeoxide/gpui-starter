@@ -14,8 +14,8 @@ pub mod window;
 // ---------------------------------------------------------------------------
 
 pub use actions::{
-    About, ExecuteCommand, Languages, OpenDiagnostics, Quit, Restart, SelectFont, SelectLocale,
-    SelectRadius, SwitchTheme, SwitchThemeMode, ToggleSearch, TriggerTestPanic,
+    About, ExecuteCommand, OpenDiagnostics, Quit, Restart, SelectFont, SelectLocale, SelectRadius,
+    SwitchTheme, SwitchThemeMode, ToggleSearch, TriggerTestPanic,
 };
 
 #[cfg(not(target_family = "wasm"))]

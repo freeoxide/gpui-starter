@@ -74,6 +74,13 @@ impl AppRoute {
         }
     }
 
+    pub fn localized_title(&self) -> String {
+        match self {
+            Self::Page(page) => page.localized_title(),
+            Self::SettingsNotifications => Page::Settings.localized_title(),
+        }
+    }
+
     pub fn to_url(&self) -> String {
         match self {
             // The host segment comes from `Page::host` — the enum is the

@@ -1,29 +1,24 @@
 [workspace]
 
 [workspace.dependencies]
-# gpui-form from the freeoxide fork; rev = the migration branch HEAD on
-# sync/gpui-kit-0.7.0.
-gpui-form = { git = "https://github.com/freeoxide/gpui-form", rev = "f7e2fb0b30c1285638f1a877489dc03ad084319a" }
+# gpui-form from the freeoxide fork; rev = the fluent-to-rust-i18n merge
+# (PR #7) on origin/master.
+gpui-form = { git = "https://github.com/freeoxide/gpui-form", rev = "710b52439f0a4bb7756b6c15eff83c1340d2e157" }
 
-# GPUI ecosystem — gpui-kit is the single application-facing dependency.
-# crates.io `gpui-pre` is the published snapshot of zed gpui (PACKAGE name
-# gpui-pre, lib name stays `gpui`); gpui-kit 0.7.0 builds on it, pins the
-# whole gpui-pre-* snapshot family to =0.3.7, and enables
-# font-kit/x11/wayland/runtime_shaders on gpui-pre-platform itself, so
-# backend selection needs no direct platform dependency. GPUI itself is
-# `use gpui_kit::*`; the layers are `gpui_kit::component` / `base` /
-# `assets` / `platform`. qa_migration.rs fails the build if a source file
-# imports any of those crates by their own names.
-# gpui-kit and gpui are direct deps for the same reason: the pinned
-# gpui-form rev's derives emit both ::gpui_kit::component paths and
-# ::gpui::Entity/Window/Context into consuming crates (see
-# crates/gpui-form-codegen/src/implementations/*.rs), so hand-written code
-# uses kit paths only while the macros still need both crate names.
+# GPUI ecosystem — gpui-kit is the single application-facing dependency
+# (`use gpui_kit::*`; layers: component / base / assets / platform).
+# gpui-pre is the crates.io snapshot of zed gpui (package name gpui-pre,
+# lib name `gpui`); gpui-kit 0.7.1 pins the gpui-pre-* family to =0.3.8.
+# gpui-kit enables font-kit/x11/wayland/runtime_shaders on gpui-pre-platform
+# itself, so backend selection needs no direct platform dependency.
+# qa_migration.rs fails the build if a source file imports gpui-pre or the
+# kit's layer crates by their own names.
+# gpui-form's derives emit ::gpui_kit::component and ::gpui:: paths into
+# consumers (see gpui-form-codegen), so gpui stays a direct dep too.
 # Never add a direct `accesskit` dep: the kit re-exports gpui's accesskit
-# (0.24.x) and a separately-versioned accesskit is type-incompatible with
-# the bridge.
-gpui = { package = "gpui-pre", version = "0.3.7" }
-gpui-kit = "0.7.0"
+# (0.24.x) and a separately-versioned copy is type-incompatible.
+gpui = { package = "gpui-pre", version = "0.3.8" }
+gpui-kit = "0.7.1"
 
 # Serialization & data
 anyhow = "1"
@@ -48,20 +43,14 @@ tracing-subscriber = { version = "0.3", features = [
 ], default-features = false }
 
 # i18n
-rust-i18n = "3"
+rust-i18n = "4"
 regex = "1"
-# es-fluent 0.16 family from crates.io — the line the migrated gpui-form
-# graph resolves; one copy keeps our directly-used satellites in lockstep.
-es-fluent = { version = "0.16", features = ["derive"] }
-es-fluent-build = "0.16"
-es-fluent-lang = "0.16"
-es-fluent-manager-embedded = "0.16"
 
 # Validation
 # koruma 0.9 family from crates.io — the line the migrated gpui-form graph
 # resolves (gpui-form-derive 0.9 emits consumer-resolved koruma code).
-koruma = { version = "0.9", features = ["fluent"] }
-koruma-collection = { version = "0.9", features = ["full-fluent"] }
+koruma = "0.9"
+koruma-collection = { version = "0.9", features = ["email", "phone-number", "url"] }
 
 # Proc-macro infrastructure
 darling = "0.23"
@@ -118,10 +107,8 @@ ai-chat = []
 # org.freedesktop.portal.Notification via ashpd (reuses the transitive 0.13.x
 # already compiled via gpui_linux/oo7). Native installs never need this.
 notifications-portal = ["dep:ashpd"]
-# PR artifact builds (.github/workflows/pr-builds.yml): debug binaries leave
-# the build machine, and rust-embed's live-fs debug mode finds nothing there —
-# feature-unified across the graph, so the kit icons and fluent bundles
-# embed too.
+# PR artifact builds (.github/workflows/pr-builds.yml): rust-embed's live-fs
+# debug mode finds nothing off-machine — feature-unified so kit icons embed.
 artifact = ["rust-embed/debug-embed"]
 
 [dependencies]
@@ -141,12 +128,10 @@ tokio.workspace = true
 tokio-util.workspace = true
 async-trait.workspace = true
 rust-i18n.workspace = true
+unic-langid.workspace = true
 regex.workspace = true
 koruma.workspace = true
 koruma-collection.workspace = true
-es-fluent.workspace = true
-es-fluent-lang.workspace = true
-es-fluent-manager-embedded.workspace = true
 strum.workspace = true
 gpui-form.workspace = true
 # user-notify / notify-rust live in the not-wasm target section (D-Bus/mac
@@ -193,7 +178,7 @@ rust-embed = "8"
 insta.workspace = true
 # Test-only: TestAppContext + deterministic timers for the config-store
 # debounce tests. Dev-dep features never reach production or wasm builds.
-gpui = { package = "gpui-pre", version = "0.3.7", features = ["test-support"] }
+gpui = { package = "gpui-pre", version = "0.3.8", features = ["test-support"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tray-icon = { version = "0.24", default-features = false }
@@ -279,6 +264,27 @@ libc = "0.2"
 single-instance = "0.3.3"
 interprocess = "2.4.2"
 network-interface = "2.0.3"
+# Gallery editor highlighting: grammars for the sample languages (json rides
+# on tree-sitter-javascript). Wasm compiles without grammars — the editors
+# render plain there, matching the kit's own story app.
+gpui-kit = { workspace = true, features = [
+    "tree-sitter-astro",
+    "tree-sitter-c",
+    "tree-sitter-go",
+    "tree-sitter-html",
+    "tree-sitter-javascript",
+    "tree-sitter-kotlin",
+    "tree-sitter-lua",
+    "tree-sitter-markdown",
+    "tree-sitter-php",
+    "tree-sitter-python",
+    "tree-sitter-ruby",
+    "tree-sitter-rust",
+    "tree-sitter-sql",
+    "tree-sitter-svelte",
+    "tree-sitter-typescript",
+    "tree-sitter-zig",
+] }
 # Per-platform credential stores; a platform left without its store feature
 # silently falls back to keyring's per-entry mock (writes vanish, reads miss).
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native"] }
@@ -362,9 +368,6 @@ web-sys = { version = "=0.3.102", features = [
 # the DOM event closures. Exact pin: matches the locked wasm-bindgen =0.2.125.
 js-sys = "=0.3.102"
 
-[build-dependencies]
-es-fluent-build.workspace = true
-
 
 [profile.dev]
 codegen-units = 16
@@ -386,7 +389,7 @@ gpui-pre-macros = { opt-level = 3 }
 # gpui-query source toggle: `just gpui-query-local` / `just gpui-query-cratesio`.
 # DEFAULT (git): hmziqagent/gpui-query branch `gpui-pre-0.6` @69a071f =
 # v0.3.0 (perf campaign, published) merged with the gpui-pre re-point; the
-# workspace root pins `gpui = { package = "gpui-pre", version = "0.3" }` — no published or upstream version targets gpui-pre yet, so this
+# workspace root pins `gpui = { package = "gpui-pre", version = "0.3.8" }` — no published or upstream version targets gpui-pre yet, so this
 # patch carries the 0.3.0 line AND re-points the crate onto registry gpui-pre
 # (keeping the graph at ONE gpui). Drop this patch once upstream ships
 # gpui-pre support on crates.io. The old 0.1.4-based fix (f84eac4) remains on

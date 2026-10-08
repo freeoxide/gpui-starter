@@ -78,7 +78,7 @@ pub fn start_demo_task(cx: &mut App) {
     );
     start(
         id,
-        "Demo background task".to_string(),
+        crate::i18n::localize("tasks_demo_label"),
         TaskProgress::Percent(0),
         cx,
     );
@@ -94,7 +94,7 @@ pub fn start_demo_task_in_window(window: &mut Window, cx: &mut App) {
     );
     start(
         id,
-        "Demo background task".to_string(),
+        crate::i18n::localize("tasks_demo_label"),
         TaskProgress::Percent(0),
         cx,
     );
@@ -306,15 +306,18 @@ enum DemoTaskNotificationKind {
 /// stacks; kit-standard constructors keep the visual language in the kit.
 fn build_demo_task_notification(id: TaskId, kind: DemoTaskNotificationKind) -> Notification {
     match kind {
-        DemoTaskNotificationKind::Loading => Notification::info("Running demo task...")
-            .title("Demo task started")
-            .autohide(false),
+        DemoTaskNotificationKind::Loading => {
+            Notification::info(crate::i18n::localize("tasks_demo_running_body"))
+                .title(crate::i18n::localize("tasks_demo_started_title"))
+                .autohide(false)
+        }
         DemoTaskNotificationKind::Success => {
-            Notification::success("Demo task finished successfully.").title("Demo task completed")
+            Notification::success(crate::i18n::localize("tasks_demo_succeeded_body"))
+                .title(crate::i18n::localize("tasks_demo_completed_title"))
         }
         DemoTaskNotificationKind::Cancelled => {
-            Notification::warning("Demo task was cancelled during shutdown.")
-                .title("Demo task cancelled")
+            Notification::warning(crate::i18n::localize("tasks_demo_cancelled_body"))
+                .title(crate::i18n::localize("tasks_demo_cancelled_title"))
                 .autohide(false)
         }
     }

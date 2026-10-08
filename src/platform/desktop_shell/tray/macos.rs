@@ -11,7 +11,10 @@ pub fn setup(cx: &mut App) {
     let Ok(tray) = TrayIconBuilder::new()
         .with_icon(icon(36))
         .with_icon_as_template(true)
-        .with_tooltip("Open Launcher  (⌥Space)")
+        .with_tooltip(format!(
+            "{}  (⌥Space)",
+            crate::i18n::localize("tray_open_launcher")
+        ))
         .with_menu_on_left_click(false)
         .build()
     else {

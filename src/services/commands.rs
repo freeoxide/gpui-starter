@@ -63,32 +63,38 @@ pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
         },
         CommandId::CopyDiagnostics => CommandAvailability {
             enabled: desktop.clipboard_available,
-            disabled_reason: (!desktop.clipboard_available)
-                .then_some("Clipboard backend unavailable".into()),
+            disabled_reason: disabled_reason(
+                "command_reason_clipboard_unavailable",
+                !desktop.clipboard_available,
+            ),
         },
         CommandId::OpenLogsFolder | CommandId::OpenConfigFolder => CommandAvailability {
             enabled: desktop.opener_available,
-            disabled_reason: (!desktop.opener_available)
-                .then_some("System opener backend unavailable".into()),
+            disabled_reason: disabled_reason(
+                "command_reason_opener_unavailable",
+                !desktop.opener_available,
+            ),
         },
         CommandId::Undo => {
             let undo = crate::undo_stack::can_undo(cx);
             CommandAvailability {
                 enabled: undo.is_some(),
-                disabled_reason: undo.is_none().then_some("No undo available".into()),
+                disabled_reason: disabled_reason("command_reason_no_undo", undo.is_none()),
             }
         }
         CommandId::Redo => {
             let redo = crate::undo_stack::can_redo(cx);
             CommandAvailability {
                 enabled: redo.is_some(),
-                disabled_reason: redo.is_none().then_some("No redo available".into()),
+                disabled_reason: disabled_reason("command_reason_no_redo", redo.is_none()),
             }
         }
         CommandId::Restart => CommandAvailability {
             enabled: cfg!(any(unix, windows)),
-            disabled_reason: (!cfg!(any(unix, windows)))
-                .then_some("Restart requires a native relaunch backend".into()),
+            disabled_reason: disabled_reason(
+                "command_reason_restart_unavailable",
+                !cfg!(any(unix, windows)),
+            ),
         },
     }
 }
@@ -97,98 +103,98 @@ pub fn registry() -> Vec<CommandSpec> {
     vec![
         command(
             CommandId::OpenHome,
-            "Home",
-            "Open the Home page",
+            "command_home",
+            "command_home_subtitle",
             IconName::Inbox,
         ),
         command(
             CommandId::OpenForm,
-            "Form",
-            "Open the Form page",
+            "command_form",
+            "command_form_subtitle",
             IconName::File,
         ),
         command(
             CommandId::OpenSettings,
-            "Settings",
-            "Open the Settings page",
+            "command_settings",
+            "command_settings_subtitle",
             IconName::Settings2,
         ),
         command(
             CommandId::OpenNotifications,
-            "Notifications",
-            "Open the Notifications page",
+            "command_notifications",
+            "command_notifications_subtitle",
             IconName::Bell,
         ),
         command(
             CommandId::OpenDiagnostics,
-            "Diagnostics",
-            "Open diagnostics page",
+            "command_diagnostics",
+            "command_diagnostics_subtitle",
             IconName::Info,
         ),
         command(
             CommandId::OpenAbout,
-            "About",
-            "Open the About page",
+            "command_about",
+            "command_about_subtitle",
             IconName::Info,
         ),
         command(
             CommandId::ThemeLight,
-            "Light Mode",
-            "Switch to light theme",
+            "command_light_mode",
+            "command_light_mode_subtitle",
             IconName::Sun,
         ),
         command(
             CommandId::ThemeDark,
-            "Dark Mode",
-            "Switch to dark theme",
+            "command_dark_mode",
+            "command_dark_mode_subtitle",
             IconName::Moon,
         ),
         command(
             CommandId::StartDemoTask,
-            "Start Demo Task",
-            "Start an example background task",
+            "command_start_demo_task",
+            "command_start_demo_task_subtitle",
             IconName::Play,
         ),
         command(
             CommandId::CheckConnectivity,
-            "Check Connectivity",
-            "Run network connectivity probe",
+            "command_check_connectivity",
+            "command_check_connectivity_subtitle",
             IconName::Globe,
         ),
         command(
             CommandId::CopyDiagnostics,
-            "Copy Diagnostics",
-            "Copy a diagnostics summary to clipboard",
+            "command_copy_diagnostics",
+            "command_copy_diagnostics_subtitle",
             IconName::Info,
         ),
         command(
             CommandId::OpenLogsFolder,
-            "Open Logs Folder",
-            "Open logs folder in system file manager",
+            "command_open_logs_folder",
+            "command_open_logs_folder_subtitle",
             IconName::Info,
         ),
         command(
             CommandId::OpenConfigFolder,
-            "Open Config Folder",
-            "Open config folder in system file manager",
+            "command_open_config_folder",
+            "command_open_config_folder_subtitle",
             IconName::Info,
         ),
         command(
             CommandId::Undo,
-            "Undo",
-            "Undo last reversible command",
+            "command_undo",
+            "command_undo_subtitle",
             IconName::Info,
         ),
         command(
             CommandId::Redo,
-            "Redo",
-            "Redo last reversed command",
+            "command_redo",
+            "command_redo_subtitle",
             IconName::Info,
         ),
         command(
             CommandId::Restart,
-            "Restart",
-            "Restart the application",
+            "command_restart",
+            "command_restart_subtitle",
             IconName::Info,
         ),
     ]
@@ -210,7 +216,10 @@ pub fn execute(id: CommandId, cx: &mut App) {
             if let Err(error) = crate::desktop_actions::copy_diagnostics(cx) {
                 tracing::warn!(target: "gpui_starter::commands", %error, "copy diagnostics failed");
                 report_error(
-                    format!("Copy diagnostics failed: {error}"),
+                    format!(
+                        "{}: {error}",
+                        crate::i18n::localize("command_copy_diagnostics_failed")
+                    ),
                     crate::error_surface::ErrorCategory::System,
                     vec![
                         crate::error_surface::ErrorAction::Retry,
@@ -224,7 +233,10 @@ pub fn execute(id: CommandId, cx: &mut App) {
             if let Err(error) = crate::desktop_actions::open_logs_folder(cx) {
                 tracing::warn!(target: "gpui_starter::commands", %error, "open logs folder failed");
                 report_error(
-                    format!("Open logs folder failed: {error}"),
+                    format!(
+                        "{}: {error}",
+                        crate::i18n::localize("command_open_logs_failed")
+                    ),
                     crate::error_surface::ErrorCategory::Storage,
                     vec![
                         crate::error_surface::ErrorAction::OpenSettings,
@@ -238,7 +250,10 @@ pub fn execute(id: CommandId, cx: &mut App) {
             if let Err(error) = crate::desktop_actions::open_config_folder(cx) {
                 tracing::warn!(target: "gpui_starter::commands", %error, "open config folder failed");
                 report_error(
-                    format!("Open config folder failed: {error}"),
+                    format!(
+                        "{}: {error}",
+                        crate::i18n::localize("command_open_config_failed")
+                    ),
                     crate::error_surface::ErrorCategory::Config,
                     vec![
                         crate::error_surface::ErrorAction::OpenSettings,
@@ -288,11 +303,15 @@ fn report_error(
     );
 }
 
-fn command(id: CommandId, title: &str, subtitle: &str, icon: IconName) -> CommandSpec {
+fn command(id: CommandId, title_key: &str, subtitle_key: &str, icon: IconName) -> CommandSpec {
     CommandSpec {
         id,
-        title: title.into(),
-        subtitle: subtitle.into(),
+        title: crate::i18n::localize(title_key).into(),
+        subtitle: crate::i18n::localize(subtitle_key).into(),
         icon,
     }
+}
+
+fn disabled_reason(key: &str, disabled: bool) -> Option<SharedString> {
+    disabled.then(|| crate::i18n::localize(key).into())
 }

@@ -30,11 +30,12 @@ pub struct NotificationInboxItem {
 
 impl NotificationInboxItem {
     pub fn summary_line(&self) -> String {
-        format!(
-            "{} • {}",
-            self.backend,
-            if self.read { "read" } else { "unread" }
-        )
+        let read_state = crate::i18n::localize(if self.read {
+            "notifications_status_read"
+        } else {
+            "notifications_status_unread"
+        });
+        format!("{} • {read_state}", self.backend)
     }
 }
 

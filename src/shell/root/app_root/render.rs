@@ -32,9 +32,9 @@ impl Render for AppRoot {
         // clock (not std::time): Instant::now panics at runtime on wasm.
         let render_started = crate::platform::clock::Instant::now();
         let page_title = if self.render_error {
-            "Render Error"
+            crate::i18n::localize("render_error_title")
         } else {
-            self.active_route.title()
+            self.active_route.localized_title()
         };
         let active_page = self.active_route.page_for_render();
         let rtl = is_rtl_locale(&crate::app::current_locale(cx));
@@ -73,45 +73,45 @@ impl Render for AppRoot {
                     .collapsed(self.collapsed)
                     // Icon-only control; the label tracks the panel icon swap.
                     .accessibility_label(if self.collapsed {
-                        "Expand sidebar"
+                        crate::i18n::localize("sidebar_expand")
                     } else {
-                        "Collapse sidebar"
+                        crate::i18n::localize("sidebar_collapse")
                     })
                     .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_sidebar(cx))),
             );
 
-        let sidebar =
-            Sidebar::new("app-sidebar")
-                .w(relative(1.))
-                .border_0()
-                .collapsed(self.collapsed)
-                .side(side)
-                .header(
-                    v_flex()
-                        .w_full()
-                        .gap_4()
-                        .child(SidebarHeader::new().w_full().child(sidebar_header)),
-                )
-                .child(SidebarGroup::new("Navigation").children(
+        let sidebar = Sidebar::new("app-sidebar")
+            .w(relative(1.))
+            .border_0()
+            .collapsed(self.collapsed)
+            .side(side)
+            .header(
+                v_flex()
+                    .w_full()
+                    .gap_4()
+                    .child(SidebarHeader::new().w_full().child(sidebar_header)),
+            )
+            .child(
+                SidebarGroup::new(crate::i18n::localize("sidebar_navigation")).children(
                     Page::all().iter().enumerate().map(|(ix, page)| {
                         let page = *page;
                         let context_menu: Rc<
                             dyn Fn(PopupMenu, &mut Window, &mut App) -> PopupMenu,
                         > = Rc::new(move |menu, _window, _cx| {
                             menu.menu_with_icon(
-                                "Navigate",
+                                crate::i18n::localize("menu_navigate"),
                                 Icon::new(IconName::ArrowRight),
                                 Box::new(NavigateToPage(page as usize)),
                             )
                             .separator()
                             .menu_with_icon(
-                                "Refresh",
+                                crate::i18n::localize("menu_refresh"),
                                 Icon::new(IconName::Redo2),
                                 Box::new(RefreshPage),
                             )
                             .separator()
                             .menu_with_icon(
-                                "Settings",
+                                crate::i18n::localize("menu_settings"),
                                 Icon::new(IconName::Settings2),
                                 Box::new(NavigateToPage(Page::Settings as usize)),
                             )
@@ -130,7 +130,8 @@ impl Render for AppRoot {
                             context_menu,
                         }
                     }),
-                ));
+                ),
+            );
 
         let content_v = v_flex()
             .id("main")
@@ -147,14 +148,14 @@ impl Render for AppRoot {
                     .child(
                         div()
                             .id("page-title")
-                            .a11y(Role::Heading, page_title)
+                            .a11y(Role::Heading, page_title.clone())
                             .aria_level(1)
                             // Navigation moves no keyboard focus, so the
                             // new page title is announced via this live region.
                             .a11y_live(accesskit::Live::Polite)
                             .text_xl()
                             .font_weight(FontWeight::BOLD)
-                            .child(page_title),
+                            .child(page_title.clone()),
                     ),
             )
             .child(
@@ -179,7 +180,10 @@ impl Render for AppRoot {
             let rail = div().id("sidebar-rail").h_full().flex_shrink_0().child(
                 div()
                     .id("sidebar-nav")
-                    .a11y(Role::Navigation, "Main navigation")
+                    .a11y(
+                        Role::Navigation,
+                        crate::i18n::localize("sidebar_main_navigation"),
+                    )
                     .aria_size_of_set(Page::all().len())
                     .child(sidebar),
             );
@@ -200,7 +204,10 @@ impl Render for AppRoot {
                         .id("sidebar-nav")
                         .h_full()
                         .w_full()
-                        .a11y(Role::Navigation, "Main navigation")
+                        .a11y(
+                            Role::Navigation,
+                            crate::i18n::localize("sidebar_main_navigation"),
+                        )
                         // AT-SPI derives each item's setsize from the nearest
                         // ancestor that declares one; item-level values are ignored.
                         .aria_size_of_set(Page::all().len())
@@ -315,11 +322,11 @@ impl SidebarItem for NavItem {
         cx: &mut App,
     ) -> impl IntoElement {
         let id = id.into();
-        let label = self.page.title();
+        let label = self.page.localized_title();
         let item_on_click = self.on_click.clone();
         let activate = self.on_click;
         let context_menu = self.context_menu.clone();
-        let item = SidebarMenuItem::new(label)
+        let item = SidebarMenuItem::new(label.clone())
             .icon(Icon::new(self.page.icon()).small())
             .active(self.active)
             .collapsed(self.collapsed)

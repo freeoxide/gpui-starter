@@ -56,7 +56,8 @@ pub fn set_native_notifications_enabled(enabled: bool, cx: &mut App) {
     mutate_snapshot(cx, |snapshot| {
         snapshot.enabled_by_user = enabled;
         if !enabled {
-            snapshot.degraded_reason = Some("native notifications disabled by user".into());
+            snapshot.degraded_reason =
+                Some(crate::i18n::localize("notifications_degraded_disabled_by_user").into());
         } else {
             snapshot.degraded_reason = None;
         }
@@ -75,12 +76,12 @@ pub fn set_native_notifications_enabled(enabled: bool, cx: &mut App) {
     );
     inbox::record_attempt(
         NotificationAttemptRecord {
-            title: "Notification Settings Updated".to_string(),
-            body: if enabled {
-                "Native notifications enabled".to_string()
+            title: crate::i18n::localize("notifications_settings_updated"),
+            body: crate::i18n::localize(if enabled {
+                "notifications_native_enabled"
             } else {
-                "Native notifications disabled".to_string()
-            },
+                "notifications_native_disabled"
+            }),
             backend: NotificationBackendKind::UiOnly,
             delivered_natively: false,
             degraded: !enabled,
@@ -179,14 +180,18 @@ pub fn request_permission_from_window(window: &mut Window, cx: &mut App) {
     cx.spawn(async move |cx| {
         let permission = service.request_permission().await;
         tracing::info!(target: LOG, ?permission, "permission request completed");
-        let message = format!("Notification permission: {}", permission.label());
+        let message = format!(
+            "{}: {}",
+            crate::i18n::localize("notifications_permission_status"),
+            permission.label()
+        );
         cx.update(move |cx| {
             mutate_snapshot(cx, |snapshot| {
                 snapshot.permission = permission;
             });
             inbox::record_attempt(
                 NotificationAttemptRecord {
-                    title: "Notification Permission Updated".to_string(),
+                    title: crate::i18n::localize("notifications_permission_updated"),
                     body: message.to_string(),
                     backend: NotificationBackendKind::UiOnly,
                     delivered_natively: false,
@@ -266,7 +271,13 @@ pub fn send_from_window(request: NotificationRequest, window: &mut Window, cx: &
                     result
                         .error_summary
                         .as_ref()
-                        .map(|err| format!("Native notification unavailable: {err}").into())
+                        .map(|err| {
+                            format!(
+                                "{}: {err}",
+                                crate::i18n::localize("notifications_native_unavailable")
+                            )
+                            .into()
+                        })
                         .unwrap_or(fallback_message)
                 };
                 push_in_app_feedback(window_handle, feedback, cx);
@@ -358,7 +369,7 @@ fn apply_send_result(result: &NotificationSendResult, cx: &mut App) {
             result
                 .error_summary
                 .clone()
-                .or_else(|| Some("notification delivery is degraded".into()))
+                .or_else(|| Some(crate::i18n::localize("notifications_degraded").into()))
         } else {
             None
         };

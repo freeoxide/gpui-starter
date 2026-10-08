@@ -5,7 +5,7 @@ use gpui_kit::component::{
 use gpui_kit::{prelude::*, *};
 
 use gpui_query::client::QueryClient;
-use gpui_query::core::QueryKeyFilter;
+use gpui_query::core::{QueryKeyFilter, QueryStatus};
 
 use crate::accessibility::A11yExt as _;
 
@@ -17,7 +17,7 @@ pub struct QueryDevToolsV2Page {
     _subscriptions: Vec<Subscription>,
     pub(super) expanded_key: Option<String>,
     pub(super) sort_by: QuerySort,
-    pub(super) status_filter: Option<String>,
+    pub(super) status_filter: Option<QueryStatus>,
     pub(super) scroll_handle: VirtualListScrollHandle,
     row_cache: RegistryRowCache,
 }
@@ -66,6 +66,8 @@ impl Render for QueryDevToolsV2Page {
 
 fn render_empty_state(cx: &mut Context<QueryDevToolsV2Page>) -> Div {
     let theme = cx.theme();
+    let title = crate::i18n::localize("query_devtools_empty_title");
+    let hint = crate::i18n::localize("query_devtools_empty_hint");
     div()
         .flex()
         .flex_col()
@@ -81,24 +83,19 @@ fn render_empty_state(cx: &mut Context<QueryDevToolsV2Page>) -> Div {
         .child(
             div()
                 .id("v2-empty-title")
-                .a11y(Role::Heading, "No V2 Query Resources")
+                .a11y(Role::Heading, title.clone())
                 .aria_level(1)
                 .text_xl()
                 .font_weight(FontWeight::BOLD)
-                .child("No V2 Query Resources"),
+                .child(title),
         )
         .child(
             div()
                 .id("v2-empty-hint")
-                .a11y(
-                    Role::Paragraph,
-                    "Navigate to the Query Playground page to create queries, then return here.",
-                )
+                .a11y(Role::Paragraph, hint.clone())
                 .text_sm()
                 .text_color(theme.muted_foreground)
-                .child(
-                    "Navigate to the Query Playground page to create queries, then return here.",
-                ),
+                .child(hint),
         )
 }
 
@@ -106,7 +103,7 @@ fn render_dashboard(
     diagnostic: &Option<gpui_query::client::ClientDiagnostic>,
     expanded_key: &Option<String>,
     sort_by: QuerySort,
-    status_filter: &Option<String>,
+    status_filter: &Option<QueryStatus>,
     row_cache: &mut RegistryRowCache,
     scroll_handle: &VirtualListScrollHandle,
     cx: &mut Context<QueryDevToolsV2Page>,
@@ -139,6 +136,9 @@ fn render_dashboard(
         })
         .unwrap_or(0);
 
+    let hero_title = crate::i18n::localize("query_devtools_title");
+    let hero_subtitle = crate::i18n::localize("query_devtools_subtitle");
+
     let hero = div()
         .rounded(radius_lg)
         .border_1()
@@ -148,22 +148,19 @@ fn render_dashboard(
         .child(
             div()
                 .id("v2-devtools-title")
-                .a11y(Role::Heading, "Query V2 DevTools")
+                .a11y(Role::Heading, hero_title.clone())
                 .aria_level(1)
                 .text_xl()
                 .font_weight(FontWeight::BOLD)
-                .child("Query V2 DevTools"),
+                .child(hero_title),
         )
         .child(
             div()
                 .id("v2-devtools-subtitle")
-                .a11y(
-                    Role::Paragraph,
-                    "Live diagnostics dashboard for gpui-query-v2's QueryClient.",
-                )
+                .a11y(Role::Paragraph, hero_subtitle.clone())
                 .text_sm()
                 .text_color(muted_foreground)
-                .child("Live diagnostics dashboard for gpui-query-v2's QueryClient."),
+                .child(hero_subtitle),
         );
 
     // Cards keep a floor width so narrow containers wrap them 2-up instead
@@ -171,7 +168,7 @@ fn render_dashboard(
     let overview = h_flex().gap_4().flex_wrap().children(vec![
         stat_card(
             "v2-stat-total-queries",
-            "Total Queries",
+            &crate::i18n::localize("query_devtools_total_queries"),
             query_count.to_string(),
             radius_lg,
             border,
@@ -180,7 +177,7 @@ fn render_dashboard(
         ),
         stat_card(
             "v2-stat-total-mutations",
-            "Total Mutations",
+            &crate::i18n::localize("query_devtools_total_mutations"),
             mutation_count.to_string(),
             radius_lg,
             border,
@@ -189,7 +186,7 @@ fn render_dashboard(
         ),
         stat_card(
             "v2-stat-cache-entries",
-            "Cache Entries",
+            &crate::i18n::localize("query_devtools_cache_entries"),
             cache_entries.to_string(),
             radius_lg,
             border,
@@ -198,7 +195,7 @@ fn render_dashboard(
         ),
         stat_card(
             "v2-stat-failed-queries",
-            "Failed Queries",
+            &crate::i18n::localize("query_devtools_failed_queries"),
             failed_queries.to_string(),
             radius_lg,
             border,
@@ -272,7 +269,7 @@ fn render_action_bar(cx: &mut Context<QueryDevToolsV2Page>) -> Div {
 
     let invalidate = Button::new("v2-devtools-invalidate-all")
         .outline()
-        .label("Invalidate All")
+        .label(crate::i18n::localize("query_devtools_invalidate_all"))
         .disabled(!has_client)
         .on_click(cx.listener(|_, _, _, cx| {
             if cx.has_global::<QueryClient>() {
@@ -285,7 +282,7 @@ fn render_action_bar(cx: &mut Context<QueryDevToolsV2Page>) -> Div {
 
     let reset = Button::new("v2-devtools-reset-all")
         .outline()
-        .label("Reset All")
+        .label(crate::i18n::localize("query_devtools_reset_all"))
         .disabled(!has_client)
         .on_click(cx.listener(|_, _, _, cx| {
             if cx.has_global::<QueryClient>() {
@@ -311,7 +308,7 @@ fn render_action_bar(cx: &mut Context<QueryDevToolsV2Page>) -> Div {
 
     let cancel = Button::new("v2-devtools-cancel-all")
         .outline()
-        .label("Cancel All")
+        .label(crate::i18n::localize("query_devtools_cancel_all"))
         .disabled(!has_client)
         .on_click(cx.listener(|_, _, _, cx| {
             if cx.has_global::<QueryClient>() {
@@ -324,7 +321,7 @@ fn render_action_bar(cx: &mut Context<QueryDevToolsV2Page>) -> Div {
 
     let remove = Button::new("v2-devtools-remove-all")
         .outline()
-        .label("Remove All")
+        .label(crate::i18n::localize("query_devtools_remove_all"))
         .disabled(!has_client)
         .on_click(cx.listener(|_, _, _, cx| {
             if cx.has_global::<QueryClient>() {
@@ -335,6 +332,8 @@ fn render_action_bar(cx: &mut Context<QueryDevToolsV2Page>) -> Div {
             }
         }));
 
+    let actions_title = crate::i18n::localize("query_devtools_actions");
+
     div()
         .rounded(radius_lg)
         .border_1()
@@ -344,12 +343,12 @@ fn render_action_bar(cx: &mut Context<QueryDevToolsV2Page>) -> Div {
         .child(
             div()
                 .id("v2-actions-title")
-                .a11y(Role::Heading, "Actions")
+                .a11y(Role::Heading, actions_title.clone())
                 .aria_level(2)
                 .text_sm()
                 .font_weight(FontWeight::SEMIBOLD)
                 .mb_2()
-                .child("Actions"),
+                .child(actions_title),
         )
         .child(
             h_flex()

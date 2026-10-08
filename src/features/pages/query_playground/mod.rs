@@ -118,6 +118,9 @@ pub struct QueryPlaygroundPage {
         Subscription,
     )>,
     pub(super) mutation_input_state: Entity<InputState>,
+    // Locale the mutation placeholder was rendered under; InputState captures
+    // the placeholder string, so a switch is re-applied in render.
+    pub(super) placeholder_locale: SharedString,
     pub(super) infinite_entity: Option<(
         Entity<InfiniteQueryResource<PlaygroundPage, QueryError>>,
         Subscription,
@@ -146,8 +149,11 @@ impl QueryPlaygroundPage {
             cx.notify();
         }));
 
-        let mutation_input_state =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Enter mutation variables..."));
+        let mutation_input_state = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(crate::i18n::localize(
+                "query_playground_mutation_variables_placeholder",
+            ))
+        });
 
         subs.push(cx.subscribe(
             &mutation_input_state,
@@ -177,6 +183,7 @@ impl QueryPlaygroundPage {
 
         Self {
             _subscriptions: subs,
+            placeholder_locale: crate::app::current_locale(cx),
             simple_query: None,
             nocache_query: None,
             ttl_query: None,
@@ -213,12 +220,26 @@ impl QueryPlaygroundPage {
 }
 
 impl Render for QueryPlaygroundPage {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let locale = crate::app::current_locale(cx);
+        if self.placeholder_locale != locale {
+            self.mutation_input_state.update(cx, |state, cx| {
+                state.set_placeholder(
+                    crate::i18n::localize("query_playground_mutation_variables_placeholder"),
+                    window,
+                    cx,
+                );
+            });
+            self.placeholder_locale = locale;
+        }
         let theme = cx.theme();
         let radius_lg = theme.radius_lg;
         let border = theme.border;
         let muted = theme.muted;
         let muted_foreground = theme.muted_foreground;
+
+        let title = crate::i18n::localize("query_playground_title");
+        let intro = crate::i18n::localize("query_playground_intro");
 
         let page = v_flex()
             .id("query-playground-page")
@@ -239,31 +260,20 @@ impl Render for QueryPlaygroundPage {
                             .child(
                                 div()
                                     .id("query-playground-title")
-                                    .a11y(Role::Heading, "Query V2 Playground")
+                                    .a11y(Role::Heading, title.clone())
                                     .aria_level(1)
                                     .text_2xl()
                                     .font_weight(FontWeight::BOLD)
-                                    .child("Query V2 Playground"),
+                                    .child(title),
                             )
                             .child(
                                 div()
                                     .id("query-playground-intro")
-                                    .a11y(
-                                        Role::Paragraph,
-                                        "Interactive demo of every gpui-query-v2 feature: queries, \
-                                         cache policies, request policies, retry, mutations, \
-                                         infinite queries, select transforms, and imperative fetch \
-                                         with signal cancellation.",
-                                    )
+                                    .a11y(Role::Paragraph, intro.clone())
                                     .max_w(px(800.))
                                     .text_sm()
                                     .text_color(muted_foreground)
-                                    .child(
-                                        "Interactive demo of every gpui-query-v2 feature: queries, \
-                                         cache policies, request policies, retry, mutations, \
-                                         infinite queries, select transforms, and imperative fetch \
-                                         with signal cancellation.",
-                                    ),
+                                    .child(intro),
                             ),
                     ),
             )

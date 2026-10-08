@@ -9,25 +9,26 @@ pub fn render_event_emitter_section(
     cx: &mut Context<super::super::SettingsPage>,
 ) -> impl IntoElement {
     let log_total = event_log.len();
+    let emitter_title = crate::i18n::localize("settings_event_emitter");
+    let emitter_desc = crate::i18n::localize("settings_event_emitter_desc");
+    let receiver_title = crate::i18n::localize("settings_event_receiver");
+    let empty_note = crate::i18n::localize("settings_no_events");
 
     super::settings_card_base(cx)
         .child(
             div()
                 .id("settings-events-title")
-                .a11y(Role::Heading, "Event Emitter")
+                .a11y(Role::Heading, emitter_title.clone())
                 .aria_level(2)
-                .child(Label::new("Event Emitter")),
+                .child(Label::new(emitter_title)),
         )
         .child(
             div()
                 .id("settings-events-desc")
-                .a11y(
-                    Role::Paragraph,
-                    "Test the event pipeline. Emit events and verify they are received.",
-                )
+                .a11y(Role::Paragraph, emitter_desc.clone())
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
-                .child("Test the event pipeline. Emit events and verify they are received."),
+                .child(emitter_desc),
         )
         .child(
             div()
@@ -38,7 +39,7 @@ pub fn render_event_emitter_section(
                 .child(
                     Button::new("emit-test-noop")
                         .outline()
-                        .label("Emit Test (No-op)")
+                        .label(crate::i18n::localize("settings_emit_test_noop"))
                         .on_click(|_, _, cx| {
                             crate::events::emit(
                                 crate::events::AppEventKind::Test {
@@ -51,7 +52,7 @@ pub fn render_event_emitter_section(
                 .child(
                     Button::new("emit-navigate-home")
                         .outline()
-                        .label("Emit Navigate \u{2192} Home")
+                        .label(crate::i18n::localize("settings_emit_navigate_home"))
                         .on_click(|_, _, cx| {
                             crate::events::emit(
                                 crate::events::AppEventKind::Navigate(
@@ -64,7 +65,9 @@ pub fn render_event_emitter_section(
                 .child(
                     Button::new("emit-navigate-notifications")
                         .outline()
-                        .label("Emit Navigate \u{2192} Notifications")
+                        .label(crate::i18n::localize(
+                            "settings_emit_navigate_notifications",
+                        ))
                         .on_click(|_, _, cx| {
                             crate::events::emit(
                                 crate::events::AppEventKind::Navigate(
@@ -80,14 +83,17 @@ pub fn render_event_emitter_section(
         .child(
             div()
                 .id("settings-event-receiver-title")
-                .a11y(Role::Heading, "Event Receiver")
+                .a11y(Role::Heading, receiver_title.clone())
                 .aria_level(3)
-                .child(Label::new("Event Receiver")),
+                .child(Label::new(receiver_title)),
         )
         .child(
             v_flex()
                 .id("settings-event-log")
-                .a11y(Role::List, "Received events")
+                .a11y(
+                    Role::List,
+                    crate::i18n::localize("settings_received_events"),
+                )
                 .aria_orientation(Orientation::Vertical)
                 // AT-SPI derives each item's setsize from the nearest
                 // ancestor that declares one; item-level values are ignored.
@@ -97,13 +103,10 @@ pub fn render_event_emitter_section(
                     el.child(
                         div()
                             .id("settings-event-log-empty")
-                            .a11y(
-                                Role::Paragraph,
-                                "No events received yet. Click a button above.",
-                            )
+                            .a11y(Role::Paragraph, empty_note.clone())
                             .text_sm()
                             .text_color(cx.theme().muted_foreground)
-                            .child("No events received yet. Click a button above."),
+                            .child(empty_note),
                     )
                 })
                 .children(event_log.iter().rev().enumerate().map(|(ix, (id, entry))| {

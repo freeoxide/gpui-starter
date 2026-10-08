@@ -26,11 +26,11 @@ pub(super) fn render_mutations_table(
         .map(|d| d.mutations.clone())
         .unwrap_or_default();
 
-    let header_cell = |id: &'static str, label: &'static str| {
+    let header_cell = |id: &'static str, label: String| {
         div()
             .id(id)
             .role(Role::ColumnHeader)
-            .aria_label(label)
+            .aria_label(label.clone())
             .text_xs()
             .font_weight(FontWeight::BOLD)
             .flex_1()
@@ -43,12 +43,24 @@ pub(super) fn render_mutations_table(
         .px_3()
         .py_2()
         .children(vec![
-            header_cell("v2-mutations-h-key", "Key"),
-            header_cell("v2-mutations-h-status", "Status"),
-            header_cell("v2-mutations-h-retries", "Retry Count"),
+            header_cell(
+                "v2-mutations-h-key",
+                crate::i18n::localize("query_devtools_col_key"),
+            ),
+            header_cell(
+                "v2-mutations-h-status",
+                crate::i18n::localize("query_devtools_col_status"),
+            ),
+            header_cell(
+                "v2-mutations-h-retries",
+                crate::i18n::localize("query_devtools_col_retry_count"),
+            ),
         ]);
 
+    let mutations_title = crate::i18n::localize("query_devtools_mutations");
+
     if mutations.is_empty() {
+        let empty_text = crate::i18n::localize("query_devtools_mutations_empty");
         return div()
             .rounded(radius_lg)
             .border_1()
@@ -58,21 +70,21 @@ pub(super) fn render_mutations_table(
             .child(
                 div()
                     .id("v2-mutations-title")
-                    .a11y(Role::Heading, "Mutations")
+                    .a11y(Role::Heading, mutations_title.clone())
                     .aria_level(2)
                     .text_sm()
                     .font_weight(FontWeight::SEMIBOLD)
                     .mb_2()
-                    .child("Mutations"),
+                    .child(mutations_title),
             )
             .child(
                 div().py_4().flex().justify_center().child(
                     div()
                         .id("v2-mutations-empty")
-                        .a11y(Role::Paragraph, "No mutations registered.")
+                        .a11y(Role::Paragraph, empty_text.clone())
                         .text_sm()
                         .text_color(muted_foreground)
-                        .child("No mutations registered."),
+                        .child(empty_text),
                 ),
             );
     }
@@ -92,7 +104,7 @@ pub(super) fn render_mutations_table(
                 MutationStatus::Failure => danger,
             };
 
-            let status_label = m.status.label();
+            let status_label = mutation_status_label(m.status);
 
             // MutationDiagnostic carries no unique id (anonymous keys repeat),
             // so rows key on key+position; they hold no keyed element state.
@@ -101,7 +113,11 @@ pub(super) fn render_mutations_table(
                 m.key.as_deref().unwrap_or("anon"),
                 i
             );
-            let row_label = format!("{key_display}: {status_label}, {} retries", m.retry_count);
+            let row_label = format!(
+                "{key_display}: {status_label}, {} {}",
+                crate::i18n::localize("query_devtools_col_retry_count"),
+                m.retry_count
+            );
 
             div()
                 .id(ElementId::Name(SharedString::from(row_id)))
@@ -122,7 +138,7 @@ pub(super) fn render_mutations_table(
                             .font_weight(FontWeight::SEMIBOLD)
                             .px_1()
                             .text_color(status_color)
-                            .child(status_label.to_string()),
+                            .child(status_label),
                         div()
                             .text_xs()
                             .text_color(muted_foreground)
@@ -135,7 +151,7 @@ pub(super) fn render_mutations_table(
     let table = v_flex()
         .id("v2-mutations-table")
         .role(Role::Table)
-        .aria_label("Mutations")
+        .aria_label(mutations_title.clone())
         .aria_row_count(row_count)
         .aria_column_count(3)
         .gap_0p5()
@@ -151,12 +167,22 @@ pub(super) fn render_mutations_table(
         .child(
             div()
                 .id("v2-mutations-title")
-                .a11y(Role::Heading, "Mutations")
+                .a11y(Role::Heading, mutations_title.clone())
                 .aria_level(2)
                 .text_sm()
                 .font_weight(FontWeight::SEMIBOLD)
                 .mb_2()
-                .child("Mutations"),
+                .child(mutations_title),
         )
         .child(table)
+}
+
+fn mutation_status_label(status: MutationStatus) -> String {
+    let key = match status {
+        MutationStatus::Idle => "query_devtools_status_idle",
+        MutationStatus::Loading => "query_devtools_status_loading",
+        MutationStatus::Success => "query_devtools_status_success",
+        MutationStatus::Failure => "query_devtools_status_failure",
+    };
+    crate::i18n::localize(key)
 }

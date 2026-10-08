@@ -10,7 +10,7 @@ use gpui_query::core::{QueryResource, QueryStatus, RetryPolicy};
 use crate::accessibility::A11yExt as _;
 
 use super::super::QueryPlaygroundPage;
-use super::super::ui_helpers::{chip, mini_card, section_card, status_badge};
+use super::super::ui_helpers::{chip, fetch_label, mini_card, section_card, status_badge};
 
 // Readers for the recurring `Option<(Entity<QueryResource<..>>, Subscription)>`
 // shape; MutationStatus/infinite/bare-Entity sites don't fit and stay inline.
@@ -50,8 +50,9 @@ impl QueryPlaygroundPage {
         let swr_loading = swr_status.is_loading();
 
         section_card(
-            "Cache Policies",
-            "Compare NoCache, TTL 5s, and StaleWhileRevalidate 3s/7s.",
+            "cache-policies",
+            &crate::i18n::localize("query_playground_cache_policies_title"),
+            &crate::i18n::localize("query_playground_cache_policies_description"),
             cx,
         )
         .child(
@@ -65,7 +66,7 @@ impl QueryPlaygroundPage {
                         .child(
                             Button::new("pg-nocache-fetch")
                                 .primary()
-                                .label(if nocache_loading { "Fetching" } else { "Fetch" })
+                                .label(fetch_label(nocache_loading))
                                 .disabled(nocache_loading)
                                 .on_click(cx.listener(|this, _, _, cx| this.fetch_nocache(cx))),
                         ),
@@ -76,7 +77,7 @@ impl QueryPlaygroundPage {
                         .child(
                             Button::new("pg-ttl-fetch")
                                 .primary()
-                                .label(if ttl_loading { "Fetching" } else { "Fetch" })
+                                .label(fetch_label(ttl_loading))
                                 .disabled(ttl_loading)
                                 .on_click(cx.listener(|this, _, _, cx| this.fetch_ttl(cx))),
                         ),
@@ -87,7 +88,7 @@ impl QueryPlaygroundPage {
                         .child(
                             Button::new("pg-swr-fetch")
                                 .primary()
-                                .label(if swr_loading { "Fetching" } else { "Fetch" })
+                                .label(fetch_label(swr_loading))
                                 .disabled(swr_loading)
                                 .on_click(cx.listener(|this, _, _, cx| this.fetch_swr(cx))),
                         ),
@@ -105,12 +106,16 @@ impl QueryPlaygroundPage {
         let ignore_loading = ignore_status.is_loading();
 
         section_card(
-            "Request Policies",
-            "LatestWins: last fetch wins, older results discarded. IgnoreWhileLoading: first fetch completes, rest ignored.",
+            "request-policies",
+            &crate::i18n::localize("query_playground_request_policies_title"),
+            &crate::i18n::localize("query_playground_request_policies_description"),
             cx,
         )
         .child(
-            h_flex().gap_4().px_4().py_3()
+            h_flex()
+                .gap_4()
+                .px_4()
+                .py_3()
                 .child(
                     mini_card("latest-wins", "LatestWins", cx)
                         .child(status_badge("latest-wins", latest_status, cx))
@@ -120,7 +125,7 @@ impl QueryPlaygroundPage {
                         .child(
                             Button::new("pg-latest-spam")
                                 .primary()
-                                .label("Spam Fetch (5x)")
+                                .label(crate::i18n::localize("query_playground_spam_fetch"))
                                 .disabled(latest_loading)
                                 .on_click(cx.listener(|this, _, _, cx| this.spam_latest_wins(cx))),
                         ),
@@ -134,7 +139,7 @@ impl QueryPlaygroundPage {
                         .child(
                             Button::new("pg-ignore-spam")
                                 .primary()
-                                .label("Spam Fetch (5x)")
+                                .label(crate::i18n::localize("query_playground_spam_fetch"))
                                 .disabled(ignore_loading)
                                 .on_click(cx.listener(|this, _, _, cx| this.spam_ignore(cx))),
                         ),
@@ -155,10 +160,9 @@ impl QueryPlaygroundPage {
             });
 
         section_card(
-            "Retry Policy",
-            "Fetcher always fails. The RetryPolicy retries 3× with backoff before \
-             giving up — the button stays \"Retrying…\" through all attempts (that \
-             delay IS the retries happening), then ends in Failure.",
+            "retry-policy",
+            &crate::i18n::localize("query_playground_retry_policy_title"),
+            &crate::i18n::localize("query_playground_retry_policy_description"),
             cx,
         )
         .child(
@@ -166,9 +170,9 @@ impl QueryPlaygroundPage {
                 Button::new("pg-retry-trigger")
                     .primary()
                     .label(if loading {
-                        "Retrying…"
+                        crate::i18n::localize("query_playground_retrying")
                     } else {
-                        "Trigger Failing Fetch"
+                        crate::i18n::localize("query_playground_trigger_failing_fetch")
                     })
                     .disabled(loading)
                     .on_click(cx.listener(|this, _, _, cx| this.trigger_failing_fetch(cx))),
@@ -183,28 +187,39 @@ impl QueryPlaygroundPage {
                 .child(status_badge("retry", status, cx))
                 .child(chip(
                     "retry-max",
-                    &format!("max retries: {}", policy.max_retries),
+                    &format!(
+                        "{}: {}",
+                        crate::i18n::localize("query_playground_max_retries"),
+                        policy.max_retries
+                    ),
                     cx.theme().background,
                     cx,
                 ))
                 .child(chip(
                     "retry-backoff",
-                    &format!("backoff: {}ms", policy.retry_delay_ms),
+                    &format!(
+                        "{}: {}ms",
+                        crate::i18n::localize("query_playground_backoff"),
+                        policy.retry_delay_ms
+                    ),
                     cx.theme().background,
                     cx,
                 ))
                 .when_some(error, |el, _| {
+                    let gave_up = format!(
+                        "{} {} {}",
+                        crate::i18n::localize("query_playground_gave_up_after"),
+                        policy.max_retries,
+                        crate::i18n::localize("query_playground_gave_up_retries")
+                    );
                     el.child(
                         div()
                             .id("pg-retry-error")
-                            .a11y(
-                                Role::Paragraph,
-                                format!("Gave up after {} retries.", policy.max_retries),
-                            )
+                            .a11y(Role::Paragraph, gave_up.clone())
                             .a11y_live(accesskit::Live::Polite)
                             .text_xs()
                             .text_color(cx.theme().danger)
-                            .child(format!("Gave up after {} retries.", policy.max_retries)),
+                            .child(gave_up),
                     )
                 }),
         )

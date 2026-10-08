@@ -13,7 +13,10 @@ use gpui_query::core::{MutationStatus, QueryStatus};
 
 use crate::accessibility::A11yExt as _;
 
-use super::super::ui_helpers::{chip, mapped_preview, section_card, source_preview, status_badge};
+use super::super::ui_helpers::{
+    chip, fetch_label, mapped_preview, mutation_status_label, section_card, source_preview,
+    status_badge,
+};
 use super::super::{PlaygroundPage, QueryPlaygroundPage};
 
 impl QueryPlaygroundPage {
@@ -46,88 +49,117 @@ impl QueryPlaygroundPage {
         };
 
         section_card(
-            "Mutation",
-            "Text input for mutation variables. Mutate() fires async; mutate_with_callbacks() also logs on_success/on_error.",
+            "mutation",
+            &crate::i18n::localize("query_playground_mutation_title"),
+            &crate::i18n::localize("query_playground_mutation_description"),
             cx,
         )
         .child(
-            h_flex().gap_2().items_center().flex_wrap().px_4().py_2()
+            h_flex()
+                .gap_2()
+                .items_center()
+                .flex_wrap()
+                .px_4()
+                .py_2()
                 .child(
-                    div().flex_1().min_w(px(140.))
-                        .child(Input::new(&self.mutation_input_state).aria_label("Mutation variables"))
+                    div().flex_1().min_w(px(140.)).child(
+                        Input::new(&self.mutation_input_state).aria_label(crate::i18n::localize(
+                            "query_playground_mutation_variables",
+                        )),
+                    ),
                 )
                 .child(
                     Button::new("pg-mutate")
                         .primary()
-                        .label(if m_loading { "Mutating..." } else { "Mutate" })
+                        .label(if m_loading {
+                            crate::i18n::localize("query_playground_mutating")
+                        } else {
+                            crate::i18n::localize("query_playground_mutate")
+                        })
                         .disabled(m_loading)
                         .on_click(cx.listener(|this, _, _, cx| this.do_mutate(cx))),
                 )
                 .child(
                     Button::new("pg-mutate-cb")
                         .outline()
-                        .label("Mutate with Callbacks")
+                        .label(crate::i18n::localize(
+                            "query_playground_mutate_with_callbacks",
+                        ))
                         .disabled(m_loading)
                         .on_click(cx.listener(|this, _, _, cx| this.do_mutate_with_callbacks(cx))),
                 )
                 .child(
                     Button::new("pg-mutate-reset")
                         .outline()
-                        .label("Reset")
+                        .label(crate::i18n::localize("query_playground_reset"))
                         .on_click(cx.listener(|this, _, _, cx| this.reset_mutation(cx))),
                 ),
         )
         .child(
-            v_flex().gap_1().px_4().pb_3()
-                .child(
-                    h_flex().gap_3().items_center()
-                        .child({
-                            let label = format!("Status: {}", m_status.label());
+            v_flex().gap_1().px_4().pb_3().child(
+                h_flex()
+                    .gap_3()
+                    .items_center()
+                    .child({
+                        let status_text = mutation_status_label(m_status);
+                        let label = format!(
+                            "{}: {status_text}",
+                            crate::i18n::localize("query_playground_status")
+                        );
+                        div()
+                            .id("pg-mutation-status")
+                            .a11y(Role::Paragraph, label)
+                            .px_3()
+                            .py_1()
+                            .rounded(cx.theme().radius_lg)
+                            .border_1()
+                            .border_color(status_color)
+                            .text_sm()
+                            .text_color(status_color)
+                            .child(status_text)
+                    })
+                    .when_some(m_data, |el, d| {
+                        el.child(chip(
+                            "mutation-data",
+                            &format!("{}: {d}", crate::i18n::localize("query_playground_data")),
+                            cx.theme().background,
+                            cx,
+                        ))
+                    })
+                    .when_some(m_vars, |el, v| {
+                        el.child(chip(
+                            "mutation-vars",
+                            &format!("{}: {v}", crate::i18n::localize("query_playground_vars")),
+                            cx.theme().background,
+                            cx,
+                        ))
+                    })
+                    .when_some(m_error, |el, e| {
+                        el.child(
                             div()
-                                .id("pg-mutation-status")
-                                .a11y(Role::Paragraph, label)
+                                .id("pg-mutation-error")
+                                .a11y(
+                                    Role::Paragraph,
+                                    format!(
+                                        "{}: {e}",
+                                        crate::i18n::localize("query_playground_error")
+                                    ),
+                                )
+                                .a11y_live(accesskit::Live::Polite)
                                 .px_3()
                                 .py_1()
                                 .rounded(cx.theme().radius_lg)
                                 .border_1()
-                                .border_color(status_color)
+                                .border_color(cx.theme().danger)
                                 .text_sm()
-                                .text_color(status_color)
-                                .child(m_status.label().to_string())
-                        })
-                        .when_some(m_data, |el, d| {
-                            el.child(chip(
-                                "mutation-data",
-                                &format!("data: {}", d),
-                                cx.theme().background,
-                                cx,
-                            ))
-                        })
-                        .when_some(m_vars, |el, v| {
-                            el.child(chip(
-                                "mutation-vars",
-                                &format!("vars: {}", v),
-                                cx.theme().background,
-                                cx,
-                            ))
-                        })
-                        .when_some(m_error, |el, e| {
-                            el.child(
-                                div()
-                                    .id("pg-mutation-error")
-                                    .a11y(Role::Paragraph, format!("error: {e}"))
-                                    .a11y_live(accesskit::Live::Polite)
-                                    .px_3()
-                                    .py_1()
-                                    .rounded(cx.theme().radius_lg)
-                                    .border_1()
-                                    .border_color(cx.theme().danger)
-                                    .text_sm()
-                                    .text_color(cx.theme().danger)
-                                    .child(format!("error: {}", e)),
-                            )
-                        }),
-                ),
+                                .text_color(cx.theme().danger)
+                                .child(format!(
+                                    "{}: {e}",
+                                    crate::i18n::localize("query_playground_error")
+                                )),
+                        )
+                    }),
+            ),
         )
     }
 
@@ -176,15 +208,22 @@ impl QueryPlaygroundPage {
             .unwrap_or_default();
 
         let range_label = match (first_pg, last_pg) {
-            (Some(f), Some(l)) => format!("range: page {f}..{l}"),
-            _ => "range: (empty)".to_string(),
+            (Some(f), Some(l)) => format!(
+                "{}: {} {f}..{l}",
+                crate::i18n::localize("query_playground_range"),
+                crate::i18n::localize("query_playground_range_page")
+            ),
+            _ => format!(
+                "{}: ({})",
+                crate::i18n::localize("query_playground_range"),
+                crate::i18n::localize("query_playground_empty")
+            ),
         };
 
         section_card(
-            "Infinite Query",
-            "Bidirectional pagination (max 3 pages kept). Data is pages 0..=10; \
-             Load Next goes toward 10, Load Previous toward 0. Either is disabled \
-             only at its end of the range.",
+            "infinite-query",
+            &crate::i18n::localize("query_playground_infinite_query_title"),
+            &crate::i18n::localize("query_playground_infinite_query_description"),
             cx,
         )
         .child(
@@ -196,27 +235,32 @@ impl QueryPlaygroundPage {
                 .child(
                     Button::new("pg-inf-next")
                         .primary()
-                        .label("Load Next Page")
+                        .label(crate::i18n::localize("query_playground_load_next_page"))
                         .disabled(!can_next)
                         .on_click(cx.listener(|this, _, _, cx| this.load_next_page(cx))),
                 )
                 .child(
                     Button::new("pg-inf-prev")
                         .outline()
-                        .label("Load Previous Page")
+                        .label(crate::i18n::localize("query_playground_load_previous_page"))
                         .disabled(!can_prev)
                         .on_click(cx.listener(|this, _, _, cx| this.load_prev_page(cx))),
                 )
                 .child(
                     Button::new("pg-inf-reset")
                         .outline()
-                        .label("Reset")
+                        .label(crate::i18n::localize("query_playground_reset"))
                         .on_click(cx.listener(|this, _, _, cx| this.reset_infinite(cx))),
                 )
                 .child(status_badge("infinite", inf_status, cx))
                 .child(chip(
                     "infinite-pages",
-                    &format!("pages: {}/3 (max)", page_count),
+                    &format!(
+                        "{}: {}/3 ({})",
+                        crate::i18n::localize("query_playground_pages"),
+                        page_count,
+                        crate::i18n::localize("query_playground_max")
+                    ),
                     cx.theme().background,
                     cx,
                 ))
@@ -243,7 +287,13 @@ impl QueryPlaygroundPage {
                                 v_flex()
                                     .gap_1()
                                     .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).child(
-                                        format!("Page {} (index {})", page.page_number, idx),
+                                        format!(
+                                            "{} {} ({} {})",
+                                            crate::i18n::localize("query_playground_page"),
+                                            page.page_number,
+                                            crate::i18n::localize("query_playground_index"),
+                                            idx
+                                        ),
                                     ))
                                     .child(
                                         div()
@@ -273,26 +323,46 @@ impl QueryPlaygroundPage {
         let loading = source_status.is_loading();
 
         section_card(
-            "Select Transform",
-            "Source query returns Vec<PlaygroundUser>. Transform projects to Vec<String> (names only).",
+            "select-transform",
+            &crate::i18n::localize("query_playground_select_transform_title"),
+            &crate::i18n::localize("query_playground_select_transform_description"),
             cx,
         )
         .child(
-            h_flex().gap_2().px_4().py_3()
+            h_flex()
+                .gap_2()
+                .px_4()
+                .py_3()
                 .child(
                     Button::new("pg-select-fetch")
                         .primary()
-                        .label(if loading { "Fetching..." } else { "Fetch Source" })
+                        .label(if loading {
+                            crate::i18n::localize("query_playground_fetching")
+                        } else {
+                            crate::i18n::localize("query_playground_fetch_source")
+                        })
                         .disabled(loading)
                         .on_click(cx.listener(|this, _, _, cx| this.fetch_select(cx))),
                 )
                 .child(status_badge("select", source_status, cx)),
         )
         .child(
-            h_flex().gap_4().px_4().pb_3()
+            h_flex()
+                .gap_4()
+                .px_4()
+                .pb_3()
                 .child(
-                    v_flex().gap_1()
-                        .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child("Source (Vec<User>)"))
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(format!(
+                                    "{} (Vec<User>)",
+                                    crate::i18n::localize("query_playground_source")
+                                )),
+                        )
                         .child(
                             div()
                                 .p_2()
@@ -303,8 +373,17 @@ impl QueryPlaygroundPage {
                         ),
                 )
                 .child(
-                    v_flex().gap_1()
-                        .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child("Mapped (Vec<String>)"))
+                    v_flex()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_sm()
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .child(format!(
+                                    "{} (Vec<String>)",
+                                    crate::i18n::localize("query_playground_mapped")
+                                )),
+                        )
                         .child(
                             div()
                                 .p_2()
@@ -336,8 +415,9 @@ impl QueryPlaygroundPage {
         let loading = status.is_loading();
 
         section_card(
-            "Imperative Fetch",
-            "Manual refetch with signal. Cancel mid-flight to observe cooperative cancellation.",
+            "imperative-fetch",
+            &crate::i18n::localize("query_playground_imperative_fetch_title"),
+            &crate::i18n::localize("query_playground_imperative_fetch_description"),
             cx,
         )
         .child(
@@ -349,21 +429,21 @@ impl QueryPlaygroundPage {
                 .child(
                     Button::new("pg-imp-fetch")
                         .primary()
-                        .label(if loading { "Fetching..." } else { "Fetch" })
+                        .label(fetch_label(loading))
                         .disabled(loading)
                         .on_click(cx.listener(|this, _, _, cx| this.fetch_imperative(cx))),
                 )
                 .child(
                     Button::new("pg-imp-cancel")
                         .outline()
-                        .label("Cancel mid-flight")
+                        .label(crate::i18n::localize("query_playground_cancel_mid_flight"))
                         .disabled(!loading)
                         .on_click(cx.listener(|this, _, _, cx| this.cancel_imperative(cx))),
                 )
                 .child(
                     Button::new("pg-imp-reset")
                         .outline()
-                        .label("Reset")
+                        .label(crate::i18n::localize("query_playground_reset"))
                         .on_click(cx.listener(|this, _, _, cx| this.reset_imperative(cx))),
                 ),
         )
@@ -379,7 +459,15 @@ impl QueryPlaygroundPage {
                 })
                 .child(chip(
                     "imperative-signal",
-                    &format!("signal cancelled: {}", signal_cancelled),
+                    &format!(
+                        "{}: {}",
+                        crate::i18n::localize("query_playground_signal_cancelled"),
+                        if signal_cancelled {
+                            crate::i18n::localize("query_playground_yes")
+                        } else {
+                            crate::i18n::localize("query_playground_no")
+                        }
+                    ),
                     cx.theme().background,
                     cx,
                 )),
