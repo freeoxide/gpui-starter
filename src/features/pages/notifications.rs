@@ -27,7 +27,12 @@ impl Render for NotificationsPage {
         let items = inbox::snapshot(cx);
         let unread = items.iter().filter(|item| !item.read).count();
         let total = items.len();
-        let title = format!("Notifications ({unread} unread)");
+        let list_label = crate::i18n::localize("notifications_title");
+        let title = format!(
+            "{} ({unread} {})",
+            list_label,
+            crate::i18n::localize("notifications_unread")
+        );
 
         v_flex()
             .min_h_full()
@@ -59,7 +64,7 @@ impl Render for NotificationsPage {
                             .child(
                                 Button::new("notifications-mark-read")
                                     .outline()
-                                    .label("Mark all read")
+                                    .label(crate::i18n::localize("notifications_mark_all_read"))
                                     .on_click(|_, _, cx| {
                                         inbox::mark_all_read(cx);
                                     }),
@@ -67,7 +72,7 @@ impl Render for NotificationsPage {
                             .child(
                                 Button::new("notifications-clear-all")
                                     .outline()
-                                    .label("Clear all")
+                                    .label(crate::i18n::localize("notifications_clear_all"))
                                     .on_click(|_, _, cx| {
                                         inbox::clear_all(cx);
                                     }),
@@ -77,7 +82,7 @@ impl Render for NotificationsPage {
             .child(
                 div()
                     .id("notifications-list")
-                    .a11y(Role::List, "Notifications")
+                    .a11y(Role::List, list_label)
                     .aria_orientation(Orientation::Vertical)
                     // AT-SPI derives each item's setsize from the nearest
                     // ancestor that declares one; item-level values are ignored.
@@ -101,8 +106,10 @@ fn render_item(index: usize, total: usize, item: NotificationInboxItem) -> State
 
     let mut label = format!("{title}. {body}. {summary}");
     if let Some(error) = &error_summary {
-        label.push_str(". error: ");
-        label.push_str(error);
+        label.push_str(&format!(
+            ". {} {error}",
+            crate::i18n::localize("notifications_error")
+        ));
     }
 
     v_flex()
@@ -138,6 +145,9 @@ fn render_item(index: usize, total: usize, item: NotificationInboxItem) -> State
         .child(div().text_sm().child(body))
         .child(div().text_xs().child(summary))
         .when_some(error_summary, |this, error| {
-            this.child(div().text_xs().child(format!("error: {error}")))
+            this.child(div().text_xs().child(format!(
+                "{} {error}",
+                crate::i18n::localize("notifications_error")
+            )))
         })
 }

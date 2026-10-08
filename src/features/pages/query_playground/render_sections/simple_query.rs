@@ -8,7 +8,7 @@ use gpui_kit::{prelude::*, *};
 use gpui_query::core::QueryStatus;
 
 use super::super::QueryPlaygroundPage;
-use super::super::ui_helpers::{chip, section_card, status_badge};
+use super::super::ui_helpers::{chip, fetch_label, section_card, status_badge};
 
 impl QueryPlaygroundPage {
     pub(in super::super) fn render_simple_query(&mut self, cx: &mut Context<Self>) -> Div {
@@ -38,8 +38,9 @@ impl QueryPlaygroundPage {
         let bg = cx.theme().background;
 
         section_card(
-            "Simple Query",
-            "Basic fetch with NoCache + LatestWins. Simulates 1s async work.",
+            "simple",
+            &crate::i18n::localize("query_playground_simple_title"),
+            &crate::i18n::localize("query_playground_simple_description"),
             cx,
         )
         .child(
@@ -51,21 +52,21 @@ impl QueryPlaygroundPage {
                 .child(
                     Button::new("pg-simple-fetch")
                         .primary()
-                        .label(if loading { "Fetching..." } else { "Fetch" })
+                        .label(fetch_label(loading))
                         .disabled(loading)
                         .on_click(cx.listener(|this, _, _, cx| this.fetch_simple(cx))),
                 )
                 .child(
                     Button::new("pg-simple-cancel")
                         .outline()
-                        .label("Cancel")
+                        .label(crate::i18n::localize("query_playground_cancel"))
                         .disabled(!loading)
                         .on_click(cx.listener(|this, _, _, cx| this.cancel_simple(cx))),
                 )
                 .child(
                     Button::new("pg-simple-reset")
                         .outline()
-                        .label("Reset")
+                        .label(crate::i18n::localize("query_playground_reset"))
                         .on_click(cx.listener(|this, _, _, cx| this.reset_simple(cx))),
                 ),
         )
@@ -85,7 +86,16 @@ impl QueryPlaygroundPage {
                     ))
                 })
                 .when_some(cache_age, |el, age| {
-                    el.child(chip("simple-age", &format!("age: {}ms", age), bg, cx))
+                    el.child(chip(
+                        "simple-age",
+                        &format!(
+                            "{}: {}ms",
+                            crate::i18n::localize("query_playground_cache_age"),
+                            age
+                        ),
+                        bg,
+                        cx,
+                    ))
                 }),
         )
     }

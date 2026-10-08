@@ -58,13 +58,18 @@ pub enum NotificationPermissionState {
 
 impl NotificationPermissionState {
     pub fn label(&self) -> SharedString {
+        let key = match self {
+            Self::Unknown => "notifications_permission_unknown",
+            Self::Unsupported => "notifications_permission_unsupported",
+            Self::Unavailable(_) => "notifications_permission_unavailable",
+            Self::NotDetermined => "notifications_permission_not_requested",
+            Self::Denied => "notifications_permission_denied",
+            Self::Authorized => "notifications_permission_authorized",
+        };
+        let label = crate::i18n::localize(key);
         match self {
-            Self::Unknown => "Unknown".into(),
-            Self::Unsupported => "Unsupported on this platform".into(),
-            Self::Unavailable(reason) => format!("Unavailable: {reason}").into(),
-            Self::NotDetermined => "Not requested".into(),
-            Self::Denied => "Denied".into(),
-            Self::Authorized => "Authorized".into(),
+            Self::Unavailable(reason) => format!("{label}: {reason}").into(),
+            _ => label.into(),
         }
     }
 }

@@ -59,7 +59,7 @@ fn sort_or_filter_changes_rebuild_the_cache() {
         &mut cache,
         &Some(d),
         QuerySort::CacheHits,
-        &Some("Failure".to_string()),
+        &Some(QueryStatus::Failure),
     );
     assert_eq!(filtered.len(), 1);
     assert_eq!(filtered[0].query.key, "playground::b");

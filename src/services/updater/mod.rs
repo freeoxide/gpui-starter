@@ -151,16 +151,24 @@ fn reset_download_retry(cx: &mut gpui_kit::App) {
 
 fn notify_update_available(version: &str, cx: &mut gpui_kit::App) {
     dispatch_background_notification(
-        &format!("Update v{version} available"),
-        "A new version is available. Open settings to download and install.",
+        &format!(
+            "{} v{version} {}",
+            crate::i18n::localize("updates_title_prefix"),
+            crate::i18n::localize("updates_available_suffix")
+        ),
+        &crate::i18n::localize("updates_available_body"),
         cx,
     );
 }
 
 fn notify_update_downloaded(version: &str, cx: &mut gpui_kit::App) {
     dispatch_background_notification(
-        &format!("Update v{version} ready"),
-        "Update downloaded — restart to apply.",
+        &format!(
+            "{} v{version} {}",
+            crate::i18n::localize("updates_title_prefix"),
+            crate::i18n::localize("updates_ready_suffix")
+        ),
+        &crate::i18n::localize("updates_ready_body"),
         cx,
     );
 }
@@ -168,8 +176,8 @@ fn notify_update_downloaded(version: &str, cx: &mut gpui_kit::App) {
 /// Permanent update errors only (retries exhausted).
 fn notify_update_error(cx: &mut gpui_kit::App) {
     dispatch_background_notification(
-        "Update check failed",
-        "Could not check or download updates. Please try again later.",
+        &crate::i18n::localize("updates_error_title"),
+        &crate::i18n::localize("updates_error_body"),
         cx,
     );
 }

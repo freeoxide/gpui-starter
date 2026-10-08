@@ -6,37 +6,40 @@ use gpui_kit::{prelude::*, *};
 
 use super::super::render_error::TriggerRenderError;
 use super::ErrorPlaygroundPage;
-use super::helpers::{action_row, result_inline, test_card};
+use super::helpers::{ResultMsg, action_row, result_inline, test_card};
 
-/// Parameter bundle for the unified HTTP/timeout error block renderer.
-/// All fields are `Copy`, so one value can be captured by the click closure.
+/// Parameter bundle for the unified HTTP/timeout error block renderer. The
+/// `*_key` fields are catalog keys; all fields are `Copy`, so one value can be
+/// captured by the click closure.
 #[derive(Clone, Copy)]
 struct ErrorBlockCtx {
-    title: &'static str,
-    description: &'static str,
-    button_key: &'static str,
-    button_label: &'static str,
-    initial_msg: &'static str,
+    id: &'static str,
+    title_key: &'static str,
+    description_key: &'static str,
+    button_label_key: &'static str,
+    initial_msg_key: &'static str,
     url: &'static str,
     timeout: std::time::Duration,
-    error_prefix: &'static str,
+    error_prefix_key: &'static str,
 }
 
 impl ErrorPlaygroundPage {
     pub(super) fn render_boundary_trigger(
         &self,
-        title: &str,
-        description: &str,
-        button_label: &str,
-        error_message: &str,
+        id: &str,
+        title: String,
+        description: String,
+        button_label: String,
+        error_message: &'static str,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
         let error_msg = error_message.to_string();
-        test_card(title, description, true, cx).child(
+        let button_id = SharedString::from(format!("ep-{id}"));
+        test_card(id, &title, &description, true, cx).child(
             action_row(cx).child(
-                Button::new(SharedString::from(format!("ep-{}", title)))
+                Button::new(button_id)
                     .primary()
-                    .label(button_label.to_string())
+                    .label(button_label)
                     .on_click(move |_, window, cx| {
                         // AppRoot swaps in RenderErrorPage. Window-scoped
                         // dispatch: the App-level one fails on Windows.
@@ -54,9 +57,9 @@ impl ErrorPlaygroundPage {
     pub(super) fn render_background_panic(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
         let result_text = self.background_panic_result.clone();
         let card = test_card(
-            "Background Task Panic",
-            "Spawns an async task on the tokio runtime that panics. Should NOT trigger the \
-             error boundary (only render-path panics are caught by the thread-local guard).",
+            "bg-panic",
+            &crate::i18n::localize("error_playground_bg_panic_title"),
+            &crate::i18n::localize("error_playground_bg_panic_description"),
             false,
             cx,
         );
@@ -67,10 +70,11 @@ impl ErrorPlaygroundPage {
                     .child(
                         Button::new("ep-bg-panic")
                             .primary()
-                            .label("Spawn Background Panic")
+                            .label(crate::i18n::localize("error_playground_bg_panic_button"))
                             .on_click(cx.listener(|this, _, _, cx| {
-                                this.background_panic_result =
-                                    Some("Panic spawned — check logs".to_string());
+                                this.background_panic_result = Some(ResultMsg::error(
+                                    crate::i18n::localize("error_playground_panic_spawned"),
+                                ));
                                 cx.notify();
 
                                 let rt = cx
@@ -94,15 +98,14 @@ impl ErrorPlaygroundPage {
         let result_text = self.http_result.clone();
         Self::render_error_block(
             ErrorBlockCtx {
-                title: "HTTP Error",
-                description: "Sends an HTTP request to an invalid URL (127.0.0.1:1). Should NOT \
-                    trigger the error boundary — the error is shown inline.",
-                button_key: "ep-http-error",
-                button_label: "Send HTTP Request",
-                initial_msg: "Requesting...",
+                id: "http-error",
+                title_key: "error_playground_http_title",
+                description_key: "error_playground_http_description",
+                button_label_key: "error_playground_http_button",
+                initial_msg_key: "error_playground_requesting",
                 url: "http://127.0.0.1:1/fail",
                 timeout: std::time::Duration::from_secs(5),
-                error_prefix: "HTTP error",
+                error_prefix_key: "error_playground_http_error_prefix",
             },
             |this, v| this.http_result = v,
             result_text,
@@ -113,9 +116,9 @@ impl ErrorPlaygroundPage {
     pub(super) fn render_fs_error(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
         let result_text = self.fs_result.clone();
         let card = test_card(
-            "Filesystem Error",
-            "Tries to read a file that does not exist. Should NOT trigger the error \
-             boundary — the error is shown inline.",
+            "fs",
+            &crate::i18n::localize("error_playground_fs_title"),
+            &crate::i18n::localize("error_playground_fs_description"),
             false,
             cx,
         );
@@ -126,16 +129,25 @@ impl ErrorPlaygroundPage {
                     .child(
                         Button::new("ep-fs-error")
                             .primary()
-                            .label("Read Missing File")
+                            .label(crate::i18n::localize("error_playground_fs_button"))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 let path = "/tmp/gpui-error-playground-nonexistent.txt";
                                 match std::fs::read_to_string(path) {
                                     Ok(_contents) => {
-                                        this.fs_result =
-                                            Some(format!("Unexpected success reading {}", path));
+                                        this.fs_result = Some(ResultMsg::info(format!(
+                                            "{} {path}",
+                                            crate::i18n::localize(
+                                                "error_playground_fs_unexpected_success"
+                                            )
+                                        )));
                                     }
                                     Err(e) => {
-                                        this.fs_result = Some(format!("FS error: {e}"));
+                                        this.fs_result = Some(ResultMsg::error(format!(
+                                            "{}: {e}",
+                                            crate::i18n::localize(
+                                                "error_playground_fs_error_prefix"
+                                            )
+                                        )));
                                     }
                                 }
                                 cx.notify();
@@ -152,16 +164,14 @@ impl ErrorPlaygroundPage {
         let result_text = self.async_result.clone();
         Self::render_error_block(
             ErrorBlockCtx {
-                title: "Async Timeout",
-                description: "Sends an HTTP request with a very short timeout (1ms) to a slow \
-                    endpoint. Should NOT trigger the error boundary — the timeout error is \
-                    shown inline.",
-                button_key: "ep-async-timeout",
-                button_label: "Send Timeout Request",
-                initial_msg: "Requesting (1ms timeout)...",
+                id: "async-timeout",
+                title_key: "error_playground_timeout_title",
+                description_key: "error_playground_timeout_description",
+                button_label_key: "error_playground_timeout_button",
+                initial_msg_key: "error_playground_requesting_timeout",
                 url: "http://httpbin.org/delay/5",
                 timeout: std::time::Duration::from_millis(1),
-                error_prefix: "Timeout error",
+                error_prefix_key: "error_playground_timeout_error_prefix",
             },
             |this, v| this.async_result = v,
             result_text,
@@ -173,21 +183,32 @@ impl ErrorPlaygroundPage {
     /// the two differ only in URL, timeout, copy, and the result field.
     fn render_error_block(
         ctx: ErrorBlockCtx,
-        set_result: impl Fn(&mut Self, Option<String>) + Copy + Send + 'static,
-        result_text: Option<String>,
+        set_result: impl Fn(&mut Self, Option<ResultMsg>) + Copy + Send + 'static,
+        result_text: Option<ResultMsg>,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
-        let card = test_card(ctx.title, ctx.description, false, cx);
+        let card = test_card(
+            ctx.id,
+            &crate::i18n::localize(ctx.title_key),
+            &crate::i18n::localize(ctx.description_key),
+            false,
+            cx,
+        );
 
         card.child(
             v_flex().gap_2().px_4().pb_3().child(
                 action_row(cx)
                     .child(
-                        Button::new(ctx.button_key)
+                        Button::new(SharedString::from(format!("ep-{}", ctx.id)))
                             .primary()
-                            .label(ctx.button_label)
+                            .label(crate::i18n::localize(ctx.button_label_key))
                             .on_click(cx.listener(move |this, _, _, cx| {
-                                set_result(this, Some(ctx.initial_msg.to_string()));
+                                set_result(
+                                    this,
+                                    Some(ResultMsg::info(crate::i18n::localize(
+                                        ctx.initial_msg_key,
+                                    ))),
+                                );
                                 cx.notify();
 
                                 let tokio_rt = cx
@@ -213,16 +234,23 @@ impl ErrorPlaygroundPage {
                                             .await;
 
                                         match result {
-                                            Ok(Ok(resp)) => {
-                                                format!(
-                                                    "Unexpected success: status {}",
-                                                    resp.status()
+                                            Ok(Ok(resp)) => ResultMsg::info(format!(
+                                                "{} {}",
+                                                crate::i18n::localize(
+                                                    "error_playground_unexpected_status"
+                                                ),
+                                                resp.status()
+                                            )),
+                                            Ok(Err(e)) => ResultMsg::error(format!(
+                                                "{}: {e}",
+                                                crate::i18n::localize(ctx.error_prefix_key)
+                                            )),
+                                            Err(e) => ResultMsg::error(format!(
+                                                "{}: {e}",
+                                                crate::i18n::localize(
+                                                    "error_playground_task_panicked"
                                                 )
-                                            }
-                                            Ok(Err(e)) => {
-                                                format!("{}: {e}", ctx.error_prefix)
-                                            }
-                                            Err(e) => format!("Task panicked: {e}"),
+                                            )),
                                         }
                                     };
 
@@ -240,19 +268,30 @@ impl ErrorPlaygroundPage {
                                         .await
                                         {
                                             futures_util::future::Either::Left((Ok(resp), _)) => {
-                                                format!(
-                                                    "Unexpected success: status {}",
+                                                ResultMsg::info(format!(
+                                                    "{} {}",
+                                                    crate::i18n::localize(
+                                                        "error_playground_unexpected_status"
+                                                    ),
                                                     resp.status()
-                                                )
+                                                ))
                                             }
                                             futures_util::future::Either::Left((Err(e), _)) => {
-                                                format!("{}: {e}", ctx.error_prefix)
+                                                ResultMsg::error(format!(
+                                                    "{}: {e}",
+                                                    crate::i18n::localize(ctx.error_prefix_key)
+                                                ))
                                             }
-                                            futures_util::future::Either::Right(_) => format!(
-                                                "{}: request timed out after {}ms",
-                                                ctx.error_prefix,
-                                                timeout.as_millis()
-                                            ),
+                                            futures_util::future::Either::Right(_) => {
+                                                ResultMsg::error(format!(
+                                                    "{}: {} ({}ms)",
+                                                    crate::i18n::localize(ctx.error_prefix_key),
+                                                    crate::i18n::localize(
+                                                        "error_playground_request_timed_out"
+                                                    ),
+                                                    timeout.as_millis()
+                                                ))
+                                            }
                                         }
                                     };
 
@@ -266,7 +305,7 @@ impl ErrorPlaygroundPage {
                             })),
                     )
                     .when_some(result_text, |el, text| {
-                        el.child(result_inline(ctx.button_key, &text, cx))
+                        el.child(result_inline(ctx.id, &text, cx))
                     }),
             ),
         )
@@ -274,8 +313,9 @@ impl ErrorPlaygroundPage {
 
     pub(super) fn render_clear_results(&self, cx: &mut Context<Self>) -> Stateful<Div> {
         let card = test_card(
-            "Clear Results",
-            "Resets all inline error/success messages.",
+            "clear",
+            &crate::i18n::localize("error_playground_clear_title"),
+            &crate::i18n::localize("error_playground_clear_description"),
             false,
             cx,
         );
@@ -284,7 +324,7 @@ impl ErrorPlaygroundPage {
             action_row(cx).child(
                 Button::new("ep-clear")
                     .outline()
-                    .label("Clear All Results")
+                    .label(crate::i18n::localize("error_playground_clear_button"))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.http_result = None;
                         this.fs_result = None;

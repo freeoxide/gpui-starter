@@ -14,8 +14,9 @@ impl QueryPlaygroundPage {
         let scroll_handle = self.log_scroll_handle.clone();
 
         let card = section_card(
-            "Activity Log",
-            "Tracks user actions across all sections.",
+            "activity-log",
+            &crate::i18n::localize("query_playground_activity_log_title"),
+            &crate::i18n::localize("query_playground_activity_log_description"),
             cx,
         )
         .child(
@@ -24,18 +25,23 @@ impl QueryPlaygroundPage {
                 .items_center()
                 .px_4()
                 .py_1()
-                .child(
+                .child({
+                    let count = format!(
+                        "{} {}",
+                        log_count,
+                        crate::i18n::localize("query_playground_entries")
+                    );
                     div()
                         .id("activity-log-count")
-                        .a11y(Role::Paragraph, format!("{} entries", log_count))
+                        .a11y(Role::Paragraph, count.clone())
                         .text_xs()
                         .text_color(cx.theme().muted_foreground)
-                        .child(format!("{} entries", log_count)),
-                )
+                        .child(count)
+                })
                 .when(has_logs, |el| {
                     el.child(
                         Button::new("clear-logs")
-                            .label("Clear Logs")
+                            .label(crate::i18n::localize("query_playground_clear_logs"))
                             .compact()
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.activity_log.clear();
@@ -51,7 +57,7 @@ impl QueryPlaygroundPage {
                     div()
                         .text_sm()
                         .text_color(cx.theme().muted_foreground)
-                        .child("No activity yet. Click a button above."),
+                        .child(crate::i18n::localize("query_playground_no_activity")),
                 ),
             )
         } else {

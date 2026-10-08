@@ -195,7 +195,7 @@ impl AppRoot {
             );
             self.render_error = true;
             let summary = crate::lifecycle::last_panic_summary()
-                .unwrap_or_else(|| "An unknown error occurred.".to_string());
+                .unwrap_or_else(|| crate::i18n::localize("render_error_unknown"));
             self.error_page = Some(cx.new(|_| RenderErrorPage::new(summary)));
         }
 

@@ -71,7 +71,7 @@ impl Render for AppTitleBar {
                             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                             .when(show_theme_label, |this| {
                                 this.child(
-                                    Label::new("theme:")
+                                    Label::new(crate::i18n::localize("titlebar_theme_label"))
                                         .secondary(cx.theme().theme_name())
                                         .text_sm(),
                                 )
@@ -94,7 +94,9 @@ impl Render for AppTitleBar {
                                     .ghost()
                                     .compact()
                                     .icon(IconName::Bell)
-                                    .accessibility_label("Notifications")
+                                    .accessibility_label(crate::i18n::localize(
+                                        "titlebar_notifications",
+                                    ))
                                     .on_click(|_, _, cx| {
                                         crate::events::emit(
                                             crate::events::AppEventKind::Navigate(
@@ -158,7 +160,7 @@ impl Render for SettingsDropdown {
 
         div()
             .id("settings-dropdown")
-            .a11y(Role::Group, "Appearance")
+            .a11y(Role::Group, crate::i18n::localize("titlebar_appearance"))
             .track_focus(&focus_handle)
             .on_action(cx.listener(Self::on_select_font))
             .on_action(cx.listener(Self::on_select_radius))
@@ -167,22 +169,30 @@ impl Render for SettingsDropdown {
                     .small()
                     .ghost()
                     .icon(IconName::Settings2)
-                    .accessibility_label("Appearance")
+                    .accessibility_label(crate::i18n::localize("titlebar_appearance"))
                     .dropdown_menu(move |menu, _window, _cx| {
                         menu.scrollable(true)
-                            .label("Font Size")
-                            .menu_with_check("Large", font_size == 18, Box::new(SelectFont(18)))
+                            .label(crate::i18n::localize("titlebar_font_size"))
                             .menu_with_check(
-                                "Medium (default)",
+                                crate::i18n::localize("titlebar_font_large"),
+                                font_size == 18,
+                                Box::new(SelectFont(18)),
+                            )
+                            .menu_with_check(
+                                crate::i18n::localize("titlebar_font_medium_default"),
                                 font_size == 16,
                                 Box::new(SelectFont(16)),
                             )
-                            .menu_with_check("Small", font_size == 14, Box::new(SelectFont(14)))
+                            .menu_with_check(
+                                crate::i18n::localize("titlebar_font_small"),
+                                font_size == 14,
+                                Box::new(SelectFont(14)),
+                            )
                             .separator()
-                            .label("Border Radius")
+                            .label(crate::i18n::localize("titlebar_border_radius"))
                             .menu_with_check("8px", radius == 8, Box::new(SelectRadius(8)))
                             .menu_with_check(
-                                "6px (default)",
+                                crate::i18n::localize("titlebar_radius_default"),
                                 radius == 6,
                                 Box::new(SelectRadius(6)),
                             )
@@ -198,7 +208,8 @@ impl Render for SettingsDropdown {
 /// ToggleSearch binding so the modifier matches the platform keymap.
 fn search_a11y_label() -> String {
     format!(
-        "Search ({})",
+        "{} ({})",
+        crate::i18n::localize("titlebar_search"),
         crate::app::keys::label(crate::app::keys::TOGGLE_SEARCH)
     )
 }

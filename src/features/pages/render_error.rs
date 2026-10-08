@@ -30,6 +30,7 @@ impl RenderErrorPage {
 impl Render for RenderErrorPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let summary = self.summary.clone();
+        let title = crate::i18n::localize("render_error_title");
 
         v_flex()
             .min_h_full()
@@ -40,7 +41,7 @@ impl Render for RenderErrorPage {
             .child(
                 v_flex()
                     .id("render-error-alert")
-                    .a11y(Role::Alert, "Render Error")
+                    .a11y(Role::Alert, title.clone())
                     .a11y_live(accesskit::Live::Polite)
                     .items_center()
                     .gap_3()
@@ -48,12 +49,12 @@ impl Render for RenderErrorPage {
                     .child(
                         div()
                             .id("render-error-title")
-                            .a11y(Role::Heading, "Render Error")
+                            .a11y(Role::Heading, title.clone())
                             .aria_level(1)
                             .text_xl()
                             .font_weight(FontWeight::BOLD)
                             .text_color(cx.theme().danger)
-                            .child("Render Error"),
+                            .child(title),
                     )
                     .child(
                         div()
@@ -65,7 +66,7 @@ impl Render for RenderErrorPage {
                     )
                     .child(
                         Button::new("reload-current-page")
-                            .label("Reload Page")
+                            .label(crate::i18n::localize("render_error_reload"))
                             .on_click(|_, window, cx| {
                                 // Window-scoped: App::dispatch_action is broken on
                                 // Windows (thread-local active-window lookup).

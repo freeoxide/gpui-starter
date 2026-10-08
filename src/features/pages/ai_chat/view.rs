@@ -120,7 +120,10 @@ impl AiResponseView {
                     .child(
                         div()
                             .id("ai-chat-error-card")
-                            .a11y(Role::Alert, format!("Error. {error}"))
+                            .a11y(
+                                Role::Alert,
+                                format!("{}. {error}", crate::i18n::localize("ai_chat_error")),
+                            )
                             .a11y_live(accesskit::Live::Polite)
                             .flex()
                             .flex_col()
@@ -135,7 +138,9 @@ impl AiResponseView {
                                     .text_sm()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(danger)
-                                    .child(SharedString::from("Error")),
+                                    .child(SharedString::from(crate::i18n::localize(
+                                        "ai_chat_error",
+                                    ))),
                             )
                             .child(
                                 div()
@@ -150,7 +155,7 @@ impl AiResponseView {
 
         let mut messages = v_flex()
             .id("ai-chat-transcript")
-            .a11y(Role::List, "Chat transcript")
+            .a11y(Role::List, crate::i18n::localize("ai_chat_transcript"))
             .aria_orientation(Orientation::Vertical)
             .w_full()
             .p_4()
@@ -201,7 +206,10 @@ fn render_user_bubble(
 ) -> impl IntoElement {
     div()
         .id(("ai-chat-user", index))
-        .a11y(Role::ListItem, format!("You: {content}"))
+        .a11y(
+            Role::ListItem,
+            format!("{}: {content}", crate::i18n::localize("ai_chat_you")),
+        )
         .w_full()
         .flex()
         .justify_end()
@@ -231,13 +239,20 @@ fn render_assistant_message(
     let wrapper = div().id(("ai-chat-assistant", index));
 
     if content.is_empty() && streaming {
-        wrapper.a11y(Role::ListItem, "Assistant: thinking").child(
-            div()
-                .text_sm()
-                .italic()
-                .text_color(muted)
-                .child(SharedString::from("Thinking…")),
-        )
+        wrapper
+            .a11y(
+                Role::ListItem,
+                crate::i18n::localize("ai_chat_assistant_thinking"),
+            )
+            .child(
+                div()
+                    .text_sm()
+                    .italic()
+                    .text_color(muted)
+                    .child(SharedString::from(crate::i18n::localize(
+                        "ai_chat_thinking",
+                    ))),
+            )
     } else {
         let display = if streaming {
             format!("{}{}", content, STREAMING_CURSOR)
@@ -245,7 +260,10 @@ fn render_assistant_message(
             content.to_string()
         };
         wrapper
-            .a11y(Role::ListItem, format!("Assistant: {content}"))
+            .a11y(
+                Role::ListItem,
+                format!("{}: {content}", crate::i18n::localize("ai_chat_assistant")),
+            )
             .child(markdown(SharedString::from(display)))
     }
 }

@@ -97,14 +97,20 @@ pub(super) fn render_notifications_section(
         )
         .when_some(
             notifications_snapshot.last_backend_error.clone(),
-            |this, error| this.child(status_row("backend-error", "Last backend error", error)),
+            |this, error| {
+                this.child(status_row(
+                    "backend-error",
+                    crate::i18n::localize("settings_last_backend_error"),
+                    error,
+                ))
+            },
         )
         .when_some(
             notifications_snapshot.daemon_capabilities.clone(),
             |this, caps| {
                 this.child(status_row(
                     "daemon-capabilities",
-                    "Daemon capabilities",
+                    crate::i18n::localize("settings_daemon_capabilities"),
                     caps,
                 ))
             },

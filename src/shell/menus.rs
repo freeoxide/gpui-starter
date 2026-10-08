@@ -4,7 +4,7 @@ use gpui_kit::component::{
 use gpui_kit::{App, Entity, Menu, MenuItem, SharedString};
 
 use crate::{
-    app::{About, ExecuteCommand, Quit, SelectLocale, SwitchTheme, SwitchThemeMode},
+    app::{About, ExecuteCommand, LocaleState, Quit, SelectLocale, SwitchTheme, SwitchThemeMode},
     commands::{self, CommandId},
 };
 
@@ -22,6 +22,14 @@ pub fn init(title: impl Into<SharedString>, cx: &mut App) -> Entity<AppMenuBar> 
     });
 
     cx.observe_global::<Theme>({
+        let title = title.clone();
+        let app_menu_bar = app_menu_bar.clone();
+        move |cx| {
+            update_app_menu(title.clone(), app_menu_bar.clone(), cx);
+        }
+    })
+    .detach();
+    cx.observe_global::<LocaleState>({
         let title = title.clone();
         let app_menu_bar = app_menu_bar.clone();
         move |cx| {
@@ -60,51 +68,81 @@ fn build_menus(title: impl Into<SharedString>, cx: &App) -> Vec<Menu> {
         Menu {
             name: title.into(),
             items: vec![
-                MenuItem::action("About", About),
+                MenuItem::action(crate::i18n::localize("menu_about"), About),
                 MenuItem::Separator,
                 MenuItem::Submenu(Menu {
-                    name: "Appearance".into(),
+                    name: crate::i18n::localize("menu_appearance").into(),
                     items: vec![
-                        MenuItem::action("Light", SwitchThemeMode(ThemeMode::Light))
-                            .checked(!cx.theme().mode.is_dark()),
-                        MenuItem::action("Dark", SwitchThemeMode(ThemeMode::Dark))
-                            .checked(cx.theme().mode.is_dark()),
+                        MenuItem::action(
+                            crate::i18n::localize("menu_appearance_light"),
+                            SwitchThemeMode(ThemeMode::Light),
+                        )
+                        .checked(!cx.theme().mode.is_dark()),
+                        MenuItem::action(
+                            crate::i18n::localize("menu_appearance_dark"),
+                            SwitchThemeMode(ThemeMode::Dark),
+                        )
+                        .checked(cx.theme().mode.is_dark()),
                     ],
                     disabled: false,
                 }),
                 theme_menu(cx),
                 language_menu(cx),
                 MenuItem::Separator,
-                MenuItem::action("Quit", Quit),
+                MenuItem::action(crate::i18n::localize("menu_quit"), Quit),
             ],
             disabled: false,
         },
         Menu {
-            name: "Edit".into(),
+            name: crate::i18n::localize("menu_edit").into(),
             items: vec![
-                MenuItem::action("Undo", ExecuteCommand(CommandId::Undo))
-                    .disabled(!commands::availability(CommandId::Undo, cx).enabled),
-                MenuItem::action("Redo", ExecuteCommand(CommandId::Redo))
-                    .disabled(!commands::availability(CommandId::Redo, cx).enabled),
+                MenuItem::action(
+                    crate::i18n::localize("menu_edit_undo"),
+                    ExecuteCommand(CommandId::Undo),
+                )
+                .disabled(!commands::availability(CommandId::Undo, cx).enabled),
+                MenuItem::action(
+                    crate::i18n::localize("menu_edit_redo"),
+                    ExecuteCommand(CommandId::Redo),
+                )
+                .disabled(!commands::availability(CommandId::Redo, cx).enabled),
                 MenuItem::separator(),
-                MenuItem::action("Cut", gpui_kit::component::input::Cut),
-                MenuItem::action("Copy", gpui_kit::component::input::Copy),
-                MenuItem::action("Paste", gpui_kit::component::input::Paste),
+                MenuItem::action(
+                    crate::i18n::localize("menu_edit_cut"),
+                    gpui_kit::component::input::Cut,
+                ),
+                MenuItem::action(
+                    crate::i18n::localize("menu_edit_copy"),
+                    gpui_kit::component::input::Copy,
+                ),
+                MenuItem::action(
+                    crate::i18n::localize("menu_edit_paste"),
+                    gpui_kit::component::input::Paste,
+                ),
                 MenuItem::separator(),
-                MenuItem::action("Select All", gpui_kit::component::input::SelectAll),
+                MenuItem::action(
+                    crate::i18n::localize("menu_edit_select_all"),
+                    gpui_kit::component::input::SelectAll,
+                ),
             ],
             disabled: false,
         },
         Menu {
-            name: "Window".into(),
+            name: crate::i18n::localize("menu_window").into(),
             items: vec![
-                MenuItem::action("Toggle Search", crate::app::ToggleSearch),
-                MenuItem::action("Diagnostics", ExecuteCommand(CommandId::OpenDiagnostics)),
+                MenuItem::action(
+                    crate::i18n::localize("menu_window_toggle_search"),
+                    crate::app::ToggleSearch,
+                ),
+                MenuItem::action(
+                    crate::i18n::localize("menu_window_diagnostics"),
+                    ExecuteCommand(CommandId::OpenDiagnostics),
+                ),
             ],
             disabled: false,
         },
         Menu {
-            name: "Go".into(),
+            name: crate::i18n::localize("menu_go").into(),
             items: command_menu_items(
                 &[
                     CommandId::OpenHome,
@@ -122,7 +160,7 @@ fn build_menus(title: impl Into<SharedString>, cx: &App) -> Vec<Menu> {
             disabled: false,
         },
         Menu {
-            name: "Tools".into(),
+            name: crate::i18n::localize("menu_tools").into(),
             items: command_menu_items(
                 &[CommandId::StartDemoTask, CommandId::CheckConnectivity],
                 cx,
@@ -135,7 +173,7 @@ fn build_menus(title: impl Into<SharedString>, cx: &App) -> Vec<Menu> {
 fn language_menu(_: &App) -> MenuItem {
     let locale = rust_i18n::locale().to_string();
     MenuItem::Submenu(Menu {
-        name: "Language".into(),
+        name: crate::i18n::localize("menu_language").into(),
         items: vec![
             MenuItem::action("English", SelectLocale("en".into())).checked(locale == "en"),
             MenuItem::action("简体中文", SelectLocale("zh-CN".into())).checked(locale == "zh-CN"),
@@ -148,7 +186,7 @@ fn theme_menu(cx: &App) -> MenuItem {
     let themes = ThemeRegistry::global(cx).sorted_themes();
     let current_name = cx.theme().theme_name();
     MenuItem::Submenu(Menu {
-        name: "Theme".into(),
+        name: crate::i18n::localize("menu_theme").into(),
         items: themes
             .iter()
             .map(|theme| {

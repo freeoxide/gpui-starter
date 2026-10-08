@@ -146,8 +146,11 @@ impl QueryPlaygroundPage {
             cx.notify();
         }));
 
-        let mutation_input_state =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Enter mutation variables..."));
+        let mutation_input_state = cx.new(|cx| {
+            InputState::new(window, cx).placeholder(crate::i18n::localize(
+                "query_playground_mutation_variables_placeholder",
+            ))
+        });
 
         subs.push(cx.subscribe(
             &mutation_input_state,
@@ -220,6 +223,9 @@ impl Render for QueryPlaygroundPage {
         let muted = theme.muted;
         let muted_foreground = theme.muted_foreground;
 
+        let title = crate::i18n::localize("query_playground_title");
+        let intro = crate::i18n::localize("query_playground_intro");
+
         let page = v_flex()
             .id("query-playground-page")
             .min_h_full()
@@ -239,31 +245,20 @@ impl Render for QueryPlaygroundPage {
                             .child(
                                 div()
                                     .id("query-playground-title")
-                                    .a11y(Role::Heading, "Query V2 Playground")
+                                    .a11y(Role::Heading, title.clone())
                                     .aria_level(1)
                                     .text_2xl()
                                     .font_weight(FontWeight::BOLD)
-                                    .child("Query V2 Playground"),
+                                    .child(title),
                             )
                             .child(
                                 div()
                                     .id("query-playground-intro")
-                                    .a11y(
-                                        Role::Paragraph,
-                                        "Interactive demo of every gpui-query-v2 feature: queries, \
-                                         cache policies, request policies, retry, mutations, \
-                                         infinite queries, select transforms, and imperative fetch \
-                                         with signal cancellation.",
-                                    )
+                                    .a11y(Role::Paragraph, intro.clone())
                                     .max_w(px(800.))
                                     .text_sm()
                                     .text_color(muted_foreground)
-                                    .child(
-                                        "Interactive demo of every gpui-query-v2 feature: queries, \
-                                         cache policies, request policies, retry, mutations, \
-                                         infinite queries, select transforms, and imperative fetch \
-                                         with signal cancellation.",
-                                    ),
+                                    .child(intro),
                             ),
                     ),
             )

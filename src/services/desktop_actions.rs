@@ -412,7 +412,10 @@ fn update_result(action: &str, error: Option<String>, cx: &mut App) {
             "desktop action failed"
         );
         crate::error_surface::report(
-            format!("Desktop action `{action}` failed: {error}"),
+            crate::i18n::localize_with_args(
+                "desktop_action_failed",
+                &[("action", action), ("error", error.as_str())],
+            ),
             crate::errors::AppErrorSeverity::Warning,
             crate::error_surface::ErrorCategory::System,
             vec![

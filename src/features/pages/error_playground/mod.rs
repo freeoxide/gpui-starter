@@ -9,11 +9,13 @@ use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 
+use helpers::ResultMsg;
+
 pub struct ErrorPlaygroundPage {
-    http_result: Option<String>,
-    fs_result: Option<String>,
-    async_result: Option<String>,
-    background_panic_result: Option<String>,
+    http_result: Option<ResultMsg>,
+    fs_result: Option<ResultMsg>,
+    async_result: Option<ResultMsg>,
+    background_panic_result: Option<ResultMsg>,
 }
 
 impl ErrorPlaygroundPage {
@@ -40,11 +42,8 @@ impl Render for ErrorPlaygroundPage {
         let border = theme.border;
         let muted = theme.muted;
         let muted_foreground = theme.muted_foreground;
-        let intro = "Test different failure modes. Red-bordered cards activate the \
-                     error boundary via action dispatch (a real render panic is \
-                     process-fatal in GPUI, so the recovery flow is simulated \
-                     without crashing). Green-bordered cards handle errors \
-                     gracefully inline.";
+        let title = crate::i18n::localize("error_playground_title");
+        let intro = crate::i18n::localize("error_playground_intro");
 
         v_flex()
             .id("error-playground-page")
@@ -60,40 +59,49 @@ impl Render for ErrorPlaygroundPage {
                     .border_color(border)
                     .bg(muted)
                     .child(
-                        v_flex().gap_3().child(
-                            div().id("error-playground-title").a11y(Role::Heading, "Error Boundary Playground").aria_level(1)
-                                .text_2xl().font_weight(FontWeight::BOLD)
-                                .child("Error Boundary Playground"),
-                        ).child(
-                            div()
-                                .id("error-playground-intro")
-                                .a11y(Role::Paragraph, intro)
-                                .max_w(px(800.))
-                                .text_sm()
-                                .text_color(muted_foreground)
-                                .child(intro),
-                        ),
+                        v_flex()
+                            .gap_3()
+                            .child(
+                                div()
+                                    .id("error-playground-title")
+                                    .a11y(Role::Heading, title.clone())
+                                    .aria_level(1)
+                                    .text_2xl()
+                                    .font_weight(FontWeight::BOLD)
+                                    .child(title),
+                            )
+                            .child(
+                                div()
+                                    .id("error-playground-intro")
+                                    .a11y(Role::Paragraph, intro.clone())
+                                    .max_w(px(800.))
+                                    .text_sm()
+                                    .text_color(muted_foreground)
+                                    .child(intro),
+                            ),
                     ),
             )
             .child(self.render_boundary_trigger(
-                "Simulated Render Error",
-                "Dispatches TriggerRenderError to activate the error boundary directly. \
-                 The fallback page appears with a summary and Reload button.",
-                "Trigger Render Error",
+                "render-error",
+                crate::i18n::localize("error_playground_render_error_title"),
+                crate::i18n::localize("error_playground_render_error_description"),
+                crate::i18n::localize("error_playground_render_error_button"),
                 "error playground: simulated render panic",
                 cx,
             ))
             .child(self.render_boundary_trigger(
-                "Simulated Division by Zero",
-                "Activates the error boundary as if a division-by-zero occurred during render.",
-                "Trigger Div Zero Error",
+                "div-zero",
+                crate::i18n::localize("error_playground_div_zero_title"),
+                crate::i18n::localize("error_playground_div_zero_description"),
+                crate::i18n::localize("error_playground_div_zero_button"),
                 "error playground: simulated division by zero",
                 cx,
             ))
             .child(self.render_boundary_trigger(
-                "Simulated Index Out of Bounds",
-                "Activates the error boundary as if an out-of-bounds access occurred during render.",
-                "Trigger OOB Error",
+                "oob",
+                crate::i18n::localize("error_playground_oob_title"),
+                crate::i18n::localize("error_playground_oob_description"),
+                crate::i18n::localize("error_playground_oob_button"),
                 "error playground: simulated index out of bounds",
                 cx,
             ))
