@@ -94,13 +94,11 @@ impl FormField {
     }
 }
 
-fn localized_field_error<E>(errs: &[E], key_of: impl Fn(&E) -> &'static str) -> Option<String> {
-    (!errs.is_empty()).then(|| {
-        errs.iter()
-            .map(|v| crate::i18n::localize(key_of(v)))
-            .collect::<Vec<_>>()
-            .join("\n")
-    })
+fn field_error_keys<E>(
+    errs: &[E],
+    key_of: impl Fn(&E) -> &'static str,
+) -> Option<Vec<&'static str>> {
+    (!errs.is_empty()).then(|| errs.iter().map(key_of).collect())
 }
 
 pub struct FormPage {
@@ -112,8 +110,9 @@ pub struct FormPage {
     /// True when `current_data` has changed since the cached validation was
     /// (re)computed. Gates `validate()` so it runs at most once per edit.
     dirty: bool,
-    /// Per-field localized error strings, recomputed only when `dirty && touched`.
-    cached_errors: [Option<String>; 5],
+    /// Per-field error catalog keys, recomputed only when `dirty && touched`;
+    /// rendering resolves them per frame so locale switches stay live.
+    cached_errors: [Option<Vec<&'static str>>; 5],
     _subscriptions: Vec<Subscription>,
 }
 
@@ -204,10 +203,15 @@ impl FormPage {
             .update(cx, |s, cx| s.set_value("", window, cx));
     }
 
-    /// Returns the cached localized error string for `field` (rebuilt only when
-    /// the page is dirty and touched — see `recompute_validation`).
+    /// Returns the localized error text for `field`, resolved from the cached
+    /// keys on every call (rebuilt only when dirty and touched).
     fn error_for_field(&self, field: FormField) -> Option<String> {
-        self.cached_errors[field as usize].clone()
+        self.cached_errors[field as usize].as_ref().map(|keys| {
+            keys.iter()
+                .map(|k| crate::i18n::localize(k))
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
     }
 
     /// Recomputes `cached_errors` from `current_data.validate()` and clears the
@@ -215,7 +219,7 @@ impl FormPage {
     fn recompute_validation(&mut self) {
         if let Some(e) = self.current_data.validate().err() {
             self.cached_errors[FormField::Name as usize] =
-                localized_field_error(&e.name().all(), |v| match v {
+                field_error_keys(&e.name().all(), |v| match v {
                     RegistrationFormFormValueHolderNameKorumaValidator::RequiredValidation(_) => {
                         "validation.required"
                     }
@@ -224,7 +228,7 @@ impl FormPage {
                     }
                 });
             self.cached_errors[FormField::Email as usize] =
-                localized_field_error(&e.email().all(), |v| match v {
+                field_error_keys(&e.email().all(), |v| match v {
                     RegistrationFormFormValueHolderEmailKorumaValidator::RequiredValidation(_) => {
                         "validation.required"
                     }
@@ -233,7 +237,7 @@ impl FormPage {
                     }
                 });
             self.cached_errors[FormField::Password as usize] =
-                localized_field_error(&e.password().all(), |v| match v {
+                field_error_keys(&e.password().all(), |v| match v {
                     RegistrationFormFormValueHolderPasswordKorumaValidator::RequiredValidation(
                         _,
                     ) => "validation.required",
@@ -242,7 +246,7 @@ impl FormPage {
                     ) => "validation.non_empty",
                 });
             self.cached_errors[FormField::Phone as usize] =
-                localized_field_error(&e.phone().all(), |v| match v {
+                field_error_keys(&e.phone().all(), |v| match v {
                     RegistrationFormFormValueHolderPhoneKorumaValidator::RequiredValidation(_) => {
                         "validation.required"
                     }
@@ -251,7 +255,7 @@ impl FormPage {
                     ) => "validation.phone_number",
                 });
             self.cached_errors[FormField::Website as usize] =
-                localized_field_error(&e.website().all(), |v| match v {
+                field_error_keys(&e.website().all(), |v| match v {
                     RegistrationFormFormValueHolderWebsiteKorumaValidator::RequiredValidation(
                         _,
                     ) => "validation.required",
