@@ -59,10 +59,12 @@ pub(crate) fn test_card(
         .border_1()
         .border_color(theme.border)
         .child(
+            // Content masks clip square, so a full-height rail would poke past
+            // the rounded corners; insetting by the radius keeps it inside.
             div()
                 .absolute()
-                .top_0()
-                .bottom_0()
+                .top(theme.radius_lg)
+                .bottom(theme.radius_lg)
                 .left_0()
                 .w_1()
                 .bg(accent),
