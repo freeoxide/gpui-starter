@@ -5,9 +5,8 @@ use crate::notifications::{
     APP_DISPLAY_NAME, NotificationBackendKind, NotificationCapabilities,
     NotificationPermissionState, NotificationRequest,
 };
-// DESKTOP_ENTRY_ID and APP_ICON_NAME feed the Linux/D-Bus-only icon wiring
-// (see `send` below) — importing them unconditionally makes them unused on
-// macOS/Windows.
+// Linux/D-Bus-only icon wiring (see `send`); importing these unconditionally
+// leaves them unused on macOS/Windows.
 #[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 
