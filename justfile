@@ -136,3 +136,9 @@ release-runs limit='8':
 # cargo-deb (`cargo install cargo-deb --locked`) and patchelf.
 deb:
     ./scripts/build-deb.sh
+
+# Build the AppImage (linuxdeploy over the tarball layout via
+# scripts/build-appimage.sh). Requires GPUI_UPDATE_MANIFEST_URL in the env
+# plus patchelf, file, desktop-file-utils, and zsync (appimagetool needs them).
+appimage:
+    ./scripts/build-appimage.sh
