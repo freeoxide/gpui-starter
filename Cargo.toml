@@ -101,6 +101,7 @@ assets = [
     ["target/deb-stage/gpui-starter", "usr/bin/gpui-starter", "755"],
     ["target/deb-stage/lib/*", "usr/lib/gpui-starter/", "644"],
     ["resources/com.gpui-starter.app.desktop", "usr/share/applications/com.gpui-starter.app.desktop", "644"],
+    ["resources/com.gpui-starter.app.metainfo.xml", "usr/share/metainfo/", "644"],
     ["assets/app-icon/hicolor/*/*/*", "usr/share/icons/hicolor/", "644"],
     ["LICENSE", "usr/share/doc/gpui-starter/", "644"],
 ]

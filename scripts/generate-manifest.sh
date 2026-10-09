@@ -43,49 +43,50 @@ fi
 # The old manual gsub chain double-escaped and turned "\n" into literal "\\n".
 RELEASE_NOTES="$(echo "$RELEASE_JSON" | jq -r '.body // ""')"
 
-# Build the platforms object.
-# Naming convention: GPUI-Starter-{version}.dmg -> macos-aarch64
+# Build the platforms object. Keys mirror platform_key() in
+# src/services/updater/types.rs (os-arch). The universal DMG serves both
+# macOS rows; windows-x86_64 points at the BARE exe because the updater
+# swaps single files (the zip and setup exe are for humans). deb/rpm/flatpak
+# compile the URL out (the system package manager owns their updates) and
+# the AppImage updates via its embedded zsync info, so no linux- entry.
 DMG_NAME="GPUI-Starter-${VERSION}.dmg"
+EXE_NAME="GPUI-Starter-${VERSION}-x86_64-windows.exe"
 
-# Find the DMG asset in the release.
-DMG_ASSET="$(echo "$RELEASE_JSON" | jq -r --arg name "$DMG_NAME" '.assets[] | select(.name == $name)')"
+# Look up one release asset by exact name; a missing asset must fail the
+# release instead of shipping a manifest without that platform.
+find_asset() {
+    echo "$RELEASE_JSON" | jq -r --arg name "$1" '.assets[] | select(.name == $name)'
+}
 
+DMG_ASSET="$(find_asset "$DMG_NAME")"
 if [ -z "$DMG_ASSET" ]; then
     echo "Error: Asset '$DMG_NAME' not found in release v${VERSION}" >&2
     exit 1
 fi
 
+EXE_ASSET="$(find_asset "$EXE_NAME")"
+if [ -z "$EXE_ASSET" ]; then
+    echo "Error: Asset '$EXE_NAME' not found in release v${VERSION}" >&2
+    exit 1
+fi
+
 DMG_URL="$(echo "$DMG_ASSET" | jq -r '.browser_download_url')"
 DMG_SIZE="$(echo "$DMG_ASSET" | jq -r '.size')"
+EXE_URL="$(echo "$EXE_ASSET" | jq -r '.browser_download_url')"
+EXE_SIZE="$(echo "$EXE_ASSET" | jq -r '.size')"
 
-# Compute Ed25519 signature of the asset's SHA-256 hash.
-# The signing key is a base64-encoded 64-byte Ed25519 private key (seed || public key).
-SIGNATURE=""
+# Compute the Ed25519 signature of each asset's SHA-256 hash. The signing key
+# is a base64-encoded 64-byte Ed25519 private key (seed || public key).
+DMG_SIGNATURE=""
+EXE_SIGNATURE=""
 
-if [ -n "${UPDATE_SIGNING_KEY:-}" ]; then
-    echo "Signing manifest with Ed25519..." >&2
-
-    # Download the asset to compute its hash.
-    TMP_ASSET="$(mktemp)"
-    trap 'rm -f "$TMP_ASSET"' EXIT
-
-    if ! gh_curl -sfL -o "$TMP_ASSET" "$DMG_URL"; then
-        echo "Warning: Failed to download asset for signing — signature will be empty" >&2
-        TMP_ASSET=""
-    fi
-
-    if [ -n "$TMP_ASSET" ] && [ -f "$TMP_ASSET" ]; then
-        # Compute SHA-256 of the downloaded file.
-        FILE_HASH="$(shasum -a 256 "$TMP_ASSET" | awk '{print $1}')"
-
-        # Decode the base64 Ed25519 seed and sign the asset's SHA-256 hash.
-        # FILE_HASH is passed via env (not shell interpolation) to avoid
-        # injection/quoting pitfalls. There is intentionally NO `2>/dev/null ||
-        # true`: any signing failure must surface — the hard guard below turns
-        # an empty signature into a hard error (this block only runs when
-        # UPDATE_SIGNING_KEY is set). NOTE: `cryptography` is NOT on ubuntu-latest
-        # by default; the release workflow pip-installs it before calling us.
-        SIGNATURE="$(FILE_HASH="$FILE_HASH" python3 -c '
+# Signs a sha256 hex digest passed as $1 and prints the base64 signature;
+# empty output means failure, which callers turn into a hard error. The hash
+# travels via env (not shell interpolation) to avoid injection/quoting
+# pitfalls. NOTE: `cryptography` is NOT on ubuntu images by default; the
+# release workflow pip-installs it before calling this script.
+sign_sha256() {
+    FILE_HASH="$1" python3 -c '
 import base64, os, sys
 
 try:
@@ -104,14 +105,36 @@ try:
 except Exception as e:
     print(f"signing failed: {e}", file=sys.stderr)
     print("", end="")
-')"
+'
+}
 
-        if [ -z "$SIGNATURE" ]; then
-            echo "Error: UPDATE_SIGNING_KEY is set but Ed25519 signing produced an empty signature" >&2
-            exit 1
-        fi
-        echo "Ed25519 signature generated: ${SIGNATURE:0:20}..." >&2
+# Downloads $1 (a browser_download_url), prints its signature. A failed
+# download keeps the old warn-and-ship-unsigned behavior; a signing failure
+# exits non-zero (the updater refuses unsigned assets, so hiding it helps
+# nobody).
+sign_release_asset() {
+    FILE="$TMP_ASSETS/$(basename "$1")"
+    if ! gh_curl -sfL -o "$FILE" "$1"; then
+        echo "Warning: Failed to download asset for signing — signature will be empty" >&2
+        return 0
     fi
+    SIGNATURE="$(sign_sha256 "$(shasum -a 256 "$FILE" | awk '{print $1}')")"
+    if [ -z "$SIGNATURE" ]; then
+        echo "Error: UPDATE_SIGNING_KEY is set but Ed25519 signing produced an empty signature" >&2
+        exit 1
+    fi
+    echo "Ed25519 signature generated: ${SIGNATURE:0:20}..." >&2
+    printf '%s' "$SIGNATURE"
+}
+
+if [ -n "${UPDATE_SIGNING_KEY:-}" ]; then
+    echo "Signing manifest with Ed25519..." >&2
+
+    TMP_ASSETS="$(mktemp -d)"
+    trap 'rm -rf "$TMP_ASSETS"' EXIT
+
+    DMG_SIGNATURE="$(sign_release_asset "$DMG_URL")"
+    EXE_SIGNATURE="$(sign_release_asset "$EXE_URL")"
 fi
 
 # Generate the manifest JSON matching the UpdateManifest struct in updater.rs:
@@ -121,15 +144,28 @@ MANIFEST="$(jq -n \
     --arg notes "$RELEASE_NOTES" \
     --arg dmg_url "$DMG_URL" \
     --argjson dmg_size "$DMG_SIZE" \
-    --arg signature "$SIGNATURE" \
+    --arg dmg_signature "$DMG_SIGNATURE" \
+    --arg exe_url "$EXE_URL" \
+    --argjson exe_size "$EXE_SIZE" \
+    --arg exe_signature "$EXE_SIGNATURE" \
     '{
         "version": $version,
         "release_notes": $notes,
         "platforms": {
             "macos-aarch64": {
                 "url": $dmg_url,
-                "signature": $signature,
+                "signature": $dmg_signature,
                 "size": $dmg_size
+            },
+            "macos-x86_64": {
+                "url": $dmg_url,
+                "signature": $dmg_signature,
+                "size": $dmg_size
+            },
+            "windows-x86_64": {
+                "url": $exe_url,
+                "signature": $exe_signature,
+                "size": $exe_size
             }
         }
     }')"
