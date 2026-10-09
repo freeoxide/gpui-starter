@@ -80,6 +80,16 @@ scripts/windows-dev-env.sh --cargo-config
 cargo run
 ```
 
+## Downloads
+
+Every release publishes 18 assets: macOS DMGs (universal, aarch64, x86_64),
+Linux x86_64/aarch64 tarballs, `.deb`, `.rpm`, AppImage (plus `.zsync`), an
+x86_64 Flatpak bundle, Windows setup exe, portable zip, and bare exe, plus
+`SHA256SUMS.txt`. Get them from the [releases page](../../releases), or build
+a format locally with the `deb`, `rpm`, `appimage`, `flatpak`,
+`win-portable`, or `win-installer` justfile recipes. Per-format install
+one-liners and the full format matrix: [docs/releasing.md](docs/releasing.md).
+
 ## Features
 
 ### Core
