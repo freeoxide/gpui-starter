@@ -378,8 +378,8 @@ chrono = { version = "0.4", features = ["wasmbind"] }
 # The feature set is the UNION of every wasm area's needs:
 #   - B (this crate, browser integrations): Clipboard, Window, Navigator,
 #     Location, History, Document, HtmlHeadElement, HtmlLinkElement,
-#     HtmlCanvasElement, CanvasRenderingContext2d, Event, EventTarget,
-#     AddEventListenerOptions
+#     HtmlCanvasElement, HtmlImageElement, CanvasRenderingContext2d, Event,
+#     EventTarget, AddEventListenerOptions
 #   - C (web notifications): Notification, NotificationOptions,
 #     NotificationDirection
 #   - D (SQLite-on-OPFS worker): Worker, WorkerOptions, MessageEvent,
@@ -397,6 +397,7 @@ web-sys = { version = "=0.3.102", features = [
     "History",
     "HtmlCanvasElement",
     "HtmlHeadElement",
+    "HtmlImageElement",
     "HtmlLinkElement",
     "Location",
     "MessageEvent",
