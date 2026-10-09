@@ -215,6 +215,11 @@ insta.workspace = true
 # debounce tests. Dev-dep features never reach production or wasm builds.
 gpui = { package = "gpui-pre", version = "0.3.8", features = ["test-support"] }
 
+# Windows .exe icon embed; build.rs gates on CARGO_CFG_TARGET_OS so Linux,
+# macOS, and wasm hosts never invoke it (docs/research/icons-and-windows.md A2).
+[build-dependencies]
+winresource = "0.1"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 tray-icon = { version = "0.24", default-features = false }
 global-hotkey = "0.8"

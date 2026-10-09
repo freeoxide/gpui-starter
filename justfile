@@ -154,3 +154,15 @@ appimage:
 # flatpak-cargo-generator (pipx install flatpak-cargo-generator).
 flatpak:
     ./scripts/build-flatpak.sh
+
+# Build the portable Windows artifacts (bare .exe + .zip in target/release
+# via scripts/build-windows-portable.sh). Git Bash on a Windows host only
+# (GHA windows-2025 runner); needs GPUI_UPDATE_MANIFEST_URL in the env.
+win-portable:
+    ./scripts/build-windows-portable.sh
+
+# Build the Inno Setup setup .exe (scripts/build-windows-installer.sh) into
+# target/release. Git Bash on a Windows host with ISCC in PATH (preinstalled
+# on GHA windows-2025); run win-portable first, this recipe needs the exe.
+win-installer:
+    ./scripts/build-windows-installer.sh
