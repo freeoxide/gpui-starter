@@ -387,8 +387,9 @@ jobs:
   # -----------------------------------------------------------------------
   # Build the Windows artifacts: bare exe (the updater's swap target),
   # portable zip, and the Inno Setup installer (ISCC 6.7.1 is preinstalled
-  # on windows-2025). All scripts run under Git Bash, so every run step
-  # needs an explicit `shell: bash` (the default would be pwsh).
+  # on windows-2025). The .sh packaging steps run under Git Bash
+  # (`shell: bash`); the cargo build keeps the default pwsh shell because
+  # Git Bash's link.exe shadows the MSVC linker (see the step note).
   # -----------------------------------------------------------------------
   build-windows:
     name: Build Windows (x86_64)
@@ -400,6 +401,10 @@ jobs:
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "256"
       RUST_BACKTRACE: "1"
       RUSTC_WRAPPER: kache
+      # Same MAX_PATH fix as ci.yml check-windows/test-windows: the default
+      # C:\Users\runneradmin\.cargo prefix puts gpui-form's longest checkout
+      # path at 266 chars (MAX_PATH is 260); C:\cargo caps it at 247.
+      CARGO_HOME: 'C:\cargo'
       GPUI_UPDATE_MANIFEST_URL: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/manifest.json"
 
     steps:
@@ -426,9 +431,16 @@ jobs:
           VALUE="$(./scripts/normalize-version.sh "$RAW")"
           echo "value=$VALUE" >> "$GITHUB_OUTPUT"
 
-      # No separate build step: build-windows-portable.sh builds
-      # --target x86_64-pc-windows-msvc itself, and a plain host build would
-      # compile the whole graph a second time into a different target dir.
+      # Default pwsh shell, never `shell: bash`, for any step that links:
+      # Git Bash's /usr/bin/link.exe (coreutils) shadows the MSVC linker and
+      # every link fails (ci.yml check-windows banner +
+      # scripts/windows-dev-env.sh). The bash packaging scripts re-run cargo
+      # build, but with this step done first that is a fresh cache hit (same
+      # job-level env -> identical fingerprints), so no linker ever runs
+      # inside bash.
+      - name: Build release binary (x86_64-pc-windows-msvc)
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
       - name: Build portable artifacts (bare exe + zip)
         shell: bash
         run: ./scripts/build-windows-portable.sh "${{ steps.version.outputs.value }}"
