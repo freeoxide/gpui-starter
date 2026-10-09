@@ -143,3 +143,9 @@ deb:
 # needs the last three).
 appimage:
     ./scripts/build-appimage.sh
+
+# Build the local .flatpak bundle (scripts/build-flatpak.sh; flathub runtimes
+# install on first run). Requires flatpak, flatpak-builder, and
+# flatpak-cargo-generator (pipx install flatpak-cargo-generator).
+flatpak:
+    ./scripts/build-flatpak.sh
