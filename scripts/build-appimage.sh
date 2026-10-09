@@ -118,10 +118,8 @@ OUT_DIR="$ROOT_DIR/target/release"
 OUT="$OUT_DIR/GPUI-Starter-${VERSION}-${ARCH}.AppImage"
 UPDATE_INFORMATION="${APPIMAGE_UPDATE_INFORMATION:-gh-releases-zsync|hmziqagent|gpui-starter|latest|GPUI-Starter-*-${ARCH}.AppImage.zsync}"
 
-# APPIMAGE_EXTRACT_AND_RUN=1: CI runners have no /dev/fuse, and the tools
-# are AppImages themselves (AppImageKit FUSE wiki). linuxdeploy keeps the
-# staged AppRun verbatim ("Existing AppRun detected, skipping deployment").
-# appimagetool runs zsyncmake with output in the CWD, so run from OUT_DIR.
+# Tools are AppImages and CI runners lack /dev/fuse, so extract-and-run;
+# zsyncmake writes <basename>.zsync into the CWD, hence the cd to OUT_DIR.
 cd "$OUT_DIR"
 APPIMAGE_EXTRACT_AND_RUN=1 \
 LDAI_OUTPUT="$OUT" \

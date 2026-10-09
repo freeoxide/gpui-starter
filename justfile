@@ -139,6 +139,7 @@ deb:
 
 # Build the AppImage (linuxdeploy over the tarball layout via
 # scripts/build-appimage.sh). Requires GPUI_UPDATE_MANIFEST_URL in the env
-# plus patchelf, file, desktop-file-utils, and zsync (appimagetool needs them).
+# plus patchelf, curl, file, desktop-file-utils, and zsync (appimagetool
+# needs the last three).
 appimage:
     ./scripts/build-appimage.sh
