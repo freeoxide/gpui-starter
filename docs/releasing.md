@@ -57,10 +57,12 @@ release tag).
 | `GPUI-Starter-<ver>-x86_64-windows-setup.exe` | Windows x86_64 | Inno Setup, per-user, no admin | run the installer |
 | `SHA256SUMS.txt` | all | checksums for the 17 files above | `sha256sum -c SHA256SUMS.txt` |
 
-`install-linux.sh` registers the desktop entry and the hicolor icon set
-per-user (XDG dirs); the binary itself runs from wherever the tarball was
-extracted, so symlink it into `~/.local/bin` yourself. CI also produces
-`.sha256` sidecars, but the release ships only `SHA256SUMS.txt`.
+`install-linux.sh` registers the desktop entry and the app icon per-user
+(XDG dirs). The tarball ships the single 512px png, so that is the icon the
+script installs (hicolor/512x512/apps); the binary itself runs from wherever
+the tarball was extracted, so symlink it into `~/.local/bin` yourself. CI
+also produces `.sha256` sidecars, but the release ships only
+`SHA256SUMS.txt`.
 
 ## Cutting a release
 
@@ -92,8 +94,10 @@ needed.
 
 ### Pipeline
 
-All jobs build with the nightly toolchain and share kache plus rust-cache
-caching.
+build-macos, build-linux and build-windows build with the nightly toolchain
+and share kache plus rust-cache caching. build-flatpak compiles inside the
+sandbox with the runtime's rust-stable extension and caches only its flatpak
+user installation (actions/cache); publish-release builds nothing.
 
 | Job | Runner | Produces |
 |---|---|---|
@@ -184,7 +188,11 @@ Binary plus a `lib/` directory of bundled non-glibc shared libraries
 (Wayland, XCB, the Vulkan loader and friends), rpath `$ORIGIN/lib`, glibc
 left to the host. The glibc floor is the build host: ubuntu-24.04, so glibc
 2.39. `install-linux.sh` ships inside and registers the desktop entry and
-hicolor icon set per-user; it never needs root.
+the single 512px png icon per-user (the script installs a full hicolor set
+when one sits next to it, but the workflow stages only
+`resources/gpui-starter.png` into the tarball); it never needs root. The
+deb, rpm and flatpak carry the full hicolor set; the AppImage carries the
+512px png as its icon.
 
 ### AUR / pacman
 
@@ -324,9 +332,10 @@ each.
 10. Flatpak source staging: untracked root files (bun.lock, package.json,
     .zcodeignore, about 2 KB total) still ride the dir source; add them to
     the skip list if the manifest is ever edited again.
-11. CHANGELOG.md has no 0.2.1 section (it jumps from 0.2.0 to 0.3.0 while
-    Cargo.toml and the git tags sit at 0.2.1); the metainfo release notes
-    currently derive from git log. Reconcile.
+11. CHANGELOG.md has no 0.2.1 section (it jumps from 0.2.0 to 0.3.0), and
+    the git tags run ahead of Cargo.toml: v0.2.2 and v0.2.3 exist, both
+    pointing at the same commit, while Cargo.toml sits at 0.2.1; the
+    metainfo release notes currently derive from git log. Reconcile.
 12. Windows code signing stays off. Azure Artifact Signing (Basic at USD
     9.99 per month, individual onboarding limited to the USA and Canada) is
     the documented upgrade path. Detail: `packaging/windows/README.md`.
@@ -335,17 +344,26 @@ each.
     publisher consistency matters.
 14. flatpak-cargo-generator is installed unpinned in CI (0.1.4 was current
     during research); pin it if the lane drifts.
+15. Tarball icon set: the workflow stages only the single
+    `resources/gpui-starter.png` into the tarball, so tarball installs get a
+    512-only icon. Staging `assets/app-icon/hicolor/` into the tarball (the
+    script already probes for a `hicolor/` directory next to itself) would
+    match the full set the deb, rpm and flatpak carry. One `cp` in the
+    release workflow's staging step.
 
 ### Accepted nits (recorded, no action expected)
 
-15. The deb ships the LICENSE text twice (explicit asset plus cargo-deb's
+16. The deb ships the LICENSE text twice (explicit asset plus cargo-deb's
     auto-generated `usr/share/doc/gpui-starter/copyright`); drop the asset
     line if the duplication bothers anyone.
-16. Style nits kept for local convention: gen-icons.sh's 4-line header,
+17. Style nits kept for local convention: gen-icons.sh's 4-line header,
     install-linux.sh exiting half-installed on a malformed tarball this repo
     never produces, the 3-line justfile flatpak recipe comment.
-17. Research-doc data nits: the Azure Premium price figure is unsourced (the
+18. Research-doc data nits: the Azure Premium price figure is unsourced (the
     Basic USD 9.99 figure is sourced); the Inno-versus-NSIS question was open
     in research and is now settled (Inno shipped); the libvulkan.so.1
     in-Platform claim is inferred from the runtime's dependency tree rather
     than shown on the cited page.
+19. The justfile release-ops comment says `softprops/action-gh-release@v2`
+    while release.yml pins @v3 (this doc follows the workflow); the fix is a
+    one-word comment edit, user's call.
