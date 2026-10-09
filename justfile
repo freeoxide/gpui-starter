@@ -131,3 +131,8 @@ watch-release runid='':
 # List recent Release runs on the fork.
 release-runs limit='8':
     gh run list -R {{release-repo}} --workflow={{release-workflow}} --limit {{limit}}
+
+# Build the .deb (bundled-libs layout via scripts/build-deb.sh). Requires
+# cargo-deb (`cargo install cargo-deb --locked`) and patchelf.
+deb:
+    ./scripts/build-deb.sh

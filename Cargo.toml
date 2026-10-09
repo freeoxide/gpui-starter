@@ -87,6 +87,24 @@ publish = false
 description = "A full-featured desktop application boilerplate built with GPUI (Zed's UI toolkit)"
 repository = "https://github.com/freeoxide/gpui-starter"
 
+# cargo-deb config; scripts/build-deb.sh must run first: it stages
+# target/deb-stage/ (binary rpathed to $ORIGIN/../lib/gpui-starter + bundled
+# libs) which the first two assets consume. Bundled-layout rationale:
+# docs/research/linux-packages.md.
+[package.metadata.deb]
+maintainer = "gpui-starter contributors <hmziqrs@users.noreply.github.com>"
+copyright = "2026 hmziqrs"
+license-file = ["LICENSE", 0]
+depends = "$auto"
+suggests = "mesa-vulkan-drivers"
+assets = [
+    ["target/deb-stage/gpui-starter", "usr/bin/gpui-starter", "755"],
+    ["target/deb-stage/lib/*", "usr/lib/gpui-starter/", "644"],
+    ["resources/com.gpui-starter.app.desktop", "usr/share/applications/com.gpui-starter.app.desktop", "644"],
+    ["assets/app-icon/hicolor/*/*/*", "usr/share/icons/hicolor/", "644"],
+    ["LICENSE", "usr/share/doc/gpui-starter/", "644"],
+]
+
 [lib]
 # rlib: consumed by the bin and by `cargo test -p gpui-starter --lib`;
 # cdylib: the wasm32-unknown-unknown web artifact post-processed by
