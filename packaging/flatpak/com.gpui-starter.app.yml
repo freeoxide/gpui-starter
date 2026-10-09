@@ -49,5 +49,6 @@ modules:
           - docs
           - node_modules
           - target
+          - wasm
           - web
       - cargo-sources.json
