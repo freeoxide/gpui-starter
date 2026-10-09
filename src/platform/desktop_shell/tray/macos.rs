@@ -11,9 +11,8 @@ mod macos_test;
 // 36px is the macOS menu-bar glyph canvas at 2x.
 const ICON_SIZE: usize = 36;
 
-// Brand G from assets/app-icon/gpui-starter.svg (ring + crossbar; the
-// background square is dropped — only alpha survives template rendering),
-// in canvas fractions rescaled to fill 80% of the square.
+// Brand G from assets/app-icon/gpui-starter.svg (ring + crossbar, square
+// dropped: only alpha survives templating), as canvas fractions at 80% fill.
 const RING_INNER: f32 = 0.256;
 const RING_OUTER: f32 = 0.4;
 const BAR_X0: f32 = 0.603;
