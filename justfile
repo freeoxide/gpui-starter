@@ -66,7 +66,7 @@ gpui-query-status:
 #
 # CI runs on the FORK hmziqagent/gpui-starter (remote `fork`), tag-triggered:
 # pushing a v* tag fires .github/workflows/release.yml from the tagged commit.
-# publish-release uses softprops/action-gh-release@v2, which UPSERTS the GitHub
+# publish-release uses softprops/action-gh-release@v3, which UPSERTS the GitHub
 # Release (replaces assets, regenerates notes) — so a re-trigger updates the
 # already-published release in place; no manual release deletion required.
 # ---------------------------------------------------------------------------

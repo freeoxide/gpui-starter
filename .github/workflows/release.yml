@@ -301,7 +301,7 @@ jobs:
           # .desktop ships INERT inside the tarball — install-linux.sh installs
           # them to the user's XDG dirs (run it once after extracting).
           cp resources/com.gpui-starter.app.desktop "$STAGE/" 2>/dev/null || true
-          cp resources/gpui-starter.png "$STAGE/" 2>/dev/null || true
+          cp -r assets/app-icon/hicolor "$STAGE/hicolor" 2>/dev/null || true
           cp scripts/install-linux.sh "$STAGE/" 2>/dev/null || true
           chmod +x "$STAGE/install-linux.sh" 2>/dev/null || true
 

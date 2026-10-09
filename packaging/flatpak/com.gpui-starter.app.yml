@@ -46,8 +46,11 @@ modules:
           - .z-gpui-workflow
           - .z-workflow
           - .zcode
+          - .zcodeignore
+          - bun.lock
           - docs
           - node_modules
+          - package.json
           - target
           - wasm
           - web

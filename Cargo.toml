@@ -103,7 +103,6 @@ assets = [
     ["resources/com.gpui-starter.app.desktop", "usr/share/applications/com.gpui-starter.app.desktop", "644"],
     ["resources/com.gpui-starter.app.metainfo.xml", "usr/share/metainfo/", "644"],
     ["assets/app-icon/hicolor/*/*/*", "usr/share/icons/hicolor/", "644"],
-    ["LICENSE", "usr/share/doc/gpui-starter/", "644"],
 ]
 
 # cargo-generate-rpm config; scripts/build-rpm.sh must run first: it stages
