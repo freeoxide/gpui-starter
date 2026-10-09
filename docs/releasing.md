@@ -4,9 +4,11 @@ What a gpui-starter release contains, how to cut one, per-format notes, and
 the decisions the release work left open. The underlying research lives in
 [research/release-matrix.md](research/release-matrix.md) (the full format and
 channel landscape), [research/linux-packages.md](research/linux-packages.md)
-(deb, rpm, AppImage, Flatpak, snap, AUR, nix decisions), and
-[research/icons-and-windows.md](research/icons-and-windows.md) (icon pipeline
-and Windows packaging).
+(deb, rpm, AppImage, Flatpak, snap, AUR, nix decisions),
+[research/icons-and-windows.md](research/icons-and-windows.md) (icon
+pipeline and Windows packaging), and
+[research/icon-surfaces.md](research/icon-surfaces.md) (runtime icon
+surfaces).
 
 ## The counted answer
 
@@ -58,9 +60,10 @@ release tag).
 | `SHA256SUMS.txt` | all | checksums for the 17 files above | `sha256sum -c SHA256SUMS.txt` |
 
 `install-linux.sh` registers the desktop entry and the app icon per-user
-(XDG dirs). The tarball ships the single 512px png, so that is the icon the
-script installs (hicolor/512x512/apps); the binary itself runs from wherever
-the tarball was extracted, so symlink it into `~/.local/bin` yourself. CI
+(XDG dirs). The tarball ships the full hicolor set as `hicolor/` next to
+the binary, and that directory is the script's first probe, so tarball
+installs get every size; the binary itself runs from wherever the tarball
+was extracted, so symlink it into `~/.local/bin` yourself. CI
 also produces `.sha256` sidecars, but the release ships only
 `SHA256SUMS.txt`.
 
@@ -188,11 +191,13 @@ Binary plus a `lib/` directory of bundled non-glibc shared libraries
 (Wayland, XCB, the Vulkan loader and friends), rpath `$ORIGIN/lib`, glibc
 left to the host. The glibc floor is the build host: ubuntu-24.04, so glibc
 2.39. `install-linux.sh` ships inside and registers the desktop entry and
-the single 512px png icon per-user (the script installs a full hicolor set
-when one sits next to it, but the workflow stages only
-`resources/gpui-starter.png` into the tarball); it never needs root. The
-deb, rpm and flatpak carry the full hicolor set; the AppImage carries the
-512px png as its icon.
+the icons per-user, never needing root; the workflow stages
+`assets/app-icon/hicolor/` into the tarball as `hicolor/` next to the
+binary (the script's first probe), so tarball installs carry the full set.
+Un-installed tarball runs also get branded notification icons: the runtime
+probe reads the same `hicolor/` tree (see [Runtime icon
+behavior](#runtime-icon-behavior)). The deb, rpm and flatpak carry the
+same hicolor set; the AppImage carries the 512px png as its icon.
 
 ### AUR / pacman
 
@@ -286,6 +291,46 @@ postFixup patchelf adding the nix store's vulkan-loader and wayland to the
 RUNPATH). No lockfile ships, so run `nix flake lock` once. Nix needs no
 release artifact; inclusion in nixpkgs proper would be a community PR.
 
+## Runtime icon behavior
+
+How the shipped binaries resolve icons at runtime. The per-surface
+research and decisions live in
+[research/icon-surfaces.md](research/icon-surfaces.md).
+
+- Linux notifications, native runs: each notification carries the
+  `desktop-entry` hint plus an explicit icon from an exe-relative probe,
+  first existing file wins:
+  `../share/icons/hicolor/<s>x<s>/apps/gpui-starter.png` (deb, rpm and
+  AppImage layouts), `hicolor/<s>x<s>/apps/gpui-starter.png` next to the
+  binary (the tarball's staged `hicolor/` tree), then
+  `resources/gpui-starter.png`; `<s>` runs 48, 64, 128, 256, 512. When no
+  file matches (a bare `cargo run` checkout), the theme name
+  `gpui-starter` is sent, resolving once the icon is installed.
+- Linux notifications, Flatpak: the `notifications-portal` feature routes
+  through the XDG portal with the themed name `gpui-starter`, resolved via
+  the sandbox's export of `/app/share/icons`.
+- Linux tray: none. tray-icon 0.24 needs a GTK event loop gpui does not
+  run; the ksni (D-Bus StatusNotifierItem) candidate and the GNOME host
+  situation are assessed in the research doc, and the in-code gap note
+  sits at the tray module's cfg gate.
+- Linux window icon: X11 windows get `_NET_WM_ICON` from the embedded 48px
+  brand PNG via `WindowOptions.icon`, so un-installed runs are branded
+  too. Wayland has no icon path in gpui-pre 0.3.8; compositors resolve
+  the icon from the desktop entry through the `gpui-starter` app_id.
+- macOS tray: the brand-G silhouette drawn in code as a 36px template
+  image, so macOS recolors it for light, dark and highlight states.
+  Notification icons come from the bundle icns automatically.
+- Windows tray and toasts: the tray shows the embedded 16px brand PNG.
+  Toasts need no icon code; they resolve through the AUMID identity chain
+  the Windows notes above describe.
+- Web harness: `wasm/icons/` holds branded renders (the SVG master, 192,
+  512, maskable 512, apple-touch 180); the static `<link rel="icon">`
+  serves first paint, then the canvas favicon draws the embedded 64px
+  brand PNG under the connectivity dot and unread badge. The canvas path
+  required adding `HtmlImageElement` to the wasm web-sys feature list,
+  and the icon files share the gen-icons.sh stand-in caveat (open
+  decisions, item 2).
+
 ## Open decisions and deferred items
 
 Everything the release work deliberately left for a maintainer, one line
@@ -301,9 +346,11 @@ each.
    `packaging/windows/README.md`.
 2. gen-icons.sh real-tool path (rsvg-convert, png2icns, ImageMagick) has
    never executed: the dev box lacks the tools and the committed artifacts
-   came from an offline stand-in chain. First real run must confirm the
-   png2icns output via the in-script `icns2png -l` self-check. Releases are
-   unaffected (CI consumes committed artifacts).
+   came from an offline stand-in chain. The run-6 wasm icon set
+   (`wasm/icons/*`) is the same story: a pure-python PNG codec and
+   resample produced it. First real run must confirm the png2icns output
+   via the in-script `icns2png -l` self-check. Releases are unaffected
+   (CI consumes committed artifacts).
 
 ### Packaging decisions still open
 
@@ -329,9 +376,8 @@ each.
    releases move to another repository or a stable channel is preferred.
 9. glibc floor: the deb and rpm floors equal the build host (2.39). Widening
    via a debian:bookworm container lane is possible and so far unprompted.
-10. Flatpak source staging: untracked root files (bun.lock, package.json,
-    .zcodeignore, about 2 KB total) still ride the dir source; add them to
-    the skip list if the manifest is ever edited again.
+10. Closed in b452118: bun.lock, package.json and .zcodeignore are on the
+    flatpak skip list, so the dir source carries no untracked residuals.
 11. CHANGELOG.md has no 0.2.1 section (it jumps from 0.2.0 to 0.3.0), and
     the git tags run ahead of Cargo.toml: v0.2.2 and v0.2.3 exist, both
     pointing at the same commit, while Cargo.toml sits at 0.2.1; the
@@ -344,18 +390,15 @@ each.
     publisher consistency matters.
 14. flatpak-cargo-generator is installed unpinned in CI (0.1.4 was current
     during research); pin it if the lane drifts.
-15. Tarball icon set: the workflow stages only the single
-    `resources/gpui-starter.png` into the tarball, so tarball installs get a
-    512-only icon. Staging `assets/app-icon/hicolor/` into the tarball (the
-    script already probes for a `hicolor/` directory next to itself) would
-    match the full set the deb, rpm and flatpak carry. One `cp` in the
-    release workflow's staging step.
+15. Closed in b452118: the workflow stages `assets/app-icon/hicolor/` into
+    the tarball (`hicolor/` next to the binary), so tarball installs get
+    the full set the deb, rpm and flatpak carry.
 
 ### Accepted nits (recorded, no action expected)
 
-16. The deb ships the LICENSE text twice (explicit asset plus cargo-deb's
-    auto-generated `usr/share/doc/gpui-starter/copyright`); drop the asset
-    line if the duplication bothers anyone.
+16. Closed in b452118: the explicit deb LICENSE asset is gone; cargo-deb's
+    auto-generated `usr/share/doc/gpui-starter/copyright` is the single
+    copy.
 17. Style nits kept for local convention: gen-icons.sh's 4-line header,
     install-linux.sh exiting half-installed on a malformed tarball this repo
     never produces, the 3-line justfile flatpak recipe comment.
@@ -364,6 +407,5 @@ each.
     in research and is now settled (Inno shipped); the libvulkan.so.1
     in-Platform claim is inferred from the runtime's dependency tree rather
     than shown on the cited page.
-19. The justfile release-ops comment says `softprops/action-gh-release@v2`
-    while release.yml pins @v3 (this doc follows the workflow); the fix is a
-    one-word comment edit, user's call.
+19. Closed in b452118: the justfile release-ops comment says @v3, matching
+    the release.yml pin.

@@ -186,7 +186,7 @@ alpha RGBA; `macos.rs:11-13` builds it at 36px with
 16px with a full menu. Linux has no tray at all: `tray/mod.rs:1-9`
 cfg-gates the module to macOS/Windows, `src/web.rs:43-44` calls
 `crate::tray::setup` only under `cfg(any(macos, windows))`, and the
-Linux dependency table (`Cargo.toml:251-263`) has no tray crate.
+Linux dependency table (`Cargo.toml:250-266`) has no tray crate.
 
 Gap. The tray shows a generic glyph, not the brand, on both platforms
 that have a tray.
@@ -224,10 +224,10 @@ Decisions for area 3 (tray-icon).
   and `src/platform_impl/gtk/`; [docs.rs
   tray-icon](https://docs.rs/tray-icon) states the GTK-loop requirement).
   gpui's Linux backend is raw xcb/Wayland and runs no GTK loop, so 0.24
-  does not fit. Newer tray-icon (0.26.1) adds a `ksni` feature (pure
-  D-Bus StatusNotifierItem, no GTK; verified in the crates.io sparse
-  index `features2`: `ksni = ["dep:ksni", "muda-snapshot"]`), and the
-  standalone [ksni crate](https://github.com/iovxw/ksni) (0.3.6, zbus,
+  does not fit. Newer tray-icon adds a `ksni` feature (first landing in
+  0.25.0; pure D-Bus StatusNotifierItem, no GTK; verified in the crates.io
+  sparse index `features2`: `ksni = ["dep:ksni", "muda-snapshot"]`), and
+  the standalone [ksni crate](https://github.com/iovxw/ksni) (0.3.6, zbus,
   own service thread) works without any GUI loop — Tauri 3 made ksni its
   default tray backend for the same reason
   ([tauri#11293](https://github.com/tauri-apps/tauri/issues/11293),
@@ -367,7 +367,8 @@ Mechanical items for area 5, each re-verified against the tree today:
   riding the dir source. Exact fix: add `bun.lock`, `package.json`,
   `.zcodeignore` to the `skip:` list in
   `packaging/flatpak/com.gpui-starter.app.yml`. (`.gitignore` is
-  tracked, `com.gpui-starter.app.instance` is tracked — neither is a
+  tracked; `com.gpui-starter.app.instance` is the runtime single-instance
+  lock, gitignored at the repo root rather than tracked — neither is a
   residual.)
 
 Items that stay genuinely-user (not area 5): Flathub app id (3),
