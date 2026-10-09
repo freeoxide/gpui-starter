@@ -7,9 +7,13 @@ use async_trait::async_trait;
 
 use super::NotificationBackend;
 use crate::notifications::{
-    DESKTOP_ENTRY_ID, NotificationBackendKind, NotificationCapabilities,
+    APP_ICON_NAME, DESKTOP_ENTRY_ID, NotificationBackendKind, NotificationCapabilities,
     NotificationPermissionState, NotificationRequest,
 };
+
+#[cfg(test)]
+#[path = "portal.test.rs"]
+mod portal_test;
 
 const LOG: &str = "gpui_starter::notifications::portal";
 
@@ -54,8 +58,7 @@ impl NotificationBackend for PortalBackend {
         // A successful AddNotification only means the portal accepted it —
         // there is no display confirmation.
         let proxy = ashpd::desktop::notification::NotificationProxy::new().await?;
-        let notification = ashpd::desktop::notification::Notification::new(&request.title)
-            .body(request.body.as_str());
+        let notification = portal_notification(request);
         match proxy.add_notification(DESKTOP_ENTRY_ID, notification).await {
             Ok(()) => {
                 tracing::info!(target: LOG, "portal notification accepted");
@@ -67,4 +70,14 @@ impl NotificationBackend for PortalBackend {
             }
         }
     }
+}
+
+fn portal_notification(
+    request: &NotificationRequest,
+) -> ashpd::desktop::notification::Notification {
+    ashpd::desktop::notification::Notification::new(&request.title)
+        .body(request.body.as_str())
+        // Themed name resolved inside the sandbox through the flatpak icon
+        // export; byte icons are deprecated by the portal spec.
+        .icon(ashpd::desktop::Icon::with_names([APP_ICON_NAME]))
 }
