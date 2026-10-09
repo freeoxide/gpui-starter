@@ -58,6 +58,7 @@ arch=('${PKGARCH}')
 url="https://github.com/\${REPO:-${REPO}}"
 license=('MIT')
 depends=('vulkan-driver' 'libxkbcommon-x11' 'wayland' 'fontconfig' 'freetype2')
+makedepends=('patchelf')
 provides=('gpui-starter')
 conflicts=('gpui-starter')
 
@@ -74,10 +75,14 @@ package() {
     # \$srcdir, so every path below is prefixed gpui-starter/. (The unprefixed
     # form hit the DIRECTORY gpui-starter with install(1) — "omitting
     # directory" — and silently skipped lib/.)
+    # The tarball binary keeps the AppDir-style rpath \$ORIGIN/lib, which in
+    # the split /usr/bin + /usr/lib/gpui-starter layout resolves to /usr/lib;
+    # re-patch before installing or the bundled libs are never found.
+    patchelf --set-rpath '\$ORIGIN/../lib/gpui-starter' "gpui-starter/gpui-starter"
+
     install -Dm755 "gpui-starter/gpui-starter" "\${pkgdir}/usr/bin/gpui-starter"
 
-    # Bundled shared libraries (patchelf rpath = \$ORIGIN/lib). Install them
-    # next to the binary so the relinked rpath resolves without a system lib.
+    # Bundled shared libraries, resolved via the rpath patched above.
     if [ -d "gpui-starter/lib" ]; then
         install -dm755 "\${pkgdir}/usr/lib/gpui-starter"
         cp -a gpui-starter/lib/. "\${pkgdir}/usr/lib/gpui-starter/"
