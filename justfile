@@ -137,6 +137,11 @@ release-runs limit='8':
 deb:
     ./scripts/build-deb.sh
 
+# Build the .rpm (bundled-libs layout via scripts/build-rpm.sh). Requires
+# cargo-generate-rpm (`cargo install cargo-generate-rpm --locked`) and patchelf.
+rpm:
+    ./scripts/build-rpm.sh
+
 # Build the AppImage (linuxdeploy over the tarball layout via
 # scripts/build-appimage.sh). Requires GPUI_UPDATE_MANIFEST_URL in the env
 # plus patchelf, curl, file, desktop-file-utils, and zsync (appimagetool

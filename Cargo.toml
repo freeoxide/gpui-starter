@@ -105,6 +105,23 @@ assets = [
     ["LICENSE", "usr/share/doc/gpui-starter/", "644"],
 ]
 
+# cargo-generate-rpm config; scripts/build-rpm.sh must run first: it stages
+# target/rpm-stage/ (binary rpathed to $ORIGIN/../lib/gpui-starter + bundled
+# libs) which the first two assets consume. Requires stay auto-detected (rpm
+# auto-req over the binary's NEEDED entries); rationale:
+# docs/research/linux-packages.md.
+[package.metadata.generate-rpm]
+# The tool hard-errors without a License tag and [package] sets no `license`.
+license = "MIT"
+assets = [
+    { source = "target/rpm-stage/gpui-starter", dest = "/usr/bin/gpui-starter", mode = "755" },
+    { source = "target/rpm-stage/lib/*", dest = "/usr/lib/gpui-starter/", mode = "644" },
+    { source = "resources/com.gpui-starter.app.desktop", dest = "/usr/share/applications/com.gpui-starter.app.desktop", mode = "644" },
+    { source = "resources/com.gpui-starter.app.metainfo.xml", dest = "/usr/share/metainfo/com.gpui-starter.app.metainfo.xml", mode = "644" },
+    { source = "assets/app-icon/hicolor/*/*/*", dest = "/usr/share/icons/hicolor/", mode = "644" },
+    { source = "LICENSE", dest = "/usr/share/doc/gpui-starter/LICENSE", mode = "644" },
+]
+
 [lib]
 # rlib: consumed by the bin and by `cargo test -p gpui-starter --lib`;
 # cdylib: the wasm32-unknown-unknown web artifact post-processed by
