@@ -17,6 +17,32 @@ struct ProjectAssets;
 #[folder = "assets"]
 struct WasmAssets;
 
+/// Branded app-icon PNGs for surfaces with no icon-theme fallback: the
+/// Windows tray and the X11 window icon (the macOS tray stays a template
+/// glyph, so macOS is excluded).
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[derive(rust_embed::RustEmbed)]
+#[folder = "assets/app-icon/hicolor"]
+struct AppIconPngs;
+
+/// Decoded `<size>x<size>` branded app-icon PNG, or None when the size is
+/// absent from the embedded set or the bytes fail to decode.
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+pub fn app_icon_png(size: u16) -> Option<image::RgbaImage> {
+    let png = AppIconPngs::get(&format!("{size}x{size}/apps/gpui-starter.png"))?;
+    image::load_from_memory(&png.data)
+        .ok()
+        .map(|img| img.into_rgba8())
+}
+
+/// 48px branded PNG for `WindowOptions.icon` (X11 `_NET_WM_ICON`). Wayland
+/// has no icon path in gpui-pre 0.3.8, so None only defers to desktop-entry
+/// resolution there.
+#[cfg(target_os = "linux")]
+pub fn window_icon() -> Option<std::sync::Arc<image::RgbaImage>> {
+    app_icon_png(48).map(std::sync::Arc::new)
+}
+
 /// Bytes of every embedded font (wasm-only; see [`WasmAssets`]). Only real
 /// font files: the folder's OFL license text makes fontdb error out.
 #[cfg(target_family = "wasm")]
@@ -98,3 +124,7 @@ impl AssetSource for CombinedAssets {
         Ok(entries)
     }
 }
+
+#[cfg(all(test, any(target_os = "windows", target_os = "linux")))]
+#[path = "assets.test.rs"]
+mod assets_test;

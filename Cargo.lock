@@ -3608,6 +3608,7 @@ dependencies = [
  "gpui-kit",
  "gpui-pre",
  "gpui-query",
+ "image",
  "insta",
  "interprocess",
  "js-sys",

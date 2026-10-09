@@ -73,6 +73,10 @@ pub fn create_new_window(title: &str, cx: &mut App) {
             window_background: gpui_kit::WindowBackgroundAppearance::Transparent,
             #[cfg(target_os = "linux")]
             window_decorations: Some(gpui_kit::WindowDecorations::Client),
+            // X11 _NET_WM_ICON from the embedded 48px brand PNG; Wayland has
+            // no icon path in gpui-pre 0.3.8 (desktop entry resolves it).
+            #[cfg(target_os = "linux")]
+            icon: crate::app::assets::window_icon(),
             ..Default::default()
         };
 

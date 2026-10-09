@@ -261,6 +261,10 @@ ashpd = { version = "0.13", optional = true, default-features = false, features 
     "notification",
     "async-io",
 ] }
+# X11 window icon: decodes the embedded 48px brand PNG for
+# WindowOptions.icon (image is already in the lock via gpui-pre; png-only
+# keeps the lock's feature set from growing).
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 # Unpackaged Win32 apps need a Start Menu shortcut carrying the toast AUMID or
 # Windows silently drops every toast; see src/platform/toast_identity.rs. Same
@@ -270,6 +274,9 @@ ashpd = { version = "0.13", optional = true, default-features = false, features 
 # user-notify uses).
 [target.'cfg(target_os = "windows")'.dependencies]
 tray-icon = { version = "0.24", default-features = false }
+# Decodes the embedded branded 16px tray PNG (same png-only 0.25 line as
+# the linux table; rust-embed is already an unconditional dependency).
+image = { version = "0.25", default-features = false, features = ["png"] }
 # Select multiplexes tray-icon's two global crossbeam channels onto the one
 # gpui-tray-events drain thread.
 crossbeam-channel = "0.5"
