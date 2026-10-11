@@ -1,0 +1,6 @@
+{
+  "dependencies": {},
+  "devDependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}

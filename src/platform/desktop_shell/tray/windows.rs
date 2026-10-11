@@ -5,7 +5,8 @@ use tray_icon::{
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
 };
 
-use super::{LOG, icon};
+use super::LOG;
+use crate::app::assets;
 use crate::capabilities::{self, CapabilityStatus};
 
 #[cfg(test)]
@@ -15,6 +16,15 @@ mod windows_test;
 // 16×16 is the tray glyph at 100% DPI; tray-icon exposes no dims query, so a
 // DPI-aware 24×24 variant stays future work.
 const ICON_SIZE: usize = 16;
+
+// The Windows tray takes a full-color icon, unlike the macOS template glyph.
+fn branded_icon() -> Result<tray_icon::Icon, String> {
+    let png = assets::app_icon_png(ICON_SIZE as u16)
+        .ok_or_else(|| format!("no {ICON_SIZE}px PNG in the embedded hicolor set"))?;
+    let (width, height) = (png.width(), png.height());
+    tray_icon::Icon::from_rgba(png.into_raw(), width, height)
+        .map_err(|err| format!("embedded {ICON_SIZE}px tray PNG rejected: {err}"))
+}
 
 const SHOW_MENU_ID: &str = "gpui-starter-show";
 const SETTINGS_MENU_ID: &str = "gpui-starter-settings";
@@ -158,11 +168,20 @@ pub fn setup(cx: &mut App) {
         }
     };
 
+    let icon = match branded_icon() {
+        Ok(icon) => icon,
+        Err(err) => {
+            tracing::error!(target: LOG, error = %err, "failed to load branded tray icon");
+            capabilities::set("system_tray", CapabilityStatus::error(err), cx);
+            return;
+        }
+    };
+
     // tray-icon creates its hidden window on this (main) thread and its
     // messages ride the app's own pump — no manager worker thread is needed.
     let tray = match TrayIconBuilder::new()
         .with_menu(Box::new(menu))
-        .with_icon(icon(ICON_SIZE))
+        .with_icon(icon)
         .with_tooltip("GPUI Starter")
         .with_menu_on_left_click(false)
         .build()

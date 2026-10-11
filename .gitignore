@@ -63,3 +63,6 @@ wasm/__pycache__/
 
 # commandcode
 .commandcode
+
+# z-flashflow orchestration state
+.z-flashflow/

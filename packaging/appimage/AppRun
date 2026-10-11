@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#
+# AppImage launcher: execs the binary at the AppDir root; its bundled
+# libs load via the $ORIGIN/lib rpath set by scripts/build-appimage.sh.
+set -euo pipefail
+
+# The AppImage runtime exports APPDIR for both FUSE mounts and
+# --appimage-extract-and-run; the fallback covers running from a bare AppDir.
+APPDIR="${APPDIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+
+exec "$APPDIR/gpui-starter" "$@"

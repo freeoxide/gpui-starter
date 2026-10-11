@@ -5,10 +5,17 @@ use crate::notifications::{
     APP_DISPLAY_NAME, NotificationBackendKind, NotificationCapabilities,
     NotificationPermissionState, NotificationRequest,
 };
-// DESKTOP_ENTRY_ID feeds Hint::DesktopEntry, which is Linux/D-Bus-only (see
-// `send` below) — importing it unconditionally makes it unused on macOS/Windows.
+// Linux/D-Bus-only icon wiring (see `send`); importing these unconditionally
+// leaves them unused on macOS/Windows.
 #[cfg(target_os = "linux")]
-use crate::notifications::DESKTOP_ENTRY_ID;
+use std::path::{Path, PathBuf};
+
+#[cfg(target_os = "linux")]
+use crate::notifications::{APP_ICON_NAME, DESKTOP_ENTRY_ID};
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "notify_rust.test.rs"]
+mod notify_rust_test;
 
 const LOG: &str = "gpui_starter::notifications::notify_rust";
 
@@ -18,6 +25,45 @@ impl NotifyRustBackend {
     pub fn new() -> Self {
         Self
     }
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_app_icon() -> String {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(probe_app_icon))
+        .unwrap_or_else(|| APP_ICON_NAME.to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn probe_app_icon(exe_dir: &Path) -> String {
+    // A name the daemon cannot resolve is a no-op, so the theme name doubles
+    // as the fallback for hosts whose hicolor tree carries the icon.
+    icon_candidates(exe_dir)
+        .into_iter()
+        .find(|candidate| candidate.is_file())
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| APP_ICON_NAME.to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn icon_candidates(exe_dir: &Path) -> Vec<PathBuf> {
+    // 48 is the typical banner size; daemons scale the rest.
+    const SIZES: [u32; 5] = [48, 64, 128, 256, 512];
+    let hicolor_roots = [
+        exe_dir
+            .parent()
+            .map(|parent| parent.join("share/icons/hicolor")),
+        Some(exe_dir.join("hicolor")),
+    ];
+    let mut candidates = Vec::with_capacity(SIZES.len() * 2 + 1);
+    for root in hicolor_roots.into_iter().flatten() {
+        for size in SIZES {
+            candidates.push(root.join(format!("{size}x{size}/apps/{APP_ICON_NAME}.png")));
+        }
+    }
+    candidates.push(exe_dir.join(format!("resources/{APP_ICON_NAME}.png")));
+    candidates
 }
 
 #[async_trait]
@@ -64,6 +110,11 @@ impl NotificationBackend for NotifyRustBackend {
         notification.hint(notify_rust::Hint::DesktopEntry(
             DESKTOP_ENTRY_ID.to_string(),
         ));
+
+        // The hint brands installs only; portable runs (tarball, un-integrated
+        // AppImage) need an explicit path or the theme name.
+        #[cfg(target_os = "linux")]
+        notification.icon(&resolve_app_icon());
 
         // GNOME suppresses Normal urgency under DND/mute/busy/fullscreen; only
         // Critical pierces those gates (GNOME Shell js/ui/messageTray.js).

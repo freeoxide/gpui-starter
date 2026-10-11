@@ -10,14 +10,16 @@ fn icon_pixel_buffer_matches_dimensions() {
 }
 
 #[test]
-fn icon_pixel_buffer_has_opaque_ring_and_transparent_corners() {
+fn icon_pixel_buffer_draws_the_brand_g() {
     let size = 36usize;
     let px = icon_pixels(size);
     let alpha = |x: usize, y: usize| px[(y * size + x) * 4 + 3];
-    // Pixel centers on the lens ring and the handle are opaque; the corners
-    // sit outside the glyph.
-    assert_eq!(alpha(15, 23), 255);
-    assert_eq!(alpha(26, 26), 255);
+    // Opaque on the ring's left and top and on the crossbar; the mouth
+    // above the crossbar and the corners sit outside the glyph.
+    assert_eq!(alpha(6, 18), 255);
+    assert_eq!(alpha(18, 6), 255);
+    assert_eq!(alpha(29, 18), 255);
+    assert_eq!(alpha(29, 10), 0);
     assert_eq!(alpha(0, 0), 0);
     // The glyph is monochrome black.
     assert_eq!(px[0], 0);

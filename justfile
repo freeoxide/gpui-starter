@@ -66,7 +66,7 @@ gpui-query-status:
 #
 # CI runs on the FORK hmziqagent/gpui-starter (remote `fork`), tag-triggered:
 # pushing a v* tag fires .github/workflows/release.yml from the tagged commit.
-# publish-release uses softprops/action-gh-release@v2, which UPSERTS the GitHub
+# publish-release uses softprops/action-gh-release@v3, which UPSERTS the GitHub
 # Release (replaces assets, regenerates notes) — so a re-trigger updates the
 # already-published release in place; no manual release deletion required.
 # ---------------------------------------------------------------------------
@@ -131,3 +131,38 @@ watch-release runid='':
 # List recent Release runs on the fork.
 release-runs limit='8':
     gh run list -R {{release-repo}} --workflow={{release-workflow}} --limit {{limit}}
+
+# Build the .deb (bundled-libs layout via scripts/build-deb.sh). Requires
+# cargo-deb (`cargo install cargo-deb --locked`) and patchelf.
+deb:
+    ./scripts/build-deb.sh
+
+# Build the .rpm (bundled-libs layout via scripts/build-rpm.sh). Requires
+# cargo-generate-rpm (`cargo install cargo-generate-rpm --locked`) and patchelf.
+rpm:
+    ./scripts/build-rpm.sh
+
+# Build the AppImage (linuxdeploy over the tarball layout via
+# scripts/build-appimage.sh). Requires GPUI_UPDATE_MANIFEST_URL in the env
+# plus patchelf, curl, file, desktop-file-utils, and zsync (appimagetool
+# needs the last three).
+appimage:
+    ./scripts/build-appimage.sh
+
+# Build the local .flatpak bundle (scripts/build-flatpak.sh; flathub runtimes
+# install on first run). Requires flatpak, flatpak-builder, and
+# flatpak-cargo-generator (pipx install flatpak-cargo-generator).
+flatpak:
+    ./scripts/build-flatpak.sh
+
+# Build the portable Windows artifacts (bare .exe + .zip in target/release
+# via scripts/build-windows-portable.sh). Git Bash on a Windows host only
+# (GHA windows-2025 runner); needs GPUI_UPDATE_MANIFEST_URL in the env.
+win-portable:
+    ./scripts/build-windows-portable.sh
+
+# Build the Inno Setup setup .exe (scripts/build-windows-installer.sh) into
+# target/release. Git Bash on a Windows host with ISCC in PATH (preinstalled
+# on GHA windows-2025); run win-portable first, this recipe needs the exe.
+win-installer:
+    ./scripts/build-windows-installer.sh

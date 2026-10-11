@@ -8,8 +8,8 @@ pub use api::{
 };
 pub use backend_service::{NativeNotificationState, NotificationRuntimeSnapshot};
 pub use types::{
-    ACTION_OPEN, ACTION_REPLY, ACTION_SNOOZE, APP_DISPLAY_NAME, CATEGORY_ACTIONS, CATEGORY_REPLY,
-    DESKTOP_ENTRY_ID, NotificationBackendKind, NotificationCapabilities,
+    ACTION_OPEN, ACTION_REPLY, ACTION_SNOOZE, APP_DISPLAY_NAME, APP_ICON_NAME, CATEGORY_ACTIONS,
+    CATEGORY_REPLY, DESKTOP_ENTRY_ID, NotificationBackendKind, NotificationCapabilities,
     NotificationPermissionState, NotificationRequest, WM_CLASS,
 };
 // NotificationImportance is consumed (via this service re-export) only by the

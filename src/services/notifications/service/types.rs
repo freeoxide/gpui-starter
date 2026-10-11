@@ -20,6 +20,9 @@ pub const APP_DISPLAY_NAME: &str = "GPUI Starter";
 pub const DESKTOP_ENTRY_ID: &str = "com.gpui-starter.app";
 /// X11 WM_CLASS value (binary basename) — must equal `.desktop` StartupWMClass.
 pub const WM_CLASS: &str = "gpui-starter";
+/// Icon-theme name: the hicolor install filename and the desktop entry's
+/// `Icon=` value, used when no bundled PNG path is handed to the daemon.
+pub const APP_ICON_NAME: &str = "gpui-starter";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NotificationBackendKind {

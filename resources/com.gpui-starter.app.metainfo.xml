@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.gpui-starter.app</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>GPUI Starter</name>
+  <summary>A full-featured desktop application boilerplate built with GPUI (Zed's UI toolkit)</summary>
+  <description>
+    <p>GPUI Starter is a desktop application boilerplate built on GPUI, the UI
+    toolkit behind the Zed editor. It ships the production wiring a real app
+    needs: multi-page navigation, themes, internationalization, form
+    validation, notifications, secure storage, SQLite persistence, and a
+    signed auto-updater.</p>
+  </description>
+  <launchable type="desktop-id">com.gpui-starter.app.desktop</launchable>
+  <url type="homepage">https://github.com/freeoxide/gpui-starter</url>
+  <url type="bugtracker">https://github.com/freeoxide/gpui-starter/issues</url>
+  <developer id="io.github.hmziqrs">
+    <name>hmziqrs</name>
+  </developer>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <provides>
+    <binary>gpui-starter</binary>
+    <mediatype>x-scheme-handler/gpui-starter</mediatype>
+  </provides>
+  <releases>
+    <release version="0.2.1" date="2026-06-29">
+      <description>
+        <p>Harden Linux notifications with the XDG portal backend, add a
+        universal macOS DMG, and fix release CI.</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

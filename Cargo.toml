@@ -87,6 +87,41 @@ publish = false
 description = "A full-featured desktop application boilerplate built with GPUI (Zed's UI toolkit)"
 repository = "https://github.com/freeoxide/gpui-starter"
 
+# cargo-deb config; scripts/build-deb.sh must run first: it stages
+# target/deb-stage/ (binary rpathed to $ORIGIN/../lib/gpui-starter + bundled
+# libs) which the first two assets consume. Bundled-layout rationale:
+# docs/research/linux-packages.md.
+[package.metadata.deb]
+maintainer = "gpui-starter contributors <hmziqrs@users.noreply.github.com>"
+copyright = "2026 hmziqrs"
+license-file = ["LICENSE", 0]
+depends = "$auto"
+suggests = "mesa-vulkan-drivers"
+assets = [
+    ["target/deb-stage/gpui-starter", "usr/bin/gpui-starter", "755"],
+    ["target/deb-stage/lib/*", "usr/lib/gpui-starter/", "644"],
+    ["resources/com.gpui-starter.app.desktop", "usr/share/applications/com.gpui-starter.app.desktop", "644"],
+    ["resources/com.gpui-starter.app.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["assets/app-icon/hicolor/*/*/*", "usr/share/icons/hicolor/", "644"],
+]
+
+# cargo-generate-rpm config; scripts/build-rpm.sh must run first: it stages
+# target/rpm-stage/ (binary rpathed to $ORIGIN/../lib/gpui-starter + bundled
+# libs) which the first two assets consume. Requires stay auto-detected (rpm
+# auto-req over the binary's NEEDED entries); rationale:
+# docs/research/linux-packages.md.
+[package.metadata.generate-rpm]
+# The tool hard-errors without a License tag and [package] sets no `license`.
+license = "MIT"
+assets = [
+    { source = "target/rpm-stage/gpui-starter", dest = "/usr/bin/gpui-starter", mode = "755" },
+    { source = "target/rpm-stage/lib/*", dest = "/usr/lib/gpui-starter/", mode = "644" },
+    { source = "resources/com.gpui-starter.app.desktop", dest = "/usr/share/applications/com.gpui-starter.app.desktop", mode = "644" },
+    { source = "resources/com.gpui-starter.app.metainfo.xml", dest = "/usr/share/metainfo/com.gpui-starter.app.metainfo.xml", mode = "644" },
+    { source = "assets/app-icon/hicolor/*/*/*", dest = "/usr/share/icons/hicolor/", mode = "644" },
+    { source = "LICENSE", dest = "/usr/share/doc/gpui-starter/LICENSE", mode = "644" },
+]
+
 [lib]
 # rlib: consumed by the bin and by `cargo test -p gpui-starter --lib`;
 # cdylib: the wasm32-unknown-unknown web artifact post-processed by
@@ -180,6 +215,11 @@ insta.workspace = true
 # debounce tests. Dev-dep features never reach production or wasm builds.
 gpui = { package = "gpui-pre", version = "0.3.8", features = ["test-support"] }
 
+# Windows .exe icon embed; build.rs gates on CARGO_CFG_TARGET_OS so Linux,
+# macOS, and wasm hosts never invoke it (docs/research/icons-and-windows.md A2).
+[build-dependencies]
+winresource = "0.1"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 tray-icon = { version = "0.24", default-features = false }
 global-hotkey = "0.8"
@@ -220,6 +260,10 @@ ashpd = { version = "0.13", optional = true, default-features = false, features 
     "notification",
     "async-io",
 ] }
+# X11 window icon: decodes the embedded 48px brand PNG for
+# WindowOptions.icon (image is already in the lock via gpui-pre; png-only
+# keeps the lock's feature set from growing).
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 # Unpackaged Win32 apps need a Start Menu shortcut carrying the toast AUMID or
 # Windows silently drops every toast; see src/platform/toast_identity.rs. Same
@@ -229,6 +273,9 @@ ashpd = { version = "0.13", optional = true, default-features = false, features 
 # user-notify uses).
 [target.'cfg(target_os = "windows")'.dependencies]
 tray-icon = { version = "0.24", default-features = false }
+# Decodes the embedded branded 16px tray PNG (same png-only 0.25 line as
+# the linux table; rust-embed is already an unconditional dependency).
+image = { version = "0.25", default-features = false, features = ["png"] }
 # Select multiplexes tray-icon's two global crossbeam channels onto the one
 # gpui-tray-events drain thread.
 crossbeam-channel = "0.5"
@@ -330,8 +377,8 @@ chrono = { version = "0.4", features = ["wasmbind"] }
 # The feature set is the UNION of every wasm area's needs:
 #   - B (this crate, browser integrations): Clipboard, Window, Navigator,
 #     Location, History, Document, HtmlHeadElement, HtmlLinkElement,
-#     HtmlCanvasElement, CanvasRenderingContext2d, Event, EventTarget,
-#     AddEventListenerOptions
+#     HtmlCanvasElement, HtmlImageElement, CanvasRenderingContext2d, Event,
+#     EventTarget, AddEventListenerOptions
 #   - C (web notifications): Notification, NotificationOptions,
 #     NotificationDirection
 #   - D (SQLite-on-OPFS worker): Worker, WorkerOptions, MessageEvent,
@@ -349,6 +396,7 @@ web-sys = { version = "=0.3.102", features = [
     "History",
     "HtmlCanvasElement",
     "HtmlHeadElement",
+    "HtmlImageElement",
     "HtmlLinkElement",
     "Location",
     "MessageEvent",

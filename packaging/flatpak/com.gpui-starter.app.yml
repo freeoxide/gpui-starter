@@ -1,0 +1,57 @@
+app-id: com.gpui-starter.app
+branch: stable
+runtime: org.freedesktop.Platform
+runtime-version: "25.08"
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: gpui-starter
+# No --talk-name=org.freedesktop.portal.*: the sandbox session-bus filter
+# always passes portal names (docs/research/linux-packages.md).
+finish-args:
+  - --device=dri
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --share=network
+modules:
+  - name: gpui-starter
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        CARGO_HOME: /run/build/gpui-starter/cargo
+        CARGO_NET_OFFLINE: "true"
+    build-commands:
+      # notifications-portal routes notifications via the ashpd portal backend;
+      # native builds keep the feature off (Cargo.toml Linux target table).
+      - cargo build --offline --locked --release --features notifications-portal
+      - install -Dm755 target/release/gpui-starter /app/bin/gpui-starter
+      - install -Dm644 resources/com.gpui-starter.app.desktop /app/share/applications/com.gpui-starter.app.desktop
+      - install -Dm644 resources/com.gpui-starter.app.metainfo.xml /app/share/metainfo/com.gpui-starter.app.metainfo.xml
+      - install -Dm644 assets/app-icon/hicolor/scalable/apps/gpui-starter.svg /app/share/icons/hicolor/scalable/apps/gpui-starter.svg
+      - for s in 16 22 24 32 48 64 128 256 512; do install -Dm644 "assets/app-icon/hicolor/${s}x${s}/apps/gpui-starter.png" "/app/share/icons/hicolor/${s}x${s}/apps/gpui-starter.png"; done
+    sources:
+      # locales/, themes/, and assets/ are compile-time embedded; skip only
+      # tooling and output directories.
+      - type: dir
+        path: ../..
+        skip:
+          - .git
+          - .github
+          - .claude
+          - .flatpak-builder
+          - .z-proflow
+          - .z-flashflow
+          - .z-gpui-workflow
+          - .z-workflow
+          - .zcode
+          - .zcodeignore
+          - bun.lock
+          - docs
+          - node_modules
+          - package.json
+          - target
+          - wasm
+          - web
+      - cargo-sources.json

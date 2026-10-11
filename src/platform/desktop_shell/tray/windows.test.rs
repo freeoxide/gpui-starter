@@ -19,6 +19,11 @@ fn tray_click(button: MouseButton, state: MouseButtonState) -> TrayIconEvent {
 }
 
 #[test]
+fn branded_tray_icon_loads_from_the_embedded_set() {
+    assert!(branded_icon().is_ok());
+}
+
+#[test]
 fn menu_lists_show_settings_and_quit_with_a_separator_before_quit() {
     let items = menu_items();
     let ids: Vec<&str> = items
