@@ -1,0 +1,83 @@
+---
+import { downloadLinks, type Channel } from '../util/downloads';
+
+interface Props {
+  /** Which release channel this button points at. */
+  channel?: Channel;
+  /** Classes for the anchor — any button or link style works. */
+  class?: string;
+}
+
+// A smart-download anchor. The default href/label targets macOS universal
+// (the site's primary platform and safe no-JS fallback); the hoisted script
+// below rewrites every instance on the page to match the visitor's platform:
+// macOS -> universal DMG, Linux -> arch-matched tarball, anything else ->
+// the GitHub release page.
+const { channel = 'stable', class: className = 'btn btn-lg btn-solid' } = Astro.props;
+const links = downloadLinks[channel];
+const base = channel === 'stable' ? `v${links.version}` : 'the master build';
+
+const platformMap = JSON.stringify({
+  mac: { href: links.macUniversal, label: `Download ${base} for macOS` },
+  linuxArm: { href: links.linuxArm, label: `Download ${base} for Linux (ARM64)` },
+  linuxX64: { href: links.linuxX64, label: `Download ${base} for Linux (x86_64)` },
+  other: { href: links.page, label: `Get ${base} on GitHub` },
+});
+---
+
+<a data-dl-map={platformMap} href={links.macUniversal} class={className}>
+  <span data-dl-label>{channel === 'stable' ? `Download v${links.version} for macOS` : `Download ${base} for macOS`}</span>
+</a>
+
+<script>
+  // ---------- platform-aware download links ----------
+  type PlatformMap = Record<'mac' | 'linuxArm' | 'linuxX64' | 'other', { href: string; label: string }>;
+
+  const anchors = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[data-dl-map]'));
+
+  const detect = () => {
+    const ua = navigator.userAgent;
+    const mac = /Macintosh|Mac OS X/i.test(ua);
+    const linux = !mac && /Linux|X11/i.test(ua) && !/Android/i.test(ua);
+    const arm = /aarch64|arm64/i.test(ua) || /armv/i.test(navigator.platform || '');
+    return { mac, linux, arm };
+  };
+
+  if (anchors.length > 0) {
+    const apply = ({ mac, linux, arm }: ReturnType<typeof detect>) => {
+      for (const a of anchors) {
+        let map: PlatformMap;
+        try {
+          map = JSON.parse(a.dataset.dlMap || '{}');
+        } catch {
+          continue;
+        }
+        const pick = mac ? map.mac : linux ? (arm ? map.linuxArm : map.linuxX64) : map.other;
+        if (!pick) continue;
+        a.href = pick.href;
+        const label = a.querySelector<HTMLElement>('[data-dl-label]');
+        if (label) label.textContent = pick.label;
+      }
+    };
+
+    apply(detect());
+
+    // Reduced UA strings usually omit the architecture; ask for it when the
+    // API exists and re-apply if it changes the ARM guess.
+    const uad = (navigator as { userAgentData?: { getHighEntropyValue?: (keys: string[]) => Promise<{ architecture?: string }> } })
+      .userAgentData;
+    if (uad?.getHighEntropyValue) {
+      uad
+        .getHighEntropyValue(['architecture'])
+        .then(({ architecture }) => {
+          const d = detect();
+          const uaArm = d.arm;
+          const realArm = architecture ? /arm|aarch/i.test(architecture) : uaArm;
+          if (realArm !== uaArm) apply({ ...d, arm: realArm });
+        })
+        .catch(() => {
+          /* keep the UA-derived guess */
+        });
+    }
+  }
+</script>

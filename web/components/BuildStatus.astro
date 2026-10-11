@@ -1,0 +1,153 @@
+---
+import { GH_REPO, type GhCompare, type GhRelease, type GhRunsResponse, type GhWorkflowRun, ghFetch, timeAgo } from '../util/github';
+
+interface Props {
+  /** Workflow file whose runs on master are shown (e.g. latest.yml). */
+  workflow?: string;
+  /** Stable tag (e.g. v0.3.0); when set, shows how far master is ahead. */
+  stableTag?: string;
+}
+
+// Live CI strip, rendered entirely in the visitor's browser: it queries the
+// public GitHub API for the workflow's master runs plus the rolling `latest`
+// release and paints one of four states — building (pulsing amber), passing
+// (green), failing (red), or paused (API rate limit). Nothing server-side:
+// if the fetch fails the strip just hides and the static page stands alone.
+const { workflow = 'latest.yml', stableTag = '' } = Astro.props;
+const WORKFLOW_URL = `https://github.com/${GH_REPO}/actions/workflows/${workflow}`;
+---
+
+<div
+  class="mt-6 border border-rule bg-panel p-5"
+  data-build-status
+  data-workflow={workflow}
+  data-stable-tag={stableTag}
+  hidden
+>
+  <div class="flex items-start gap-3.5">
+    <span
+      data-bs-dot
+      class="mt-[7px] shrink-0 w-2.5 h-2.5 rounded-full"
+      style="background:var(--color-fg-subtle)"
+      aria-hidden="true"></span>
+    <div class="flex-1 min-w-0">
+      <p data-bs-headline class="text-[14px] font-semibold leading-snug">Checking CI…</p>
+      <p data-bs-sub class="mono text-[11.5px] text-fg-muted mt-1 truncate"></p>
+    </div>
+    <div class="flex items-center gap-3 shrink-0">
+      <a data-bs-run href={WORKFLOW_URL} target="_blank" rel="noopener" class="alink text-[12.5px] hidden">View run</a>
+      <button data-bs-refresh type="button" class="pill cursor-pointer">Refresh</button>
+    </div>
+  </div>
+  <p class="mono text-[10.5px] text-fg-subtle mt-3">
+    <span data-bs-meta></span>
+    <span data-bs-checked class="float-right"></span>
+  </p>
+</div>
+
+<script>
+  import { ghFetch, timeAgo, type GhCompare, type GhRelease, type GhRunsResponse } from '../util/github';
+
+  const root = document.querySelector<HTMLElement>('[data-build-status]');
+  if (root) {
+    const workflow = root.dataset.workflow || 'latest.yml';
+    const stableTag = root.dataset.stableTag || '';
+    const dot = root.querySelector<HTMLElement>('[data-bs-dot]')!;
+    const headline = root.querySelector<HTMLElement>('[data-bs-headline]')!;
+    const sub = root.querySelector<HTMLElement>('[data-bs-sub]')!;
+    const meta = root.querySelector<HTMLElement>('[data-bs-meta]')!;
+    const checked = root.querySelector<HTMLElement>('[data-bs-checked]')!;
+    const runLink = root.querySelector<HTMLAnchorElement>('[data-bs-run]')!;
+
+    const COLORS = {
+      idle: 'var(--color-fg-subtle)',
+      build: '#e8b339',
+      ok: 'var(--color-c-ok)',
+      fail: '#ff6b6b',
+    };
+    const setDot = (color: string, pulse: boolean) => {
+      dot.style.background = color;
+      dot.classList.toggle('animate-pulse', pulse);
+    };
+
+    let lastCheckedAt = 0;
+    let metaFromState = '';
+
+    const refresh = async () => {
+      const runsRes = await ghFetch<GhRunsResponse>(`/actions/workflows/${workflow}/runs?branch=master&per_page=3`);
+      const [relRes, cmpRes] = await Promise.all([
+        ghFetch<GhRelease>('/releases/tags/latest'),
+        stableTag ? ghFetch<GhCompare>(`/compare/${stableTag}...master`) : Promise.resolve(null),
+      ]);
+      lastCheckedAt = Date.now();
+
+      if (!runsRes.ok) {
+        if (runsRes.reason === 'rate-limit') {
+          root.hidden = false;
+          setDot(COLORS.idle, false);
+          headline.textContent = 'Live status paused';
+          sub.textContent = '';
+          meta.textContent = 'GitHub API rate limit hit from this browser — hit Refresh in a minute';
+        } else {
+          // Offline or API hiccup: fall back to the static page quietly.
+          root.hidden = true;
+        }
+        return;
+      }
+
+      const run: GhWorkflowRun | undefined = runsRes.data.workflow_runs[0];
+      if (!run) {
+        root.hidden = true;
+        return;
+      }
+
+      root.hidden = false;
+      runLink.href = run.html_url;
+      runLink.classList.remove('hidden');
+
+      const sha = run.head_sha.slice(0, 7);
+      const title = run.display_title || 'master';
+      const when = timeAgo(run.run_started_at ?? run.created_at);
+      metaFromState = '';
+
+      if (run.status === 'in_progress' || run.status === 'queued') {
+        setDot(COLORS.build, true);
+        headline.textContent = 'CI is building master right now';
+        sub.textContent = `${title} · ${sha} · started ${when}`;
+        metaFromState = 'a fresh set of downloads lands on the latest release when this run finishes';
+      } else if (run.conclusion === 'success') {
+        setDot(COLORS.ok, false);
+        headline.textContent = 'Master build passing';
+        sub.textContent = `${title} · ${sha} · built ${when}`;
+      } else if (run.conclusion) {
+        setDot(COLORS.fail, false);
+        headline.textContent = `Master build ${run.conclusion}`;
+        sub.textContent = `${title} · ${sha} · ${when}`;
+        metaFromState = 'downloads below come from the last passing run';
+      }
+
+      const bits: string[] = [];
+      if (metaFromState) bits.push(metaFromState);
+      if (relRes && relRes.ok) bits.push(`latest release rebuilt ${timeAgo(relRes.data.published_at)}`);
+      if (cmpRes && cmpRes.ok) {
+        bits.push(`master is ${cmpRes.data.ahead_by} commit${cmpRes.data.ahead_by === 1 ? '' : 's'} ahead of ${stableTag}`);
+      }
+      meta.textContent = bits.join(' · ');
+    };
+
+    // Poll while the tab is visible; refresh immediately on return.
+    const tick = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
+    setInterval(tick, 60_000);
+    document.addEventListener('visibilitychange', tick);
+    root.querySelector<HTMLButtonElement>('[data-bs-refresh]')!.addEventListener('click', () => void refresh());
+
+    // "checked Xs ago" ticker.
+    setInterval(() => {
+      if (lastCheckedAt) checked.textContent = `checked ${timeAgo(new Date(lastCheckedAt).toISOString())}`;
+    }, 5_000);
+
+    void refresh();
+  }
+</script>

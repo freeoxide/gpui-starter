@@ -1,0 +1,265 @@
+---
+import Layout from '../layouts/MarketingLayout.astro';
+import DownloadCta from '../components/DownloadCta.astro';
+import BuildStatus from '../components/BuildStatus.astro';
+import { downloadLinks, RELEASES_URL, type ChannelLinks } from '../util/downloads';
+import { latestVersion } from '../util/changelog';
+
+const CLONE = 'git clone https://github.com/freeoxide/gpui-starter.git';
+
+interface AssetCard {
+  platform: string;
+  arch: string;
+  file: string;
+  hint: string;
+  href: string;
+}
+
+function assetCards(links: ChannelLinks, flavor: 'stable' | 'latest'): AssetCard[] {
+  const macHint =
+    flavor === 'stable'
+      ? 'Apple Silicon and Intel in one DMG. Open it and drag GPUI Starter to Applications.'
+      : 'Apple Silicon and Intel in one DMG. Ad-hoc signed, not notarized — right-click the app and choose Open on first launch.';
+  return [
+    { platform: 'macOS', arch: 'universal', file: `GPUI-Starter-${links.version}.dmg`, hint: macHint, href: links.macUniversal },
+    { platform: 'macOS', arch: 'Apple Silicon', file: `GPUI-Starter-${links.version}-aarch64.dmg`, hint: 'Slimmer download for M-series Macs.', href: links.macArm },
+    { platform: 'macOS', arch: 'Intel', file: `GPUI-Starter-${links.version}-x86_64.dmg`, hint: 'Slimmer download for Intel Macs.', href: links.macIntel },
+    {
+      platform: 'Linux',
+      arch: 'x86_64',
+      file: `gpui-starter-${links.version}-x86_64-linux.tar.gz`,
+      hint: 'Extract, then run ./install-linux.sh once to register the desktop entry. Launch with gpui-starter.',
+      href: links.linuxX64,
+    },
+    {
+      platform: 'Linux',
+      arch: 'ARM64',
+      file: `gpui-starter-${links.version}-aarch64-linux.tar.gz`,
+      hint: 'For Arm desktops and SBCs on a glibc distro. Same install-linux.sh step.',
+      href: links.linuxArm,
+    },
+  ];
+}
+
+const stable = assetCards(downloadLinks.stable, 'stable');
+const latest = assetCards(downloadLinks.latest, 'latest');
+
+/** Render the one command that appears inside install hints as <code>. */
+const hintHtml = (s: string) => s.replace('./install-linux.sh', '<code class="inline">./install-linux.sh</code>');
+---
+
+<Layout
+  title="Download gpui-starter — prebuilt macOS & Linux builds"
+  ogImage="/og/pages/download.png"
+  description="Download gpui-starter: signed macOS DMGs (universal, Apple Silicon, Intel) and Linux tarballs (x86_64, ARM64) for every tagged release, plus a fresh build from every commit to master."
+>
+  <!-- ===== HERO ===== -->
+  <section class="border-b border-line">
+    <div class="frame py-14 md:py-20">
+      <p class="eyebrow">Downloads</p>
+      <h1 class="display t-hero mt-5">
+        Grab a build,<br /><span class="text-accent">skip the compile.</span>
+      </h1>
+      <p class="lead mt-7 max-w-[54ch]">
+        Two channels: <strong class="text-fg">stable</strong> follows tagged releases, and
+        <strong class="text-fg">latest</strong> is rebuilt by CI from every commit to master —
+        the same builds CI itself compiles and tests.
+      </p>
+
+      <div class="mt-9 flex flex-wrap items-center gap-3">
+        <DownloadCta channel="stable" class="btn btn-lg btn-solid" />
+        <DownloadCta channel="latest" class="btn btn-lg btn-accent" />
+      </div>
+      <p class="mono text-[11px] text-fg-subtle mt-4">
+        buttons adapt to your platform · no Windows builds yet — build from source below
+      </p>
+    </div>
+  </section>
+
+  <!-- ===== STABLE ===== -->
+  <section id="stable" class="sect" data-channel="stable" data-tag={`v${downloadLinks.stable.version}`}>
+    <div class="wrap">
+      <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+        <div>
+          <p class="eyebrow">Stable</p>
+          <h2 class="display t-h2 mt-4">
+            v{latestVersion}
+            <span class="mono text-fg-subtle text-[0.4em] align-top">recommended</span>
+          </h2>
+          <p class="mono text-[11px] text-fg-subtle mt-2" data-stable-meta hidden></p>
+        </div>
+        <p class="lead text-[15px] max-w-[42ch]">
+          The release the changelog describes. Notarized when signing secrets are configured,
+          and the channel the in-app updater serves.
+        </p>
+      </div>
+
+      <div class="mt-11 ruled grid sm:grid-cols-2 lg:grid-cols-3 reveal">
+        {stable.map((a) => (
+          <article class="p-6 flex flex-col" data-asset={a.file}>
+            <div class="flex items-center justify-between gap-3">
+              <h3 class="text-[16px] font-bold">{a.platform}</h3>
+              <span class="mono text-[10.5px] uppercase tracking-[.1em] text-fg-subtle">{a.arch}</span>
+            </div>
+            <code class="mono block text-[11px] text-fg-subtle mt-1.5 break-all">{a.file}</code>
+            <p class="mono text-[10.5px] text-fg-subtle mt-1" data-asset-meta hidden></p>
+            <p class="text-[13.5px] text-fg-muted mt-3 leading-relaxed flex-1" set:html={hintHtml(a.hint)} />
+            <a href={a.href} class="alink text-[13px] mt-4">Download</a>
+          </article>
+        ))}
+        <a
+          href={downloadLinks.stable.page}
+          target="_blank"
+          rel="noopener"
+          class="p-6 no-underline text-fg block hover:bg-panel transition-colors flex flex-col"
+        >
+          <h3 class="text-[16px] font-bold">All assets</h3>
+          <p class="text-[13.5px] text-fg-muted mt-3 leading-relaxed flex-1">
+            Every file for this release, plus the full release notes, on GitHub.
+          </p>
+          <span class="alink text-[13px] mt-4">Open the release &rarr;</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== LATEST (MASTER) ===== -->
+  <section id="latest" class="sect-rule" data-channel="latest" data-tag="latest">
+    <div class="wrap">
+      <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+        <div>
+          <p class="eyebrow">Latest build</p>
+          <h2 class="display t-h2 mt-4">
+            master
+            <span class="mono text-fg-subtle text-[0.4em] align-top">rebuilt every commit</span>
+          </h2>
+        </div>
+        <p class="lead text-[15px] max-w-[42ch]">
+          CI compiles and attaches these on every push to master, so they track the code you
+          see in the repo — bugs included. Use them to test fixes before they ship.
+        </p>
+      </div>
+
+      <div class="mt-6 flex flex-wrap gap-2">
+        <span class="pill">not notarized</span>
+        <span class="pill">updater stays on the stable channel</span>
+        <span class="pill">
+          <a href={RELEASES_URL + '/tag/latest'} target="_blank" rel="noopener" class="no-underline text-inherit hover:text-fg">latest tag on GitHub</a>
+        </span>
+      </div>
+
+      <BuildStatus workflow="latest.yml" stableTag={`v${downloadLinks.stable.version}`} />
+
+      <div class="mt-11 ruled grid sm:grid-cols-2 lg:grid-cols-3 reveal">
+        {latest.map((a) => (
+          <article class="p-6 flex flex-col" data-asset={a.file}>
+            <div class="flex items-center justify-between gap-3">
+              <h3 class="text-[16px] font-bold">{a.platform}</h3>
+              <span class="mono text-[10.5px] uppercase tracking-[.1em] text-fg-subtle">{a.arch}</span>
+            </div>
+            <code class="mono block text-[11px] text-fg-subtle mt-1.5 break-all">{a.file}</code>
+            <p class="mono text-[10.5px] text-fg-subtle mt-1" data-asset-meta hidden></p>
+            <p class="text-[13.5px] text-fg-muted mt-3 leading-relaxed flex-1" set:html={hintHtml(a.hint)} />
+            <a href={a.href} class="alink text-[13px] mt-4">Download</a>
+          </article>
+        ))}
+        <a
+          href="/changelog/"
+          class="p-6 no-underline text-fg block hover:bg-panel transition-colors flex flex-col"
+        >
+          <h3 class="text-[16px] font-bold">What changed?</h3>
+          <p class="text-[13.5px] text-fg-muted mt-3 leading-relaxed flex-1">
+            Master moves between tagged releases. The changelog covers the last stable cut.
+          </p>
+          <span class="alink text-[13px] mt-4">Read the changelog &rarr;</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== BUILD FROM SOURCE ===== -->
+  <section id="source" class="sect">
+    <div class="wrap">
+      <p class="eyebrow">Windows · Contributors · Everyone else</p>
+      <h2 class="display t-h2 mt-4 max-w-[22ch]">Build from source.</h2>
+      <p class="lead mt-5 max-w-[54ch]">
+        The whole point of gpui-starter is that the app <em>is</em> the source. Clone it and
+        you have the same binary these builds ship — plus every subsystem as editable code.
+      </p>
+
+      <div class="mt-9 max-w-[640px] flex items-stretch codebox text-left">
+        <div class="flex-1 min-w-0 flex items-center gap-2.5 px-4 py-3.5 overflow-x-auto">
+          <span class="c-p mono text-[14px]">$</span>
+          <code class="mono text-[13.5px] whitespace-nowrap">{CLONE}</code>
+        </div>
+        <button
+          class="copy-btn shrink-0 w-11 grid place-items-center text-fg-subtle hover:text-fg bg-transparent cursor-pointer transition-colors border-0 border-l border-l-line"
+          data-copy={CLONE}
+          aria-label="Copy clone command"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"
+            ><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg
+          >
+        </button>
+      </div>
+
+      <div class="mt-7 flex flex-wrap gap-6 text-[13.5px] text-fg-muted">
+        <span><strong class="text-fg">macOS:</strong> Xcode Command Line Tools is all you need.</span>
+        <span><strong class="text-fg">Linux:</strong> Vulkan + X11/Wayland dev headers.</span>
+        <a href="/docs/getting-started/" class="alink">Full build requirements &rarr;</a>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  // ---------- live asset metadata (sizes + download counts) ----------
+  // Purely client-side: each release channel section carries data-tag, and we
+  // enrich the asset cards from the public GitHub API. On any failure the
+  // static page stays exactly as built.
+  import { ghFetch, formatBytes, formatCount, timeAgo, type GhRelease } from '../util/github';
+
+  const sections = Array.from(document.querySelectorAll<HTMLElement>('section[data-tag]'));
+
+  const enrich = async (section: HTMLElement) => {
+    const tag = section.dataset.tag;
+    if (!tag) return;
+    const res = await ghFetch<GhRelease>(`/releases/tags/${tag}`);
+    if (!res.ok) return;
+    const release = res.data;
+    const byName = new Map(release.assets.map((a) => [a.name, a]));
+
+    for (const card of section.querySelectorAll<HTMLElement>('[data-asset]')) {
+      const asset = byName.get(card.dataset.asset || '');
+      const metaEl = card.querySelector<HTMLElement>('[data-asset-meta]');
+      if (!asset || !metaEl) continue;
+      const bits = [formatBytes(asset.size)];
+      if (asset.download_count > 0) bits.push(`${formatCount(asset.download_count)} download${asset.download_count === 1 ? '' : 's'}`);
+      metaEl.textContent = bits.join(' · ');
+      metaEl.hidden = false;
+    }
+
+    if (section.dataset.channel === 'stable') {
+      const stableMeta = section.querySelector<HTMLElement>('[data-stable-meta]');
+      if (stableMeta) {
+        const total = release.assets.reduce((n, a) => n + a.download_count, 0);
+        const bits = [`published ${timeAgo(release.published_at)}`];
+        if (total > 0) bits.push(`${formatCount(total)} downloads so far`);
+        stableMeta.textContent = bits.join(' · ');
+        stableMeta.hidden = false;
+      }
+    }
+  };
+
+  if (sections.length > 0) {
+    const refreshAll = () => sections.forEach((s) => void enrich(s));
+    refreshAll();
+    // Download counts move slowly — revalidate every 5 minutes while visible.
+    setInterval(() => {
+      if (document.visibilityState === 'visible') refreshAll();
+    }, 300_000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') refreshAll();
+    });
+  }
+</script>
