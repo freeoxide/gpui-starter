@@ -1,0 +1,96 @@
+target
+
+# Website
+node_modules
+dist
+*.tgz
+package-lock.json
+.astro
+
+# Environment
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# OS
+.DS_Store
+
+# Runtime artifacts (macOS single-instance lock lands in cwd)
+com.gpui-starter.app.instance
+
+# IDE
+.idea
+
+# Claude
+.claude/worktrees/
+
+# Cache
+.cache
+*.tsbuildinfo
+.xwin-cache/
+
+# Machine-local MSVC env for this checkout (linker, INCLUDE/LIB, CC, RC)
+.cargo/config.toml
+
+# Local working artifacts (UI-audit captures and session reports)
+/out/
+
+.playwright-*/
+
+tests/snapshots/
+
+# Wasm harness build artifacts (wasm-bindgen output, precompressed
+# siblings, version.json — all under pkg/) + serve PID + precompressed
+# HTML and vendored-sqlite siblings
+wasm/pkg/
+wasm/serve.pid
+wasm/index.html.gz
+wasm/index.html.br
+wasm/sqlite/*.gz
+wasm/sqlite/*.br
+wasm/__pycache__/
+
+# z-workflow orchestration state
+.z-workflow/
+
+# z-proflow orchestration state
+.z-proflow/
+
+# z-gpui-workflow orchestration state
+.z-gpui-workflow/
+
+# commandcode
+.commandcode
+
+# ===== ↑ 以上同步自 .gitignore（「从 .gitignore 同步」只重写以上部分）=====
+.git/
+.hg/
+.svn/
+bower_components/
+jspm_packages/
+__pycache__/
+site-packages/
+venv/
+coverage/
+htmlcov/
+lcov-report/
+cmakefiles/
+cmake-build-*/
+bazel-*/
+pods/
+deriveddata/
+storybook-static/
+playwright-report/
+test-results/
+allure-results/
+allure-report/
+cdk.out/
+*.egg-info/
+*.dist-info/
+eggs/
+pip-wheel-metadata/
+wheels/
+# ----- ↑ 以上为 ZCode 默认排除规则（自定义规则请写在本行下方，不会被同步/恢复改动）-----
+# 自定义规则写在下方（本行提示可删除）
