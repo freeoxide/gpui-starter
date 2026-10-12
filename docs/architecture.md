@@ -1,6 +1,6 @@
 # Architecture
 
-GPUI Starter is a desktop application boilerplate built with the [GPUI](https://github.com/zed-industries/zed) framework from Zed, targeting macOS (with Linux support). It ships working implementations of the cross-cutting concerns every desktop app needs — persisted settings, i18n, theming, background tasks, telemetry, notifications, diagnostics, and an in-app command palette — so you can start building your own features on day one.
+GPUI Starter is a desktop application boilerplate built with the [GPUI](https://github.com/zed-industries/zed) framework from Zed, targeting macOS, Linux (X11/Wayland), Windows, and the browser (wasm32). It ships working implementations of the cross-cutting concerns every desktop app needs — persisted settings, i18n, theming, background tasks, telemetry, notifications, diagnostics, and an in-app command palette — so you can start building your own features on day one.
 
 ## Dependency Foundations
 
@@ -8,115 +8,92 @@ The UI foundation is [GPUI Kit](https://github.com/longbridge/gpui-kit) 0.7.3 fr
 
 Two libraries are overridden because no upstream release targets this kit line yet. The rule is no vendoring (copying sources into this repo as path deps forks maintenance and defeats review/update); both overrides sit on top of a real remote pin and are deleted when upstream catches up:
 
-- **gpui-form** — pinned to the freeoxide fork @`710b524`, the freeoxide `master` HEAD where the fluent-to-rust-i18n migration landed (gpui-form 0.5.2; its `gpui-kit = "0.7.0"` / `gpui-pre 0.3.7` caret requirements unify on the app's kit 0.7.3 / `gpui-pre` `=0.3.9` resolution). The fork carries the kit-0.7 migration because no stayhydated rev targets kit 0.7 and the stayhydated git pin drags a second `gpui-kit-assets` into the graph, which cargo's `links = "gpui-kit-default-icons"` one-copy rule rejects. The rev is merged into freeoxide `master`, so the git pin resolves as written; the temporary `[patch."https://github.com/freeoxide/gpui-form"]` table that bridged the pre-merge window by resolving from the sibling checkout `../gpui-form/crates/gpui-form` is deleted and re-locked (the run-1 vendor tree and the stayhydated patch table are likewise gone, and `tests/qa_migration.rs` fails if the patch table reappears). Satellites follow the fork's migrated graph: `koruma` 0.9 from crates.io with no fluent features (`gpui-form-derive` emits consumer-resolved koruma code, so a second koruma copy would type that code against a different API); the only `es-fluent-*` crates left in the lock are koruma-collection's non-optional build chain, and no app-facing es-fluent crate remains. The fork's migration also replaced the app's message stack: app-owned strings live in `locales/{en,zh-CN}.yml`, embedded at compile time by the crate-root `rust_i18n::i18n!` backend in `src/lib.rs` and read through the `crate::i18n::localize` facade (`src/services/i18n.rs`). rust-i18n 4 is the only i18n crate in the graph, and it is the same backend gpui-kit and gpui-form use; `app::set_locale` drives every translation set through the process-wide rust-i18n locale plus the `gpui_form::i18n` bridge, which also switches gpui-kit's component locale.
+- **gpui-form** — pinned to the freeoxide fork @`710b524`, the freeoxide `master` HEAD where the fluent-to-rust-i18n migration landed (gpui-form 0.5.2; its `gpui-kit = "0.7.0"` / `gpui-pre 0.3.7` caret requirements unify on the app's kit 0.7.3 / `gpui-pre` `=0.3.9` resolution). The fork carries the kit-0.7 migration because no stayhydated rev targets kit 0.7 and the stayhydated git pin drags a second `gpui-kit-assets` into the graph, which cargo's `links = "gpui-kit-default-icons"` one-copy rule rejects. The rev is merged into freeoxide `master`, so the git pin resolves as written; the temporary `[patch."https://github.com/freeoxide/gpui-form"]` table that bridged the pre-merge window by resolving from the sibling checkout `../gpui-form/crates/gpui-form` is deleted and re-locked (the run-1 vendor tree and the stayhydated patch table are likewise gone, and `tests/qa_migration.rs` fails if the patch table reappears). Satellites follow the fork's migrated graph: `koruma` 0.9 from crates.io with no fluent features (`gpui-form-derive` emits consumer-resolved koruma code, so a second koruma copy would type that code against a different API); the only `es-fluent-*` crates left in the lock are koruma-collection's non-optional build chain, and no app-facing es-fluent crate remains. The fork's migration also replaced the app's message stack: app-owned strings live in `locales/en.yml` and `locales/zh-CN.yml`, embedded at compile time by the crate-root `rust_i18n::i18n!` backend in `src/lib.rs` and read through the `crate::i18n::localize` facade (`src/services/i18n.rs`). rust-i18n 4 is the only i18n crate in the graph, and it is the same backend gpui-kit and gpui-form use; `app::set_locale` drives every translation set through the process-wide rust-i18n locale plus the `gpui_form::i18n` bridge, which also switches gpui-kit's component locale.
 - **gpui-query** — no published or upstream version targets gpui-pre, so a `[patch.crates-io]` override points the registry requirement (`0.3`, kept in lockstep with the bridge's stamped version) at our fork branch `gpui-pre-0.6` @`69a071f` on hmziqagent/gpui-query: published v0.3.0 (perf campaign) merged with the gpui-pre re-point, ONE root-manifest line swapped to `gpui = { package = "gpui-pre", version = "0.3" }` plus call-site fixes for the snapshot's infallible context methods. The branch is purely additive and upstreamable — drop the patch once gpui-query ships gpui-pre support on crates.io.
 
 `git revert 32bc8c4` was the Phase-2 swap's rollback before the kit-0.7 series landed on top (also restoring the Phase-1 `gpui-query` pin `f84eac4`, orphaned but still fetchable); rolling back the kit-0.7 migration means reverting its commit series, `6421c0d` through `HEAD`. Under gpui-form 0.5.2 the generated `<N>FormFields`/`<N>FormComponents` members use `{field}_{component}` names (`name_input`, not form 0.6's raw field names).
 
 ## Module Map
 
-Every module lives under `src/`. Modules that depend on other modules are noted with arrows.
+The crate is layered under `src/`: `main.rs` and `web.rs` are the entry points, and `lib.rs` re-exports the layers' modules under flat crate paths (`crate::app_state` is `state::config_store`, `crate::routes` is `shell::route`, `crate::views` is `features::pages`, and so on).
 
 | Module | Description | Depends on |
 |---|---|---|
-| `main` | Entry point. Runs single-instance preflight, then delegates to `app::init`. | `single_instance`, `app`, `events`, `tray` |
-| `app` | Top-level initialization, window creation, locale/theme helpers, action registrations. | Almost everything (the orchestrator). |
-| `app_state` | Global persisted configuration (`AppConfig`) and file-backed load/save cycle. | `paths`, `errors`, `routes`, `notifications::inbox` |
-| `events` | Application-wide event bus (`AppEventQueue`) with emit/drain semantics. | `ids`, `time`, `errors`, `routes` |
-| `commands` | Command palette registry — defines `CommandId`, availability checks, and dispatch. | `events`, `routes`, `sidebar`, `desktop_actions`, `undo_stack`, `connectivity` |
-| `root` | UI root (`AppRoot`). Owns sidebar, title bar, page views, and routing. | `events`, `routes`, `sidebar`, `views::*`, `title_bar`, `status_bar`, `tasks`, `notifications`, `connectivity`, `session` |
-| `storage` | SQLite data layer via `rusqlite`. Schema migrations, health checks, maintenance. | `app_state` (for paths), `capabilities` |
-| `telemetry` | Observability with pluggable sinks (disabled / local-only / remote). | `capabilities` |
-| `routes` | URL-based routing (`AppRoute`) with deep-link parsing (`gpui-starter://`). | `sidebar::Page`, `errors` |
-| `sidebar` | Page enum: titles, icons, ordering. The source of truth for navigation pages. | — |
-| `views` | Re-exports individual page view modules (`home`, `form_page`, `settings`, etc.). | Each view depends on relevant subsystems. |
-| `capabilities` | Feature-flag registry (`CapabilityRegistry`). Tracks which subsystems are supported/enabled/degraded. | — |
-| `lifecycle` | Startup/shutdown stage tracking, panic hook installation. | `time` |
-| `notifications` | Native + in-app notification system with inbox persistence. | `events`, `capabilities`, `app_state` |
-| `tasks` | Background task registry with drain-on-shutdown. | `ids`, `time`, `capabilities` |
-| `connectivity` | Network connectivity probing. | `capabilities` |
-| `session` | Session tracking (start time, uptime). | `capabilities`, `time` |
-| `i18n` | Internationalization: the `crate::i18n::localize` facade over the crate's rust-i18n backend (`locales/*.yml`). | — |
-| `logging` | Structured logging initialization and shutdown. | `paths` |
-| `paths` | Platform-aware directories for config, data, logs. | — |
-| `errors` | `AppError` enum and `AppErrorSeverity` classification. | — |
-| `error_surface` | In-app error display with dismiss/retry actions. | `errors`, `capabilities` |
-| `ids` | `EventId`, `TaskId` — unique identifiers. | — |
-| `time` | `AppTimestamp` helper for RFC 3339 timestamps. | — |
-| `undo_stack` | Undo/redo for reversible operations (e.g., theme switches). | `capabilities` |
-| `shortcuts` | Global keyboard shortcut registration. | `app_state`, `capabilities` |
-| `desktop_actions` | System integrations: clipboard, file opener, diagnostics copy. | `capabilities`, `app_state` |
-| `accessibility` | AccessKit foundation: `A11yExt` element helpers, live bridge/window snapshot, capability registration. | `capabilities` |
-| `secure_storage` | Keychain/credential storage abstraction. | `capabilities` |
-| `first_run` | First-run experience detection. | `app_state`, `capabilities` |
-| `launcher` | Command palette / search launcher overlay. | `events`, `commands`, `capabilities` |
-| `menus` | Application menu bar construction. | `commands`, `app` actions |
-| `app_menu` | macOS application menu setup. | `capabilities` |
-| `title_bar` | Custom title bar view. | `app` actions |
-| `status_bar` | Bottom status bar showing route, connectivity, session info. | `routes`, `connectivity`, `session`, `capabilities` |
-| `single_instance` | Prevents multiple app instances from running simultaneously. | `ids` |
-| `tray` | System tray icon (macOS only). | — |
-| `config_migrations` | Migrates `AppConfig` between schema versions. | — |
-| `testing` | Test-only utilities (gated behind `#[cfg(test)]`). | — |
+| `main` / `web` | Entry points. `web::bootstrap` runs single-instance preflight, calls `app::init`, then installs the single-instance listener and the tray (macOS/Windows); the wasm `#[wasm_bindgen(start)]` entry boots the same path. | `single_instance`, `app`, `events`, `tray` |
+| `app` | Top-level initialization, window creation, keybindings, actions, locale/theme helpers, lifecycle stages, crash marker, dev reload. | Almost everything (the orchestrator). |
+| `foundation` | `AppError` + `AppErrorSeverity` (`errors`), `EventId`/`TaskId` (`ids`), `AppTimestamp` (`time`), argument validation. | — |
+| `runtime` | Cross-cutting runtime: `CapabilityRegistry` (`capabilities`) and the application-wide event bus `AppEventQueue` (`events`). | `ids`, `time`, `errors`, `routes` |
+| `state` | Persisted configuration (`config_store`, re-exported as `app_state`), config validation, and `AppConfig` schema migrations (`config_migrations`). | `paths`, `errors`, `routes`, `notifications::inbox` |
+| `services` | Feature services: `commands` (palette registry: `CommandId`, availability, dispatch), `storage` (SQLite via `rusqlite` natively, an OPFS-backed web store on wasm), `telemetry` (pluggable sinks: disabled / local-only / remote), `notifications` (native + in-app + inbox, per-platform backends), `tasks`, `connectivity`, `session`, `error_surface`, `undo_stack`, `desktop_actions`, `accessibility`, `secure_storage`, `first_run`, `i18n`, `logging`, `crash_report`, `updater` (signed-manifest auto-updates), `tokio_runtime`, `streaming`. | `capabilities`, `events`, `app_state`, `paths` |
+| `shell` | App chrome: `root` (the `AppRoot` view owning sidebar, title bar, page views, routing), `route` (`AppRoute`, URL/deep-link/hash parsing), `sidebar` (`Page` enum: titles, icons, ordering), `title_bar`, `status_bar`, `menus` (kit `AppMenuBar` construction). | `events`, `routes`, `sidebar`, `views::*` |
+| `features` | Pages and overlays: `pages` (`home`, `form_page`, `settings`, `notifications`, `diagnostics`, `about`, `query_playground`, `query_devtools_v2`, `error_playground`, `render_error`, `ai_chat`), re-exported as `views`; `command_palette` + `palette` (launcher overlay, fuzzy filter), re-exported as `launcher`. | Each view depends on relevant subsystems. |
+| `platform` | Platform layering: `paths` (config/data/log dirs), `process::single_instance` (IPC forwarding), `input::shortcuts` (global hotkeys), `ipc` (second-instance command protocol), `desktop_shell::tray` (macOS + Windows), `win_toast`, `toast_identity`, `deep_link_registration` (Windows HKCU), `clock` (wasm-safe time), `network::websocket`, `environment`, `liquid_glass`, and `web` (wasm bridges: hash router, favicon/title, clipboard, connectivity). | `capabilities`, `ids` |
+| `persistence` | SQLite schema migrations (`db_migrations`), native-only. | `storage` |
+| `gallery` | The component gallery page: a registry of demo sections per kit component family. | kit components |
+| `ui` | App-level widgets (`virtual_list`). | kit components |
+
+Tests live next to the modules as `*.test.rs` files plus the integration suites in `tests/`.
 
 ## Initialization Order
 
 `app::init` runs inside the GPUI `App` callback. The sequence matters because later steps depend on earlier ones.
 
 ```
-1.  lifecycle::install_panic_hook()
-2.  gpui_kit::init(cx)                                 -- must precede all component use
-3.  app_state::initialize(cx)                          -- loads persisted config from disk
-4.  logging::initialize(cx)                            -- sets up tracing subscriber
-5.  capabilities::initialize(cx)                       -- empty registry, populated below
-6.  gpui_form::i18n::init(cx)                          -- installs the gpui-form i18n global (locale bridge)
-7.  set_locale(&locale_to_use, cx)                     -- persisted locale, or system-detected on first run
-8.  ThemeRegistry::watch_dir(themes/, ...)             -- hot-reloadable theme files
-9.  Theme scrollbar_show restore                       -- from persisted config
-10. cx.observe_global::<Theme>(...)                    -- auto-persist theme changes
-11. Action handlers: SwitchTheme, SwitchThemeMode, SelectLocale
-12. events::AppEventQueue installed as global
-13. tasks::initialize(cx)
-14. error_surface::initialize(cx)
-15. undo_stack::initialize(cx)
-16. shortcuts::initialize(cx)
-17. connectivity::initialize(cx)
-18. desktop_actions::initialize(cx)
-19. accessibility::initialize(cx)
-20. secure_storage::initialize(cx)
-21. session::initialize(cx)
-22. storage::initialize(cx)                           -- SQLite schema + health check
-23. telemetry::initialize(cx)
-24. notifications::inbox::initialize(cx)
-25. notifications::initialize(cx)
-26. Key bindings registered (secondary-k, /, secondary-q/alt-f4 — `secondary` is cmd on macOS, ctrl elsewhere)
-27. Action handlers: Quit, About, OpenDiagnostics, ExecuteCommand
-28. Lifecycle stage set to Running
+1.  Wasm only: register embedded fonts (browser tabs have no system fonts)
+2.  lifecycle::install_panic_hook()
+3.  gpui_kit::init(cx)                                 -- must precede all component use
+4.  app_state::initialize(cx)                          -- loads persisted config from disk
+5.  lifecycle crash marker: pin data dir, check previous crash, write marker
+6.  logging::initialize(cx)                            -- tracing subscriber (file native, console on wasm)
+7.  Windows only: deep-link scheme registration under HKCU (best-effort)
+8.  capabilities::initialize(cx)                       -- registry plus the default-enabled list
+9.  gpui_form::i18n::init(cx)                          -- installs the gpui-form i18n global (locale bridge)
+10. set_locale(&locale_to_use, cx)                     -- persisted locale, or system-detected on first run
+11. Embedded themes registered; persisted theme applied
+12. ThemeRegistry::watch_dir(themes/, ...)             -- hot-reloadable theme files (native dev checkout)
+13. Theme scrollbar_show restore                       -- from persisted config
+14. cx.observe_global::<Theme>(...)                    -- auto-persist theme changes
+15. Action handlers: SwitchTheme, SwitchThemeMode, SelectLocale
+16. events::AppEventQueue + launcher::LauncherOpen installed as globals
+17. tasks, error_surface, undo_stack, shortcuts, tokio runtime, connectivity (+ first probe), desktop_actions, accessibility, secure_storage, session, storage, db migrations (native), telemetry -- the runtime_services_init block
+18. crash_report::initialize(cx)                       -- pending reports upload when the last run crashed
+19. notifications::inbox::initialize(cx)
+20. notifications::initialize(cx)
+21. updater::initialize(cx) + check_pending_swap
+22. Wasm only: platform::web bridges install (hash router, favicon/title, connectivity)
+23. Key bindings registered (secondary-k, /, secondary-q on macOS or alt-f4 elsewhere, ctrl-r restart on unix/windows — `secondary` is cmd on macOS, ctrl elsewhere)
+24. Action handlers: Quit, Restart, About, OpenDiagnostics, ExecuteCommand
+25. Lifecycle stage set to Running
 ```
 
-After `init` returns, `main` calls `create_new_window` which opens the first `AppRoot` window.
+After `init` returns, `bootstrap` calls `create_new_window` which opens the first `AppRoot` window.
 
 ### Shutdown Order
 
 Triggered by the `Quit` action. Runs inside a `cx.spawn` to allow async drain:
 
 ```
-1. tasks::drain_with_timeout(5s)     -- wait for background tasks
-2. single_instance::shutdown(cx)
-3. desktop_actions::shutdown(cx)
-4. shortcuts::shutdown(cx)
-5. storage::shutdown(cx)
-6. telemetry::shutdown(cx)           -- flush + OpenTelemetry provider shutdown
-7. logging::shutdown(cx)
-8. cx.quit()
+1. root::flush_window_bounds(cx)     -- persist final window position, bypassing the debounce
+2. tasks::drain_with_timeout(5s)     -- wait for background tasks
+3. single_instance::shutdown(cx)
+4. desktop_actions::shutdown(cx)
+5. shortcuts::shutdown(cx)
+6. app_state::force_save(cx)         -- final config flush
+7. storage::shutdown(cx)
+8. telemetry::shutdown(cx)           -- flush + OpenTelemetry provider shutdown
+9. logging::shutdown(cx)
+10. crash_report::shutdown(cx)
+11. lifecycle::remove_crash_marker()
+12. cx.quit()
 ```
 
 ## State Management
 
 ### AppConfig (persisted)
 
-Defined in `app_state.rs`. Serialized as JSON to `{data_dir}/state.json` using atomic writes. Fields include:
+Defined in `src/state/config_store.rs` (re-exported as `crate::app_state`). Serialized as JSON to `{config_dir}/state.json` using atomic writes. Fields include:
 
+- `version` — `AppConfig` schema version
 - `theme` — active theme name
 - `locale` — `"en"` or `"zh-CN"`
 - `active_route` — last navigated `AppRoute`
@@ -127,6 +104,9 @@ Defined in `app_state.rs`. Serialized as JSON to `{data_dir}/state.json` using a
 - `notification_inbox` — persisted notification items
 - `window_bounds` — saved window position and size
 - `scrollbar_show` — scrollbar visibility preference
+- `granted_permissions` / `denied_permissions` — permission prompts the user answered
+- `update_channel` / `last_update_check` — auto-updater state
+- `show_frame_time` — frame-time overlay toggle
 
 Every mutation goes through `app_state::update_config(cx, |config| { ... })`, which normalizes the config, writes to disk, and replaces the global. If the write fails, `last_save_error` is set but the in-memory state still updates — the app never blocks on I/O.
 
@@ -134,7 +114,7 @@ On load, corrupt JSON is quarantined (renamed to `.json.bad`) and defaults are u
 
 ### AppEventQueue (transient)
 
-Defined in `events.rs`. A `Global` containing `Vec<AppEvent>`. Producers call `events::emit(kind, cx)`. The root view consumes with `events::drain(cx)`, which takes all events and resets the queue. This is a manual observer pattern — setting the global triggers GPUI's `observe_global` machinery.
+Defined in `src/runtime/events.rs`. A `Global` containing `Vec<AppEvent>`. Producers call `events::emit(kind, cx)`. The root view consumes with `events::drain(cx)`, which takes all events and resets the queue. This is a manual observer pattern — setting the global triggers GPUI's `observe_global` machinery.
 
 ### Entity pattern
 
@@ -165,7 +145,7 @@ impl Render for HomePage {
 
 ### Routing
 
-`AppRoute` (in `routes.rs`) is the routing type. It has two variants:
+`AppRoute` (in `src/shell/route.rs`, re-exported as `crate::routes`) is the routing type. It has two variants:
 
 - `Page(Page)` — maps directly to a sidebar page.
 - `SettingsNotifications` — a sub-route that still renders the Settings page but with the notifications tab active.
@@ -174,7 +154,7 @@ impl Render for HomePage {
 
 ### Sidebar navigation
 
-The sidebar iterates `Page::all()` and renders a `SidebarMenuItem` for each. Clicking an item calls `this.set_route(AppRoute::page(*page), cx)`. The active page is highlighted via `.active(active_page == *page)`.
+The sidebar iterates `Page::all()` and renders a `SidebarMenuItem` for each, wrapped in an app-side `NavItem` that carries selection state and direct assistive-tech activation. Clicking an item calls `this.set_route(AppRoute::page(*page), cx)`. The active page is highlighted via `.active(...)`.
 
 ### Deep links
 
@@ -203,8 +183,10 @@ User action / System event
   Match on AppEventKind:
     Navigate(route)    --> set_route --> update_config --> cx.notify()
     DeepLinkReceived   --> parse_deep_link --> set_route --> cx.notify()
+    RemoteCommand      --> IPC-forwarded command translated into in-process actions
     AppError           --> error_surface::report --> cx.notify()
-    BackgroundTaskChanged / DiagnosticsChanged --> cx.notify()
+    DiagnosticsChanged   --> ignored (empty arm)
+    Test                 --> logged (no state change)
         |
         v
   GPUI re-renders affected Entity<...> views
@@ -241,16 +223,16 @@ Re-render
 
 ### Add a new page
 
-1. Create `src/views/my_page.rs` with a struct implementing `Render`.
-2. Add `mod my_page;` and `pub use my_page::MyPage;` to `src/views/mod.rs`.
-3. Add a variant to `Page` in `src/sidebar.rs` with `title()` and `icon()` entries.
-4. Add the corresponding URL mapping in `AppRoute::to_url` and `AppRoute::parse_deep_link` (in `src/routes.rs`).
-5. Add the entity field to `AppRoot` in `src/root.rs`, construct it in `AppRoot::new`, and add the match arm in `active_page_view`.
-6. Add a `CommandId::OpenMyPage` variant in `src/commands.rs` with registry entry and execute dispatch.
+1. Create `my_page.rs` under `src/features/pages/` with a struct implementing `Render`.
+2. Add `mod my_page;` and `pub use my_page::MyPage;` to `src/features/pages/mod.rs`.
+3. Add a variant to `Page` in `src/shell/sidebar.rs` with `title()`, `title_key()`, `host()`, and `icon()` entries.
+4. No route-table edits: `AppRoute::to_url` and `AppRoute::parse_deep_link` (`src/shell/route.rs`) both derive their URL segment from `Page::host`.
+5. Add the entity field to `AppRoot` in `src/shell/root/app_root/`, construct it in `AppRoot::new`, and add the match arm in `active_page_view`.
+6. Add a `CommandId::OpenMyPage` variant in `src/services/commands.rs` with registry entry and execute dispatch.
 
 ### Add a new command
 
-1. Add a variant to `CommandId` in `src/commands.rs`.
+1. Add a variant to `CommandId` in `src/services/commands.rs`.
 2. Add a `command(...)` entry to the `registry()` function with title, subtitle, and icon.
 3. Implement `availability()` logic for the new variant (return `enabled: true` if always available).
 4. Add a match arm in `execute()` that performs the action.
@@ -259,12 +241,12 @@ Re-render
 ### Add a new theme
 
 1. Create a `.json` theme file in `themes/` at the project root.
-2. The file is auto-detected by `ThemeRegistry::watch_dir` during init.
+2. The file is auto-detected by `ThemeRegistry::watch_dir` during init (native dev checkouts; shipped binaries and wasm carry the embedded theme set instead).
 3. No code changes required. The theme appears in settings automatically.
 
 ### Add a new locale
 
-1. Add `locales/<code>.yml` mirroring the keys of `locales/en.yml`. The crate-root `rust_i18n::i18n!` macro (`src/lib.rs`) embeds every file under `locales/` at compile time; there is no locale registry.
+1. Add a `<code>.yml` catalog under `locales/` mirroring the keys of `locales/en.yml`. The crate-root `rust_i18n::i18n!` macro (`src/lib.rs`) embeds every file under `locales/` at compile time; there is no locale registry.
 2. Add the locale constant to `src/app/locale.rs` (alongside `LOCALE_EN`, `LOCALE_ZH_CN`), add it to `KNOWN_LOCALES` in `src/state/config_validation.rs`, and extend the locale check in `AppConfig::normalized()` (`src/state/config_store.rs`).
 3. Add the locale to the language menus; the settings and home pages enumerate the supported locales explicitly.
 
@@ -278,17 +260,25 @@ All UI components are `Entity<T>` where `T: Render`. Construction uses `cx.new(|
 
 ### cx.spawn for async work
 
-Long-running or I/O-bound work uses `cx.spawn(async move |cx| { ... })`. The closure receives an async-capable context. Call `cx.update(|cx| { ... })` inside the future to re-enter the synchronous GPUI context and update state. The returned `Task` is detached with `.detach()` or awaited.
+Long-running or I/O-bound work uses `cx.spawn(async move |cx| { ... })`. The closure receives an async-capable context. Call `cx.update(...)` inside the future to re-enter the synchronous GPUI context and update state. The returned `Task` is detached with `.detach()` or awaited.
 
 ```rust
 cx.spawn(async move |cx| {
     let result = some_async_work().await;
     cx.update(|cx| {
-        // synchronous state update
-        cx.notify();
-    })?;
-    Ok::<_, anyhow::Error>(())
+        // synchronous app-level state update
+    });
 }).detach();
+```
+
+`AsyncApp::update` is infallible in this gpui snapshot; the fallible form is updating an entity through a `WeakEntity<T>` handle, which returns `Err` when the entity was released:
+
+```rust
+weak.update(cx, |this, cx| {
+    this.on_result(result, cx);
+    cx.notify();
+})
+.ok(); // drop is an expected shutdown path
 ```
 
 ### Global state via entities and Global trait
@@ -318,8 +308,8 @@ Neither path panics. The panic hook in `lifecycle` captures unexpected panics an
 
 ### Window bounds persistence
 
-`AppRoot` registers `cx.observe_window_bounds(...)` which writes the current window position and size to `AppConfig` on every resize/move. On next launch, `create_new_window` reads `persisted_bounds` and restores the window.
+`AppRoot` registers `cx.observe_window_bounds(...)` which feeds the current window position and size into the debounced `app_state::update_config` writes; `root::flush_window_bounds` persists the final bounds at quit, bypassing the debounce. On next launch, `create_new_window` reads `persisted_bounds` and restores the window.
 
 ### Atomic config writes
 
-`app_state::save_config` uses `AtomicWriteFile` to prevent partial writes. If the process crashes mid-write, the previous config file remains intact.
+The config store (`app_state::update_config` / `force_save`) writes through `AtomicWriteFile` to prevent partial writes. If the process crashes mid-write, the previous config file remains intact.

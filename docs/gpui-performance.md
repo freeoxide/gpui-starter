@@ -170,10 +170,10 @@ struct MyView {
     row_subs: Vec<Subscription>, // separate from long-lived subscriptions
 }
 
-fn rebuild_rows(&mut self, data: &[Row], cx: &mut Context<Self>) {
+fn rebuild_rows(&mut self, data: &[Row], window: &mut Window, cx: &mut Context<Self>) {
     self.row_subs.clear(); // drop old Subscription objects first
     self.rows = data.iter().map(|row| {
-        let input = cx.new(|cx| InputState::new(cx, row.value.clone()));
+        let input = cx.new(|cx| InputState::new(window, cx).default_value(row.value.clone()));
         self.row_subs.push(cx.subscribe_in(&input, cx, Self::on_row_changed));
         input
     }).collect();

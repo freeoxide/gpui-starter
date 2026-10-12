@@ -212,20 +212,22 @@ them by blob ID instead. This keeps the database lean and queries fast.
 
 ## 9. Fallible Async
 
-All async operations that touch app/window/entity state are fallible by design.
-A dropped app, window, or entity is a normal shutdown path — not an error.
+All async operations that touch entity state are fallible by design.
+A dropped entity is a normal shutdown path — not an error.
 
 ```rust
 cx.spawn(async move |mut cx| {
     let result = do_work().await;
-    // update() returns Err if the entity was dropped — handle it, don't unwrap
-    cx.update(|this, cx| {
+    // WeakEntity::update returns Err if the entity was released — handle it, don't unwrap
+    weak.update(&mut cx, |this, cx| {
         this.on_result(result, cx);
     }).ok(); // .ok() is intentional — drop is expected on shutdown
 })
 ```
 
-Never rely on `.unwrap()` or `.expect()` after async boundaries for entity/window/app updates.
+`AsyncApp::update` itself is infallible in the current gpui snapshot; the fallible
+boundary is the entity handle. Never rely on `.unwrap()` or `.expect()` after async
+boundaries for entity/window/app updates.
 
 ---
 
