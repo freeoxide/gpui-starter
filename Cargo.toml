@@ -8,7 +8,7 @@ gpui-form = { git = "https://github.com/freeoxide/gpui-form", rev = "710b52439f0
 # GPUI ecosystem — gpui-kit is the single application-facing dependency
 # (`use gpui_kit::*`; layers: component / base / assets / platform).
 # gpui-pre is the crates.io snapshot of zed gpui (package name gpui-pre,
-# lib name `gpui`); gpui-kit 0.7.1 pins the gpui-pre-* family to =0.3.8.
+# lib name `gpui`); gpui-kit 0.7.3 pins the gpui-pre-* family to =0.3.9.
 # gpui-kit enables font-kit/x11/wayland/runtime_shaders on gpui-pre-platform
 # itself, so backend selection needs no direct platform dependency.
 # qa_migration.rs fails the build if a source file imports gpui-pre or the
@@ -17,8 +17,8 @@ gpui-form = { git = "https://github.com/freeoxide/gpui-form", rev = "710b52439f0
 # consumers (see gpui-form-codegen), so gpui stays a direct dep too.
 # Never add a direct `accesskit` dep: the kit re-exports gpui's accesskit
 # (0.24.x) and a separately-versioned copy is type-incompatible.
-gpui = { package = "gpui-pre", version = "0.3.8" }
-gpui-kit = "0.7.1"
+gpui = { package = "gpui-pre", version = "0.3.9" }
+gpui-kit = "0.7.3"
 
 # Serialization & data
 anyhow = "1"
@@ -213,7 +213,7 @@ rust-embed = "8"
 insta.workspace = true
 # Test-only: TestAppContext + deterministic timers for the config-store
 # debounce tests. Dev-dep features never reach production or wasm builds.
-gpui = { package = "gpui-pre", version = "0.3.8", features = ["test-support"] }
+gpui = { package = "gpui-pre", version = "0.3.9", features = ["test-support"] }
 
 # Windows .exe icon embed; build.rs gates on CARGO_CFG_TARGET_OS so Linux,
 # macOS, and wasm hosts never invoke it (docs/research/icons-and-windows.md A2).
@@ -437,7 +437,7 @@ gpui-pre-macros = { opt-level = 3 }
 # gpui-query source toggle: `just gpui-query-local` / `just gpui-query-cratesio`.
 # DEFAULT (git): hmziqagent/gpui-query branch `gpui-pre-0.6` @69a071f =
 # v0.3.0 (perf campaign, published) merged with the gpui-pre re-point; the
-# workspace root pins `gpui = { package = "gpui-pre", version = "0.3.8" }` — no published or upstream version targets gpui-pre yet, so this
+# workspace root pins `gpui = { package = "gpui-pre", version = "0.3.9" }` — no published or upstream version targets gpui-pre yet, so this
 # patch carries the 0.3.0 line AND re-points the crate onto registry gpui-pre
 # (keeping the graph at ONE gpui). Drop this patch once upstream ships
 # gpui-pre support on crates.io. The old 0.1.4-based fix (f84eac4) remains on

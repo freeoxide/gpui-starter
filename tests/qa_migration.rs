@@ -1,4 +1,4 @@
-//! Kit 0.7.1 migration invariants the compiler cannot check: manifest pins,
+//! Kit 0.7.3 migration invariants the compiler cannot check: manifest pins,
 //! the single-kit lock graph (the round-1 links-conflict failure mode), the
 //! gpui-form re-pin to the migrated freeoxide repo, and the kit-facade
 //! import surface.
@@ -106,12 +106,12 @@ fn manifest_declares_only_justified_kit_deps() {
     // gpui stays beside gpui-kit for one reason: the pinned gpui-form rev's
     // derives emit ::gpui::Entity/Window/Context into this crate.
     assert!(
-        manifest.contains("package = \"gpui-pre\", version = \"0.3.8\""),
-        "gpui (gpui-pre) must stay on the kit-0.7.1 snapshot"
+        manifest.contains("package = \"gpui-pre\", version = \"0.3.9\""),
+        "gpui (gpui-pre) must stay on the kit-0.7.3 snapshot"
     );
     assert!(
-        manifest.contains("\ngpui-kit = \"0.7.1\""),
-        "Cargo.toml must pin gpui-kit to 0.7.1"
+        manifest.contains("\ngpui-kit = \"0.7.3\""),
+        "Cargo.toml must pin gpui-kit to 0.7.3"
     );
     // The layer crates are reached through gpui-kit's own re-exports; the
     // anchor is line start so Cargo.toml's comment prose cannot trip this.
@@ -133,13 +133,13 @@ fn lock_graph_holds_one_kit_family() {
     let lock = repo_file("Cargo.lock");
 
     for (package, version) in [
-        ("gpui-kit", "0.7.1"),
-        ("gpui-component", "0.7.1"),
-        ("gpui-component-macros", "0.7.1"),
-        ("gpui-base", "0.7.1"),
-        ("gpui-kit-assets", "0.7.1"),
-        ("gpui-pre", "0.3.8"),
-        ("gpui-pre-platform", "0.3.8"),
+        ("gpui-kit", "0.7.3"),
+        ("gpui-component", "0.7.3"),
+        ("gpui-component-macros", "0.7.3"),
+        ("gpui-base", "0.7.3"),
+        ("gpui-kit-assets", "0.7.3"),
+        ("gpui-pre", "0.3.9"),
+        ("gpui-pre-platform", "0.3.9"),
     ] {
         assert_single_version(&lock, package, version);
     }
@@ -206,8 +206,8 @@ fn gpui_pre_snapshot_family_is_unified() {
             continue;
         }
         assert!(
-            block.contains("\nversion = \"0.3.8\""),
-            "{name} must sit on the unified 0.3.8 snapshot"
+            block.contains("\nversion = \"0.3.9\""),
+            "{name} must sit on the unified 0.3.9 snapshot"
         );
     }
 }

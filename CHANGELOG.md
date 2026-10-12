@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Upgraded the GPUI foundation to **gpui-kit 0.7.3** (from 0.7.1), which pins the `gpui-pre` snapshot family at **0.3.9** (zed@93d7456); the app compiles and passes all gates with no source changes — 0.7.3's API surface is additive here (diff viewer, `InputState::add_selection`, dialog entrances, `TooltipDefaults`) and its behavior deltas are kit-internal defaults the suite absorbs (TextView paragraph gap 0.75rem, Markdown table column widths, `visible_rows_changed` firing `0..1`/`0..0` for one-row/empty tables). `qa_migration` invariants and the manifest/lock pins move to 0.7.3/0.3.9; the freeoxide `gpui-form` rev's caret requirements (`gpui-kit 0.7.0`, `gpui-pre 0.3.7`) unify on the same resolution, keeping the graph at one kit family and one gpui snapshot
+
 ### Added
+
+- `docs/plans/`: showcase master plan — reviewed implementation plans for 20 removable example features (canvas engine, floating windows, notch floater, menu-bar charts, shaders, wgpu embed, multi-user canvas, tutorial mode, music player, image editor, system controls, microphone/audio waveform, GH Actions bundle fix) plus the INDEX with dependency batches, seam-collision map, icon policy, and full-showcase removal recipe; two research appendices under `_survey/` back every API citation
 
 - `tests/qa_migration.rs` locks the migration's dependency-graph invariants: kit 0.7.0 + `gpui-pre` 0.3.7 manifest pins, exactly one gpui-kit family and one unified `gpui-pre` snapshot in the lockfile, the freeoxide `gpui-form` rev pin, single-copy `koruma` 0.9 / `es-fluent` 0.16 registry satellites, and the retired gpui-form `[patch]` table's absence — the merged rev resolves from git unpatched
 
