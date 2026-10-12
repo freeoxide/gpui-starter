@@ -151,6 +151,42 @@ the baked manifest URL never resolves.
   tarball and AppImage binaries do query the manifest and then report "no
   asset for platform linux-x86_64"; that error is expected and pre-existing.
 
+### Update server
+
+Client side of the manifest above (`src/services/updater/`). The app checks
+for updates 5 seconds after startup, every 4 hours, and on user trigger:
+it fetches `manifest.json`, compares strict semver (pre-release tags
+respected; equal or older never updates), and if newer streams the platform
+asset to the app-owned `updates/` directory under the user's data dir. The
+asset's Ed25519 signature over its SHA-256 is verified against the public
+key embedded at `src/services/updater_public_key.bin`; an invalid or
+missing signature means the download is deleted and refused. On macOS,
+`codesign --verify --deep --strict` runs on the download as well. Apply
+writes a pending-swap marker; the next launch swaps the binary in place.
+
+Manifest schema (the generator is `scripts/generate-manifest.sh`):
+
+```jsonc
+{
+  "version": "0.3.0",              // semver; strictly newer triggers update
+  "release_notes": "...",          // optional, shown to the user
+  "platforms": {
+    "<os>-<arch>": {               // platform_key(), src/services/updater/types.rs
+      "url": "https://.../asset",  // HTTPS download URL
+      "signature": "<base64>",     // Ed25519 over the asset's SHA-256
+      "size": 0                    // optional, logging only
+    }
+  }
+}
+```
+
+The manifest URL is baked at compile time: set
+`GPUI_UPDATE_MANIFEST_URL` before building (`option_env!` in
+`src/services/updater/types.rs`; the default is a placeholder). gh-pages is
+the default host; any static HTTPS file server works, no CORS or auth
+needed. Rotating the trust anchor means replacing the embedded key file and
+setting a matching `UPDATE_SIGNING_KEY` in CI.
+
 ### First CI run watch list
 
 The pipeline has never executed end to end; everything was validated against
@@ -315,7 +351,7 @@ research and decisions live in
   sits at the tray module's cfg gate.
 - Linux window icon: X11 windows get `_NET_WM_ICON` from the embedded 48px
   brand PNG via `WindowOptions.icon`, so un-installed runs are branded
-  too. Wayland has no icon path in gpui-pre 0.3.8; compositors resolve
+  too. Wayland has no icon path in gpui-pre 0.3.9; compositors resolve
   the icon from the desktop entry through the `gpui-starter` app_id.
 - macOS tray: the brand-G silhouette drawn in code as a 36px template
   image, so macOS recolors it for light, dark and highlight states.
@@ -323,8 +359,8 @@ research and decisions live in
 - Windows tray and toasts: the tray shows the embedded 16px brand PNG.
   Toasts need no icon code; they resolve through the AUMID identity chain
   the Windows notes above describe.
-- Web harness: `wasm/icons/` holds branded renders (the SVG master, 192,
-  512, maskable 512, apple-touch 180); the static `<link rel="icon">`
+- Web harness: the files under `wasm/icons/` hold branded renders (the SVG
+  master, 192, 512, maskable 512, apple-touch 180); the static `<link rel="icon">`
   serves first paint, then the canvas favicon draws the embedded 64px
   brand PNG under the connectivity dot and unread badge. The canvas path
   required adding `HtmlImageElement` to the wasm web-sys feature list,
@@ -347,7 +383,7 @@ each.
 2. gen-icons.sh real-tool path (rsvg-convert, png2icns, ImageMagick) has
    never executed: the dev box lacks the tools and the committed artifacts
    came from an offline stand-in chain. The run-6 wasm icon set
-   (`wasm/icons/*`) is the same story: a pure-python PNG codec and
+   (the `wasm/icons/` set) is the same story: a pure-python PNG codec and
    resample produced it. First real run must confirm the png2icns output
    via the in-script `icns2png -l` self-check. Releases are unaffected
    (CI consumes committed artifacts).
