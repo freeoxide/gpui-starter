@@ -1,6 +1,8 @@
 # QA Matrix
 
-This matrix validates desktop boilerplate behavior across platforms.
+This matrix validates desktop boilerplate behavior across platforms. The wasm
+target is covered by its own gates (`just wasm-check`, smoke-run via
+`just wasm-serve`) and is not part of these manual passes.
 
 ## Core Startup And Lifecycle
 
@@ -56,7 +58,7 @@ This matrix validates desktop boilerplate behavior across platforms.
 
 ## Automation Gates
 
-- `cargo fmt -- --check`
-- `cargo check`
-- `cargo test`
-- `cargo clippy --all-targets -- -D warnings`
+- `cargo fmt --all -- --check` (`just fmt` is the write-mode variant)
+- `cargo clippy --workspace --all-features` (CI runs it with `-D warnings`)
+- `cargo test --workspace --all-features`
+- `just wasm-check` (nightly `wasm32-unknown-unknown` check of the lib)

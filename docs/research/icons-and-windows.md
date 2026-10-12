@@ -1,5 +1,8 @@
 # App icons and Windows packaging for gpui-starter
 
+> Status: research snapshot (2026-10-09), input to the icons and
+> windows-installer campaign. Repo state below was read on that date.
+
 Research for routing-map areas 4 (icons) and 9 (windows-installer). Every
 claim carries its source. Repo reality was read before deciding:
 `scripts/create-release-app.sh` (no icon step at all, `Info.plist` has no

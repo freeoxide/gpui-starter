@@ -1,5 +1,8 @@
 # Runtime icon surfaces for gpui-starter
 
+> Status: research snapshot (2026-10-09), the run-6 audit of runtime icon
+> surfaces. Behavior below was observed on that date.
+
 Research for run 6 area 1 (audit:icon-surfaces). Every runtime surface
 where an icon reaches the user was read in the code before deciding;
 external claims carry fetched sources. The branded asset set
