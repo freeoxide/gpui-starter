@@ -426,6 +426,63 @@ main window, wasm spawns always succeed via the overlay path.
 `floating_snapshot` is ordered by id (BTreeMap). All handles stay valid
 across `App` lifetime; a closed handle makes `close_floating` return `false`.
 
+### Amendment (2026-10-12, plan 25): widget window shims
+
+Appended by `docs/plans/25-widget-window-shims.md`; the contract block above
+is unchanged. Additions to `crate::ui::floating`:
+
+- `FloatingSpec::click_through(self, enabled: bool) -> Self` (default
+  false), applied over a platform shim right after the native window opens;
+  reader `FloatingSpec::is_click_through(&self) -> bool` (the `is_` prefix
+  exists because a same-named reader cannot coexist with the builder;
+  note Step 3.2's `spec.focus()`-style reader calls predate this rule and
+  need renamed readers when 02 is implemented).
+- `pub fn set_floating_click_through(handle: &FloatingHandle, enabled:
+  bool, cx: &mut App) -> bool`: runtime mouse pass-through. macOS
+  `setIgnoresMouseEvents`, Windows `WS_EX_TRANSPARENT | WS_EX_NOACTIVATE`,
+  X11 empty XShape input region, Wayland `Window::set_input_region(
+  Some(&[]))`. `false` (never an error) on overlay handles, wasm, the test
+  platform, or a gone handle.
+- `pub fn set_floating_always_on_top(handle: &FloatingHandle, enabled:
+  bool, cx: &mut App) -> bool`: runtime topmost. macOS
+  `NSPopUpWindowLevel` (101) + `CanJoinAllSpaces | FullScreenAuxiliary`
+  on / `NSFloatingWindowLevel` + default behavior off (the toggle cannot
+  add the `NSWindowStyleMaskNonactivatingPanel` bit a spawn-time PopUp
+  gets, so a Floating-spawned float toggled on sits at popup level but
+  still activates on click while the registry reports `AlwaysOnTop`);
+  Windows
+  `SetWindowPos(HWND_TOPMOST/HWND_NOTOPMOST)`; X11 `_NET_WM_STATE`
+  ADD/REMOVE of `ABOVE | SKIP_TASKBAR | STICKY` (EWMH request,
+  WM-dependent, best-effort, and applied to WM-managed windows only: a
+  PopUp-kind float is override-redirect on X11, so the WM never sees
+  these messages); Wayland returns false (z-order is
+  compositor-owned).
+- `pub const CAPABILITY_FLOATING_CLICK_THROUGH: &str =
+  "floating_click_through";` registered by `init` (native
+  supported_enabled; wasm unsupported with an overlay reason).
+- `FloatingWindowEntry.level` semantics widen from "spawn level" to
+  "current level": a successful `set_floating_always_on_top` updates the
+  registry entry. No consumer reads the field today.
+
+Windows level-to-kind verification (plan 25, re-verified against the pinned
+gpui-pre-windows 0.3.9 source): `WindowKind::Floating` falls into the
+`WS_EX_APPWINDOW` branch and is NOT topmost on Windows
+(`gpui-pre-windows-0.3.9/src/window.rs:492-515`); `WindowKind::PopUp` maps
+to `WS_EX_TOOLWINDOW | WS_EX_TOPMOST` with style 0. 02's Step 3.2 mapping
+(`FloatLevel::AlwaysOnTop => WindowKind::PopUp`) therefore already makes
+AlwaysOnTop floats topmost on Windows. The mapping stays uniform across
+platforms and must not be "fixed" into a Windows-only branch. The runtime
+gap for `FloatLevel::Floating` floats on Windows is closed by
+`set_floating_always_on_top`, not by a mapping change.
+
+Consumer check (re-run mechanically: grep plans 03/04/09/10 for
+`FloatLevel::`, `WindowKind`, and snapshot level reads): 03 spawns
+`FloatLevel::Floating` (03.md:883, unaffected); 04/09/10 spawn
+`FloatLevel::AlwaysOnTop` and already document the Windows result as the
+PopUp/`WS_EX_TOPMOST` tool window (04.md:831, 09.md:1185, 10.md:844); no
+consumer reads `FloatingWindowEntry.level`. Results recorded 2026-10-12 in
+25's Dependencies section.
+
 ## Module Layout
 
 Every module with a sibling test file wires it inside the module file with
@@ -1074,3 +1131,77 @@ Ranked:
    real Mac; if drag fails there, the fix is enabling
    `app_owns_titlebar_drag` plus a `start_window_move` header strip on macOS
    too (`GPUI/src/platform.rs:2461-2477`, `GPUI/src/window.rs:2888`).
+
+## Amendment 1 (plan 26): Wayland layer-shell surface option
+
+Appended by `docs/plans/26-layer-shell-widgets.md`; nothing above this line
+changes. Consumers 03/04/09/10 are unaffected: the option is opt-in and off
+by default, and every existing guarantee still holds — in particular the
+"Native Err cases are exactly two" clause, because a compositor's
+layer-shell rejection is absorbed by an internal fallback to the plain
+float path, never surfaced as a new error. Implementation lives in plan
+26's `src/ui/floating/layer_shell/`; the signatures below are that plan's
+Interface Contract, restated.
+
+```rust
+// Cross-platform data types (compile on every target; inert off Wayland).
+pub enum WidgetLayer { Background, Bottom, Top /* default */, Overlay }
+pub enum WidgetKeyboardInteractivity { None /* default */, Exclusive, OnDemand }
+pub enum Edge4 { Top, Right, Bottom, Left }
+
+pub struct LayerShellSpec { /* private */ }
+impl Default for LayerShellSpec {}   // layer Top, namespace "gpui-starter.widgets",
+                                     // keyboard None, anchor/margin derived from FloatAnchor
+impl LayerShellSpec {
+    pub fn new() -> Self;
+    pub fn layer(self, layer: WidgetLayer) -> Self;
+    pub fn anchor(self, placement: Placement9) -> Self;   // default: derive from FloatAnchor
+    pub fn margin(self, margin: Edges<Pixels>) -> Self;   // CSS order top/right/bottom/left
+    pub fn exclusive_zone(self, zone: Pixels) -> Self;
+    pub fn exclusive_edge(self, edge: Edge4) -> Self;
+    pub fn keyboard(self, mode: WidgetKeyboardInteractivity) -> Self;
+    pub fn namespace(self, ns: impl Into<String>) -> Self;
+}
+
+// On FloatingSpec (field private, builder + reader):
+pub fn layer_shell(self, spec: LayerShellSpec) -> Self;
+pub fn layer_shell_spec(&self) -> Option<&LayerShellSpec>;
+
+// On FloatingWindowEntry (struct stays #[non_exhaustive]; readers only):
+pub surface: FloatSurface;   // enum FloatSurface { Window /* default */, LayerShell }
+
+pub const CAPABILITY_LAYER_SHELL_WIDGETS: &str = "layer_shell_widgets";
+pub const CAPABILITY_LAYER_SHELL_INPUT_PASSTHROUGH: &str = "layer_shell_input_passthrough";
+
+/// Wayland arm of the desktop-widget click-through toggle; plan 25's toggle
+/// surface dispatches here when the session is Wayland. false for overlay
+/// handles, dead handles, or any non-Wayland session.
+pub fn set_input_passthrough(handle: &FloatingHandle, passthrough: bool, cx: &mut App) -> bool;
+
+/// zed#46378 workaround: spawn once cx.displays() is non-empty (immediate
+/// when it already is; else 100ms retries, max 10). Never panics.
+pub fn spawn_floating_after_displays(
+    spec: FloatingSpec,
+    build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    cx: &mut App,
+);
+
+/// Called from `floating::init` (one added line, no cfg): registers the two
+/// capability rows above per platform/session. Idempotent.
+pub fn init(cx: &mut App);  // crate::ui::floating::layer_shell::init
+```
+
+`spawn_floating` semantics gain one clause: when `layer_shell_spec()` is
+set, the session is Wayland (`cx.compositor_name() == "Wayland"`, gpui-pre
+0.3.9 `src/app.rs:1877`), and the caller is native, the window opens as
+`WindowKind::LayerShell(..)` with `WindowBackgroundAppearance::Transparent`,
+`titlebar: None`, and best-effort `display_id`; on
+`LayerShellNotSupportedError` the spawn retries once through the plain
+float path, records the failure in the `layer_shell_widgets` capability
+entry (degraded), and tags the entry `surface: FloatSurface::Window`. On a
+success the entry is tagged `FloatSurface::LayerShell`. X11 sessions never
+receive the LayerShell kind (the X11 backend has no branch for it); the
+option is ignored there and on macOS/Windows/wasm with one info log per
+process. Reference implementation: `crates/gpui/examples/layer_shell.rs` at
+zed@93d7456 (the pinned snapshot's commit). Removal of the amendment
+reverts with plan 26's Removal Recipe.
