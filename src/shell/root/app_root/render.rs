@@ -287,6 +287,7 @@ impl Render for AppRoot {
             .child(self.title_bar.clone())
             .child(content_area)
             .child(crate::status_bar::render(&self.active_route, cx))
+            .child(self.floating_host.clone())
     }
 }
 

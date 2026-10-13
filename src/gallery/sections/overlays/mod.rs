@@ -7,6 +7,7 @@ mod alert;
 mod alert_dialog;
 mod demo;
 mod dialog;
+mod floating;
 mod hover_card;
 mod notification;
 mod popover;
@@ -23,6 +24,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     alert::register(sections, window, cx);
     alert_dialog::register(sections, window, cx);
     dialog::register(sections, window, cx);
+    floating::register(sections, window, cx);
     hover_card::register(sections, window, cx);
     notification::register(sections, window, cx);
     popover::register(sections, window, cx);

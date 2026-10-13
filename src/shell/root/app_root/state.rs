@@ -29,6 +29,7 @@ pub struct AppRoot {
     pub(crate) query_devtools_v2_page: Entity<QueryDevToolsV2Page>,
     pub(crate) about_page: Entity<AboutPage>,
     pub(crate) gallery_page: Entity<GalleryPage>,
+    pub(crate) floating_host: Entity<crate::ui::floating::OverlayFloatHost>,
 
     /// When true, the error fallback view replaces the active page; set on a
     /// render panic, cleared by "Reload Page" or navigation.
@@ -54,6 +55,7 @@ impl AppRoot {
         let query_devtools_v2_page = cx.new(|cx| QueryDevToolsV2Page::new(window, cx));
         let about_page = cx.new(|_| AboutPage::new());
         let gallery_page = cx.new(|cx| GalleryPage::new(window, cx));
+        let floating_host = cx.new(|cx| crate::ui::floating::OverlayFloatHost::new(window, cx));
 
         // Register the v2 QueryClient global so DevTools/Playground pages can observe it.
         if !cx.has_global::<gpui_query::client::QueryClient>() {
@@ -180,6 +182,7 @@ impl AppRoot {
             query_devtools_v2_page,
             about_page,
             gallery_page,
+            floating_host,
             render_error: false,
             error_page: None,
         }

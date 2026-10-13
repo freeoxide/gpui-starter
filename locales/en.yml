@@ -532,3 +532,4 @@ updates_error_body: "Could not check or download updates. Please try again later
 about_version: "Version %{version}"
 about_tagline: "A boilerplate for GPUI desktop apps."
 desktop_action_failed: "Desktop action `%{action}` failed: %{error}"
+floating_close: "Close"
