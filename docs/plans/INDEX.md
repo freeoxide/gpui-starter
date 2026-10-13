@@ -389,7 +389,7 @@ foundations), one plan per commit, gates green between steps:
 | 04 | menubar-charts | 2 | implemented |
 | 05 | canvas-showcase | 2 | implemented |
 | 06 | infinite-canvas | 2 | implemented |
-| 08 | multiuser-canvas | 3 | |
+| 08 | multiuser-canvas | 3 | implemented |
 | 09 | floating-ui | 3 | |
 | 14 | image-editor | 3 | |
 | 10 | floating-canvas | 3 | |

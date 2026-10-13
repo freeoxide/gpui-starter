@@ -166,3 +166,7 @@ win-portable:
 # on GHA windows-2025); run win-portable first, this recipe needs the exe.
 win-installer:
     ./scripts/build-windows-installer.sh
+
+# Run the socket.io relay the Shared Canvas page connects to.
+collab-server:
+    cargo run -p collab-server

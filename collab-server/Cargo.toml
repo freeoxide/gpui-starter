@@ -1,0 +1,18 @@
+[package]
+name = "collab-server"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+axum = "0.8"
+collab-protocol = { path = "../collab-protocol" }
+socketioxide = "0.18"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[dev-dependencies]
+futures-util = "0.3"
+rust_socketio = { version = "0.6", default-features = false, features = ["async"] }
+serde_json = "1"

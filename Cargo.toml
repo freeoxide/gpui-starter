@@ -1,4 +1,5 @@
 [workspace]
+members = ["collab-protocol", "collab-server"]
 
 [workspace.dependencies]
 # gpui-form from the freeoxide fork; rev = the fluent-to-rust-i18n merge
@@ -216,6 +217,8 @@ rustfft = "6.4"
 # every platform (the target tables' png-only lines predate the common entry;
 # png+jpeg is the union with plan 14's needs). Pure Rust, wasm-clean.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# Shared wire types for the multiuser-canvas page and collab-server.
+collab-protocol = { path = "collab-protocol" }
 
 [dev-dependencies]
 insta.workspace = true
@@ -360,6 +363,10 @@ tracing-appender = "0.2"
 # (rt + sync + time): `net` and `io-util` have no wasm implementation, and
 # `rt-multi-thread` (tokio_runtime's dedicated I/O runtime) needs threads.
 tokio = { workspace = true, features = ["io-util", "net", "rt-multi-thread"] }
+# Socket.io client for the multiuser-canvas page's live sync; its async
+# feature set needs the tokio features above on a dedicated thread
+# (src/features/pages/multiuser_canvas/net.rs).
+rust_socketio = { version = "0.6", default-features = false, features = ["async"] }
 sysinfo = { version = "0.31", default-features = false, features = ["system"] }
 
 # Web (wasm32-unknown-unknown) dependencies.

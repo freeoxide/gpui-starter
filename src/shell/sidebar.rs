@@ -15,6 +15,7 @@ pub enum Page {
     Gallery,
     CanvasShowcase,
     InfiniteCanvas,
+    MultiuserCanvas,
 }
 
 impl Page {
@@ -32,6 +33,7 @@ impl Page {
             Page::Gallery => "Gallery",
             Page::CanvasShowcase => "Canvas Showcase",
             Page::InfiniteCanvas => "Infinite Canvas",
+            Page::MultiuserCanvas => "Shared Canvas",
         }
     }
 
@@ -51,6 +53,7 @@ impl Page {
             Page::Gallery => "nav_gallery",
             Page::CanvasShowcase => "nav_canvas_showcase",
             Page::InfiniteCanvas => "nav_infinite_canvas",
+            Page::MultiuserCanvas => "nav_multiuser_canvas",
         }
     }
 
@@ -74,6 +77,7 @@ impl Page {
             Page::Gallery => "gallery",
             Page::CanvasShowcase => "canvas-showcase",
             Page::InfiniteCanvas => "infinite-canvas",
+            Page::MultiuserCanvas => "multiuser-canvas",
         }
     }
 
@@ -96,6 +100,7 @@ impl Page {
             Page::Gallery => IconName::GalleryVerticalEnd,
             Page::CanvasShowcase => IconName::Palette,
             Page::InfiniteCanvas => IconName::Frame,
+            Page::MultiuserCanvas => IconName::User,
         }
     }
 
@@ -113,6 +118,7 @@ impl Page {
             Page::Gallery,
             Page::CanvasShowcase,
             Page::InfiniteCanvas,
+            Page::MultiuserCanvas,
         ]
     }
 }
