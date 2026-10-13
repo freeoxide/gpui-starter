@@ -46,6 +46,8 @@ fn test_config_default_serialization() {
         last_update_check: ~
         show_frame_time: true
         floating_palettes: []
+        mic_device_id: ~
+        mic_gain_db: 0
         "#
         );
 }
@@ -79,6 +81,8 @@ fn test_config_roundtrip() {
         last_update_check: None,
         show_frame_time: false,
         floating_palettes: Vec::new(),
+        mic_device_id: Some("coreaudio:Built-in Microphone".to_string()),
+        mic_gain_db: 4.5,
     };
 
     let json = serde_json::to_string(&original).expect("serialize config");
@@ -118,6 +122,8 @@ fn test_config_roundtrip() {
         last_update_check: ~
         show_frame_time: false
         floating_palettes: []
+        mic_device_id: "coreaudio:Built-in Microphone"
+        mic_gain_db: 4.5
         "#
         );
 }

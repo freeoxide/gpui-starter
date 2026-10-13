@@ -257,6 +257,14 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = [
     "NSWindow",
     "NSScreen",
 ] }
+# Microphone TCC permission (services/microphone/permission.rs). Only the
+# authorization surface; pairs with the locked objc2/block2/foundation line.
+objc2-av-foundation = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "AVCaptureDevice",
+    "AVMediaFormat",
+    "block2",
+] }
 raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -368,6 +376,9 @@ tokio = { workspace = true, features = ["io-util", "net", "rt-multi-thread"] }
 # (src/features/pages/multiuser_canvas/net.rs).
 rust_socketio = { version = "0.6", default-features = false, features = ["async"] }
 sysinfo = { version = "0.31", default-features = false, features = ["system"] }
+# Microphone input (services/microphone). ALSA backend needs libasound2-dev
+# at build time (scripts/install-linux-deps.sh); no wasm32 story.
+cpal = "0.18"
 
 # Web (wasm32-unknown-unknown) dependencies.
 [target.'cfg(target_family = "wasm")'.dependencies]

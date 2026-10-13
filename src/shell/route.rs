@@ -23,6 +23,7 @@ pub(crate) const VALID_HOSTS: &[&str] = &[
     Page::MultiuserCanvas.host(),
     Page::FloatingUi.host(),
     Page::ImageEditor.host(),
+    Page::Microphone.host(),
 ];
 
 const INVALID_SEGMENT_CHARS: &[char] = &['/', '\\', '\0', '<', '>', '|', '"'];

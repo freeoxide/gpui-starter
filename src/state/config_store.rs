@@ -89,6 +89,10 @@ pub struct AppConfig {
     pub show_frame_time: bool,
     #[serde(default)]
     pub floating_palettes: Vec<crate::features::pages::floating_ui::persistence::PersistedPalette>,
+    #[serde(default)]
+    pub mic_device_id: Option<String>,
+    #[serde(default)]
+    pub mic_gain_db: f32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -134,6 +138,8 @@ impl Default for AppConfig {
             last_update_check: None,
             show_frame_time: default_show_frame_time(),
             floating_palettes: Vec::new(),
+            mic_device_id: None,
+            mic_gain_db: 0.0,
         }
     }
 }

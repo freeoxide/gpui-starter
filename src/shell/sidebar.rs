@@ -18,6 +18,7 @@ pub enum Page {
     MultiuserCanvas,
     FloatingUi,
     ImageEditor,
+    Microphone,
 }
 
 impl Page {
@@ -38,6 +39,7 @@ impl Page {
             Page::MultiuserCanvas => "Shared Canvas",
             Page::FloatingUi => "Floating UI",
             Page::ImageEditor => "Image Editor",
+            Page::Microphone => "Microphone",
         }
     }
 
@@ -60,6 +62,7 @@ impl Page {
             Page::MultiuserCanvas => "nav_multiuser_canvas",
             Page::FloatingUi => "nav_floating_ui",
             Page::ImageEditor => "nav_image_editor",
+            Page::Microphone => "nav_microphone",
         }
     }
 
@@ -86,6 +89,7 @@ impl Page {
             Page::MultiuserCanvas => "multiuser-canvas",
             Page::FloatingUi => "floating-ui",
             Page::ImageEditor => "image-editor",
+            Page::Microphone => "microphone",
         }
     }
 
@@ -113,6 +117,7 @@ impl Page {
             Page::FloatingUi => IconName::PanelLeft,
             // Full-catalog Image renders blank on native; Frame is the stand-in.
             Page::ImageEditor => IconName::Frame,
+            Page::Microphone => IconName::Mic,
         }
     }
 
@@ -133,6 +138,7 @@ impl Page {
             Page::MultiuserCanvas,
             Page::FloatingUi,
             Page::ImageEditor,
+            Page::Microphone,
         ]
     }
 }

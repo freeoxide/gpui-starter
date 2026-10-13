@@ -7,6 +7,7 @@ pub mod error_surface;
 pub mod first_run;
 pub mod i18n;
 pub mod logging;
+pub mod microphone;
 pub mod notifications;
 // query module is provided by the gpui_query (v2) crate
 pub mod secure_storage;

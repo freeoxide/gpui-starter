@@ -290,6 +290,7 @@ pub fn init(cx: &mut App) {
     crate::telemetry::record_event("app_runtime_initialized", cx);
     crate::notifications::inbox::initialize(cx);
     crate::notifications::initialize(cx);
+    crate::microphone::initialize(cx);
     crate::ui::floating::init(cx);
     crate::features::notch::init(cx);
     crate::features::pages::floating_ui::init(cx);
