@@ -17,6 +17,7 @@ pub enum Page {
     InfiniteCanvas,
     MultiuserCanvas,
     FloatingUi,
+    ImageEditor,
 }
 
 impl Page {
@@ -36,6 +37,7 @@ impl Page {
             Page::InfiniteCanvas => "Infinite Canvas",
             Page::MultiuserCanvas => "Shared Canvas",
             Page::FloatingUi => "Floating UI",
+            Page::ImageEditor => "Image Editor",
         }
     }
 
@@ -57,6 +59,7 @@ impl Page {
             Page::InfiniteCanvas => "nav_infinite_canvas",
             Page::MultiuserCanvas => "nav_multiuser_canvas",
             Page::FloatingUi => "nav_floating_ui",
+            Page::ImageEditor => "nav_image_editor",
         }
     }
 
@@ -82,6 +85,7 @@ impl Page {
             Page::InfiniteCanvas => "infinite-canvas",
             Page::MultiuserCanvas => "multiuser-canvas",
             Page::FloatingUi => "floating-ui",
+            Page::ImageEditor => "image-editor",
         }
     }
 
@@ -107,6 +111,8 @@ impl Page {
             Page::MultiuserCanvas => IconName::User,
             // CanvasShowcase already claims Palette; panels name this page.
             Page::FloatingUi => IconName::PanelLeft,
+            // Full-catalog Image renders blank on native; Frame is the stand-in.
+            Page::ImageEditor => IconName::Frame,
         }
     }
 
@@ -126,6 +132,7 @@ impl Page {
             Page::InfiniteCanvas,
             Page::MultiuserCanvas,
             Page::FloatingUi,
+            Page::ImageEditor,
         ]
     }
 }

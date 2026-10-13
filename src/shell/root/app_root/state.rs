@@ -5,8 +5,8 @@ use crate::sidebar::Page;
 use crate::title_bar::AppTitleBar;
 use crate::views::{
     AboutPage, CanvasShowcasePage, DiagnosticsPage, ErrorPlaygroundPage, FloatingUiPage, FormPage,
-    HomePage, InfiniteCanvasPage, MultiuserCanvasPage, NotificationsPage, QueryDevToolsV2Page,
-    QueryPlaygroundPage, RenderErrorPage, SettingsPage,
+    HomePage, ImageEditorPage, InfiniteCanvasPage, MultiuserCanvasPage, NotificationsPage,
+    QueryDevToolsV2Page, QueryPlaygroundPage, RenderErrorPage, SettingsPage,
 };
 use crate::{
     events::{self, AppEventKind},
@@ -34,6 +34,7 @@ pub struct AppRoot {
     pub(crate) infinite_canvas_page: Entity<InfiniteCanvasPage>,
     pub(crate) multiuser_canvas_page: Entity<MultiuserCanvasPage>,
     pub(crate) floating_ui_page: Entity<FloatingUiPage>,
+    pub(crate) image_editor_page: Entity<ImageEditorPage>,
     pub(crate) floating_host: Entity<crate::ui::floating::OverlayFloatHost>,
     pub(crate) floating_ui_session: Entity<crate::features::pages::floating_ui::PaletteSession>,
     pub(crate) floating_ui_host: Entity<crate::features::pages::floating_ui::PalettePanelHost>,
@@ -75,6 +76,7 @@ impl AppRoot {
             )
         });
         let floating_ui_page = cx.new(|cx| FloatingUiPage::new(floating_ui_session.clone(), cx));
+        let image_editor_page = cx.new(|cx| ImageEditorPage::new(window, cx));
         cx.observe_global::<crate::app::window::RootWindow>(|this, cx| {
             this.floating_ui_session
                 .update(cx, |session, cx| session.restore_windows(cx));
@@ -216,6 +218,7 @@ impl AppRoot {
             floating_ui_session,
             floating_ui_host,
             floating_ui_page,
+            image_editor_page,
             render_error: false,
             error_page: None,
         }
@@ -260,6 +263,7 @@ impl AppRoot {
             Page::InfiniteCanvas => self.infinite_canvas_page.clone().into(),
             Page::MultiuserCanvas => self.multiuser_canvas_page.clone().into(),
             Page::FloatingUi => self.floating_ui_page.clone().into(),
+            Page::ImageEditor => self.image_editor_page.clone().into(),
         }
     }
 

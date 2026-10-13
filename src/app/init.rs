@@ -131,6 +131,23 @@ pub fn init(cx: &mut App) {
     };
     set_locale(&locale_to_use, cx);
 
+    // After set_locale so the wasm reason string is captured already
+    // localized; the default-list loop above runs before it.
+    #[cfg(target_family = "wasm")]
+    crate::capabilities::set(
+        "image_editor",
+        crate::capabilities::CapabilityStatus::degraded(crate::i18n::localize(
+            "image_editor_no_picker",
+        )),
+        cx,
+    );
+    #[cfg(not(target_family = "wasm"))]
+    crate::capabilities::set(
+        "image_editor",
+        crate::capabilities::CapabilityStatus::supported_enabled(),
+        cx,
+    );
+
     // Embedded themes are the bundle's only portable theme source; they
     // register before any registry lookup, on native and wasm alike.
     let persisted_theme = persisted.theme.clone();

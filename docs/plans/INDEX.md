@@ -391,7 +391,7 @@ foundations), one plan per commit, gates green between steps:
 | 06 | infinite-canvas | 2 | implemented |
 | 08 | multiuser-canvas | 3 | implemented |
 | 09 | floating-ui | 3 | implemented |
-| 14 | image-editor | 3 | |
+| 14 | image-editor | 3 | implemented |
 | 10 | floating-canvas | 3 | |
 | 07 | canvas-shaders | 4 | |
 | 18 | microphone | 4 | |
