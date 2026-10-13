@@ -212,6 +212,10 @@ rust-embed = "8"
 # rustfft drives the spectrum analyzer. Both compile on wasm32.
 rtrb = "0.4"
 rustfft = "6.4"
+# Canvas showcase image demo: RenderImage construction needs image::Frame on
+# every platform (the target tables' png-only lines predate the common entry;
+# png+jpeg is the union with plan 14's needs). Pure Rust, wasm-clean.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [dev-dependencies]
 insta.workspace = true

@@ -13,6 +13,7 @@ pub enum Page {
     ErrorPlayground,
     About,
     Gallery,
+    CanvasShowcase,
 }
 
 impl Page {
@@ -28,6 +29,7 @@ impl Page {
             Page::ErrorPlayground => "Error Playground",
             Page::About => "About",
             Page::Gallery => "Gallery",
+            Page::CanvasShowcase => "Canvas Showcase",
         }
     }
 
@@ -45,6 +47,7 @@ impl Page {
             Page::ErrorPlayground => "nav_error_playground",
             Page::About => "nav_about",
             Page::Gallery => "nav_gallery",
+            Page::CanvasShowcase => "nav_canvas_showcase",
         }
     }
 
@@ -66,6 +69,7 @@ impl Page {
             Page::QueryDevToolsV2 => "query-devtools-v2",
             Page::About => "about",
             Page::Gallery => "gallery",
+            Page::CanvasShowcase => "canvas-showcase",
         }
     }
 
@@ -86,6 +90,7 @@ impl Page {
             Page::ErrorPlayground => IconName::TriangleAlert,
             Page::About => IconName::Info,
             Page::Gallery => IconName::GalleryVerticalEnd,
+            Page::CanvasShowcase => IconName::Palette,
         }
     }
 
@@ -101,6 +106,7 @@ impl Page {
             Page::ErrorPlayground,
             Page::About,
             Page::Gallery,
+            Page::CanvasShowcase,
         ]
     }
 }

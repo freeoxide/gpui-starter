@@ -18,6 +18,7 @@ pub(crate) const VALID_HOSTS: &[&str] = &[
     Page::QueryDevToolsV2.host(),
     Page::About.host(),
     Page::Gallery.host(),
+    Page::CanvasShowcase.host(),
 ];
 
 const INVALID_SEGMENT_CHARS: &[char] = &['/', '\\', '\0', '<', '>', '|', '"'];
