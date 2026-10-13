@@ -16,10 +16,20 @@ interface AssetCard {
 }
 
 function assetCards(links: ChannelLinks, flavor: 'stable' | 'latest'): AssetCard[] {
-  const macHint =
-    flavor === 'stable'
-      ? 'Apple Silicon and Intel in one DMG. Open it and drag GPUI Starter to Applications.'
-      : 'Apple Silicon and Intel in one DMG. Ad-hoc signed, not notarized — right-click the app and choose Open on first launch.';
+  if (flavor === 'latest') {
+    return [
+      { platform: 'macOS', arch: 'Apple Silicon', file: 'gpui-starter-macos-arm64-debug-app.zip',
+        hint: 'Unzip, then right-click GPUI Starter.app and choose Open. Ad-hoc signed debug build.',
+        href: links.debugMacArm },
+      { platform: 'Linux', arch: 'x86_64', file: 'gpui-starter-linux-x86_64-debug.tar.gz',
+        hint: 'Extract, run ./install-linux.sh once to register the desktop entry, then gpui-starter/gpui-starter.',
+        href: links.debugLinuxX64 },
+      { platform: 'Windows', arch: 'x64', file: 'gpui-starter-windows-x64-debug.exe',
+        hint: 'Run gpui-starter.exe (debug; needs the VC++ runtime). The app writes its own Start Menu shortcut for toasts.',
+        href: links.debugWinX64 },
+    ];
+  }
+  const macHint = 'Apple Silicon and Intel in one DMG. Open it and drag GPUI Starter to Applications.';
   return [
     { platform: 'macOS', arch: 'universal', file: `GPUI-Starter-${links.version}.dmg`, hint: macHint, href: links.macUniversal },
     { platform: 'macOS', arch: 'Apple Silicon', file: `GPUI-Starter-${links.version}-aarch64.dmg`, hint: 'Slimmer download for M-series Macs.', href: links.macArm },
@@ -71,7 +81,7 @@ const hintHtml = (s: string) => s.replace('./install-linux.sh', '<code class="in
         <DownloadCta channel="latest" class="btn btn-lg btn-accent" />
       </div>
       <p class="mono text-[11px] text-fg-subtle mt-4">
-        buttons adapt to your platform · no Windows builds yet — build from source below
+        buttons adapt to your platform · Windows has a debug build on the latest channel only
       </p>
     </div>
   </section>
@@ -148,7 +158,7 @@ const hintHtml = (s: string) => s.replace('./install-linux.sh', '<code class="in
         </span>
       </div>
 
-      <BuildStatus workflow="latest.yml" stableTag={`v${downloadLinks.stable.version}`} />
+      <BuildStatus workflow="pr-builds.yml" stableTag={`v${downloadLinks.stable.version}`} />
 
       <div class="mt-11 ruled grid sm:grid-cols-2 lg:grid-cols-3 reveal">
         {latest.map((a) => (

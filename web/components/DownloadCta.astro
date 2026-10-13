@@ -8,24 +8,34 @@ interface Props {
   class?: string;
 }
 
-// A smart-download anchor. The default href/label targets macOS universal
-// (the site's primary platform and safe no-JS fallback); the hoisted script
-// below rewrites every instance on the page to match the visitor's platform:
+// A smart-download anchor. The default href/label targets the channel's
+// macOS asset (safe no-JS fallback); the hoisted script below rewrites
+// every instance on the page to match the visitor's platform. Stable maps
 // macOS -> universal DMG, Linux -> arch-matched tarball, anything else ->
-// the GitHub release page.
+// the GitHub release page; latest maps macOS -> debug .app zip, Linux
+// x86_64 -> debug tarball, anything else -> the debug exe.
 const { channel = 'stable', class: className = 'btn btn-lg btn-solid' } = Astro.props;
 const links = downloadLinks[channel];
 const base = channel === 'stable' ? `v${links.version}` : 'the master build';
 
-const platformMap = JSON.stringify({
-  mac: { href: links.macUniversal, label: `Download ${base} for macOS` },
-  linuxArm: { href: links.linuxArm, label: `Download ${base} for Linux (ARM64)` },
-  linuxX64: { href: links.linuxX64, label: `Download ${base} for Linux (x86_64)` },
-  other: { href: links.page, label: `Get ${base} on GitHub` },
-});
+const platformMap = JSON.stringify(
+  channel === 'stable'
+    ? {
+        mac: { href: links.macUniversal, label: `Download ${base} for macOS` },
+        linuxArm: { href: links.linuxArm, label: `Download ${base} for Linux (ARM64)` },
+        linuxX64: { href: links.linuxX64, label: `Download ${base} for Linux (x86_64)` },
+        other: { href: links.page, label: `Get ${base} on GitHub` },
+      }
+    : {
+        mac: { href: links.debugMacArm, label: `Download ${base} for macOS` },
+        linuxArm: { href: links.page, label: `Get ${base} on GitHub` },
+        linuxX64: { href: links.debugLinuxX64, label: `Download ${base} for Linux (x86_64 debug)` },
+        other: { href: links.debugWinX64, label: `Download ${base} for Windows (x64 debug)` },
+      },
+);
 ---
 
-<a data-dl-map={platformMap} href={links.macUniversal} class={className}>
+<a data-dl-map={platformMap} href={channel === 'stable' ? links.macUniversal : links.debugMacArm} class={className}>
   <span data-dl-label>{channel === 'stable' ? `Download v${links.version} for macOS` : `Download ${base} for macOS`}</span>
 </a>
 

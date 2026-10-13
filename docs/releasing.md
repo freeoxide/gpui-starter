@@ -24,7 +24,8 @@ This repo ships 10 of the 15 formats as 18 release assets per release:
 - macOS (1): DMG, universal plus per-arch.
 - Windows (3): portable zip, bare exe, Inno Setup exe.
 
-Skipped: snap, macOS `.app`-in-zip, macOS `.pkg`, Windows `.msi`, `.msix`.
+Skipped: snap, macOS `.app`-in-zip (stable channel; the debug `latest`
+channel ships one), macOS `.pkg`, Windows `.msi`, `.msix`.
 Rationale in [research/release-matrix.md](research/release-matrix.md).
 
 Of the 14 channels the project hosts none itself: GitHub Releases carries the
@@ -66,6 +67,20 @@ installs get every size; the binary itself runs from wherever the tarball
 was extracted, so symlink it into `~/.local/bin` yourself. CI
 also produces `.sha256` sidecars, but the release ships only
 `SHA256SUMS.txt`.
+
+## The debug channel (`latest` release)
+
+Every push to master makes the `publish-latest` job of
+`.github/workflows/pr-builds.yml` replace three assets on the rolling
+`latest` prerelease: `gpui-starter-macos-arm64-debug-app.zip` (an ad-hoc
+signed `GPUI Starter.app` whose Info.plist carries the bundle identifier,
+the icns reference, and `NSMicrophoneUsageDescription`),
+`gpui-starter-linux-x86_64-debug.tar.gz` (same staging as the release
+tarball: desktop entry, full hicolor set, `install-linux.sh`), and
+`gpui-starter-windows-x64-debug.exe` (the debug exe with the
+`build.rs`-embedded icon). Each lane smoke-verifies its own artifact
+before upload. The download page's `latest` cards and the DownloadCta
+button map to exactly these names via `web/util/downloads.ts`.
 
 ## Cutting a release
 
@@ -298,7 +313,10 @@ download) plus two slim per-arch DMGs. The icns ships committed at
 `assets/app-icon/gpui-starter.icns`, so CI needs no icon tooling. Developer
 ID codesign and notarization are conditional on the `APPLE_*` secrets;
 without them the apps are ad-hoc signed and Gatekeeper shows the
-click-through.
+click-through. Every shipped `Info.plist` also carries
+`NSMicrophoneUsageDescription` for the microphone page's capture prompt;
+the notification permission prompt itself has no plist usage key, so its
+text is system-generated.
 
 ### Windows
 

@@ -55,7 +55,8 @@ env:
 jobs:
   # ---------------------------------------------------------------------
   # Linux x86_64: raw binary + $ORIGIN/lib rpath + bundled non-system
-  # .so files (trimmed from the release.yml bundling step). Without the
+  # .so files, plus the desktop entry / icon / installer staging from
+  # the release.yml bundling step. Without the
   # rpath/bundle a Linux artifact fails to start on any machine lacking
   # the exact system libs — a test build that won't launch is worse than
   # none. Runners pinned to ubuntu-24.04 for the same reason as ci.yml
@@ -105,9 +106,23 @@ jobs:
             esac
             [ -f "$STAGE/lib/$base" ] || cp -L "$lib" "$STAGE/lib/"
           done
+          cp resources/com.gpui-starter.app.desktop "$STAGE/" 2>/dev/null || true
+          cp -r assets/app-icon/hicolor "$STAGE/hicolor" 2>/dev/null || true
+          cp scripts/install-linux.sh "$STAGE/" 2>/dev/null || true
+          chmod +x "$STAGE/install-linux.sh" 2>/dev/null || true
           # GITHUB_SHA on a PR event is the merge commit, so this labels
           # exactly the combination the artifact was tested as.
           tar -czf "stage/gpui-starter-${GITHUB_SHA:0:12}-linux-x86_64-debug.tar.gz" -C stage gpui-starter
+
+      - name: Verify tarball contents
+        run: |
+          set -euo pipefail
+          TARBALL="stage/gpui-starter-${GITHUB_SHA:0:12}-linux-x86_64-debug.tar.gz"
+          LIST="$(tar -tzf "$TARBALL")"
+          echo "$LIST" | grep -qx 'gpui-starter/com.gpui-starter.app.desktop'
+          echo "$LIST" | grep -q '^gpui-starter/hicolor/48x48/apps/gpui-starter\.png$'
+          echo "$LIST" | grep -q '^gpui-starter/hicolor/512x512/apps/gpui-starter\.png$'
+          echo "$LIST" | grep -qx 'gpui-starter/install-linux.sh'
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v7
@@ -127,7 +142,7 @@ jobs:
           {
             echo "### Download this build"
             echo "Artifacts live on the run page, not on this job page: $RUN_URL"
-            echo "Artifact: gpui-starter-linux-x86_64-debug — tarball with the binary plus bundled libs; run ./gpui-starter/gpui-starter."
+            echo "Artifact: gpui-starter-linux-x86_64-debug — tarball with the binary, bundled libs, desktop entry, icons, and install-linux.sh; run ./gpui-starter/gpui-starter."
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------
@@ -165,6 +180,18 @@ jobs:
         # only embeds at compile time in release or with debug-embed.
         run: cargo build --features artifact
 
+      # The icon is embedded by build.rs for every Windows build; the AUMID
+      # shortcut is self-registered at app start (src/platform/toast_identity.rs),
+      # not assertable headless.
+      - name: Verify exe embeds an icon
+        shell: pwsh
+        run: |
+          $exe = [System.IO.File]::ReadAllBytes("C:\t\debug\gpui-starter.exe")
+          $text = [System.Text.Encoding]::GetEncoding(28591).GetString($exe)
+          if (-not $text.Contains([string][char]0 + [char]0 + [char]1 + [char]0)) {
+            throw "no ICONDIR signature - build.rs icon embed broken"
+          }
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v7
         with:
@@ -182,10 +209,10 @@ jobs:
           "Artifact: gpui-starter-windows-x64-debug - gpui-starter.exe (x64, debug; needs the VC++ runtime)." | Add-Content -Path $env:GITHUB_STEP_SUMMARY
 
   # ---------------------------------------------------------------------
-  # macOS (host arch, arm64 on macos-latest): plain binary, no .app
-  # bundle / codesign / DMG — those are release.yml's job. Ad-hoc
-  # signature is applied by the linker, so macOS Gatekeeper may still
-  # ask on first launch; right-click > Open accepts it for a test build.
+  # macOS (host arch, arm64 on macos-latest): a host-debug .app bundle
+  # from create-release-app.sh, ad-hoc signed and zipped with ditto. No
+  # DMG or notarization — release.yml's job. Ad-hoc signing means
+  # Gatekeeper asks on first launch; right-click > Open accepts it.
   # ---------------------------------------------------------------------
   build-macos:
     name: Build (macOS arm64)
@@ -208,11 +235,35 @@ jobs:
         # only embeds at compile time in release or with debug-embed.
         run: cargo build --features artifact
 
+      # A bare binary has no NSBundle identifier, so the notifications
+      # backend refuses it (src/services/notifications/backend/user_notify.rs).
+      - name: Bundle debug .app and zip
+        run: |
+          set -euo pipefail
+          APP="$(./scripts/create-release-app.sh "${GITHUB_SHA:0:12}" host-debug)"
+          codesign --force --deep --sign - "$APP"
+          mkdir -p stage
+          ditto -c -k --sequesterRsrc --keepParent "$APP" \
+            "stage/gpui-starter-macos-arm64-debug-app.zip"
+
+      - name: Verify bundled app (identifier + icon)
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/appcheck && mkdir -p /tmp/appcheck
+          ditto -x -k --rsrc stage/gpui-starter-macos-arm64-debug-app.zip /tmp/appcheck
+          APP="/tmp/appcheck/GPUI Starter.app"
+          PLIST="$APP/Contents/Info.plist"
+          [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = "com.gpui-starter.app" ]
+          [ -n "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$PLIST")" ]
+          [ -n "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$PLIST")" ]
+          [ -f "$APP/Contents/Resources/gpui-starter.icns" ]
+          codesign --verify --deep --strict "$APP"
+
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v7
         with:
-          name: gpui-starter-macos-arm64-debug
-          path: target/debug/gpui-starter
+          name: gpui-starter-macos-arm64-debug-app
+          path: stage/gpui-starter-macos-arm64-debug-app.zip
           if-no-files-found: error
 
       - name: Link the artifact from this job's summary
@@ -223,7 +274,7 @@ jobs:
           {
             echo "### Download this build"
             echo "Artifacts live on the run page, not on this job page: $RUN_URL"
-            echo "Artifact: gpui-starter-macos-arm64-debug — bare arm64 binary (chmod +x before running; unsigned test build)."
+            echo "Artifact: gpui-starter-macos-arm64-debug-app — zip containing the ad-hoc signed GPUI Starter.app (arm64 debug). Unzip, right-click the app, Open."
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------
@@ -245,7 +296,7 @@ jobs:
       - name: Download built artifacts
         uses: actions/download-artifact@v8
         with:
-          pattern: gpui-starter-*-debug
+          pattern: gpui-starter-*-debug*
           merge-multiple: true
           path: ./artifacts
 
@@ -257,8 +308,10 @@ jobs:
             release/gpui-starter-linux-x86_64-debug.tar.gz
           cp artifacts/gpui-starter.exe \
             release/gpui-starter-windows-x64-debug.exe
-          cp artifacts/gpui-starter \
-            release/gpui-starter-macos-arm64-debug
+          [ -f artifacts/gpui-starter-macos-arm64-debug-app.zip ] \
+            || { echo "Error: mac zip not in ./artifacts (pattern mismatch?)" >&2; exit 1; }
+          cp artifacts/gpui-starter-macos-arm64-debug-app.zip \
+            release/gpui-starter-macos-arm64-debug-app.zip
 
       - name: Move the latest tag to this build
         run: |
@@ -268,6 +321,16 @@ jobs:
               -c user.email="github-actions[bot]@users.noreply.github.com" \
             tag -fa latest -m "Rolling latest master build" "${GITHUB_SHA}"
           git push -f origin "refs/tags/latest"
+
+      # action-gh-release overwrites same-named assets but never deletes
+      # names that fall out of files:, so the pre-bundle bare binary has to
+      # go by hand (a no-op once it is gone).
+      - name: Delete the stale mac bare-binary asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete-asset latest gpui-starter-macos-arm64-debug \
+            --repo "$GITHUB_REPOSITORY" --yes || true
 
       - name: Upsert the latest release
         uses: softprops/action-gh-release@v3
@@ -281,4 +344,4 @@ jobs:
           files: |
             release/gpui-starter-linux-x86_64-debug.tar.gz
             release/gpui-starter-windows-x64-debug.exe
-            release/gpui-starter-macos-arm64-debug
+            release/gpui-starter-macos-arm64-debug-app.zip

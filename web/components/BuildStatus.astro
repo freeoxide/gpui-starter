@@ -2,7 +2,7 @@
 import { GH_REPO, type GhCompare, type GhRelease, type GhRunsResponse, type GhWorkflowRun, ghFetch, timeAgo } from '../util/github';
 
 interface Props {
-  /** Workflow file whose runs on master are shown (e.g. latest.yml). */
+  /** Workflow file whose runs on master are shown (e.g. pr-builds.yml). */
   workflow?: string;
   /** Stable tag (e.g. v0.3.0); when set, shows how far master is ahead. */
   stableTag?: string;
@@ -13,7 +13,7 @@ interface Props {
 // release and paints one of four states — building (pulsing amber), passing
 // (green), failing (red), or paused (API rate limit). Nothing server-side:
 // if the fetch fails the strip just hides and the static page stands alone.
-const { workflow = 'latest.yml', stableTag = '' } = Astro.props;
+const { workflow = 'pr-builds.yml', stableTag = '' } = Astro.props;
 const WORKFLOW_URL = `https://github.com/${GH_REPO}/actions/workflows/${workflow}`;
 ---
 
@@ -50,7 +50,7 @@ const WORKFLOW_URL = `https://github.com/${GH_REPO}/actions/workflows/${workflow
 
   const root = document.querySelector<HTMLElement>('[data-build-status]');
   if (root) {
-    const workflow = root.dataset.workflow || 'latest.yml';
+    const workflow = root.dataset.workflow || 'pr-builds.yml';
     const stableTag = root.dataset.stableTag || '';
     const dot = root.querySelector<HTMLElement>('[data-bs-dot]')!;
     const headline = root.querySelector<HTMLElement>('[data-bs-headline]')!;
