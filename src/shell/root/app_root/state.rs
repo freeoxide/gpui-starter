@@ -44,6 +44,7 @@ pub struct AppRoot {
     pub(crate) floating_host: Entity<crate::ui::floating::OverlayFloatHost>,
     pub(crate) floating_ui_session: Entity<crate::features::pages::floating_ui::PaletteSession>,
     pub(crate) floating_ui_host: Entity<crate::features::pages::floating_ui::PalettePanelHost>,
+    pub(crate) tutorial: Entity<crate::features::tutorial::TourController>,
 
     /// When true, the error fallback view replaces the active page; set on a
     /// render panic, cleared by "Reload Page" or navigation.
@@ -87,6 +88,8 @@ impl AppRoot {
         let audio_page = cx.new(|cx| AudioPage::new(window, cx));
         let analytics_page = cx.new(|cx| AnalyticsPage::new(window, cx));
         let (music_page, now_playing_bar) = crate::views::music::init(window, cx);
+        let tutorial = cx.new(|cx| crate::features::tutorial::TourController::new(window, cx));
+        cx.set_global(crate::features::tutorial::TourHandle(tutorial.clone()));
         cx.observe_global::<crate::app::window::RootWindow>(|this, cx| {
             this.floating_ui_session
                 .update(cx, |session, cx| session.restore_windows(cx));
@@ -234,6 +237,7 @@ impl AppRoot {
             analytics_page,
             music_page,
             now_playing_bar,
+            tutorial,
             render_error: false,
             error_page: None,
         }

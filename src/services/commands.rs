@@ -27,6 +27,7 @@ pub enum CommandId {
     Redo,
     Restart,
     OpenMenubarCharts,
+    StartTour,
 }
 
 #[derive(Clone, Debug)]
@@ -54,7 +55,8 @@ pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
         | CommandId::OpenAbout
         | CommandId::ThemeLight
         | CommandId::ThemeDark
-        | CommandId::StartDemoTask => CommandAvailability {
+        | CommandId::StartDemoTask
+        | CommandId::StartTour => CommandAvailability {
             enabled: true,
             disabled_reason: None,
         },
@@ -211,6 +213,12 @@ pub fn registry() -> Vec<CommandSpec> {
             "command_menubar_charts_subtitle",
             IconName::ChartPie,
         ),
+        command(
+            CommandId::StartTour,
+            "tutorial_command",
+            "tutorial_command_subtitle",
+            IconName::Map,
+        ),
     ]
 }
 
@@ -297,6 +305,9 @@ pub fn execute(id: CommandId, cx: &mut App) {
         }
         CommandId::OpenMenubarCharts => {
             crate::features::menubar_charts::open_sheet(cx);
+        }
+        CommandId::StartTour => {
+            crate::features::tutorial::start(cx);
         }
     }
 }

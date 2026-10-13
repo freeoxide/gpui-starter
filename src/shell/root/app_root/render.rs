@@ -282,14 +282,20 @@ impl Render for AppRoot {
             );
         }
 
-        v_flex()
-            .size_full()
-            .child(self.title_bar.clone())
-            .child(content_area)
-            .child(self.now_playing_bar.clone())
-            .child(crate::status_bar::render(&self.active_route, cx))
-            .child(self.floating_host.clone())
-            .child(self.floating_ui_host.clone())
+        crate::features::tutorial::target(
+            "tour-viewport",
+            v_flex()
+                .size_full()
+                .child(self.title_bar.clone())
+                .child(content_area)
+                .child(self.now_playing_bar.clone())
+                .child(crate::status_bar::render(&self.active_route, cx))
+                .child(self.floating_host.clone())
+                .child(self.floating_ui_host.clone())
+                // Last subtree: the tour overlay must paint above every other
+                // child of the root (tree order is the stacking order here).
+                .child(self.tutorial.clone()),
+        )
     }
 }
 
@@ -336,7 +342,7 @@ impl SidebarItem for NavItem {
             .on_click(move |ev, window, cx| item_on_click(ev, window, cx))
             .context_menu(move |menu, window, cx| context_menu(menu, window, cx));
 
-        div()
+        let row = div()
             .id(id.clone())
             .a11y(Role::ListItem, label)
             .aria_selected(self.active)
@@ -345,6 +351,12 @@ impl SidebarItem for NavItem {
             .on_a11y_action(AccessibleAction::Click, move |_, window, cx| {
                 activate(&ClickEvent::default(), window, cx);
             })
-            .child(item.render(id, window, cx))
+            .child(item.render(id, window, cx));
+
+        if matches!(self.page, Page::Gallery) {
+            crate::features::tutorial::target("sidebar-gallery", row).into_any_element()
+        } else {
+            row.into_any_element()
+        }
     }
 }

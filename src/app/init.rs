@@ -106,6 +106,7 @@ pub fn init(cx: &mut App) {
         "app_menu",
         "command_registry",
         "music_playback",
+        "tutorial",
     ];
     for &name in DEFAULT_ENABLED_CAPABILITIES {
         crate::capabilities::set(
@@ -236,6 +237,7 @@ pub fn init(cx: &mut App) {
         crate::session::initialize(cx);
         crate::storage::initialize(cx);
         crate::audio::initialize(cx);
+        crate::features::tutorial::initialize(cx);
 
         // SQLite is native-only; wasm storage is never available.
         #[cfg(not(target_family = "wasm"))]

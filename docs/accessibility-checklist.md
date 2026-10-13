@@ -48,6 +48,8 @@ Verified practice for every UI change:
 - State changes a user must hear go through polite live regions: command
   palette selection and result count, form results, errors, notification
   counts. Nothing that changes per frame is live, or it would spam the reader.
+- Guided-tour step changes announce "Step n of m: title" through a Polite
+  `Role::Status` on the tour card; the dots stay decorative.
 - App init registers the `accessibility` capability; the Diagnostics page
   renders the registry and its read-outs as labeled list items.
 
