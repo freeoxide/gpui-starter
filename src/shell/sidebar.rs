@@ -21,6 +21,7 @@ pub enum Page {
     Microphone,
     Audio,
     Analytics,
+    Music,
 }
 
 impl Page {
@@ -44,6 +45,7 @@ impl Page {
             Page::Microphone => "Microphone",
             Page::Audio => "Audio",
             Page::Analytics => "Analytics",
+            Page::Music => "Music",
         }
     }
 
@@ -69,6 +71,7 @@ impl Page {
             Page::Microphone => "nav_microphone",
             Page::Audio => "nav_audio",
             Page::Analytics => "nav_analytics",
+            Page::Music => "nav_music",
         }
     }
 
@@ -98,6 +101,7 @@ impl Page {
             Page::Microphone => "microphone",
             Page::Audio => "audio",
             Page::Analytics => "analytics",
+            Page::Music => "music",
         }
     }
 
@@ -130,6 +134,9 @@ impl Page {
             // the shipped stand-in.
             Page::Audio => IconName::Play,
             Page::Analytics => IconName::ChartPie,
+            // Music is full-catalog and renders blank on native; Play is
+            // the shipped stand-in.
+            Page::Music => IconName::Play,
         }
     }
 
@@ -153,6 +160,7 @@ impl Page {
             Page::Microphone,
             Page::Audio,
             Page::Analytics,
+            Page::Music,
         ]
     }
 }

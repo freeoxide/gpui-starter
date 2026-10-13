@@ -105,6 +105,7 @@ pub fn init(cx: &mut App) {
         "launcher",
         "app_menu",
         "command_registry",
+        "music_playback",
     ];
     for &name in DEFAULT_ENABLED_CAPABILITIES {
         crate::capabilities::set(
