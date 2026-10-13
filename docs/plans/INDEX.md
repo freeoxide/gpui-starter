@@ -388,7 +388,7 @@ foundations), one plan per commit, gates green between steps:
 | 03 | notch-floater | 2 | implemented |
 | 04 | menubar-charts | 2 | implemented |
 | 05 | canvas-showcase | 2 | implemented |
-| 06 | infinite-canvas | 2 | |
+| 06 | infinite-canvas | 2 | implemented |
 | 08 | multiuser-canvas | 3 | |
 | 09 | floating-ui | 3 | |
 | 14 | image-editor | 3 | |

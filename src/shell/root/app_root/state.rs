@@ -5,7 +5,8 @@ use crate::sidebar::Page;
 use crate::title_bar::AppTitleBar;
 use crate::views::{
     AboutPage, CanvasShowcasePage, DiagnosticsPage, ErrorPlaygroundPage, FormPage, HomePage,
-    NotificationsPage, QueryDevToolsV2Page, QueryPlaygroundPage, RenderErrorPage, SettingsPage,
+    InfiniteCanvasPage, NotificationsPage, QueryDevToolsV2Page, QueryPlaygroundPage,
+    RenderErrorPage, SettingsPage,
 };
 use crate::{
     events::{self, AppEventKind},
@@ -30,6 +31,7 @@ pub struct AppRoot {
     pub(crate) about_page: Entity<AboutPage>,
     pub(crate) gallery_page: Entity<GalleryPage>,
     pub(crate) canvas_showcase_page: Entity<CanvasShowcasePage>,
+    pub(crate) infinite_canvas_page: Entity<InfiniteCanvasPage>,
     pub(crate) floating_host: Entity<crate::ui::floating::OverlayFloatHost>,
 
     /// When true, the error fallback view replaces the active page; set on a
@@ -57,6 +59,7 @@ impl AppRoot {
         let about_page = cx.new(|_| AboutPage::new());
         let gallery_page = cx.new(|cx| GalleryPage::new(window, cx));
         let canvas_showcase_page = cx.new(CanvasShowcasePage::new);
+        let infinite_canvas_page = cx.new(|cx| InfiniteCanvasPage::new(window, cx));
         let floating_host = cx.new(|cx| crate::ui::floating::OverlayFloatHost::new(window, cx));
 
         // Register the v2 QueryClient global so DevTools/Playground pages can observe it.
@@ -185,6 +188,7 @@ impl AppRoot {
             about_page,
             gallery_page,
             canvas_showcase_page,
+            infinite_canvas_page,
             floating_host,
             render_error: false,
             error_page: None,
@@ -227,6 +231,7 @@ impl AppRoot {
             Page::About => self.about_page.clone().into(),
             Page::Gallery => self.gallery_page.clone().into(),
             Page::CanvasShowcase => self.canvas_showcase_page.clone().into(),
+            Page::InfiniteCanvas => self.infinite_canvas_page.clone().into(),
         }
     }
 

@@ -14,6 +14,7 @@ pub enum Page {
     About,
     Gallery,
     CanvasShowcase,
+    InfiniteCanvas,
 }
 
 impl Page {
@@ -30,6 +31,7 @@ impl Page {
             Page::About => "About",
             Page::Gallery => "Gallery",
             Page::CanvasShowcase => "Canvas Showcase",
+            Page::InfiniteCanvas => "Infinite Canvas",
         }
     }
 
@@ -48,6 +50,7 @@ impl Page {
             Page::About => "nav_about",
             Page::Gallery => "nav_gallery",
             Page::CanvasShowcase => "nav_canvas_showcase",
+            Page::InfiniteCanvas => "nav_infinite_canvas",
         }
     }
 
@@ -70,6 +73,7 @@ impl Page {
             Page::About => "about",
             Page::Gallery => "gallery",
             Page::CanvasShowcase => "canvas-showcase",
+            Page::InfiniteCanvas => "infinite-canvas",
         }
     }
 
@@ -91,6 +95,7 @@ impl Page {
             Page::About => IconName::Info,
             Page::Gallery => IconName::GalleryVerticalEnd,
             Page::CanvasShowcase => IconName::Palette,
+            Page::InfiniteCanvas => IconName::Frame,
         }
     }
 
@@ -107,6 +112,7 @@ impl Page {
             Page::About,
             Page::Gallery,
             Page::CanvasShowcase,
+            Page::InfiniteCanvas,
         ]
     }
 }
