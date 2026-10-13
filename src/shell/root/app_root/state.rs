@@ -4,8 +4,8 @@ use crate::gallery::GalleryPage;
 use crate::sidebar::Page;
 use crate::title_bar::AppTitleBar;
 use crate::views::{
-    AboutPage, CanvasShowcasePage, DiagnosticsPage, ErrorPlaygroundPage, FormPage, HomePage,
-    InfiniteCanvasPage, MultiuserCanvasPage, NotificationsPage, QueryDevToolsV2Page,
+    AboutPage, CanvasShowcasePage, DiagnosticsPage, ErrorPlaygroundPage, FloatingUiPage, FormPage,
+    HomePage, InfiniteCanvasPage, MultiuserCanvasPage, NotificationsPage, QueryDevToolsV2Page,
     QueryPlaygroundPage, RenderErrorPage, SettingsPage,
 };
 use crate::{
@@ -33,7 +33,10 @@ pub struct AppRoot {
     pub(crate) canvas_showcase_page: Entity<CanvasShowcasePage>,
     pub(crate) infinite_canvas_page: Entity<InfiniteCanvasPage>,
     pub(crate) multiuser_canvas_page: Entity<MultiuserCanvasPage>,
+    pub(crate) floating_ui_page: Entity<FloatingUiPage>,
     pub(crate) floating_host: Entity<crate::ui::floating::OverlayFloatHost>,
+    pub(crate) floating_ui_session: Entity<crate::features::pages::floating_ui::PaletteSession>,
+    pub(crate) floating_ui_host: Entity<crate::features::pages::floating_ui::PalettePanelHost>,
 
     /// When true, the error fallback view replaces the active page; set on a
     /// render panic, cleared by "Reload Page" or navigation.
@@ -63,6 +66,20 @@ impl AppRoot {
         let infinite_canvas_page = cx.new(|cx| InfiniteCanvasPage::new(window, cx));
         let multiuser_canvas_page = cx.new(|cx| MultiuserCanvasPage::new(window, cx));
         let floating_host = cx.new(|cx| crate::ui::floating::OverlayFloatHost::new(window, cx));
+        let floating_ui_session = cx.new(crate::features::pages::floating_ui::PaletteSession::new);
+        let floating_ui_host = cx.new(|cx| {
+            crate::features::pages::floating_ui::PalettePanelHost::new(
+                floating_ui_session.clone(),
+                window,
+                cx,
+            )
+        });
+        let floating_ui_page = cx.new(|cx| FloatingUiPage::new(floating_ui_session.clone(), cx));
+        cx.observe_global::<crate::app::window::RootWindow>(|this, cx| {
+            this.floating_ui_session
+                .update(cx, |session, cx| session.restore_windows(cx));
+        })
+        .detach();
 
         // Register the v2 QueryClient global so DevTools/Playground pages can observe it.
         if !cx.has_global::<gpui_query::client::QueryClient>() {
@@ -89,6 +106,9 @@ impl AppRoot {
                         cx.notify();
                     }
                     AppEventKind::DiagnosticsChanged => {}
+                    AppEventKind::PaletteChanged { palette, value } => {
+                        crate::features::pages::floating_ui::apply_change(&palette, &value, cx);
+                    }
                     AppEventKind::Test { message } => {
                         tracing::info!(target: "gpui_starter::root", message, "test event received");
                     }
@@ -193,6 +213,9 @@ impl AppRoot {
             infinite_canvas_page,
             multiuser_canvas_page,
             floating_host,
+            floating_ui_session,
+            floating_ui_host,
+            floating_ui_page,
             render_error: false,
             error_page: None,
         }
@@ -236,6 +259,7 @@ impl AppRoot {
             Page::CanvasShowcase => self.canvas_showcase_page.clone().into(),
             Page::InfiniteCanvas => self.infinite_canvas_page.clone().into(),
             Page::MultiuserCanvas => self.multiuser_canvas_page.clone().into(),
+            Page::FloatingUi => self.floating_ui_page.clone().into(),
         }
     }
 

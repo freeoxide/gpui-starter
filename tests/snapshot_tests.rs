@@ -45,6 +45,7 @@ fn test_config_default_serialization() {
         update_channel: stable
         last_update_check: ~
         show_frame_time: true
+        floating_palettes: []
         "#
         );
 }
@@ -77,6 +78,7 @@ fn test_config_roundtrip() {
         update_channel: "stable".to_string(),
         last_update_check: None,
         show_frame_time: false,
+        floating_palettes: Vec::new(),
     };
 
     let json = serde_json::to_string(&original).expect("serialize config");
@@ -115,6 +117,7 @@ fn test_config_roundtrip() {
         update_channel: stable
         last_update_check: ~
         show_frame_time: false
+        floating_palettes: []
         "#
         );
 }

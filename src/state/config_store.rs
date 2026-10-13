@@ -87,6 +87,8 @@ pub struct AppConfig {
     pub last_update_check: Option<String>,
     #[serde(default = "default_show_frame_time")]
     pub show_frame_time: bool,
+    #[serde(default)]
+    pub floating_palettes: Vec<crate::features::pages::floating_ui::persistence::PersistedPalette>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -131,6 +133,7 @@ impl Default for AppConfig {
             update_channel: default_stable(),
             last_update_check: None,
             show_frame_time: default_show_frame_time(),
+            floating_palettes: Vec::new(),
         }
     }
 }

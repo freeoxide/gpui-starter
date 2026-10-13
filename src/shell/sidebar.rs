@@ -16,6 +16,7 @@ pub enum Page {
     CanvasShowcase,
     InfiniteCanvas,
     MultiuserCanvas,
+    FloatingUi,
 }
 
 impl Page {
@@ -34,6 +35,7 @@ impl Page {
             Page::CanvasShowcase => "Canvas Showcase",
             Page::InfiniteCanvas => "Infinite Canvas",
             Page::MultiuserCanvas => "Shared Canvas",
+            Page::FloatingUi => "Floating UI",
         }
     }
 
@@ -54,6 +56,7 @@ impl Page {
             Page::CanvasShowcase => "nav_canvas_showcase",
             Page::InfiniteCanvas => "nav_infinite_canvas",
             Page::MultiuserCanvas => "nav_multiuser_canvas",
+            Page::FloatingUi => "nav_floating_ui",
         }
     }
 
@@ -78,6 +81,7 @@ impl Page {
             Page::CanvasShowcase => "canvas-showcase",
             Page::InfiniteCanvas => "infinite-canvas",
             Page::MultiuserCanvas => "multiuser-canvas",
+            Page::FloatingUi => "floating-ui",
         }
     }
 
@@ -101,6 +105,8 @@ impl Page {
             Page::CanvasShowcase => IconName::Palette,
             Page::InfiniteCanvas => IconName::Frame,
             Page::MultiuserCanvas => IconName::User,
+            // CanvasShowcase already claims Palette; panels name this page.
+            Page::FloatingUi => IconName::PanelLeft,
         }
     }
 
@@ -119,6 +125,7 @@ impl Page {
             Page::CanvasShowcase,
             Page::InfiniteCanvas,
             Page::MultiuserCanvas,
+            Page::FloatingUi,
         ]
     }
 }

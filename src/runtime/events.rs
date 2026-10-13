@@ -18,6 +18,10 @@ pub enum AppEventKind {
         severity: crate::errors::AppErrorSeverity,
     },
     DiagnosticsChanged,
+    PaletteChanged {
+        palette: String,
+        value: String,
+    },
     Test {
         message: String,
     },

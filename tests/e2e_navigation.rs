@@ -11,12 +11,12 @@ use gpui_starter::sidebar::Page;
 #[test]
 fn test_sidebar_pages_exist() {
     let all = Page::all();
-    // The app must expose exactly thirteen pages (nine feature pages + Gallery
-    // + Canvas Showcase + Infinite Canvas + Shared Canvas).
+    // The app must expose exactly fourteen pages (nine feature pages + Gallery
+    // + Canvas Showcase + Infinite Canvas + Shared Canvas + Floating UI).
     assert_eq!(
         all.len(),
-        13,
-        "expected 13 sidebar pages, got {}",
+        14,
+        "expected 14 sidebar pages, got {}",
         all.len()
     );
 
@@ -35,6 +35,7 @@ fn test_sidebar_pages_exist() {
         Page::CanvasShowcase,
         Page::InfiniteCanvas,
         Page::MultiuserCanvas,
+        Page::FloatingUi,
     ];
 
     for page in &expected {
@@ -84,6 +85,10 @@ fn test_route_parsing() {
         (
             "gpui-starter://multiuser-canvas",
             AppRoute::Page(Page::MultiuserCanvas),
+        ),
+        (
+            "gpui-starter://floating-ui",
+            AppRoute::Page(Page::FloatingUi),
         ),
         // Sub-route
         (
