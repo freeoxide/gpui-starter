@@ -10,6 +10,8 @@ pub mod ipc;
 pub mod liquid_glass;
 pub mod network;
 pub mod process;
+#[cfg(not(target_family = "wasm"))]
+pub mod system_controls;
 #[cfg(target_os = "windows")]
 pub mod toast_identity;
 #[cfg(target_os = "windows")]

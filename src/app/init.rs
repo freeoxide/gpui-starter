@@ -228,6 +228,7 @@ pub fn init(cx: &mut App) {
             crate::services::tokio_runtime::TokioRuntime::new(),
         ));
         crate::connectivity::initialize(cx);
+        crate::system_controls::initialize(cx);
         // Probe once at startup so the status bar and the update checker see
         // a real state instead of Unknown (the updater refuses while Unknown).
         crate::connectivity::check_now(cx);

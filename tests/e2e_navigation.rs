@@ -11,13 +11,13 @@ use gpui_starter::sidebar::Page;
 #[test]
 fn test_sidebar_pages_exist() {
     let all = Page::all();
-    // The app must expose exactly nineteen pages (nine feature pages + Gallery
-    // + Canvas Showcase + Infinite Canvas + Shared Canvas + Floating UI
-    // + Image Editor + Microphone + Audio + Analytics + Music).
+    // The app must expose exactly twenty pages (nine feature pages + System
+    // Controls + Gallery + Canvas Showcase + Infinite Canvas + Shared Canvas
+    // + Floating UI + Image Editor + Microphone + Audio + Analytics + Music).
     assert_eq!(
         all.len(),
-        19,
-        "expected 19 sidebar pages, got {}",
+        20,
+        "expected 20 sidebar pages, got {}",
         all.len()
     );
 
@@ -33,6 +33,7 @@ fn test_sidebar_pages_exist() {
         Page::QueryDevToolsV2,
         Page::ErrorPlayground,
         Page::About,
+        Page::SystemControls,
         Page::CanvasShowcase,
         Page::InfiniteCanvas,
         Page::MultiuserCanvas,
@@ -80,6 +81,10 @@ fn test_route_parsing() {
             AppRoute::Page(Page::Diagnostics),
         ),
         ("gpui-starter://about", AppRoute::Page(Page::About)),
+        (
+            "gpui-starter://system-controls",
+            AppRoute::Page(Page::SystemControls),
+        ),
         (
             "gpui-starter://canvas-showcase",
             AppRoute::Page(Page::CanvasShowcase),

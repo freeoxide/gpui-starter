@@ -259,6 +259,7 @@ objc2-foundation = { version = "0.3.0", default-features = false, features = [
     "std",
     "NSBundle",
     "NSError",
+    "NSProcessInfo",
     "NSString",
 ] }
 objc2-user-notifications = { version = "0.3.0", default-features = false, features = [
@@ -281,6 +282,13 @@ objc2-av-foundation = { version = "0.3.2", default-features = false, features = 
     "AVMediaFormat",
     "block2",
 ] }
+# System controls page (plan 17): CoreAudio HAL volume + IOBluetooth power and
+# paired devices. AudioHardware covers every AudioObject* symbol used.
+objc2-core-audio = { version = "0.3.0", default-features = false, features = [
+    "std",
+    "AudioHardware",
+] }
+objc2-io-bluetooth = "0.3"
 raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -300,6 +308,14 @@ ashpd = { version = "0.13", optional = true, default-features = false, features 
 # WindowOptions.icon (image is already in the lock via gpui-pre; png-only
 # keeps the lock's feature set from growing).
 image = { version = "0.25", default-features = false, features = ["png"] }
+# System controls page (plan 17): BlueZ runs on the system bus (zbus blocking
+# wrappers under the default async-io runtime; never add the zbus `tokio`
+# feature alongside async-io); libpulse-binding speaks the native protocol
+# against both PulseAudio and pipewire-pulse (needs libpulse-dev at build
+# time, scripts/install-linux-deps.sh); brightness reads/sets the backlight.
+zbus = "5"
+libpulse-binding = "2.30"
+brightness = "0.8"
 
 # Unpackaged Win32 apps need a Start Menu shortcut carrying the toast AUMID or
 # Windows silently drops every toast; see src/platform/toast_identity.rs. Same
@@ -324,6 +340,7 @@ windows = { version = "0.61", features = [
     "Data_Xml_Dom",
     "Foundation_Collections",
     "Win32_Foundation",
+    "Win32_Media_Audio",
     "Win32_Storage_FileSystem",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
@@ -334,6 +351,8 @@ windows = { version = "0.61", features = [
     "Win32_UI_WindowsAndMessaging",
     "UI_Notifications",
 ] }
+# System controls page (plan 17): backlight via the brightness crate.
+brightness = "0.8"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -395,6 +414,8 @@ sysinfo = { version = "0.31", default-features = false, features = ["system"] }
 # Microphone input (services/microphone). ALSA backend needs libasound2-dev
 # at build time (scripts/install-linux-deps.sh); no wasm32 story.
 cpal = "0.18"
+# System controls page (plan 17): cross-platform battery reader.
+starship-battery = "0.12"
 
 # Web (wasm32-unknown-unknown) dependencies.
 [target.'cfg(target_family = "wasm")'.dependencies]

@@ -17,6 +17,7 @@ pub(crate) const VALID_HOSTS: &[&str] = &[
     Page::QueryPlayground.host(),
     Page::QueryDevToolsV2.host(),
     Page::About.host(),
+    Page::SystemControls.host(),
     Page::Gallery.host(),
     Page::CanvasShowcase.host(),
     Page::InfiniteCanvas.host(),

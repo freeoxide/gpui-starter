@@ -16,6 +16,7 @@ pub enum CommandId {
     OpenNotifications,
     OpenDiagnostics,
     OpenAbout,
+    OpenSystemControls,
     ThemeLight,
     ThemeDark,
     StartDemoTask,
@@ -53,6 +54,7 @@ pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
         | CommandId::OpenNotifications
         | CommandId::OpenDiagnostics
         | CommandId::OpenAbout
+        | CommandId::OpenSystemControls
         | CommandId::ThemeLight
         | CommandId::ThemeDark
         | CommandId::StartDemoTask
@@ -148,6 +150,12 @@ pub fn registry() -> Vec<CommandSpec> {
             IconName::Info,
         ),
         command(
+            CommandId::OpenSystemControls,
+            "command_system_controls",
+            "command_system_controls_subtitle",
+            IconName::Settings2,
+        ),
+        command(
             CommandId::ThemeLight,
             "command_light_mode",
             "command_light_mode_subtitle",
@@ -230,6 +238,7 @@ pub fn execute(id: CommandId, cx: &mut App) {
         CommandId::OpenNotifications => navigate(Page::Notifications, cx),
         CommandId::OpenDiagnostics => navigate(Page::Diagnostics, cx),
         CommandId::OpenAbout => navigate(Page::About, cx),
+        CommandId::OpenSystemControls => navigate(Page::SystemControls, cx),
         CommandId::ThemeLight => crate::app::set_theme_mode(ThemeMode::Light, cx),
         CommandId::ThemeDark => crate::app::set_theme_mode(ThemeMode::Dark, cx),
         CommandId::StartDemoTask => crate::tasks::start_demo_task(cx),

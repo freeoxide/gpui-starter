@@ -399,7 +399,7 @@ foundations), one plan per commit, gates green between steps:
 | 12 | real-app-ui | 5 | implemented |
 | 13 | music-player | 5 | implemented |
 | 15 | tutorial-mode | 5 | implemented |
-| 17 | system-controls | 5 | |
+| 17 | system-controls | 5 | implemented |
 | 20 | release-bundling | 5 | |
 | 21 | auth-foundation | 6 | |
 | 22 | auth-email | 6 | |

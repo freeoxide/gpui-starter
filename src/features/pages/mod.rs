@@ -19,6 +19,7 @@ mod query_devtools_v2;
 mod query_playground;
 mod render_error;
 mod settings;
+mod system_controls;
 
 pub use about::AboutPage;
 pub use analytics::AnalyticsPage;
@@ -41,3 +42,4 @@ pub use render_error::ReloadCurrentPage;
 pub use render_error::RenderErrorPage;
 pub use render_error::TriggerRenderError;
 pub use settings::SettingsPage;
+pub use system_controls::SystemControlsPage;

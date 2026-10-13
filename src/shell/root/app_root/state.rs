@@ -7,7 +7,7 @@ use crate::views::{
     AboutPage, AnalyticsPage, AudioPage, CanvasShowcasePage, DiagnosticsPage, ErrorPlaygroundPage,
     FloatingUiPage, FormPage, HomePage, ImageEditorPage, InfiniteCanvasPage, MicrophonePage,
     MultiuserCanvasPage, MusicPage, NotificationsPage, QueryDevToolsV2Page, QueryPlaygroundPage,
-    RenderErrorPage, SettingsPage,
+    RenderErrorPage, SettingsPage, SystemControlsPage,
 };
 use crate::{
     events::{self, AppEventKind},
@@ -30,6 +30,7 @@ pub struct AppRoot {
     pub(crate) query_playground_page: Entity<QueryPlaygroundPage>,
     pub(crate) query_devtools_v2_page: Entity<QueryDevToolsV2Page>,
     pub(crate) about_page: Entity<AboutPage>,
+    pub(crate) system_controls_page: Entity<SystemControlsPage>,
     pub(crate) gallery_page: Entity<GalleryPage>,
     pub(crate) canvas_showcase_page: Entity<CanvasShowcasePage>,
     pub(crate) infinite_canvas_page: Entity<InfiniteCanvasPage>,
@@ -69,6 +70,7 @@ impl AppRoot {
         let query_playground_page = cx.new(|cx| QueryPlaygroundPage::new(window, cx));
         let query_devtools_v2_page = cx.new(|cx| QueryDevToolsV2Page::new(window, cx));
         let about_page = cx.new(|_| AboutPage::new());
+        let system_controls_page = cx.new(|cx| SystemControlsPage::new(window, cx));
         let gallery_page = cx.new(|cx| GalleryPage::new(window, cx));
         let canvas_showcase_page = cx.new(CanvasShowcasePage::new);
         let infinite_canvas_page = cx.new(|cx| InfiniteCanvasPage::new(window, cx));
@@ -223,6 +225,7 @@ impl AppRoot {
             query_playground_page,
             query_devtools_v2_page,
             about_page,
+            system_controls_page,
             gallery_page,
             canvas_showcase_page,
             infinite_canvas_page,
@@ -277,6 +280,7 @@ impl AppRoot {
             Page::QueryPlayground => self.query_playground_page.clone().into(),
             Page::QueryDevToolsV2 => self.query_devtools_v2_page.clone().into(),
             Page::About => self.about_page.clone().into(),
+            Page::SystemControls => self.system_controls_page.clone().into(),
             Page::Gallery => self.gallery_page.clone().into(),
             Page::CanvasShowcase => self.canvas_showcase_page.clone().into(),
             Page::InfiniteCanvas => self.infinite_canvas_page.clone().into(),
