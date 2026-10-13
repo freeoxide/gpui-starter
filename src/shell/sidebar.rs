@@ -20,6 +20,7 @@ pub enum Page {
     ImageEditor,
     Microphone,
     Audio,
+    Analytics,
 }
 
 impl Page {
@@ -42,6 +43,7 @@ impl Page {
             Page::ImageEditor => "Image Editor",
             Page::Microphone => "Microphone",
             Page::Audio => "Audio",
+            Page::Analytics => "Analytics",
         }
     }
 
@@ -66,6 +68,7 @@ impl Page {
             Page::ImageEditor => "nav_image_editor",
             Page::Microphone => "nav_microphone",
             Page::Audio => "nav_audio",
+            Page::Analytics => "nav_analytics",
         }
     }
 
@@ -94,6 +97,7 @@ impl Page {
             Page::ImageEditor => "image-editor",
             Page::Microphone => "microphone",
             Page::Audio => "audio",
+            Page::Analytics => "analytics",
         }
     }
 
@@ -125,6 +129,7 @@ impl Page {
             // AudioLines is full-catalog and renders blank on native; Play is
             // the shipped stand-in.
             Page::Audio => IconName::Play,
+            Page::Analytics => IconName::ChartPie,
         }
     }
 
@@ -147,6 +152,7 @@ impl Page {
             Page::ImageEditor,
             Page::Microphone,
             Page::Audio,
+            Page::Analytics,
         ]
     }
 }

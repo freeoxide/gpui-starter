@@ -1,0 +1,812 @@
+[
+  {
+    "date": "2025-07-01",
+    "organic": 4200,
+    "paid": 2300,
+    "social": 1500,
+    "direct": 3100,
+    "sessions": 17760,
+    "revenue": 102120.0
+  },
+  {
+    "date": "2025-07-02",
+    "organic": 4900,
+    "paid": 2683,
+    "social": 1750,
+    "direct": 3616,
+    "sessions": 20718,
+    "revenue": 119130.8
+  },
+  {
+    "date": "2025-07-03",
+    "organic": 5289,
+    "paid": 2897,
+    "social": 1889,
+    "direct": 3904,
+    "sessions": 22366,
+    "revenue": 128606.8
+  },
+  {
+    "date": "2025-07-04",
+    "organic": 5283,
+    "paid": 2893,
+    "social": 1887,
+    "direct": 3899,
+    "sessions": 22339,
+    "revenue": 128450.4
+  },
+  {
+    "date": "2025-07-05",
+    "organic": 5074,
+    "paid": 2778,
+    "social": 1812,
+    "direct": 3745,
+    "sessions": 21454,
+    "revenue": 123362.8
+  },
+  {
+    "date": "2025-07-06",
+    "organic": 4982,
+    "paid": 2728,
+    "social": 1779,
+    "direct": 3677,
+    "sessions": 21066,
+    "revenue": 121127.2
+  },
+  {
+    "date": "2025-07-07",
+    "organic": 5204,
+    "paid": 2850,
+    "social": 1859,
+    "direct": 3841,
+    "sessions": 22006,
+    "revenue": 126536.8
+  },
+  {
+    "date": "2025-07-08",
+    "organic": 5662,
+    "paid": 3101,
+    "social": 2022,
+    "direct": 4179,
+    "sessions": 23942,
+    "revenue": 137668.8
+  },
+  {
+    "date": "2025-07-09",
+    "organic": 6056,
+    "paid": 3316,
+    "social": 2163,
+    "direct": 4470,
+    "sessions": 25608,
+    "revenue": 147246.0
+  },
+  {
+    "date": "2025-07-10",
+    "organic": 6089,
+    "paid": 3335,
+    "social": 2175,
+    "direct": 4495,
+    "sessions": 25750,
+    "revenue": 148064.8
+  },
+  {
+    "date": "2025-07-11",
+    "organic": 5692,
+    "paid": 3117,
+    "social": 2033,
+    "direct": 4201,
+    "sessions": 24069,
+    "revenue": 138395.6
+  },
+  {
+    "date": "2025-07-12",
+    "organic": 5074,
+    "paid": 2778,
+    "social": 1812,
+    "direct": 3745,
+    "sessions": 21454,
+    "revenue": 123362.8
+  },
+  {
+    "date": "2025-07-13",
+    "organic": 4573,
+    "paid": 2504,
+    "social": 1633,
+    "direct": 3375,
+    "sessions": 19336,
+    "revenue": 111182.0
+  },
+  {
+    "date": "2025-07-14",
+    "organic": 4404,
+    "paid": 2412,
+    "social": 1573,
+    "direct": 3250,
+    "sessions": 18622,
+    "revenue": 107078.8
+  },
+  {
+    "date": "2025-07-15",
+    "organic": 4506,
+    "paid": 2467,
+    "social": 1609,
+    "direct": 3326,
+    "sessions": 19053,
+    "revenue": 109553.6
+  },
+  {
+    "date": "2025-07-16",
+    "organic": 4594,
+    "paid": 2516,
+    "social": 1641,
+    "direct": 3391,
+    "sessions": 19427,
+    "revenue": 111706.4
+  },
+  {
+    "date": "2025-07-17",
+    "organic": 4386,
+    "paid": 2402,
+    "social": 1566,
+    "direct": 3237,
+    "sessions": 18546,
+    "revenue": 106637.2
+  },
+  {
+    "date": "2025-07-18",
+    "organic": 3821,
+    "paid": 2092,
+    "social": 1365,
+    "direct": 2820,
+    "sessions": 16157,
+    "revenue": 92901.6
+  },
+  {
+    "date": "2025-07-19",
+    "organic": 3117,
+    "paid": 1707,
+    "social": 1113,
+    "direct": 2301,
+    "sessions": 13181,
+    "revenue": 75789.6
+  },
+  {
+    "date": "2025-07-20",
+    "organic": 2616,
+    "paid": 1433,
+    "social": 934,
+    "direct": 1931,
+    "sessions": 11062,
+    "revenue": 63608.8
+  },
+  {
+    "date": "2025-07-21",
+    "organic": 2533,
+    "paid": 1387,
+    "social": 905,
+    "direct": 1870,
+    "sessions": 10712,
+    "revenue": 61594.0
+  },
+  {
+    "date": "2025-07-22",
+    "organic": 2802,
+    "paid": 1534,
+    "social": 1001,
+    "direct": 2068,
+    "sessions": 11848,
+    "revenue": 68126.0
+  },
+  {
+    "date": "2025-07-23",
+    "organic": 3132,
+    "paid": 1715,
+    "social": 1119,
+    "direct": 2312,
+    "sessions": 13245,
+    "revenue": 76157.6
+  },
+  {
+    "date": "2025-07-24",
+    "organic": 3229,
+    "paid": 1768,
+    "social": 1153,
+    "direct": 2384,
+    "sessions": 13654,
+    "revenue": 78512.8
+  },
+  {
+    "date": "2025-07-25",
+    "organic": 3021,
+    "paid": 1654,
+    "social": 1079,
+    "direct": 2230,
+    "sessions": 12774,
+    "revenue": 73452.8
+  },
+  {
+    "date": "2025-07-26",
+    "organic": 2708,
+    "paid": 1483,
+    "social": 967,
+    "direct": 1999,
+    "sessions": 11451,
+    "revenue": 65844.4
+  },
+  {
+    "date": "2025-07-27",
+    "organic": 2616,
+    "paid": 1433,
+    "social": 934,
+    "direct": 1931,
+    "sessions": 11062,
+    "revenue": 63608.8
+  },
+  {
+    "date": "2025-07-28",
+    "organic": 2942,
+    "paid": 1611,
+    "social": 1051,
+    "direct": 2171,
+    "sessions": 12440,
+    "revenue": 71530.0
+  },
+  {
+    "date": "2025-07-29",
+    "organic": 3602,
+    "paid": 1973,
+    "social": 1286,
+    "direct": 2659,
+    "sessions": 15232,
+    "revenue": 87584.0
+  },
+  {
+    "date": "2025-07-30",
+    "organic": 4288,
+    "paid": 2348,
+    "social": 1532,
+    "direct": 3165,
+    "sessions": 18133,
+    "revenue": 104263.6
+  },
+  {
+    "date": "2025-07-31",
+    "organic": 4691,
+    "paid": 2569,
+    "social": 1675,
+    "direct": 3463,
+    "sessions": 19837,
+    "revenue": 114061.6
+  },
+  {
+    "date": "2025-08-01",
+    "organic": 4724,
+    "paid": 2587,
+    "social": 1687,
+    "direct": 3487,
+    "sessions": 19976,
+    "revenue": 114862.0
+  },
+  {
+    "date": "2025-08-02",
+    "organic": 4579,
+    "paid": 2508,
+    "social": 1635,
+    "direct": 3380,
+    "sessions": 19363,
+    "revenue": 111338.4
+  },
+  {
+    "date": "2025-08-03",
+    "organic": 4573,
+    "paid": 2504,
+    "social": 1633,
+    "direct": 3375,
+    "sessions": 19336,
+    "revenue": 111182.0
+  },
+  {
+    "date": "2025-08-04",
+    "organic": 4898,
+    "paid": 2682,
+    "social": 1749,
+    "direct": 3615,
+    "sessions": 20710,
+    "revenue": 119084.8
+  },
+  {
+    "date": "2025-08-05",
+    "organic": 5473,
+    "paid": 2997,
+    "social": 1955,
+    "direct": 4040,
+    "sessions": 23144,
+    "revenue": 133078.0
+  },
+  {
+    "date": "2025-08-06",
+    "organic": 5992,
+    "paid": 3281,
+    "social": 2140,
+    "direct": 4423,
+    "sessions": 25338,
+    "revenue": 145691.2
+  },
+  {
+    "date": "2025-08-07",
+    "organic": 6153,
+    "paid": 3370,
+    "social": 2198,
+    "direct": 4542,
+    "sessions": 26021,
+    "revenue": 149619.6
+  },
+  {
+    "date": "2025-08-08",
+    "organic": 5881,
+    "paid": 3220,
+    "social": 2100,
+    "direct": 4340,
+    "sessions": 24866,
+    "revenue": 142977.2
+  },
+  {
+    "date": "2025-08-09",
+    "organic": 5379,
+    "paid": 2946,
+    "social": 1921,
+    "direct": 3970,
+    "sessions": 22746,
+    "revenue": 130787.2
+  },
+  {
+    "date": "2025-08-10",
+    "organic": 4982,
+    "paid": 2728,
+    "social": 1779,
+    "direct": 3677,
+    "sessions": 21066,
+    "revenue": 121127.2
+  },
+  {
+    "date": "2025-08-11",
+    "organic": 4898,
+    "paid": 2682,
+    "social": 1749,
+    "direct": 3615,
+    "sessions": 20710,
+    "revenue": 119084.8
+  },
+  {
+    "date": "2025-08-12",
+    "organic": 5064,
+    "paid": 2773,
+    "social": 1809,
+    "direct": 3738,
+    "sessions": 21414,
+    "revenue": 123132.8
+  },
+  {
+    "date": "2025-08-13",
+    "organic": 5192,
+    "paid": 2843,
+    "social": 1854,
+    "direct": 3832,
+    "sessions": 21954,
+    "revenue": 126233.2
+  },
+  {
+    "date": "2025-08-14",
+    "organic": 4997,
+    "paid": 2736,
+    "social": 1785,
+    "direct": 3688,
+    "sessions": 21130,
+    "revenue": 121495.2
+  },
+  {
+    "date": "2025-08-15",
+    "organic": 4419,
+    "paid": 2420,
+    "social": 1578,
+    "direct": 3261,
+    "sessions": 18685,
+    "revenue": 107437.6
+  },
+  {
+    "date": "2025-08-16",
+    "organic": 3676,
+    "paid": 2013,
+    "social": 1313,
+    "direct": 2713,
+    "sessions": 15544,
+    "revenue": 89378.0
+  },
+  {
+    "date": "2025-08-17",
+    "organic": 3111,
+    "paid": 1703,
+    "social": 1111,
+    "direct": 2296,
+    "sessions": 13154,
+    "revenue": 75633.2
+  },
+  {
+    "date": "2025-08-18",
+    "organic": 2942,
+    "paid": 1611,
+    "social": 1051,
+    "direct": 2171,
+    "sessions": 12440,
+    "revenue": 71530.0
+  },
+  {
+    "date": "2025-08-19",
+    "organic": 3108,
+    "paid": 1702,
+    "social": 1110,
+    "direct": 2294,
+    "sessions": 13142,
+    "revenue": 75568.8
+  },
+  {
+    "date": "2025-08-20",
+    "organic": 3321,
+    "paid": 1819,
+    "social": 1186,
+    "direct": 2451,
+    "sessions": 14043,
+    "revenue": 80748.4
+  },
+  {
+    "date": "2025-08-21",
+    "organic": 3293,
+    "paid": 1803,
+    "social": 1176,
+    "direct": 2431,
+    "sessions": 13925,
+    "revenue": 80067.6
+  },
+  {
+    "date": "2025-08-22",
+    "organic": 2957,
+    "paid": 1619,
+    "social": 1056,
+    "direct": 2182,
+    "sessions": 12502,
+    "revenue": 71888.8
+  },
+  {
+    "date": "2025-08-23",
+    "organic": 2519,
+    "paid": 1380,
+    "social": 900,
+    "direct": 1860,
+    "sessions": 10654,
+    "revenue": 61262.8
+  },
+  {
+    "date": "2025-08-24",
+    "organic": 2311,
+    "paid": 1265,
+    "social": 825,
+    "direct": 1705,
+    "sessions": 9770,
+    "revenue": 56175.2
+  },
+  {
+    "date": "2025-08-25",
+    "organic": 2533,
+    "paid": 1387,
+    "social": 905,
+    "direct": 1870,
+    "sessions": 10712,
+    "revenue": 61594.0
+  },
+  {
+    "date": "2025-08-26",
+    "organic": 3108,
+    "paid": 1702,
+    "social": 1110,
+    "direct": 2294,
+    "sessions": 13142,
+    "revenue": 75568.8
+  },
+  {
+    "date": "2025-08-27",
+    "organic": 3730,
+    "paid": 2043,
+    "social": 1332,
+    "direct": 2753,
+    "sessions": 15773,
+    "revenue": 90693.6
+  },
+  {
+    "date": "2025-08-28",
+    "organic": 4093,
+    "paid": 2242,
+    "social": 1462,
+    "direct": 3021,
+    "sessions": 17309,
+    "revenue": 99525.6
+  },
+  {
+    "date": "2025-08-29",
+    "organic": 4113,
+    "paid": 2252,
+    "social": 1469,
+    "direct": 3036,
+    "sessions": 17392,
+    "revenue": 100004.0
+  },
+  {
+    "date": "2025-08-30",
+    "organic": 3981,
+    "paid": 2180,
+    "social": 1422,
+    "direct": 2939,
+    "sessions": 16835,
+    "revenue": 96802.4
+  },
+  {
+    "date": "2025-08-31",
+    "organic": 4014,
+    "paid": 2198,
+    "social": 1434,
+    "direct": 2963,
+    "sessions": 16974,
+    "revenue": 97602.8
+  },
+  {
+    "date": "2025-09-01",
+    "organic": 4404,
+    "paid": 2412,
+    "social": 1573,
+    "direct": 3250,
+    "sessions": 18622,
+    "revenue": 107078.8
+  },
+  {
+    "date": "2025-09-02",
+    "organic": 5064,
+    "paid": 2773,
+    "social": 1809,
+    "direct": 3738,
+    "sessions": 21414,
+    "revenue": 123132.8
+  },
+  {
+    "date": "2025-09-03",
+    "organic": 5686,
+    "paid": 3114,
+    "social": 2031,
+    "direct": 4197,
+    "sessions": 24045,
+    "revenue": 138257.6
+  },
+  {
+    "date": "2025-09-04",
+    "organic": 5964,
+    "paid": 3266,
+    "social": 2130,
+    "direct": 4402,
+    "sessions": 25219,
+    "revenue": 145010.4
+  },
+  {
+    "date": "2025-09-05",
+    "organic": 5817,
+    "paid": 3185,
+    "social": 2077,
+    "direct": 4293,
+    "sessions": 24595,
+    "revenue": 141422.4
+  },
+  {
+    "date": "2025-09-06",
+    "organic": 5443,
+    "paid": 2981,
+    "social": 1944,
+    "direct": 4018,
+    "sessions": 23018,
+    "revenue": 132351.2
+  },
+  {
+    "date": "2025-09-07",
+    "organic": 5171,
+    "paid": 2832,
+    "social": 1847,
+    "direct": 3816,
+    "sessions": 21866,
+    "revenue": 125727.2
+  },
+  {
+    "date": "2025-09-08",
+    "organic": 5204,
+    "paid": 2850,
+    "social": 1859,
+    "direct": 3841,
+    "sessions": 22006,
+    "revenue": 126536.8
+  },
+  {
+    "date": "2025-09-09",
+    "organic": 5473,
+    "paid": 2997,
+    "social": 1955,
+    "direct": 4040,
+    "sessions": 23144,
+    "revenue": 133078.0
+  },
+  {
+    "date": "2025-09-10",
+    "organic": 5686,
+    "paid": 3114,
+    "social": 2031,
+    "direct": 4197,
+    "sessions": 24045,
+    "revenue": 138257.6
+  },
+  {
+    "date": "2025-09-11",
+    "organic": 5555,
+    "paid": 3042,
+    "social": 1984,
+    "direct": 4100,
+    "sessions": 23490,
+    "revenue": 135065.2
+  },
+  {
+    "date": "2025-09-12",
+    "organic": 5017,
+    "paid": 2747,
+    "social": 1792,
+    "direct": 3703,
+    "sessions": 21214,
+    "revenue": 121982.8
+  },
+  {
+    "date": "2025-09-13",
+    "organic": 4287,
+    "paid": 2348,
+    "social": 1531,
+    "direct": 3164,
+    "sessions": 18128,
+    "revenue": 104236.0
+  },
+  {
+    "date": "2025-09-14",
+    "organic": 3709,
+    "paid": 2031,
+    "social": 1325,
+    "direct": 2737,
+    "sessions": 15683,
+    "revenue": 90178.4
+  },
+  {
+    "date": "2025-09-15",
+    "organic": 3500,
+    "paid": 1917,
+    "social": 1250,
+    "direct": 2584,
+    "sessions": 14802,
+    "revenue": 85109.2
+  },
+  {
+    "date": "2025-09-16",
+    "organic": 3602,
+    "paid": 1973,
+    "social": 1286,
+    "direct": 2659,
+    "sessions": 15232,
+    "revenue": 87584.0
+  },
+  {
+    "date": "2025-09-17",
+    "organic": 3730,
+    "paid": 2043,
+    "social": 1332,
+    "direct": 2753,
+    "sessions": 15773,
+    "revenue": 90693.6
+  },
+  {
+    "date": "2025-09-18",
+    "organic": 3599,
+    "paid": 1971,
+    "social": 1285,
+    "direct": 2656,
+    "sessions": 15218,
+    "revenue": 87501.2
+  },
+  {
+    "date": "2025-09-19",
+    "organic": 3146,
+    "paid": 1723,
+    "social": 1123,
+    "direct": 2322,
+    "sessions": 13302,
+    "revenue": 76488.8
+  },
+  {
+    "date": "2025-09-20",
+    "organic": 2583,
+    "paid": 1415,
+    "social": 923,
+    "direct": 1907,
+    "sessions": 10925,
+    "revenue": 62817.6
+  },
+  {
+    "date": "2025-09-21",
+    "organic": 2247,
+    "paid": 1230,
+    "social": 802,
+    "direct": 1658,
+    "sessions": 9499,
+    "revenue": 54620.4
+  },
+  {
+    "date": "2025-09-22",
+    "organic": 2344,
+    "paid": 1284,
+    "social": 837,
+    "direct": 1730,
+    "sessions": 9912,
+    "revenue": 56994.0
+  },
+  {
+    "date": "2025-09-23",
+    "organic": 2802,
+    "paid": 1534,
+    "social": 1001,
+    "direct": 2068,
+    "sessions": 11848,
+    "revenue": 68126.0
+  },
+  {
+    "date": "2025-09-24",
+    "organic": 3321,
+    "paid": 1819,
+    "social": 1186,
+    "direct": 2451,
+    "sessions": 14043,
+    "revenue": 80748.4
+  },
+  {
+    "date": "2025-09-25",
+    "organic": 3599,
+    "paid": 1971,
+    "social": 1285,
+    "direct": 2656,
+    "sessions": 15218,
+    "revenue": 87501.2
+  },
+  {
+    "date": "2025-09-26",
+    "organic": 3555,
+    "paid": 1947,
+    "social": 1270,
+    "direct": 2624,
+    "sessions": 15034,
+    "revenue": 86443.2
+  },
+  {
+    "date": "2025-09-27",
+    "organic": 3383,
+    "paid": 1853,
+    "social": 1208,
+    "direct": 2497,
+    "sessions": 14306,
+    "revenue": 82257.2
+  },
+  {
+    "date": "2025-09-28",
+    "organic": 3403,
+    "paid": 1864,
+    "social": 1215,
+    "direct": 2512,
+    "sessions": 14390,
+    "revenue": 82744.8
+  }
+]

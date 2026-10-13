@@ -1,6 +1,7 @@
 mod about;
 #[cfg(feature = "ai-chat")]
 pub mod ai_chat;
+mod analytics;
 mod audio;
 mod canvas_showcase;
 mod diagnostics;
@@ -19,6 +20,7 @@ mod render_error;
 mod settings;
 
 pub use about::AboutPage;
+pub use analytics::AnalyticsPage;
 pub use audio::AudioPage;
 pub use canvas_showcase::CanvasShowcasePage;
 pub use diagnostics::DiagnosticsPage;
