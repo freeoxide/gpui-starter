@@ -273,6 +273,7 @@ pub fn init(cx: &mut App) {
     crate::notifications::inbox::initialize(cx);
     crate::notifications::initialize(cx);
     crate::ui::floating::init(cx);
+    crate::features::notch::init(cx);
     crate::notifications::set_native_notifications_enabled(
         persisted.native_notifications_enabled,
         cx,

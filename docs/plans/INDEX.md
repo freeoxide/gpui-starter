@@ -385,7 +385,7 @@ foundations), one plan per commit, gates green between steps:
 | 02 | floating-window-toolkit | 1 | implemented |
 | 11 | wgpu-embed | 1 | |
 | 16 | waveform-foundation | 1 | implemented |
-| 03 | notch-floater | 2 | |
+| 03 | notch-floater | 2 | implemented |
 | 04 | menubar-charts | 2 | |
 | 05 | canvas-showcase | 2 | |
 | 06 | infinite-canvas | 2 | |
