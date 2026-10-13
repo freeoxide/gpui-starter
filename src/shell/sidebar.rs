@@ -19,6 +19,7 @@ pub enum Page {
     FloatingUi,
     ImageEditor,
     Microphone,
+    Audio,
 }
 
 impl Page {
@@ -40,6 +41,7 @@ impl Page {
             Page::FloatingUi => "Floating UI",
             Page::ImageEditor => "Image Editor",
             Page::Microphone => "Microphone",
+            Page::Audio => "Audio",
         }
     }
 
@@ -63,6 +65,7 @@ impl Page {
             Page::FloatingUi => "nav_floating_ui",
             Page::ImageEditor => "nav_image_editor",
             Page::Microphone => "nav_microphone",
+            Page::Audio => "nav_audio",
         }
     }
 
@@ -90,6 +93,7 @@ impl Page {
             Page::FloatingUi => "floating-ui",
             Page::ImageEditor => "image-editor",
             Page::Microphone => "microphone",
+            Page::Audio => "audio",
         }
     }
 
@@ -118,6 +122,9 @@ impl Page {
             // Full-catalog Image renders blank on native; Frame is the stand-in.
             Page::ImageEditor => IconName::Frame,
             Page::Microphone => IconName::Mic,
+            // AudioLines is full-catalog and renders blank on native; Play is
+            // the shipped stand-in.
+            Page::Audio => IconName::Play,
         }
     }
 
@@ -139,6 +146,7 @@ impl Page {
             Page::FloatingUi,
             Page::ImageEditor,
             Page::Microphone,
+            Page::Audio,
         ]
     }
 }

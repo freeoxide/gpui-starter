@@ -4,8 +4,8 @@ use crate::gallery::GalleryPage;
 use crate::sidebar::Page;
 use crate::title_bar::AppTitleBar;
 use crate::views::{
-    AboutPage, CanvasShowcasePage, DiagnosticsPage, ErrorPlaygroundPage, FloatingUiPage, FormPage,
-    HomePage, ImageEditorPage, InfiniteCanvasPage, MicrophonePage, MultiuserCanvasPage,
+    AboutPage, AudioPage, CanvasShowcasePage, DiagnosticsPage, ErrorPlaygroundPage, FloatingUiPage,
+    FormPage, HomePage, ImageEditorPage, InfiniteCanvasPage, MicrophonePage, MultiuserCanvasPage,
     NotificationsPage, QueryDevToolsV2Page, QueryPlaygroundPage, RenderErrorPage, SettingsPage,
 };
 use crate::{
@@ -36,6 +36,7 @@ pub struct AppRoot {
     pub(crate) floating_ui_page: Entity<FloatingUiPage>,
     pub(crate) image_editor_page: Entity<ImageEditorPage>,
     pub(crate) microphone_page: Entity<MicrophonePage>,
+    pub(crate) audio_page: Entity<AudioPage>,
     pub(crate) floating_host: Entity<crate::ui::floating::OverlayFloatHost>,
     pub(crate) floating_ui_session: Entity<crate::features::pages::floating_ui::PaletteSession>,
     pub(crate) floating_ui_host: Entity<crate::features::pages::floating_ui::PalettePanelHost>,
@@ -79,6 +80,7 @@ impl AppRoot {
         let floating_ui_page = cx.new(|cx| FloatingUiPage::new(floating_ui_session.clone(), cx));
         let image_editor_page = cx.new(|cx| ImageEditorPage::new(window, cx));
         let microphone_page = cx.new(|cx| MicrophonePage::new(window, cx));
+        let audio_page = cx.new(|cx| AudioPage::new(window, cx));
         cx.observe_global::<crate::app::window::RootWindow>(|this, cx| {
             this.floating_ui_session
                 .update(cx, |session, cx| session.restore_windows(cx));
@@ -222,6 +224,7 @@ impl AppRoot {
             floating_ui_page,
             image_editor_page,
             microphone_page,
+            audio_page,
             render_error: false,
             error_page: None,
         }
@@ -268,6 +271,7 @@ impl AppRoot {
             Page::FloatingUi => self.floating_ui_page.clone().into(),
             Page::ImageEditor => self.image_editor_page.clone().into(),
             Page::Microphone => self.microphone_page.clone().into(),
+            Page::Audio => self.audio_page.clone().into(),
         }
     }
 

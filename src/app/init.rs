@@ -234,6 +234,7 @@ pub fn init(cx: &mut App) {
         crate::secure_storage::initialize(cx);
         crate::session::initialize(cx);
         crate::storage::initialize(cx);
+        crate::audio::initialize(cx);
 
         // SQLite is native-only; wasm storage is never available.
         #[cfg(not(target_family = "wasm"))]

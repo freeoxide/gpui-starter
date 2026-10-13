@@ -1,6 +1,7 @@
 mod about;
 #[cfg(feature = "ai-chat")]
 pub mod ai_chat;
+mod audio;
 mod canvas_showcase;
 mod diagnostics;
 mod error_playground;
@@ -18,6 +19,7 @@ mod render_error;
 mod settings;
 
 pub use about::AboutPage;
+pub use audio::AudioPage;
 pub use canvas_showcase::CanvasShowcasePage;
 pub use diagnostics::DiagnosticsPage;
 pub use error_playground::ErrorPlaygroundPage;

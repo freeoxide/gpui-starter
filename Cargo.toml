@@ -217,6 +217,22 @@ rustfft = "6.4"
 # every platform (the target tables' png-only lines predate the common entry;
 # png+jpeg is the union with plan 14's needs). Pure Rust, wasm-clean.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# Audio playback decode (services/audio): hound is the .wav fast path,
+# symphonia covers FLAC/MP3/OGG. Both pure Rust and wasm32-clean; output
+# itself goes through the native-only cpal entry in the not-wasm table.
+# "pcm" is the 16-bit WAV codec symphonia's own wav path decodes.
+hound = "3.5"
+symphonia = { version = "0.6.1", default-features = false, features = [
+    "wav",
+    "pcm",
+    "flac",
+    "mp3",
+    "ogg",
+    "vorbis",
+    "aac",
+    "isomp4",
+    "alac",
+] }
 # Shared wire types for the multiuser-canvas page and collab-server.
 collab-protocol = { path = "collab-protocol" }
 

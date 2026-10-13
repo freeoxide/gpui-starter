@@ -395,7 +395,7 @@ foundations), one plan per commit, gates green between steps:
 | 10 | floating-canvas | 3 | implemented |
 | 07 | canvas-shaders | 4 | |
 | 18 | microphone | 4 | implemented |
-| 19 | audio-playback | 4 | |
+| 19 | audio-playback | 4 | implemented |
 | 12 | real-app-ui | 5 | |
 | 13 | music-player | 5 | |
 | 15 | tutorial-mode | 5 | |

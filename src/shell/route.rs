@@ -24,6 +24,7 @@ pub(crate) const VALID_HOSTS: &[&str] = &[
     Page::FloatingUi.host(),
     Page::ImageEditor.host(),
     Page::Microphone.host(),
+    Page::Audio.host(),
 ];
 
 const INVALID_SEGMENT_CHARS: &[char] = &['/', '\\', '\0', '<', '>', '|', '"'];
