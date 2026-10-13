@@ -208,6 +208,10 @@ sys-locale = "0.3"
 flume = "0.11"
 fuzzy-matcher = "0.3"
 rust-embed = "8"
+# ui::waveform: rtrb is the SPSC ring between audio callback and UI tick;
+# rustfft drives the spectrum analyzer. Both compile on wasm32.
+rtrb = "0.4"
+rustfft = "6.4"
 
 [dev-dependencies]
 insta.workspace = true
