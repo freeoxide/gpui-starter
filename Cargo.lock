@@ -3483,6 +3483,7 @@ dependencies = [
  "single-instance",
  "strum 0.28.0",
  "sys-locale",
+ "sysinfo",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

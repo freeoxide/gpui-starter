@@ -356,6 +356,7 @@ tracing-appender = "0.2"
 # (rt + sync + time): `net` and `io-util` have no wasm implementation, and
 # `rt-multi-thread` (tokio_runtime's dedicated I/O runtime) needs threads.
 tokio = { workspace = true, features = ["io-util", "net", "rt-multi-thread"] }
+sysinfo = { version = "0.31", default-features = false, features = ["system"] }
 
 # Web (wasm32-unknown-unknown) dependencies.
 [target.'cfg(target_family = "wasm")'.dependencies]

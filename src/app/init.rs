@@ -113,6 +113,7 @@ pub fn init(cx: &mut App) {
             cx,
         );
     }
+    crate::features::menubar_charts::init(cx);
 
     let system_locale = crate::i18n::detect_system_locale();
     tracing::info!(

@@ -26,6 +26,7 @@ pub enum CommandId {
     Undo,
     Redo,
     Restart,
+    OpenMenubarCharts,
 }
 
 #[derive(Clone, Debug)]
@@ -94,6 +95,13 @@ pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
             disabled_reason: disabled_reason(
                 "command_reason_restart_unavailable",
                 !cfg!(any(unix, windows)),
+            ),
+        },
+        CommandId::OpenMenubarCharts => CommandAvailability {
+            enabled: cfg!(not(target_family = "wasm")),
+            disabled_reason: disabled_reason(
+                "command_reason_menubar_charts_unavailable",
+                cfg!(target_family = "wasm"),
             ),
         },
     }
@@ -197,6 +205,12 @@ pub fn registry() -> Vec<CommandSpec> {
             "command_restart_subtitle",
             IconName::Info,
         ),
+        command(
+            CommandId::OpenMenubarCharts,
+            "command_menubar_charts",
+            "command_menubar_charts_subtitle",
+            IconName::ChartPie,
+        ),
     ]
 }
 
@@ -280,6 +294,9 @@ pub fn execute(id: CommandId, cx: &mut App) {
                     "restart command unavailable on this platform"
                 );
             }
+        }
+        CommandId::OpenMenubarCharts => {
+            crate::features::menubar_charts::open_sheet(cx);
         }
     }
 }

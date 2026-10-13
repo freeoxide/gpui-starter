@@ -27,6 +27,7 @@ fn branded_icon() -> Result<tray_icon::Icon, String> {
 }
 
 const SHOW_MENU_ID: &str = "gpui-starter-show";
+const CHARTS_MENU_ID: &str = "gpui-starter-charts";
 const SETTINGS_MENU_ID: &str = "gpui-starter-settings";
 const QUIT_MENU_ID: &str = "gpui-starter-quit";
 
@@ -42,6 +43,10 @@ fn menu_items() -> Vec<MenuItemSpec> {
         MenuItemSpec::Action {
             id: SHOW_MENU_ID,
             label: crate::i18n::localize("tray_show_window"),
+        },
+        MenuItemSpec::Action {
+            id: CHARTS_MENU_ID,
+            label: crate::i18n::localize("menubar_charts_tray_menu"),
         },
         MenuItemSpec::Action {
             id: SETTINGS_MENU_ID,
@@ -71,6 +76,7 @@ fn build_menu() -> tray_icon::menu::Result<Menu> {
 enum TrayAction {
     OpenLauncher,
     ShowWindow,
+    OpenCharts,
     OpenSettings,
     Quit,
 }
@@ -78,6 +84,7 @@ enum TrayAction {
 fn action_for_menu_id(id: &str) -> Option<TrayAction> {
     match id {
         SHOW_MENU_ID => Some(TrayAction::ShowWindow),
+        CHARTS_MENU_ID => Some(TrayAction::OpenCharts),
         SETTINGS_MENU_ID => Some(TrayAction::OpenSettings),
         QUIT_MENU_ID => Some(TrayAction::Quit),
         _ => None,
@@ -126,6 +133,9 @@ fn apply_action(action: TrayAction, cx: &mut App) {
     match action {
         TrayAction::OpenLauncher => crate::launcher::open_launcher(cx),
         TrayAction::ShowWindow => show_window(cx),
+        TrayAction::OpenCharts => {
+            crate::features::menubar_charts::open_sheet(cx);
+        }
         TrayAction::OpenSettings => crate::events::emit(
             crate::events::AppEventKind::Navigate(crate::routes::AppRoute::page(
                 crate::sidebar::Page::Settings,
