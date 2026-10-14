@@ -407,7 +407,7 @@ foundations), one plan per commit, gates green between steps:
 | 24 | auth-ui | 6 | implemented |
 | 25 | widget-window-shims | 7 | implemented |
 | 26 | layer-shell-widgets | 7 | implemented |
-| 27 | desktop-widgets | 7 | |
+| 27 | desktop-widgets | 7 | implemented |
 
 ## 8. Open questions roll-up
 

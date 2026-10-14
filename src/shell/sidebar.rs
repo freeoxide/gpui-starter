@@ -24,6 +24,7 @@ pub enum Page {
     Analytics,
     Music,
     SignIn,
+    DesktopWidgets,
 }
 
 impl Page {
@@ -50,6 +51,7 @@ impl Page {
             Page::Analytics => "Analytics",
             Page::Music => "Music",
             Page::SignIn => "Sign In",
+            Page::DesktopWidgets => "Desktop Widgets",
         }
     }
 
@@ -78,6 +80,7 @@ impl Page {
             Page::Analytics => "nav_analytics",
             Page::Music => "nav_music",
             Page::SignIn => "nav_sign_in",
+            Page::DesktopWidgets => "nav_desktop_widgets",
         }
     }
 
@@ -110,6 +113,7 @@ impl Page {
             Page::Analytics => "analytics",
             Page::Music => "music",
             Page::SignIn => "sign-in",
+            Page::DesktopWidgets => "desktop-widgets",
         }
     }
 
@@ -149,6 +153,7 @@ impl Page {
             // the shipped stand-in.
             Page::Music => IconName::Play,
             Page::SignIn => IconName::User,
+            Page::DesktopWidgets => IconName::PanelBottom,
         }
     }
 
@@ -175,6 +180,7 @@ impl Page {
             Page::Analytics,
             Page::Music,
             Page::SignIn,
+            Page::DesktopWidgets,
         ]
     }
 }

@@ -31,6 +31,7 @@ pub enum CommandId {
     StartTour,
     SignIn,
     SignOut,
+    OpenDesktopWidgets,
 }
 
 #[derive(Clone, Debug)]
@@ -60,7 +61,8 @@ pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
         | CommandId::ThemeLight
         | CommandId::ThemeDark
         | CommandId::StartDemoTask
-        | CommandId::StartTour => CommandAvailability {
+        | CommandId::StartTour
+        | CommandId::OpenDesktopWidgets => CommandAvailability {
             enabled: true,
             disabled_reason: None,
         },
@@ -255,6 +257,12 @@ pub fn registry() -> Vec<CommandSpec> {
             "command_sign_out_subtitle",
             IconName::CircleUser,
         ),
+        command(
+            CommandId::OpenDesktopWidgets,
+            "command_desktop_widgets",
+            "command_desktop_widgets_subtitle",
+            IconName::PanelBottom,
+        ),
     ]
 }
 
@@ -347,6 +355,7 @@ pub fn execute(id: CommandId, cx: &mut App) {
             crate::features::tutorial::start(cx);
         }
         CommandId::SignIn => navigate(Page::SignIn, cx),
+        CommandId::OpenDesktopWidgets => navigate(Page::DesktopWidgets, cx),
         CommandId::SignOut => match crate::services::auth::controller(cx) {
             Some(entity) => {
                 entity.update(cx, |controller, cx| controller.sign_out(cx));

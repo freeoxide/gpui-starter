@@ -2,6 +2,8 @@ use std::collections::HashSet;
 #[cfg(not(target_family = "wasm"))]
 use std::io::{Read as _, Write};
 use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(not(target_family = "wasm"))]
@@ -15,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     app::{LOCALE_EN, LOCALE_ZH_CN},
     errors::AppError,
+    features::pages::desktop_widgets::catalog::PersistedWidget,
     notifications::inbox::NotificationInboxItem,
     paths::AppPaths,
     routes::AppRoute,
@@ -93,6 +96,8 @@ pub struct AppConfig {
     pub mic_device_id: Option<String>,
     #[serde(default)]
     pub mic_gain_db: f32,
+    #[serde(default)]
+    pub widgets_layout: Vec<PersistedWidget>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -140,6 +145,7 @@ impl Default for AppConfig {
             floating_palettes: Vec::new(),
             mic_device_id: None,
             mic_gain_db: 0.0,
+            widgets_layout: Vec::new(),
         }
     }
 }
@@ -585,6 +591,44 @@ fn quarantine_bad_config(path: &Path) {
             "failed to quarantine corrupt app state"
         );
     }
+}
+
+// SAVE_SCHEDULED is process-global while each test gets its own App, so
+// debounce-arming tests serialize on this poison-tolerant lock.
+#[cfg(test)]
+static DEBOUNCE_TESTS: Mutex<()> = Mutex::new(());
+
+#[cfg(test)]
+pub(crate) fn debounce_test_lock() -> std::sync::MutexGuard<'static, ()> {
+    DEBOUNCE_TESTS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Seed the AppState global from `config` with no disk read and no debounced
+/// save armed; feature tests use this instead of `initialize`, which touches
+/// the real state file. Trailing writes land in a throwaway temp file.
+#[cfg(test)]
+pub(crate) fn install_for_tests(config: AppConfig, cx: &mut App) {
+    let temp = std::env::temp_dir().join("gpui-starter-config-test.json");
+    let paths = AppPaths {
+        config_dir: temp.parent().map(Path::to_path_buf).unwrap_or_default(),
+        data_dir: temp.parent().map(Path::to_path_buf).unwrap_or_default(),
+        cache_dir: temp.parent().map(Path::to_path_buf).unwrap_or_default(),
+        log_dir: temp.parent().map(Path::to_path_buf).unwrap_or_default(),
+        runtime_dir: temp.parent().map(Path::to_path_buf).unwrap_or_default(),
+        state_file: temp,
+    };
+    let flushed = serde_json::to_vec(&config).unwrap_or_default();
+    cx.set_global(AppState {
+        paths,
+        config,
+        last_load_error: None,
+        last_save_error: None,
+        dirty: false,
+        last_flushed_bytes: flushed,
+        in_flight_save: None,
+    });
 }
 
 #[cfg(test)]

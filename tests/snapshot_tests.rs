@@ -48,6 +48,7 @@ fn test_config_default_serialization() {
         floating_palettes: []
         mic_device_id: ~
         mic_gain_db: 0
+        widgets_layout: []
         "#
         );
 }
@@ -83,6 +84,7 @@ fn test_config_roundtrip() {
         floating_palettes: Vec::new(),
         mic_device_id: Some("coreaudio:Built-in Microphone".to_string()),
         mic_gain_db: 4.5,
+        widgets_layout: Vec::new(),
     };
 
     let json = serde_json::to_string(&original).expect("serialize config");
@@ -124,6 +126,7 @@ fn test_config_roundtrip() {
         floating_palettes: []
         mic_device_id: "coreaudio:Built-in Microphone"
         mic_gain_db: 4.5
+        widgets_layout: []
         "#
         );
 }

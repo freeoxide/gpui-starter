@@ -301,6 +301,7 @@ pub fn init(cx: &mut App) {
     crate::notifications::initialize(cx);
     crate::microphone::initialize(cx);
     crate::ui::floating::init(cx);
+    crate::features::pages::desktop_widgets::init(cx);
     crate::features::notch::init(cx);
     crate::features::pages::floating_ui::init(cx);
     crate::notifications::set_native_notifications_enabled(

@@ -4,10 +4,10 @@ use crate::gallery::GalleryPage;
 use crate::sidebar::Page;
 use crate::title_bar::AppTitleBar;
 use crate::views::{
-    AboutPage, AnalyticsPage, AudioPage, CanvasShowcasePage, DiagnosticsPage, ErrorPlaygroundPage,
-    FloatingUiPage, FormPage, HomePage, ImageEditorPage, InfiniteCanvasPage, MicrophonePage,
-    MultiuserCanvasPage, MusicPage, NotificationsPage, QueryDevToolsV2Page, QueryPlaygroundPage,
-    RenderErrorPage, SettingsPage, SignInPage, SystemControlsPage,
+    AboutPage, AnalyticsPage, AudioPage, CanvasShowcasePage, DesktopWidgetsPage, DiagnosticsPage,
+    ErrorPlaygroundPage, FloatingUiPage, FormPage, HomePage, ImageEditorPage, InfiniteCanvasPage,
+    MicrophonePage, MultiuserCanvasPage, MusicPage, NotificationsPage, QueryDevToolsV2Page,
+    QueryPlaygroundPage, RenderErrorPage, SettingsPage, SignInPage, SystemControlsPage,
 };
 use crate::{
     events::{self, AppEventKind},
@@ -42,6 +42,7 @@ pub struct AppRoot {
     pub(crate) analytics_page: Entity<AnalyticsPage>,
     pub(crate) music_page: Entity<MusicPage>,
     pub(crate) sign_in_page: Entity<SignInPage>,
+    pub(crate) desktop_widgets_page: Entity<DesktopWidgetsPage>,
     pub(crate) now_playing_bar: Entity<crate::features::pages::music::NowPlayingBar>,
     pub(crate) floating_host: Entity<crate::ui::floating::OverlayFloatHost>,
     pub(crate) floating_ui_session: Entity<crate::features::pages::floating_ui::PaletteSession>,
@@ -92,6 +93,7 @@ impl AppRoot {
         let analytics_page = cx.new(|cx| AnalyticsPage::new(window, cx));
         let (music_page, now_playing_bar) = crate::views::music::init(window, cx);
         let sign_in_page = cx.new(|cx| SignInPage::new(window, cx));
+        let desktop_widgets_page = cx.new(|cx| DesktopWidgetsPage::new(window, cx));
         let tutorial = cx.new(|cx| crate::features::tutorial::TourController::new(window, cx));
         cx.set_global(crate::features::tutorial::TourHandle(tutorial.clone()));
         cx.observe_global::<crate::app::window::RootWindow>(|this, cx| {
@@ -250,6 +252,7 @@ impl AppRoot {
             analytics_page,
             music_page,
             sign_in_page,
+            desktop_widgets_page,
             now_playing_bar,
             tutorial,
             render_error: false,
@@ -303,6 +306,7 @@ impl AppRoot {
             Page::Analytics => self.analytics_page.clone().into(),
             Page::Music => self.music_page.clone().into(),
             Page::SignIn => self.sign_in_page.clone().into(),
+            Page::DesktopWidgets => self.desktop_widgets_page.clone().into(),
         }
     }
 

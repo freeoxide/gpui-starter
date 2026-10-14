@@ -1,5 +1,3 @@
-use std::sync::Mutex;
-
 use gpui_kit::TestAppContext;
 use tempfile::tempdir;
 
@@ -251,14 +249,9 @@ fn commit_flush_failure_keeps_the_state_dirty_for_retry() {
 // ---------------------------------------------------------------------------
 
 // SAVE_SCHEDULED is process-global while each test gets its own App, so
-// debounce-arming tests serialize on this poison-tolerant lock.
-static DEBOUNCE_TESTS: Mutex<()> = Mutex::new(());
-
-fn debounce_test_lock() -> std::sync::MutexGuard<'static, ()> {
-    DEBOUNCE_TESTS
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
+// debounce-arming tests (this module and out-of-module feature tests) share
+// the promoted poison-tolerant lock.
+use super::debounce_test_lock;
 
 /// A clean store: nothing pending, the default config already flushed, so
 /// only a real mutation produces bytes.
