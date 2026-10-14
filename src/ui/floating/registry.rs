@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use gpui_kit::{AnyView, AnyWindowHandle, App, Bounds, Global, Pixels, SharedString, Window};
 
+use super::layer_shell::FloatSurface;
 use super::spec::{FloatLevel, FloatingSpec, FloatingWindowId};
 
 pub(crate) type ViewFactory = Rc<dyn Fn(&mut Window, &mut App) -> AnyView>;
@@ -13,6 +14,7 @@ pub(crate) struct RegistryEntry {
     pub(crate) handle: FloatingHandle,
     pub(crate) build: ViewFactory,
     pub(crate) view: Option<AnyView>,
+    pub(crate) surface: FloatSurface,
 }
 
 /// How an open float is reached: an OS window handle on native platforms, or
@@ -32,6 +34,7 @@ pub struct FloatingWindowEntry {
     /// Screen-space bounds (for overlay floats: main-window space).
     pub bounds: Bounds<Pixels>,
     pub handle: FloatingHandle,
+    pub surface: FloatSurface,
 }
 
 pub(crate) struct OverlayPane {
@@ -111,6 +114,7 @@ pub fn floating_snapshot(cx: &App) -> Vec<FloatingWindowEntry> {
                     level: entry.spec.float_level(),
                     bounds: entry.bounds,
                     handle: entry.handle.clone(),
+                    surface: entry.surface,
                 })
                 .collect()
         })

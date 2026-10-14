@@ -6,7 +6,7 @@ use gpui_kit::{
 };
 
 use super::*;
-use crate::ui::floating::{Placement9, init};
+use crate::ui::floating::{FloatSurface, LayerShellSpec, Placement9, init};
 
 struct Blank;
 
@@ -48,6 +48,7 @@ async fn spawns_a_screen_centered_native_float(cx: &mut TestAppContext) {
             size: size(px(200.), px(120.)),
         }
     );
+    assert_eq!(snapshot[0].surface, FloatSurface::Window);
 }
 
 #[gpui_kit::test]
@@ -189,6 +190,27 @@ async fn spawning_with_click_through_succeeds_on_the_test_platform(cx: &mut Test
 }
 
 #[gpui_kit::test]
+async fn a_layer_shell_spec_degrades_to_a_native_window_float(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    let handle = cx
+        .update(|cx| {
+            spawn_floating(
+                FloatingSpec::new(FloatingWindowId("layered".into()), size(px(120.), px(90.)))
+                    .layer_shell(LayerShellSpec::new()),
+                blank_view,
+                cx,
+            )
+        })
+        .unwrap();
+    assert!(matches!(handle, FloatingHandle::Native(_)));
+    let snapshot = cx.read(|cx| floating_snapshot(cx));
+    assert_eq!(snapshot.len(), 1);
+    assert_eq!(snapshot[0].id.0, "layered");
+    assert_eq!(snapshot[0].surface, FloatSurface::Window);
+}
+
+#[gpui_kit::test]
 async fn runtime_toggles_return_false_on_the_test_platform(cx: &mut TestAppContext) {
     cx.update(gpui_kit::init);
     cx.update(init);
@@ -228,6 +250,7 @@ async fn runtime_toggles_return_false_for_overlay_handles(cx: &mut TestAppContex
                 handle: overlay.clone(),
                 build: Rc::new(|_, cx: &mut App| -> AnyView { cx.new(|_| Blank).into() }),
                 view: None,
+                surface: FloatSurface::Window,
             },
             cx,
         );

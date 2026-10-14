@@ -34,6 +34,7 @@ fn overlay_entry(id: &str, x: f32, view: AnyView) -> registry::RegistryEntry {
         handle: FloatingHandle::Overlay(FloatingWindowId(id.into())),
         build: Rc::new(|_, cx: &mut App| -> AnyView { cx.new(|_| Blank).into() }),
         view: Some(view),
+        surface: super::super::FloatSurface::Window,
     }
 }
 

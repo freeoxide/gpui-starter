@@ -29,32 +29,97 @@ pub fn spawn_floating(
     let factory: ViewFactory = Rc::new(build);
     let bounds = resolve_float_bounds(&spec, cx)?;
     let level = spec.float_level();
-    let options = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(bounds)),
-        titlebar: Some(TitlebarOptions {
-            title: Some(spec.window_title()),
-            appears_transparent: true,
-            traffic_light_position: None,
-        }),
-        focus: spec.is_focus(),
-        kind: match level {
-            FloatLevel::Floating => WindowKind::Floating,
-            FloatLevel::AlwaysOnTop => WindowKind::PopUp,
-        },
-        is_resizable: spec.is_resizable() && level != FloatLevel::AlwaysOnTop,
-        is_minimizable: false,
-        is_movable: spec.is_movable(),
-        window_min_size: spec.min_window_size(),
-        app_id: Some("gpui-starter".to_string()),
-        ..Default::default()
+    #[cfg(target_os = "linux")]
+    let plan = super::layer_shell::wayland::plan(&spec, cx);
+    #[cfg(target_os = "linux")]
+    let use_layer = plan.layer_options.is_some();
+    #[cfg(not(target_os = "linux"))]
+    let use_layer = false;
+    if spec.layer_shell_spec().is_some() && !use_layer {
+        super::layer_shell::note_ignored_once();
+    }
+    let make_options = |_use_layer: bool| -> WindowOptions {
+        let mut options = WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(bounds)),
+            titlebar: Some(TitlebarOptions {
+                title: Some(spec.window_title()),
+                appears_transparent: true,
+                traffic_light_position: None,
+            }),
+            focus: spec.is_focus(),
+            kind: match level {
+                FloatLevel::Floating => WindowKind::Floating,
+                FloatLevel::AlwaysOnTop => WindowKind::PopUp,
+            },
+            is_resizable: spec.is_resizable() && level != FloatLevel::AlwaysOnTop,
+            is_minimizable: false,
+            is_movable: spec.is_movable(),
+            window_min_size: spec.min_window_size(),
+            app_id: Some("gpui-starter".to_string()),
+            ..Default::default()
+        };
+        #[cfg(target_os = "linux")]
+        if _use_layer && let Some(layer) = plan.layer_options.clone() {
+            // Option set from crates/gpui/examples/layer_shell.rs at
+            // zed@93d7456, the pinned snapshot's reference implementation.
+            options.kind = WindowKind::LayerShell(layer);
+            options.window_background = gpui_kit::WindowBackgroundAppearance::Transparent;
+            options.titlebar = None;
+            options.display_id = plan.display_id;
+        }
+        options
     };
-    let id = spec.id().clone();
-    let title = spec.window_title();
-    let build_view = factory.clone();
-    let (window, _shell) = gpui_kit::open_window(options, cx, move |window, cx| {
-        let view = build_view(window, cx);
-        cx.new(|cx| FloatingShell::new(id, title, view, cx))
-    })?;
+    let opened = {
+        let id = spec.id().clone();
+        let title = spec.window_title();
+        let build_view = factory.clone();
+        gpui_kit::open_window(make_options(use_layer), cx, move |window, cx| {
+            let view = build_view(window, cx);
+            cx.new(|cx| FloatingShell::new(id, title, view, cx))
+        })
+    };
+    let (window, surface) = match opened {
+        Ok((window, _)) => {
+            #[cfg(target_os = "linux")]
+            let surface = if use_layer {
+                super::layer_shell::state::record_available(cx);
+                super::layer_shell::FloatSurface::LayerShell
+            } else {
+                super::layer_shell::FloatSurface::Window
+            };
+            #[cfg(not(target_os = "linux"))]
+            let surface = super::layer_shell::FloatSurface::Window;
+            (window, surface)
+        }
+        Err(err) => {
+            #[cfg(target_os = "linux")]
+            {
+                if use_layer && super::layer_shell::wayland::is_layer_shell_unsupported(&err) {
+                    tracing::warn!(
+                        target: super::layer_shell::LOG,
+                        error = %err,
+                        "compositor rejected the layer surface; retrying as a plain float"
+                    );
+                    super::layer_shell::state::record_unsupported(&err, cx);
+                    let id = spec.id().clone();
+                    let title = spec.window_title();
+                    let build_view = factory.clone();
+                    let (window, _) =
+                        gpui_kit::open_window(make_options(false), cx, move |window, cx| {
+                            let view = build_view(window, cx);
+                            cx.new(|cx| FloatingShell::new(id, title, view, cx))
+                        })?;
+                    (window, super::layer_shell::FloatSurface::Window)
+                } else {
+                    return Err(err);
+                }
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                return Err(err);
+            }
+        }
+    };
     let handle = FloatingHandle::Native(window);
     if spec.is_click_through() {
         let applied = window
@@ -74,6 +139,7 @@ pub fn spawn_floating(
             handle: handle.clone(),
             build: factory,
             view: None,
+            surface,
         },
         cx,
     );
@@ -86,6 +152,9 @@ pub fn spawn_floating(
     build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     cx: &mut App,
 ) -> anyhow::Result<FloatingHandle> {
+    if spec.layer_shell_spec().is_some() {
+        super::layer_shell::note_ignored_once();
+    }
     let root = crate::app::window::root_window(cx)
         .ok_or_else(|| anyhow!("no main window to host overlay float"))?;
     let factory: ViewFactory = Rc::new(build);
@@ -102,6 +171,7 @@ pub fn spawn_floating(
             handle: handle.clone(),
             build: factory,
             view: Some(view),
+            surface: super::layer_shell::FloatSurface::Window,
         },
         cx,
     );

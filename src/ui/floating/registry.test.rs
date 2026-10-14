@@ -30,6 +30,7 @@ fn overlay_entry(id: &str, x: f32) -> RegistryEntry {
         handle: FloatingHandle::Overlay(FloatingWindowId(id.into())),
         build: factory(),
         view: None,
+        surface: FloatSurface::Window,
     }
 }
 
@@ -45,6 +46,7 @@ async fn set_entry_lands_in_the_snapshot(cx: &TestAppContext) {
         snapshot[0].handle,
         FloatingHandle::Overlay(ref id) if id.0 == "alpha"
     ));
+    assert_eq!(snapshot[0].surface, FloatSurface::Window);
 }
 
 #[gpui_kit::test]

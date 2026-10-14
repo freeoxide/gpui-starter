@@ -1,6 +1,8 @@
 use gpui_kit::{AnyWindowHandle, App, Bounds, DisplayId, Pixels, Point, SharedString, Size, point};
 use serde::{Deserialize, Serialize};
 
+use super::layer_shell::LayerShellSpec;
+
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct FloatingWindowId(pub SharedString);
 
@@ -69,6 +71,7 @@ pub struct FloatingSpec {
     resizable: bool,
     movable: bool,
     click_through: bool,
+    layer_shell: Option<LayerShellSpec>,
     min_size: Option<Size<Pixels>>,
 }
 
@@ -89,6 +92,7 @@ impl FloatingSpec {
             resizable: false,
             movable: true,
             click_through: false,
+            layer_shell: None,
             min_size: None,
         }
     }
@@ -131,6 +135,13 @@ impl FloatingSpec {
         self
     }
 
+    /// Requests a Wayland layer-shell surface instead of a normal window.
+    /// Inert (ignored, one info log per process) off Wayland sessions.
+    pub fn layer_shell(mut self, spec: LayerShellSpec) -> Self {
+        self.layer_shell = Some(spec);
+        self
+    }
+
     pub fn min_size(mut self, min: Size<Pixels>) -> Self {
         self.min_size = Some(min);
         self
@@ -170,6 +181,10 @@ impl FloatingSpec {
 
     pub fn is_click_through(&self) -> bool {
         self.click_through
+    }
+
+    pub fn layer_shell_spec(&self) -> Option<&LayerShellSpec> {
+        self.layer_shell.as_ref()
     }
 
     pub(crate) fn set_level(&mut self, level: FloatLevel) {

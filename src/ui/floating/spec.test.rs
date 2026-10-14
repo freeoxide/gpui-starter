@@ -144,6 +144,18 @@ fn click_through_builder_round_trips() {
 }
 
 #[test]
+fn layer_shell_builder_round_trips() {
+    let spec = FloatingSpec::new(FloatingWindowId("demo".into()), float_size());
+    assert!(spec.layer_shell_spec().is_none());
+    let spec = spec.layer_shell(LayerShellSpec::new().namespace("widgets.local"));
+    assert_eq!(
+        spec.layer_shell_spec()
+            .map(|ls| ls.requested_namespace().to_string()),
+        Some("widgets.local".to_string())
+    );
+}
+
+#[test]
 fn set_level_rewrites_the_stored_level() {
     let mut spec = FloatingSpec::new(FloatingWindowId("demo".into()), float_size());
     assert_eq!(spec.level, FloatLevel::Floating);

@@ -7,6 +7,7 @@
 
 use gpui_kit::{Action, App, KeyBinding};
 
+pub mod layer_shell;
 #[cfg(target_os = "macos")]
 mod macos_probe;
 mod overlay_host;
@@ -17,6 +18,11 @@ mod shims;
 pub mod spawn;
 pub mod spec;
 
+pub use layer_shell::{
+    CAPABILITY_LAYER_SHELL_INPUT_PASSTHROUGH, CAPABILITY_LAYER_SHELL_WIDGETS, Edge4, FloatSurface,
+    LayerShellSpec, WidgetKeyboardInteractivity, WidgetLayer, set_input_passthrough,
+    spawn_floating_after_displays,
+};
 pub use overlay_host::OverlayFloatHost;
 pub use probe::{FloatingPlatformInfo, NotchGeometry, probe};
 pub use registry::{
@@ -44,4 +50,5 @@ pub fn init(cx: &mut App) {
     registry::install_close_tracker(cx);
     cx.bind_keys([KeyBinding::new("escape", DismissFloating, Some("floating"))]);
     probe::register_capabilities(cx);
+    layer_shell::init(cx);
 }
