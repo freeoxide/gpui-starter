@@ -29,6 +29,8 @@ pub enum CommandId {
     Restart,
     OpenMenubarCharts,
     StartTour,
+    SignIn,
+    SignOut,
 }
 
 #[derive(Clone, Debug)]
@@ -108,6 +110,20 @@ pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
                 cfg!(target_family = "wasm"),
             ),
         },
+        CommandId::SignIn => CommandAvailability {
+            enabled: true,
+            disabled_reason: None,
+        },
+        CommandId::SignOut => {
+            let signed_in = matches!(
+                crate::auth_ui::snapshot(cx).state,
+                gpui_auth::AuthState::SignedIn { .. }
+            );
+            CommandAvailability {
+                enabled: signed_in,
+                disabled_reason: disabled_reason("command_reason_signed_out", !signed_in),
+            }
+        }
     }
 }
 
@@ -227,6 +243,18 @@ pub fn registry() -> Vec<CommandSpec> {
             "tutorial_command_subtitle",
             IconName::Map,
         ),
+        command(
+            CommandId::SignIn,
+            "command_sign_in",
+            "command_sign_in_subtitle",
+            IconName::User,
+        ),
+        command(
+            CommandId::SignOut,
+            "command_sign_out",
+            "command_sign_out_subtitle",
+            IconName::CircleUser,
+        ),
     ]
 }
 
@@ -318,6 +346,18 @@ pub fn execute(id: CommandId, cx: &mut App) {
         CommandId::StartTour => {
             crate::features::tutorial::start(cx);
         }
+        CommandId::SignIn => navigate(Page::SignIn, cx),
+        CommandId::SignOut => match crate::services::auth::controller(cx) {
+            Some(entity) => {
+                entity.update(cx, |controller, cx| controller.sign_out(cx));
+            }
+            None => {
+                tracing::warn!(
+                    target: "gpui_starter::commands",
+                    "sign-out requested without an auth controller"
+                );
+            }
+        },
     }
 }
 

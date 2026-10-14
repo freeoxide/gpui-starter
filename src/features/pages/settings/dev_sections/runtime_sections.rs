@@ -4,7 +4,6 @@ use gpui_kit::{prelude::*, *};
 use crate::connectivity;
 use crate::desktop_actions;
 use crate::secure_storage;
-use crate::session::{self, SessionState};
 
 pub fn render_desktop_actions_section(
     cx: &mut Context<super::super::SettingsPage>,
@@ -128,52 +127,14 @@ pub fn render_runtime_boundaries_section(
             crate::i18n::localize("settings_runtime_boundaries"),
         ))
         .child(
-            div()
-                .flex()
-                .flex_wrap()
-                .items_center()
-                .gap_2()
-                .child(
-                    Button::new("connectivity-check-now")
-                        .outline()
-                        .label(crate::i18n::localize("settings_check_connectivity_now"))
-                        .on_click(|_, _, cx| {
-                            connectivity::check_now(cx);
-                        }),
-                )
-                .child(
-                    Button::new("session-sign-in")
-                        .outline()
-                        .label(crate::i18n::localize("settings_session_sign_in_demo"))
-                        .on_click(|_, _, cx| {
-                            session::set_state(SessionState::SigningIn, cx);
-                            session::set_state(
-                                SessionState::SignedIn {
-                                    account_label: "demo-user".to_string(),
-                                },
-                                cx,
-                            );
-                        }),
-                )
-                .child(
-                    Button::new("session-sign-out")
-                        .outline()
-                        .label(crate::i18n::localize("settings_session_sign_out"))
-                        .on_click(|_, _, cx| {
-                            session::set_state(SessionState::SignedOut, cx);
-                        }),
-                )
-                .child(
-                    Button::new("session-error-demo")
-                        .outline()
-                        .label(crate::i18n::localize("settings_session_error_demo"))
-                        .on_click(|_, _, cx| {
-                            session::set_state(
-                                SessionState::Error("demo session error".to_string()),
-                                cx,
-                            );
-                        }),
-                ),
+            div().flex().flex_wrap().items_center().gap_2().child(
+                Button::new("connectivity-check-now")
+                    .outline()
+                    .label(crate::i18n::localize("settings_check_connectivity_now"))
+                    .on_click(|_, _, cx| {
+                        connectivity::check_now(cx);
+                    }),
+            ),
         )
         .child(
             div()

@@ -1,5 +1,6 @@
 mod dev_sections;
 mod notifications_section;
+mod session_section;
 
 use gpui_kit::component::{
     ActiveTheme as _, Selectable as _, Theme, ThemeMode, button::Button, label::Label,
@@ -42,6 +43,9 @@ impl SettingsPage {
             }),
             cx.observe_global_in::<NativeNotificationState>(window, |this, _, cx| {
                 this.notifications = notifications::snapshot(cx);
+                cx.notify();
+            }),
+            cx.observe_global_in::<crate::services::auth_ui::AuthUiState>(window, |_, _, cx| {
                 cx.notify();
             }),
             cx.observe_global_in::<crate::events::AppEventQueue>(window, |this, _, cx| {
@@ -161,6 +165,7 @@ impl Render for SettingsPage {
                             ),
                     ),
             )
+            .child(session_section::render_session_section(cx))
             .child(notifications_section::render_notifications_section(
                 &notifications_snapshot,
                 cx,

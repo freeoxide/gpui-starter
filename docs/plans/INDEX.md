@@ -404,7 +404,7 @@ foundations), one plan per commit, gates green between steps:
 | 21 | auth-foundation | 6 | implemented |
 | 22 | auth-email | 6 | implemented |
 | 23 | auth-social-oidc | 6 | implemented |
-| 24 | auth-ui | 6 | |
+| 24 | auth-ui | 6 | implemented |
 | 25 | widget-window-shims | 7 | |
 | 26 | layer-shell-widgets | 7 | |
 | 27 | desktop-widgets | 7 | |

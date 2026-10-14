@@ -240,6 +240,7 @@ pub fn init(cx: &mut App) {
         crate::services::auth::install(cx);
         #[cfg(not(target_family = "wasm"))]
         crate::services::auth_social::install(cx);
+        crate::services::auth_ui::initialize(cx);
         crate::audio::initialize(cx);
         crate::features::tutorial::initialize(cx);
 

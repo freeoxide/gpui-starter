@@ -13,11 +13,13 @@ use gpui_kit::{
 use crate::accessibility::A11yExt;
 use crate::app::{SelectFont, SelectRadius};
 use crate::menus;
+use crate::shell::account_menu::AccountMenu;
 
 pub struct AppTitleBar {
     title: SharedString,
     app_menu_bar: Entity<AppMenuBar>,
     settings: Entity<SettingsDropdown>,
+    account: Entity<AccountMenu>,
 }
 
 impl AppTitleBar {
@@ -29,11 +31,13 @@ impl AppTitleBar {
         let title: SharedString = title.into();
         let app_menu_bar = menus::init(title.clone(), cx);
         let settings = cx.new(|cx| SettingsDropdown::new(window, cx));
+        let account = cx.new(|cx| AccountMenu::new(window, cx));
 
         Self {
             title,
             app_menu_bar,
             settings,
+            account,
         }
     }
 }
@@ -107,7 +111,8 @@ impl Render for AppTitleBar {
                                             cx,
                                         );
                                     }),
-                            ),
+                            )
+                            .child(self.account.clone()),
                     ),
             )
     }

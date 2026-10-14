@@ -7,7 +7,7 @@ use crate::views::{
     AboutPage, AnalyticsPage, AudioPage, CanvasShowcasePage, DiagnosticsPage, ErrorPlaygroundPage,
     FloatingUiPage, FormPage, HomePage, ImageEditorPage, InfiniteCanvasPage, MicrophonePage,
     MultiuserCanvasPage, MusicPage, NotificationsPage, QueryDevToolsV2Page, QueryPlaygroundPage,
-    RenderErrorPage, SettingsPage, SystemControlsPage,
+    RenderErrorPage, SettingsPage, SignInPage, SystemControlsPage,
 };
 use crate::{
     events::{self, AppEventKind},
@@ -41,6 +41,7 @@ pub struct AppRoot {
     pub(crate) audio_page: Entity<AudioPage>,
     pub(crate) analytics_page: Entity<AnalyticsPage>,
     pub(crate) music_page: Entity<MusicPage>,
+    pub(crate) sign_in_page: Entity<SignInPage>,
     pub(crate) now_playing_bar: Entity<crate::features::pages::music::NowPlayingBar>,
     pub(crate) floating_host: Entity<crate::ui::floating::OverlayFloatHost>,
     pub(crate) floating_ui_session: Entity<crate::features::pages::floating_ui::PaletteSession>,
@@ -90,6 +91,7 @@ impl AppRoot {
         let audio_page = cx.new(|cx| AudioPage::new(window, cx));
         let analytics_page = cx.new(|cx| AnalyticsPage::new(window, cx));
         let (music_page, now_playing_bar) = crate::views::music::init(window, cx);
+        let sign_in_page = cx.new(|cx| SignInPage::new(window, cx));
         let tutorial = cx.new(|cx| crate::features::tutorial::TourController::new(window, cx));
         cx.set_global(crate::features::tutorial::TourHandle(tutorial.clone()));
         cx.observe_global::<crate::app::window::RootWindow>(|this, cx| {
@@ -247,6 +249,7 @@ impl AppRoot {
             audio_page,
             analytics_page,
             music_page,
+            sign_in_page,
             now_playing_bar,
             tutorial,
             render_error: false,
@@ -299,6 +302,7 @@ impl AppRoot {
             Page::Audio => self.audio_page.clone().into(),
             Page::Analytics => self.analytics_page.clone().into(),
             Page::Music => self.music_page.clone().into(),
+            Page::SignIn => self.sign_in_page.clone().into(),
         }
     }
 

@@ -26,6 +26,7 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
     let shortcuts = shortcuts::snapshot(cx);
     let desktop_actions = desktop_actions::snapshot(cx);
     let undo = undo_stack::snapshot(cx);
+    let auth = crate::auth_ui::snapshot(cx);
     let latest_error = error_surface::latest(cx);
     let crash_snap = crash_report::snapshot(cx);
 
@@ -159,6 +160,14 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
                 .unwrap_or(none_label.as_str()),
         ),
         row("diagnostics_session", &format!("{:?}", session.state)),
+        row("diagnostics_auth_state", &format!("{:?}", auth.state)),
+        row("diagnostics_auth_provider", &auth.provider_id),
+        row(
+            "diagnostics_auth_token_expiry",
+            &crate::auth_ui::format_expiry(auth.expires_at)
+                .unwrap_or_else(|| crate::i18n::localize("auth_no_expiry")),
+        ),
+        row("diagnostics_auth_store", auth.store_backend),
         row("diagnostics_commands", &command_registry.len().to_string()),
         row("diagnostics_command_titles", &command_titles),
         row("diagnostics_command_availability", &command_states),

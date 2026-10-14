@@ -23,6 +23,7 @@ pub enum Page {
     Audio,
     Analytics,
     Music,
+    SignIn,
 }
 
 impl Page {
@@ -48,6 +49,7 @@ impl Page {
             Page::Audio => "Audio",
             Page::Analytics => "Analytics",
             Page::Music => "Music",
+            Page::SignIn => "Sign In",
         }
     }
 
@@ -75,6 +77,7 @@ impl Page {
             Page::Audio => "nav_audio",
             Page::Analytics => "nav_analytics",
             Page::Music => "nav_music",
+            Page::SignIn => "nav_sign_in",
         }
     }
 
@@ -106,6 +109,7 @@ impl Page {
             Page::Audio => "audio",
             Page::Analytics => "analytics",
             Page::Music => "music",
+            Page::SignIn => "sign-in",
         }
     }
 
@@ -144,6 +148,7 @@ impl Page {
             // Music is full-catalog and renders blank on native; Play is
             // the shipped stand-in.
             Page::Music => IconName::Play,
+            Page::SignIn => IconName::User,
         }
     }
 
@@ -169,6 +174,7 @@ impl Page {
             Page::Audio,
             Page::Analytics,
             Page::Music,
+            Page::SignIn,
         ]
     }
 }

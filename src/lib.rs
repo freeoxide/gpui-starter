@@ -57,7 +57,7 @@ pub use runtime::{capabilities, events};
 #[cfg(not(target_family = "wasm"))]
 pub use services::auth_social;
 pub use services::{
-    accessibility, audio, auth, commands, connectivity, crash_report, desktop_actions,
+    accessibility, audio, auth, auth_ui, commands, connectivity, crash_report, desktop_actions,
     error_surface, first_run, i18n, logging, microphone, notifications, secure_storage, session,
     storage, system_controls, tasks, telemetry, undo_stack, updater,
 };

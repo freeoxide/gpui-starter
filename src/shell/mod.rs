@@ -1,3 +1,4 @@
+pub mod account_menu;
 pub mod menus;
 pub mod root;
 pub mod route;

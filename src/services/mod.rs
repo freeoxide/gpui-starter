@@ -3,6 +3,7 @@ pub mod audio;
 pub mod auth;
 #[cfg(not(target_family = "wasm"))]
 pub mod auth_social;
+pub mod auth_ui;
 pub mod commands;
 pub mod connectivity;
 pub mod crash_report;
