@@ -246,6 +246,14 @@ insta.workspace = true
 # debounce tests. Dev-dep features never reach production or wasm builds.
 gpui = { package = "gpui-pre", version = "0.3.9", features = ["test-support"] }
 
+# Test-only (plan 22 email-auth e2e): fast argon2 cost params for the demo
+# backend plus an RFC 6238 code oracle for the TOTP suites. Same target gate
+# as the gpui-auth lines so the wasm lane never resolves them.
+[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
+argon2 = "0.5.3"
+hmac = "0.12"
+sha1 = "0.10"
+
 # Windows .exe icon embed; build.rs gates on CARGO_CFG_TARGET_OS so Linux,
 # macOS, and wasm hosts never invoke it (docs/research/icons-and-windows.md A2).
 [build-dependencies]

@@ -25,6 +25,12 @@ reqwest = { version = "0.12", default-features = false, features = ["json"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio = { workspace = true }
+# DemoBackend native-only crypto: argon2id password hashing (RFC 9106) and
+# the hand-rolled RFC 6238 TOTP (totp-rs 6.0 does not carry the documented
+# alloc/otpauth/zeroize features; plan 22's fallback path).
+argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
+hmac = "0.12"
+sha1 = "0.10"
 
 [dev-dependencies]
 gpui = { package = "gpui-pre", version = "0.3.9", features = ["test-support"] }

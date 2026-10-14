@@ -9,10 +9,15 @@
 
 use std::sync::Arc;
 
+#[cfg(target_family = "wasm")]
+use gpui_auth::MockProvider;
+#[cfg(not(target_family = "wasm"))]
+use gpui_auth::{AuthBackend, DemoBackend, EmailPasswordProvider};
 use gpui_auth::{
-    AuthController, AuthError, AuthEvent, AuthIo, AuthState, MockProvider, TokenSet, TokenStore,
+    AuthController, AuthError, AuthEvent, AuthIo, AuthProvider, AuthState, PasswordAuth, TokenSet,
+    TokenStore,
 };
-use gpui_kit::{App, AppContext as _, Entity, Global, Subscription};
+use gpui_kit::{App, AppContext as _, AsyncApp, Entity, Global, Subscription};
 
 use crate::services::session::SessionState;
 
@@ -113,17 +118,40 @@ pub fn install(cx: &mut App) {
     #[cfg(target_family = "wasm")]
     let store = Arc::new(gpui_auth::InMemoryStore::new());
 
-    install_with(store, io, cx);
+    let clock: Arc<dyn Fn() -> i64 + Send + Sync> = Arc::new(|| chrono::Utc::now().timestamp());
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let backend: Arc<dyn AuthBackend> = Arc::new(DemoBackend::new());
+        let provider = Arc::new(EmailPasswordProvider::new(backend, clock.clone()));
+        install_with(
+            store,
+            io,
+            provider.clone() as Arc<dyn AuthProvider>,
+            Some(provider as Arc<dyn PasswordAuth>),
+            clock,
+            cx,
+        );
+    }
+    #[cfg(target_family = "wasm")]
+    install_with(store, io, Arc::new(MockProvider::new()), None, clock, cx);
 }
 
-pub(crate) fn install_with(store: Arc<dyn TokenStore>, io: AuthIo, cx: &mut App) {
-    let provider = Arc::new(MockProvider::new());
+pub(crate) fn install_with(
+    store: Arc<dyn TokenStore>,
+    io: AuthIo,
+    provider: Arc<dyn AuthProvider>,
+    password: Option<Arc<dyn PasswordAuth>>,
+    clock: Arc<dyn Fn() -> i64 + Send + Sync>,
+    cx: &mut App,
+) {
     let controller = cx.new(|cx| AuthController::new(provider, store, io, cx));
 
     let session_observer = cx.observe(&controller, |controller, cx| {
         let mapped = match controller.read(cx).state() {
             AuthState::SignedOut => SessionState::SignedOut,
-            AuthState::SigningIn => SessionState::SigningIn,
+            AuthState::SigningIn | AuthState::SigningUp | AuthState::AwaitingChallenge { .. } => {
+                SessionState::SigningIn
+            }
             AuthState::SignedIn { account_label } => SessionState::SignedIn {
                 account_label: account_label.clone(),
             },
@@ -149,7 +177,7 @@ pub(crate) fn install_with(store: Arc<dyn TokenStore>, io: AuthIo, cx: &mut App)
         AuthEvent::FlowFailed { error } => {
             tracing::warn!(target: "gpui_starter::auth", error = %error, "auth flow failed");
         }
-        AuthEvent::FlowCompleted | AuthEvent::SignedOut => {}
+        AuthEvent::FlowCompleted | AuthEvent::SignedOut | AuthEvent::AccountCreated { .. } => {}
     });
 
     cx.set_global(AuthHandle(AuthHandleInner {
@@ -157,6 +185,27 @@ pub(crate) fn install_with(store: Arc<dyn TokenStore>, io: AuthIo, cx: &mut App)
         _session_observer: session_observer,
         _browser_subscriber: browser_subscriber,
     }));
+    controller.update(cx, |controller, _| {
+        if let Some(password) = password {
+            controller.enable_password(password);
+        }
+        controller.set_clock(clock);
+    });
+    let weak = controller.downgrade();
+    cx.spawn(async move |cx: &mut AsyncApp| {
+        loop {
+            cx.background_executor()
+                .timer(std::time::Duration::from_secs(60))
+                .await;
+            if weak
+                .update(cx, |controller, cx| controller.refresh_if_needed(120, cx))
+                .is_err()
+            {
+                break;
+            }
+        }
+    })
+    .detach();
     set_capabilities(cx);
     // After the wiring above: restore's notify must reach the session
     // observer, and it flushes at this update's boundary.
@@ -164,11 +213,19 @@ pub(crate) fn install_with(store: Arc<dyn TokenStore>, io: AuthIo, cx: &mut App)
 }
 
 fn set_capabilities(cx: &mut App) {
-    crate::capabilities::set(
-        "auth_email",
-        crate::capabilities::CapabilityStatus::supported_enabled(),
-        cx,
-    );
+    #[cfg(not(target_family = "wasm"))]
+    let email = crate::capabilities::CapabilityStatus::supported_enabled();
+    #[cfg(target_family = "wasm")]
+    let email = crate::capabilities::CapabilityStatus {
+        supported: false,
+        enabled: true,
+        degraded: true,
+        reason: Some(
+            "password auth needs native crypto crates; the scripted mock provider remains".into(),
+        ),
+        last_error: None,
+    };
+    crate::capabilities::set("auth_email", email, cx);
     #[cfg(not(target_family = "wasm"))]
     crate::capabilities::set(
         "auth_social",

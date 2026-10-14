@@ -31,6 +31,40 @@ The host routes `gpui-starter://auth/callback` links to
 `complete_callback(link, cx)`; everything else (state matching, exchange,
 persistence, sign-out) is the controller's job.
 
+## Email + password (plan 22)
+
+`email.rs` adds the credential seams: `AuthBackend` (app-owned backend, every
+method takes `now_unix`), `PasswordAuth` (what the controller calls), and
+`EmailPasswordProvider` (provider id `"email"`, `ReuseUntilDead`, no browser
+flow — `start_flow` returns `NoBrowserFlow`). The controller gains
+`sign_up_with_password`, `sign_in_with_password`, `submit_totp`,
+`cancel_challenge`, `enroll_totp`, `confirm_totp_enrollment`,
+`refresh_if_needed`, and the `enable_password` / `set_clock` registrations;
+wire them before first use:
+
+```rust
+let provider = Arc::new(EmailPasswordProvider::new(backend, clock));
+controller.update(cx, |c, _| {
+    c.enable_password(provider.clone() as Arc<dyn PasswordAuth>);
+    c.set_clock(clock);
+});
+```
+
+`DemoBackend` (native only, id `"demo"`) is the reference backend: argon2id
+hashing (`"v1$b64url(salt)$b64url(hash)"`, 8 MiB / 2 passes by default,
+`with_params` for cheaper test costs), deterministic tokens
+(`demo-access-{seq}` / `demo-refresh-{seq}`, 900 s access TTL), refresh that
+keeps the refresh token, idempotent revoke, and RFC 6238 TOTP with a
+hand-rolled HMAC-SHA1 verifier (totp-rs 6.0 does not carry its documented
+feature set, so the ~30-line fallback from the plan landed instead).
+
+Demo caveats: users and sessions live in process memory — after an app
+restart the persisted `TokenSet` restores `SignedIn` until the first
+`refresh_if_needed` surfaces `RefreshRejected` (sign in again to recover);
+TOTP secrets never leave the backend's process memory and never enter the
+`TokenStore`; `verified` is always `false` (nothing is sent, the state exists
+so UI can badge it).
+
 ## Security rules
 
 - Secrets live in exactly two places: the controller's transient `TokenSet`

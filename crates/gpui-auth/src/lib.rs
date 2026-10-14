@@ -3,6 +3,9 @@
 //! `SecretString` never prints, and every browser flow carries PKCE + a fresh
 //! random state.
 pub mod controller;
+#[cfg(not(target_family = "wasm"))]
+pub mod demo_backend;
+pub mod email;
 pub mod error;
 #[cfg(feature = "mock-provider")]
 pub mod mock;
@@ -12,6 +15,12 @@ pub mod store;
 pub mod token;
 
 pub use controller::{AuthController, AuthEvent, AuthState};
+#[cfg(not(target_family = "wasm"))]
+pub use demo_backend::DemoBackend;
+pub use email::{
+    AuthBackend, AuthenticatedSession, EMAIL_PROVIDER_ID, EmailAccountStatus,
+    EmailPasswordProvider, PasswordAuth, SignInOutcome, TotpChallenge, TotpEnrollment,
+};
 pub use error::AuthError;
 #[cfg(feature = "mock-provider")]
 pub use mock::MockProvider;
