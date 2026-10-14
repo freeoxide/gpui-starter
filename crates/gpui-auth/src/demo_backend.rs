@@ -167,6 +167,7 @@ fn token_set(
             id: Some(account_id.to_string()),
             email: Some(email.to_string()),
             display_name: Some(email.to_string()),
+            avatar_url: None,
         }),
     }
 }

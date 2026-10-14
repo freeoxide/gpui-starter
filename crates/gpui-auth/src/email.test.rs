@@ -76,6 +76,7 @@ impl TestBackend {
                 id: Some(seq.to_string()),
                 email: Some(email.to_string()),
                 display_name: Some(email.to_string()),
+                avatar_url: None,
             }),
         }
     }

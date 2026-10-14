@@ -54,6 +54,8 @@ pub use platform::input::shortcuts;
 pub use platform::ipc;
 pub use platform::process::single_instance;
 pub use runtime::{capabilities, events};
+#[cfg(not(target_family = "wasm"))]
+pub use services::auth_social;
 pub use services::{
     accessibility, audio, auth, commands, connectivity, crash_report, desktop_actions,
     error_surface, first_run, i18n, logging, microphone, notifications, secure_storage, session,

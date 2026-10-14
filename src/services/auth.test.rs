@@ -62,11 +62,14 @@ async fn install_sets_both_capability_entries(cx: &mut TestAppContext) {
     assert!(email.supported && email.enabled && !email.degraded);
     #[cfg(target_family = "wasm")]
     assert!(!email.supported && email.degraded);
-    let social = snapshot.get("auth_social").expect("auth_social entry");
+    // Native: auth_social::install owns the entry, so the adapter sets none.
     #[cfg(not(target_family = "wasm"))]
-    assert!(social.supported && social.enabled && !social.degraded);
+    assert!(!snapshot.contains_key("auth_social"));
     #[cfg(target_family = "wasm")]
-    assert!(!social.supported && social.degraded);
+    {
+        let social = snapshot.get("auth_social").expect("auth_social entry");
+        assert!(!social.supported && social.degraded);
+    }
 }
 
 #[gpui_kit::test]
@@ -146,6 +149,7 @@ async fn restored_sign_in_propagates_to_the_session_state(cx: &mut TestAppContex
             id: None,
             email: None,
             display_name: Some("Mock account".to_string()),
+            avatar_url: None,
         }),
     };
     cx.update(|cx| {

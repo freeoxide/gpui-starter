@@ -13,6 +13,7 @@ fn sample_set(access: &str, refresh: Option<&str>, expires_at: Option<i64>) -> T
             id: Some("u1".to_string()),
             email: Some("user@example.test".to_string()),
             display_name: Some("Mock account".to_string()),
+            avatar_url: Some("https://example.test/avatar.png".to_string()),
         }),
     }
 }
@@ -92,8 +93,23 @@ fn token_set_serde_round_trip_keeps_account_info() {
     let set = sample_set("access-1", Some("refresh-1"), Some(1234567890));
     let json = serde_json::to_string(&set).unwrap();
     assert!(json.contains("access-1"));
+    assert!(json.contains("https://example.test/avatar.png"));
     let restored: TokenSet = serde_json::from_str(&json).unwrap();
     assert_eq!(restored, set);
+}
+
+#[test]
+fn account_info_without_avatar_url_parses_as_none() {
+    let json = r#"{
+        "provider_id": "mock",
+        "access_token": "a",
+        "token_type": "Bearer",
+        "account": { "id": "u1", "email": "user@example.test", "display_name": "Mock account" }
+    }"#;
+    let set: TokenSet = serde_json::from_str(json).unwrap();
+    let account = set.account.unwrap();
+    assert_eq!(account.avatar_url, None);
+    assert_eq!(account.display_name.as_deref(), Some("Mock account"));
 }
 
 #[test]

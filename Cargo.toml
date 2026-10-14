@@ -432,6 +432,18 @@ sysinfo = { version = "0.31", default-features = false, features = ["system"] }
 cpal = "0.18"
 # System controls page (plan 17): cross-platform battery reader.
 starship-battery = "0.12"
+# Social login (services/auth_social, plan 23). oauth2 serves the GitHub
+# flow (no OIDC discovery there); openidconnect adds discovery, id_token
+# validation, and userinfo for Google + generic issuers. reqwest+rustls-tls
+# subset the app's reqwest line above, so one copy resolves in the lock.
+oauth2 = { version = "5.0", default-features = false, features = [
+    "reqwest",
+    "rustls-tls",
+] }
+openidconnect = { version = "4.0", default-features = false, features = [
+    "reqwest",
+    "rustls-tls",
+] }
 
 # Web (wasm32-unknown-unknown) dependencies.
 [target.'cfg(target_family = "wasm")'.dependencies]

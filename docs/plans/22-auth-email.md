@@ -627,7 +627,10 @@ Precondition for Phase 1: plan 21 is implemented and its gates pass
   maps, build `TokenSet { provider_id: EMAIL_PROVIDER_ID, access_token, 
   refresh_token: Some, id_token: None, token_type: "Bearer", expires_at:
   Some(access_exp), scope: None, account: Some(AccountInfo { id:
-  Some(seq.to_string()), email: Some(email), display_name: Some(email) }) }`.
+  Some(seq.to_string()), email: Some(email), display_name: Some(email),
+  avatar_url: None }) }`. The `avatar_url: None` arm is plan 23's serde-default
+  amendment to `AccountInfo` (23 seam row 10); the field is absent from the
+  JSON keyring rows this backend writes, so old rows parse unchanged.
   `refresh_impl(refresh_token, now)`: session lookup (miss → `RefreshRejected`)
   → mint next access seq for the same session, keep the refresh token,
   `access_exp = now + 900`, update `by_access`, return the fresh `TokenSet`.

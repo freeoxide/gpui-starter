@@ -182,6 +182,7 @@ async fn restore_signs_in_from_a_preseeded_store(cx: &mut TestAppContext) {
             id: None,
             email: Some("stored@example.test".to_string()),
             display_name: None,
+            avatar_url: None,
         }),
     };
     cx.update(|cx| store.save("mock", &tokens, cx).unwrap());
@@ -789,6 +790,7 @@ async fn restored_session_enrolls_through_the_stored_account_email(cx: &mut Test
             id: None,
             email: Some("restored@example.test".to_string()),
             display_name: None,
+            avatar_url: None,
         }),
     };
     cx.update(|cx| fixture.store.save("email", &tokens, cx).unwrap());

@@ -57,6 +57,8 @@ pub struct AccountInfo {
     pub id: Option<String>,
     pub email: Option<String>,
     pub display_name: Option<String>,
+    #[serde(default)]
+    pub avatar_url: Option<String>,
 }
 
 /// A provider's tokens plus the metadata needed to use them. `expires_at` is

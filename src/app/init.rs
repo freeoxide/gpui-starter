@@ -238,6 +238,8 @@ pub fn init(cx: &mut App) {
         crate::session::initialize(cx);
         crate::storage::initialize(cx);
         crate::services::auth::install(cx);
+        #[cfg(not(target_family = "wasm"))]
+        crate::services::auth_social::install(cx);
         crate::audio::initialize(cx);
         crate::features::tutorial::initialize(cx);
 

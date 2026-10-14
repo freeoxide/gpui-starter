@@ -32,6 +32,7 @@ impl MockProvider {
                 id: None,
                 email: None,
                 display_name: Some("Mock account".to_string()),
+                avatar_url: None,
             }),
         }
     }

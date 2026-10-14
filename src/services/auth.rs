@@ -226,12 +226,6 @@ fn set_capabilities(cx: &mut App) {
         last_error: None,
     };
     crate::capabilities::set("auth_email", email, cx);
-    #[cfg(not(target_family = "wasm"))]
-    crate::capabilities::set(
-        "auth_social",
-        crate::capabilities::CapabilityStatus::supported_enabled(),
-        cx,
-    );
     #[cfg(target_family = "wasm")]
     crate::capabilities::set(
         "auth_social",
@@ -240,7 +234,7 @@ fn set_capabilities(cx: &mut App) {
             enabled: true,
             degraded: true,
             reason: Some(
-                "social login needs the web redirect path from plan 23; browser loopback flows do not run on wasm"
+                "social login needs the native browser + loopback/scheme redirect path; a web build would use an https redirect + boot query parse (not implemented)"
                     .into(),
             ),
             last_error: None,
@@ -257,6 +251,10 @@ pub fn controller(cx: &App) -> Option<Entity<AuthController>> {
 /// Consume `gpui-starter://auth/callback` links. Returns true when the link
 /// was routed to the controller (caller skips route parsing).
 pub fn handle_callback_link(link: &str, cx: &mut App) -> bool {
+    #[cfg(not(target_family = "wasm"))]
+    if crate::services::auth_social::route_callback(link, cx) {
+        return true;
+    }
     let Ok(url) = url::Url::parse(link) else {
         return false;
     };

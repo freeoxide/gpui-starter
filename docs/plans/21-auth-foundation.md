@@ -566,6 +566,12 @@ variants, two `AuthState` variants (`SigningUp`, `AwaitingChallenge`), the
 `22:Interface Contract` (22-auth-email.md, Interface Contract section);
 consumers of this block read that one before building.
 
+Amended by plan 23 (social login; 23-auth-social-oidc.md): `AccountInfo`
+gained `avatar_url: Option<String>` with `#[serde(default)]` (userinfo
+`picture` / GitHub `avatar_url`; old keyring rows parse unchanged). Plan 22's
+exhaustive `AccountInfo` literal gained the matching `avatar_url: None` (23
+seam row 10). The field's contract lives in `23:Interface Contract`.
+
 ## Module Layout
 
 | File | Purpose |
