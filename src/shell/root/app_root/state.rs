@@ -107,10 +107,15 @@ impl AppRoot {
             for event in events::drain(cx) {
                 match event.kind {
                     AppEventKind::Navigate(route) => this.set_route(route, cx),
-                    AppEventKind::DeepLinkReceived(link) => match AppRoute::parse_deep_link(&link) {
-                        Ok(route) => this.set_route(route, cx),
-                        Err(err) => events::emit_error(err, cx),
-                    },
+                    AppEventKind::DeepLinkReceived(link) => {
+                        if crate::services::auth::handle_callback_link(&link, cx) {
+                            continue;
+                        }
+                        match AppRoute::parse_deep_link(&link) {
+                            Ok(route) => this.set_route(route, cx),
+                            Err(err) => events::emit_error(err, cx),
+                        }
+                    }
                     AppEventKind::AppError { message, severity } => {
                         tracing::warn!(target: "gpui_starter::root", error = %message, ?severity, "app error event received");
                         crate::error_surface::report(
@@ -138,6 +143,9 @@ impl AppRoot {
                                 crate::features::command_palette::open_launcher(cx);
                             }
                             ForwardedCommand::DeepLink(link) => {
+                                if crate::services::auth::handle_callback_link(&link, cx) {
+                                    continue;
+                                }
                                 match AppRoute::parse_deep_link(&link) {
                                     Ok(route) => this.set_route(route, cx),
                                     Err(err) => events::emit_error(err, cx),

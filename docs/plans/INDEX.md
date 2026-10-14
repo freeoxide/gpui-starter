@@ -401,7 +401,7 @@ foundations), one plan per commit, gates green between steps:
 | 15 | tutorial-mode | 5 | implemented |
 | 17 | system-controls | 5 | implemented |
 | 20 | release-bundling | 5 | implemented |
-| 21 | auth-foundation | 6 | |
+| 21 | auth-foundation | 6 | implemented |
 | 22 | auth-email | 6 | |
 | 23 | auth-social-oidc | 6 | |
 | 24 | auth-ui | 6 | |

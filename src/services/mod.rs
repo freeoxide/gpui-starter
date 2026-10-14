@@ -1,5 +1,6 @@
 pub mod accessibility;
 pub mod audio;
+pub mod auth;
 pub mod commands;
 pub mod connectivity;
 pub mod crash_report;

@@ -237,6 +237,7 @@ pub fn init(cx: &mut App) {
         crate::secure_storage::initialize(cx);
         crate::session::initialize(cx);
         crate::storage::initialize(cx);
+        crate::services::auth::install(cx);
         crate::audio::initialize(cx);
         crate::features::tutorial::initialize(cx);
 

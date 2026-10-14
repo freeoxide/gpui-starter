@@ -1,5 +1,5 @@
 [workspace]
-members = ["collab-protocol", "collab-server"]
+members = ["collab-protocol", "collab-server", "crates/gpui-auth"]
 
 [workspace.dependencies]
 # gpui-form from the freeoxide fork; rev = the fluent-to-rust-i18n merge
@@ -235,6 +235,10 @@ symphonia = { version = "0.6.1", default-features = false, features = [
 ] }
 # Shared wire types for the multiuser-canvas page and collab-server.
 collab-protocol = { path = "collab-protocol" }
+# Auth foundation (plan 21): token model, PKCE, provider trait, controller
+# entity; the app adapter is src/services/auth.rs. mock stays dev/demo-only
+# until plan 22 registers real providers.
+gpui-auth = { path = "crates/gpui-auth", features = ["mock-provider"] }
 
 [dev-dependencies]
 insta.workspace = true
@@ -389,7 +393,11 @@ gpui-kit = { workspace = true, features = [
 ] }
 # Per-platform credential stores; a platform left without its store feature
 # silently falls back to keyring's per-entry mock (writes vanish, reads miss).
-keyring = { version = "3.6.3", features = ["apple-native", "windows-native"] }
+keyring = { version = "3.6.3", features = [
+    "apple-native",
+    "linux-native",
+    "windows-native",
+] }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 notify-rust = "4.17.0"
 # `open` hits compile_error!("open is not supported on this platform") and
