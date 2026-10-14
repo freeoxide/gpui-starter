@@ -13,6 +13,7 @@ mod overlay_host;
 pub mod probe;
 pub mod registry;
 mod shell;
+mod shims;
 pub mod spawn;
 pub mod spec;
 
@@ -21,11 +22,15 @@ pub use probe::{FloatingPlatformInfo, NotchGeometry, probe};
 pub use registry::{
     FloatingHandle, FloatingWindowEntry, FloatingWindowRegistry, floating_snapshot,
 };
-pub use spawn::{close_all_floating, close_floating, respawn_floating, spawn_floating};
+pub use spawn::{
+    close_all_floating, close_floating, respawn_floating, set_floating_always_on_top,
+    set_floating_click_through, spawn_floating,
+};
 pub use spec::{FloatAnchor, FloatLevel, FloatingSpec, FloatingWindowId, Placement9};
 
 pub const CAPABILITY_FLOATING_WINDOWS: &str = "floating_windows";
 pub const CAPABILITY_ALWAYS_ON_TOP: &str = "floating_always_on_top";
+pub const CAPABILITY_FLOATING_CLICK_THROUGH: &str = "floating_click_through";
 pub const CAPABILITY_NOTCH_GEOMETRY: &str = "notch_geometry";
 
 /// Esc action inside a floating shell or overlay pane; bound by `init`.

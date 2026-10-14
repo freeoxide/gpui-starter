@@ -2,7 +2,8 @@ use gpui_kit::TestAppContext;
 
 use super::*;
 use crate::ui::floating::{
-    CAPABILITY_ALWAYS_ON_TOP, CAPABILITY_FLOATING_WINDOWS, CAPABILITY_NOTCH_GEOMETRY, init,
+    CAPABILITY_ALWAYS_ON_TOP, CAPABILITY_FLOATING_CLICK_THROUGH, CAPABILITY_FLOATING_WINDOWS,
+    CAPABILITY_NOTCH_GEOMETRY, init,
 };
 
 #[gpui_kit::test]
@@ -31,12 +32,13 @@ async fn probe_never_panics_and_reports_no_notch_off_macos(cx: &TestAppContext) 
 }
 
 #[gpui_kit::test]
-async fn init_registers_the_three_capability_rows(cx: &TestAppContext) {
+async fn init_registers_the_four_capability_rows(cx: &TestAppContext) {
     cx.update(init);
     let snapshot = cx.read(|cx| crate::capabilities::snapshot(cx));
     for key in [
         CAPABILITY_FLOATING_WINDOWS,
         CAPABILITY_ALWAYS_ON_TOP,
+        CAPABILITY_FLOATING_CLICK_THROUGH,
         CAPABILITY_NOTCH_GEOMETRY,
     ] {
         assert!(snapshot.contains_key(key), "missing capability {key}");
@@ -47,8 +49,13 @@ async fn init_registers_the_three_capability_rows(cx: &TestAppContext) {
         assert!(floating.enabled);
         assert!(floating.degraded);
         assert!(floating.reason.is_some());
+        let click_through = &snapshot[CAPABILITY_FLOATING_CLICK_THROUGH];
+        assert!(!click_through.supported);
+        assert!(!click_through.enabled);
+        assert!(click_through.reason.is_some());
     } else {
         assert!(snapshot[CAPABILITY_FLOATING_WINDOWS].supported);
         assert!(snapshot[CAPABILITY_ALWAYS_ON_TOP].supported);
+        assert!(snapshot[CAPABILITY_FLOATING_CLICK_THROUGH].supported);
     }
 }

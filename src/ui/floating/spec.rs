@@ -68,6 +68,7 @@ pub struct FloatingSpec {
     focus: bool,
     resizable: bool,
     movable: bool,
+    click_through: bool,
     min_size: Option<Size<Pixels>>,
 }
 
@@ -87,6 +88,7 @@ impl FloatingSpec {
             focus: false,
             resizable: false,
             movable: true,
+            click_through: false,
             min_size: None,
         }
     }
@@ -118,6 +120,14 @@ impl FloatingSpec {
 
     pub fn movable(mut self, movable: bool) -> Self {
         self.movable = movable;
+        self
+    }
+
+    /// Spawn-time click-through: the float ignores all pointer input.
+    /// Applied over the platform shim right after the native window opens;
+    /// advisory where no shim exists (wasm overlays, test windows).
+    pub fn click_through(mut self, enabled: bool) -> Self {
+        self.click_through = enabled;
         self
     }
 
@@ -156,6 +166,14 @@ impl FloatingSpec {
 
     pub fn is_movable(&self) -> bool {
         self.movable
+    }
+
+    pub fn is_click_through(&self) -> bool {
+        self.click_through
+    }
+
+    pub(crate) fn set_level(&mut self, level: FloatLevel) {
+        self.level = level;
     }
 
     pub fn min_window_size(&self) -> Option<Size<Pixels>> {

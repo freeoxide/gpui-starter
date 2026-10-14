@@ -61,6 +61,24 @@ pub(crate) fn remove_entry(id: &FloatingWindowId, cx: &mut App) -> Option<Regist
         .remove(id)
 }
 
+pub(crate) fn set_entry_level(handle: &FloatingHandle, level: FloatLevel, cx: &mut App) {
+    cx.default_global::<FloatingWindowRegistry>()
+        .entries
+        .iter_mut()
+        .for_each(|(_, entry)| {
+            let same = match (&entry.handle, handle) {
+                (FloatingHandle::Native(a), FloatingHandle::Native(b)) => {
+                    a.window_id() == b.window_id()
+                }
+                (FloatingHandle::Overlay(a), FloatingHandle::Overlay(b)) => a == b,
+                _ => false,
+            };
+            if same {
+                entry.spec.set_level(level);
+            }
+        });
+}
+
 pub(crate) fn overlay_panes(cx: &App) -> Vec<OverlayPane> {
     cx.try_global::<FloatingWindowRegistry>()
         .map(|registry| {

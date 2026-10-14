@@ -463,6 +463,10 @@ is unchanged. Additions to `crate::ui::floating`:
 - `FloatingWindowEntry.level` semantics widen from "spawn level" to
   "current level": a successful `set_floating_always_on_top` updates the
   registry entry. No consumer reads the field today.
+- Registry plumbing for that update: `pub(crate) fn set_entry_level` on
+  the registry plus `pub(crate) FloatingSpec::set_level(&mut self, level:
+  FloatLevel)` (rewrites the stored level; no public level builder
+  changes).
 
 Windows level-to-kind verification (plan 25, re-verified against the pinned
 gpui-pre-windows 0.3.9 source): `WindowKind::Floating` falls into the

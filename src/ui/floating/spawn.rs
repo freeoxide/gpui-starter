@@ -8,12 +8,14 @@ use gpui_kit::{AppContext as _, TitlebarOptions, WindowBounds, WindowKind, Windo
 
 use super::registry::{
     FloatingHandle, RegistryEntry, ViewFactory, floating_snapshot, remove_entry, set_entry,
+    set_entry_level,
 };
 #[cfg(not(target_family = "wasm"))]
 use super::shell::FloatingShell;
-#[cfg(not(target_family = "wasm"))]
-use super::spec::FloatLevel;
-use super::spec::{FloatAnchor, FloatingSpec, FloatingWindowId, anchor_rect, resolve_bounds};
+use super::shims;
+use super::spec::{
+    FloatAnchor, FloatLevel, FloatingSpec, FloatingWindowId, anchor_rect, resolve_bounds,
+};
 
 /// Spawn a float for `spec`. Native errors: the anchor cannot be resolved or
 /// window creation failed. On wasm the only error is that no main window has
@@ -54,6 +56,17 @@ pub fn spawn_floating(
         cx.new(|cx| FloatingShell::new(id, title, view, cx))
     })?;
     let handle = FloatingHandle::Native(window);
+    if spec.is_click_through() {
+        let applied = window
+            .update(cx, |_, window, _| shims::set_click_through(window, true))
+            .unwrap_or(false);
+        if !applied {
+            tracing::debug!(
+                target: shims::LOG,
+                "click-through not applied at spawn (no shim or unsupported handle)"
+            );
+        }
+    }
     set_entry(
         RegistryEntry {
             spec,
@@ -103,6 +116,39 @@ pub fn close_floating(handle: &FloatingHandle, cx: &mut App) -> bool {
             .is_ok(),
         FloatingHandle::Overlay(id) => remove_entry(id, cx).is_some(),
     }
+}
+
+/// Runtime mouse pass-through on an open float. Returns true when a
+/// platform shim acknowledged the request; false is a normal outcome
+/// (overlay handle, wasm, test platform, gone window), never an error.
+pub fn set_floating_click_through(handle: &FloatingHandle, enabled: bool, cx: &mut App) -> bool {
+    match handle {
+        FloatingHandle::Native(window) => window
+            .update(cx, |_, window, _| shims::set_click_through(window, enabled))
+            .unwrap_or(false),
+        FloatingHandle::Overlay(_) => false,
+    }
+}
+
+/// Runtime always-on-top on an open float. On success the registry entry's
+/// level becomes the current level; false (never an error) on overlay
+/// handles, Wayland, wasm, the test platform, or a gone window.
+pub fn set_floating_always_on_top(handle: &FloatingHandle, enabled: bool, cx: &mut App) -> bool {
+    let applied = match handle {
+        FloatingHandle::Native(window) => window
+            .update(cx, |_, window, _| shims::set_always_on_top(window, enabled))
+            .unwrap_or(false),
+        FloatingHandle::Overlay(_) => false,
+    };
+    if applied {
+        let level = if enabled {
+            FloatLevel::AlwaysOnTop
+        } else {
+            FloatLevel::Floating
+        };
+        set_entry_level(handle, level, cx);
+    }
+    applied
 }
 
 pub fn close_all_floating(cx: &mut App) -> usize {

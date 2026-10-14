@@ -89,6 +89,20 @@ pub(crate) fn register_capabilities(cx: &mut App) {
             },
             cx,
         );
+        crate::capabilities::set(
+            super::CAPABILITY_FLOATING_CLICK_THROUGH,
+            crate::capabilities::CapabilityStatus {
+                supported: false,
+                enabled: false,
+                degraded: false,
+                reason: Some(
+                    "overlay floats render inside the main window; no native window to pass input through"
+                        .into(),
+                ),
+                last_error: None,
+            },
+            cx,
+        );
         crate::capabilities::set(super::CAPABILITY_NOTCH_GEOMETRY, macos_only(), cx);
     }
     #[cfg(not(target_family = "wasm"))]
@@ -100,6 +114,11 @@ pub(crate) fn register_capabilities(cx: &mut App) {
         );
         crate::capabilities::set(
             super::CAPABILITY_ALWAYS_ON_TOP,
+            crate::capabilities::CapabilityStatus::supported_enabled(),
+            cx,
+        );
+        crate::capabilities::set(
+            super::CAPABILITY_FLOATING_CLICK_THROUGH,
             crate::capabilities::CapabilityStatus::supported_enabled(),
             cx,
         );

@@ -131,7 +131,25 @@ fn spec_defaults_center_on_the_primary_display() {
     assert!(!spec.is_focus());
     assert!(!spec.is_resizable());
     assert!(spec.is_movable());
+    assert!(!spec.is_click_through());
     assert_eq!(spec.min_window_size(), None);
+}
+
+#[test]
+fn click_through_builder_round_trips() {
+    let spec = FloatingSpec::new(FloatingWindowId("demo".into()), float_size()).click_through(true);
+    assert!(spec.is_click_through());
+    let spec = spec.click_through(false);
+    assert!(!spec.is_click_through());
+}
+
+#[test]
+fn set_level_rewrites_the_stored_level() {
+    let mut spec = FloatingSpec::new(FloatingWindowId("demo".into()), float_size());
+    assert_eq!(spec.level, FloatLevel::Floating);
+    spec.set_level(FloatLevel::AlwaysOnTop);
+    assert_eq!(spec.level, FloatLevel::AlwaysOnTop);
+    assert_eq!(spec.float_level(), FloatLevel::AlwaysOnTop);
 }
 
 #[gpui_kit::test]

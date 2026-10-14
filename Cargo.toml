@@ -239,6 +239,9 @@ collab-protocol = { path = "collab-protocol" }
 # entity; the app adapter is src/services/auth.rs. mock stays dev/demo-only
 # until plan 22 registers real providers.
 gpui-auth = { path = "crates/gpui-auth", features = ["mock-provider"] }
+# Floating window shims (src/ui/floating/shims/): raw platform handles on
+# every target incl. wasm (the crate defines the Web handle; wasm-clean).
+raw-window-handle = "0.6"
 
 [dev-dependencies]
 insta.workspace = true
@@ -301,7 +304,6 @@ objc2-core-audio = { version = "0.3.0", default-features = false, features = [
     "AudioHardware",
 ] }
 objc2-io-bluetooth = "0.3"
-raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Optional: XDG Desktop Portal notification backend (enable with --features
@@ -320,6 +322,14 @@ ashpd = { version = "0.13", optional = true, default-features = false, features 
 # WindowOptions.icon (image is already in the lock via gpui-pre; png-only
 # keeps the lock's feature set from growing).
 image = { version = "0.25", default-features = false, features = ["png"] }
+# X11 EWMH/XShape window shims (src/ui/floating/shims/x11.rs) over the
+# same x11rb 0.13 the lock already carries for gpui-pre-linux; shape gates
+# the XShape protocol module, allow-unsafe-code gates xcb_ffi (wrapping
+# the live connection; no second X connection is opened).
+x11rb = { version = "0.13", default-features = false, features = [
+    "allow-unsafe-code",
+    "shape",
+] }
 # System controls page (plan 17): BlueZ runs on the system bus (zbus blocking
 # wrappers under the default async-io runtime; never add the zbus `tokio`
 # feature alongside async-io); libpulse-binding speaks the native protocol
