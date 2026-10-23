@@ -2,14 +2,14 @@
 members = ["collab-protocol", "collab-server", "crates/gpui-auth"]
 
 [workspace.dependencies]
-# gpui-form from the freeoxide fork; rev = the fluent-to-rust-i18n merge
-# (PR #7) on origin/master.
-gpui-form = { git = "https://github.com/freeoxide/gpui-form", rev = "710b52439f0a4bb7756b6c15eff83c1340d2e157" }
+# gpui-form from the freeoxide fork (package freeoxide-gpui-form, lib name
+# gpui_form); rev = the origin/master kit-0.8.0 bump merge (PR #12).
+gpui-form = { package = "freeoxide-gpui-form", git = "https://github.com/freeoxide/gpui-form", rev = "23efdef8f30b8c72819b44b0544ef86f7ff72616" }
 
 # GPUI ecosystem — gpui-kit is the single application-facing dependency
 # (`use gpui_kit::*`; layers: component / base / assets / platform).
 # gpui-pre is the crates.io snapshot of zed gpui (package name gpui-pre,
-# lib name `gpui`); gpui-kit 0.7.3 pins the gpui-pre-* family to =0.3.9.
+# lib name `gpui`); gpui-kit 0.8.0 pins the gpui-pre-* family to =0.3.9.
 # gpui-kit enables font-kit/x11/wayland/runtime_shaders on gpui-pre-platform
 # itself, so backend selection needs no direct platform dependency.
 # qa_migration.rs fails the build if a source file imports gpui-pre or the
@@ -19,7 +19,7 @@ gpui-form = { git = "https://github.com/freeoxide/gpui-form", rev = "710b52439f0
 # Never add a direct `accesskit` dep: the kit re-exports gpui's accesskit
 # (0.24.x) and a separately-versioned copy is type-incompatible.
 gpui = { package = "gpui-pre", version = "0.3.9" }
-gpui-kit = "0.7.3"
+gpui-kit = "0.8.0"
 
 # Serialization & data
 anyhow = "1"

@@ -97,11 +97,15 @@ impl Render for HtmlRenderSection {
                         .label(match self.selection_format {
                             SelectionFormat::Plain => "Selection: Plain",
                             SelectionFormat::Source => "Selection: Source",
+                            SelectionFormat::SourceAcrossStyles => {
+                                "Selection: Source Across Styles"
+                            }
                         })
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.selection_format = match this.selection_format {
                                 SelectionFormat::Plain => SelectionFormat::Source,
-                                SelectionFormat::Source => SelectionFormat::Plain,
+                                SelectionFormat::Source => SelectionFormat::SourceAcrossStyles,
+                                SelectionFormat::SourceAcrossStyles => SelectionFormat::Plain,
                             };
                             cx.notify();
                         })),

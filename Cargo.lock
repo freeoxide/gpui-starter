@@ -1325,19 +1325,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "component-shape"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7d398549ecfe0428e40adbc7c1bb08be277a5eb33c5aaaa9341c0624253f480"
-dependencies = [
- "derive_more",
- "heck 0.5.0",
- "strum 0.28.0",
- "syn 3.0.3",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2705,6 +2692,106 @@ dependencies = [
 ]
 
 [[package]]
+name = "freeoxide-gpui-form"
+version = "0.10.0"
+source = "git+https://github.com/freeoxide/gpui-form?rev=23efdef8f30b8c72819b44b0544ef86f7ff72616#23efdef8f30b8c72819b44b0544ef86f7ff72616"
+dependencies = [
+ "bon",
+ "freeoxide-gpui-form-component",
+ "freeoxide-gpui-form-core",
+ "freeoxide-gpui-form-derive",
+ "freeoxide-gpui-form-schema",
+]
+
+[[package]]
+name = "freeoxide-gpui-form-codegen"
+version = "0.10.0"
+source = "git+https://github.com/freeoxide/gpui-form?rev=23efdef8f30b8c72819b44b0544ef86f7ff72616#23efdef8f30b8c72819b44b0544ef86f7ff72616"
+dependencies = [
+ "darling",
+ "derive_more",
+ "freeoxide-gpui-form-schema",
+ "proc-macro2",
+ "quote",
+ "strum 0.28.0",
+ "syn 2.0.118",
+]
+
+[[package]]
+name = "freeoxide-gpui-form-component"
+version = "0.10.0"
+source = "git+https://github.com/freeoxide/gpui-form?rev=23efdef8f30b8c72819b44b0544ef86f7ff72616#23efdef8f30b8c72819b44b0544ef86f7ff72616"
+dependencies = [
+ "chrono",
+ "freeoxide-gpui-form-component-derive",
+ "freeoxide-gpui-form-i18n",
+ "gpui-kit",
+ "gpui-pre",
+ "icu_calendar",
+ "icu_datetime",
+ "icu_locale_core",
+ "jiff",
+ "rust-i18n",
+ "serde",
+]
+
+[[package]]
+name = "freeoxide-gpui-form-component-derive"
+version = "0.10.0"
+source = "git+https://github.com/freeoxide/gpui-form?rev=23efdef8f30b8c72819b44b0544ef86f7ff72616#23efdef8f30b8c72819b44b0544ef86f7ff72616"
+dependencies = [
+ "darling",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
+]
+
+[[package]]
+name = "freeoxide-gpui-form-core"
+version = "0.10.0"
+source = "git+https://github.com/freeoxide/gpui-form?rev=23efdef8f30b8c72819b44b0544ef86f7ff72616#23efdef8f30b8c72819b44b0544ef86f7ff72616"
+
+[[package]]
+name = "freeoxide-gpui-form-derive"
+version = "0.10.0"
+source = "git+https://github.com/freeoxide/gpui-form?rev=23efdef8f30b8c72819b44b0544ef86f7ff72616#23efdef8f30b8c72819b44b0544ef86f7ff72616"
+dependencies = [
+ "darling",
+ "freeoxide-gpui-form-codegen",
+ "heck 0.5.0",
+ "itertools 0.14.0",
+ "koruma-derive-core",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
+ "syn-cfg-attr",
+]
+
+[[package]]
+name = "freeoxide-gpui-form-i18n"
+version = "0.10.0"
+source = "git+https://github.com/freeoxide/gpui-form?rev=23efdef8f30b8c72819b44b0544ef86f7ff72616#23efdef8f30b8c72819b44b0544ef86f7ff72616"
+dependencies = [
+ "gpui-pre",
+ "rust-i18n",
+ "strum 0.28.0",
+ "thiserror 2.0.18",
+ "unic-langid",
+]
+
+[[package]]
+name = "freeoxide-gpui-form-schema"
+version = "0.10.0"
+source = "git+https://github.com/freeoxide/gpui-form?rev=23efdef8f30b8c72819b44b0544ef86f7ff72616#23efdef8f30b8c72819b44b0544ef86f7ff72616"
+dependencies = [
+ "heck 0.5.0",
+ "inventory",
+ "serde",
+ "strum 0.28.0",
+]
+
+[[package]]
 name = "freetype-sys"
 version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3091,9 +3178,9 @@ dependencies = [
 
 [[package]]
 name = "gpui-base"
-version = "0.7.3"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e9955b6f4b048fd50ca15fc8e225d80bb00ba9ebc8fecdddde5ad26dbef9270"
+checksum = "d5cd7de73d5b2d3d18b94a928abf343922091fa77bc472f77b7d2e7e8b1823a7"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -3132,9 +3219,9 @@ dependencies = [
 
 [[package]]
 name = "gpui-component"
-version = "0.7.3"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "465a363235cd4062ef5f0953fc096fc764ed6f53dfbd9f409f669f93ea3b1ff9"
+checksum = "4097e161cc81e86323b439664be0cdd4f7c56148e867ed6f67fd72b966b6c2d1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3197,125 +3284,21 @@ dependencies = [
 
 [[package]]
 name = "gpui-component-macros"
-version = "0.7.3"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c0c9398aaf99e595d450e38eb44ff0c500df8c332b4783d5b72022e69525359"
+checksum = "6b98496748463b60ad69eab80cd91fc9b3807fed9a0e01ab4d5c159c949fd814"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
  "syn 2.0.118",
-]
-
-[[package]]
-name = "gpui-form"
-version = "0.5.2"
-source = "git+https://github.com/freeoxide/gpui-form?rev=710b52439f0a4bb7756b6c15eff83c1340d2e157#710b52439f0a4bb7756b6c15eff83c1340d2e157"
-dependencies = [
- "bon",
- "gpui-form-component",
- "gpui-form-core",
- "gpui-form-derive",
- "gpui-form-schema",
-]
-
-[[package]]
-name = "gpui-form-codegen"
-version = "0.5.2"
-source = "git+https://github.com/freeoxide/gpui-form?rev=710b52439f0a4bb7756b6c15eff83c1340d2e157#710b52439f0a4bb7756b6c15eff83c1340d2e157"
-dependencies = [
- "darling",
- "derive_more",
- "gpui-form-schema",
- "proc-macro2",
- "quote",
- "strum 0.28.0",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "gpui-form-component"
-version = "0.5.2"
-source = "git+https://github.com/freeoxide/gpui-form?rev=710b52439f0a4bb7756b6c15eff83c1340d2e157#710b52439f0a4bb7756b6c15eff83c1340d2e157"
-dependencies = [
- "chrono",
- "gpui-form-component-derive",
- "gpui-form-i18n",
- "gpui-kit",
- "gpui-pre",
- "icu_calendar",
- "icu_datetime",
- "icu_locale_core",
- "jiff",
- "rust-i18n",
- "serde",
-]
-
-[[package]]
-name = "gpui-form-component-derive"
-version = "0.5.2"
-source = "git+https://github.com/freeoxide/gpui-form?rev=710b52439f0a4bb7756b6c15eff83c1340d2e157#710b52439f0a4bb7756b6c15eff83c1340d2e157"
-dependencies = [
- "darling",
- "proc-macro-crate",
- "proc-macro-error2",
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "gpui-form-core"
-version = "0.5.2"
-source = "git+https://github.com/freeoxide/gpui-form?rev=710b52439f0a4bb7756b6c15eff83c1340d2e157#710b52439f0a4bb7756b6c15eff83c1340d2e157"
-
-[[package]]
-name = "gpui-form-derive"
-version = "0.5.2"
-source = "git+https://github.com/freeoxide/gpui-form?rev=710b52439f0a4bb7756b6c15eff83c1340d2e157#710b52439f0a4bb7756b6c15eff83c1340d2e157"
-dependencies = [
- "component-shape",
- "darling",
- "gpui-form-codegen",
- "heck 0.5.0",
- "itertools 0.14.0",
- "koruma-derive-core",
- "proc-macro-crate",
- "proc-macro-error2",
- "proc-macro2",
- "quote",
- "strum 0.28.0",
- "syn 2.0.118",
- "syn-cfg-attr",
-]
-
-[[package]]
-name = "gpui-form-i18n"
-version = "0.5.2"
-source = "git+https://github.com/freeoxide/gpui-form?rev=710b52439f0a4bb7756b6c15eff83c1340d2e157#710b52439f0a4bb7756b6c15eff83c1340d2e157"
-dependencies = [
- "gpui-pre",
- "rust-i18n",
- "strum 0.28.0",
- "thiserror 2.0.18",
- "unic-langid",
-]
-
-[[package]]
-name = "gpui-form-schema"
-version = "0.5.2"
-source = "git+https://github.com/freeoxide/gpui-form?rev=710b52439f0a4bb7756b6c15eff83c1340d2e157#710b52439f0a4bb7756b6c15eff83c1340d2e157"
-dependencies = [
- "heck 0.5.0",
- "inventory",
- "strum 0.28.0",
 ]
 
 [[package]]
 name = "gpui-kit"
-version = "0.7.3"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fac401f6b149bf33794da0942510240afd29b7b18556574e4cf17196b647066"
+checksum = "3cdcb78553bef8785669e572e79759b0eab47fdd9d318fe0cce1def798189432"
 dependencies = [
  "gpui-base",
  "gpui-component",
@@ -3328,9 +3311,9 @@ dependencies = [
 
 [[package]]
 name = "gpui-kit-assets"
-version = "0.7.3"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7abc281dcbfe51c16a7e73189521a3a771168c31e3ab0db99e21e481d1b1b9a"
+checksum = "b037e2fa43d53a567a8aa5be6b1a8931f416cbd010ceee8d4a3727a71e9b1d05"
 dependencies = [
  "anyhow",
  "gpui-pre",
@@ -3849,11 +3832,11 @@ dependencies = [
  "directories",
  "ed25519-dalek",
  "flume 0.11.1",
+ "freeoxide-gpui-form",
  "futures-util",
  "fuzzy-matcher",
  "global-hotkey",
  "gpui-auth",
- "gpui-form",
  "gpui-kit",
  "gpui-pre",
  "gpui-query",
