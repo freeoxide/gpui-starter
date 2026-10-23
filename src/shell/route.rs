@@ -30,6 +30,7 @@ pub(crate) const VALID_HOSTS: &[&str] = &[
     Page::Music.host(),
     Page::SignIn.host(),
     Page::DesktopWidgets.host(),
+    Page::Wgpu.host(),
 ];
 
 const INVALID_SEGMENT_CHARS: &[char] = &['/', '\\', '\0', '<', '>', '|', '"'];

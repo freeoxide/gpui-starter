@@ -1,5 +1,6 @@
 use gpui_kit::{prelude::*, *};
 
+use crate::features::wgpu::WgpuPage;
 use crate::gallery::GalleryPage;
 use crate::sidebar::Page;
 use crate::title_bar::AppTitleBar;
@@ -44,6 +45,7 @@ pub struct AppRoot {
     pub(crate) sign_in_page: Entity<SignInPage>,
     pub(crate) desktop_widgets_page: Entity<DesktopWidgetsPage>,
     pub(crate) now_playing_bar: Entity<crate::features::pages::music::NowPlayingBar>,
+    pub(crate) wgpu_page: Entity<WgpuPage>,
     pub(crate) floating_host: Entity<crate::ui::floating::OverlayFloatHost>,
     pub(crate) floating_ui_session: Entity<crate::features::pages::floating_ui::PaletteSession>,
     pub(crate) floating_ui_host: Entity<crate::features::pages::floating_ui::PalettePanelHost>,
@@ -77,6 +79,7 @@ impl AppRoot {
         let canvas_showcase_page = cx.new(CanvasShowcasePage::new);
         let infinite_canvas_page = cx.new(|cx| InfiniteCanvasPage::new(window, cx));
         let multiuser_canvas_page = cx.new(|cx| MultiuserCanvasPage::new(window, cx));
+        let wgpu_page = cx.new(|cx| WgpuPage::new(window, cx));
         let floating_host = cx.new(|cx| crate::ui::floating::OverlayFloatHost::new(window, cx));
         let floating_ui_session = cx.new(crate::features::pages::floating_ui::PaletteSession::new);
         let floating_ui_host = cx.new(|cx| {
@@ -242,6 +245,7 @@ impl AppRoot {
             canvas_showcase_page,
             infinite_canvas_page,
             multiuser_canvas_page,
+            wgpu_page,
             floating_host,
             floating_ui_session,
             floating_ui_host,
@@ -307,6 +311,7 @@ impl AppRoot {
             Page::Music => self.music_page.clone().into(),
             Page::SignIn => self.sign_in_page.clone().into(),
             Page::DesktopWidgets => self.desktop_widgets_page.clone().into(),
+            Page::Wgpu => self.wgpu_page.clone().into(),
         }
     }
 

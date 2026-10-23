@@ -248,6 +248,8 @@ insta.workspace = true
 # Test-only: TestAppContext + deterministic timers for the config-store
 # debounce tests. Dev-dep features never reach production or wasm builds.
 gpui = { package = "gpui-pre", version = "0.3.9", features = ["test-support"] }
+# GPU-free WGSL validation; same version as the lock's naga.
+naga = { version = "=29.0.4", features = ["wgsl-in"] }
 
 # Test-only (plan 22 email-auth e2e): fast argon2 cost params for the demo
 # backend plus an RFC 6238 code oracle for the TOTP suites. Same target gate
@@ -454,6 +456,9 @@ openidconnect = { version = "4.0", default-features = false, features = [
     "reqwest",
     "rustls-tls",
 ] }
+# Exact pin shares the lock's single wgpu copy with gpui-pre-wgpu; any other
+# version compiles a second full wgpu/naga stack into the binary.
+wgpu = { version = "=29.0.4" }
 
 # Web (wasm32-unknown-unknown) dependencies.
 [target.'cfg(target_family = "wasm")'.dependencies]

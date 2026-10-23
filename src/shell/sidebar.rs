@@ -25,6 +25,7 @@ pub enum Page {
     Music,
     SignIn,
     DesktopWidgets,
+    Wgpu,
 }
 
 impl Page {
@@ -52,6 +53,7 @@ impl Page {
             Page::Music => "Music",
             Page::SignIn => "Sign In",
             Page::DesktopWidgets => "Desktop Widgets",
+            Page::Wgpu => "WGPU",
         }
     }
 
@@ -81,6 +83,7 @@ impl Page {
             Page::Music => "nav_music",
             Page::SignIn => "nav_sign_in",
             Page::DesktopWidgets => "nav_desktop_widgets",
+            Page::Wgpu => "nav_wgpu",
         }
     }
 
@@ -114,6 +117,7 @@ impl Page {
             Page::Music => "music",
             Page::SignIn => "sign-in",
             Page::DesktopWidgets => "desktop-widgets",
+            Page::Wgpu => "wgpu",
         }
     }
 
@@ -154,6 +158,7 @@ impl Page {
             Page::Music => IconName::Play,
             Page::SignIn => IconName::User,
             Page::DesktopWidgets => IconName::PanelBottom,
+            Page::Wgpu => IconName::Cpu,
         }
     }
 
@@ -181,6 +186,7 @@ impl Page {
             Page::Music,
             Page::SignIn,
             Page::DesktopWidgets,
+            Page::Wgpu,
         ]
     }
 }

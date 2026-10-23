@@ -105,6 +105,7 @@ pub fn init(cx: &mut App) {
         "launcher",
         "app_menu",
         "command_registry",
+        "wgpu_embed",
         "music_playback",
         "tutorial",
     ];
@@ -116,6 +117,22 @@ pub fn init(cx: &mut App) {
         );
     }
     crate::features::menubar_charts::init(cx);
+
+    // Offscreen wgpu is native-only; the wasm page renders a reason panel.
+    #[cfg(target_family = "wasm")]
+    crate::capabilities::set(
+        crate::features::wgpu::CAPABILITY_WGPU,
+        crate::capabilities::CapabilityStatus {
+            supported: false,
+            enabled: false,
+            degraded: false,
+            reason: Some(
+                "Offscreen wgpu rendering is native-only; the web build ships no bridge.".into(),
+            ),
+            last_error: None,
+        },
+        cx,
+    );
 
     let system_locale = crate::i18n::detect_system_locale();
     tracing::info!(

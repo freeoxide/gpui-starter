@@ -383,7 +383,7 @@ foundations), one plan per commit, gates green between steps:
 |---|---|---|---|
 | 01 | canvas-foundation | 1 | implemented |
 | 02 | floating-window-toolkit | 1 | implemented |
-| 11 | wgpu-embed | 1 | |
+| 11 | wgpu-embed | 1 | implemented |
 | 16 | waveform-foundation | 1 | implemented |
 | 03 | notch-floater | 2 | implemented |
 | 04 | menubar-charts | 2 | implemented |
@@ -581,9 +581,14 @@ Test-harness limits (accept the documented workarounds; do not invent tooling):
   `TestAppContext` state assertions plus manual QA.
 - No scroll-wheel or held-key simulation in the test harness. 01 (wheel
   router), 06 (space-pan); covered by unit math + manual QA.
-- GPU-dependent tests are `#[ignore]`d; CI has no GPU job. 07, 11 (also 11's
-  1M-particle perf target unmeasured, and lavapipe availability on runners
-  unknown, 07).
+- GPU-dependent tests are `#[ignore]`d; CI has no GPU job. 07, 11 (11's
+  1M-particle budget now has a local-only `#[ignore]`d timing smoke:
+  `renders_one_million_particles_within_the_frame_budget` asserts a median
+  render under ~16 ms on hardware adapters and, on software rasterizers,
+  logs the median and asserts only that the 1M path completes — measured
+  2236.5 ms median on this repo's llvmpipe dev container, no GPU present;
+  on-screen manual QA items stay unrun there, no display; lavapipe
+  availability on runners unknown, 07).
 
 Platform verification gaps (first-run watch lists inside each plan):
 
