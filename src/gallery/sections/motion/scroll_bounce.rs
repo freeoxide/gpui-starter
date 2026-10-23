@@ -47,6 +47,7 @@ pub struct ScrollBounceSection {
     list: ListState,
     short: ScrollHandle,
     enabled: bool,
+    wrapper_wheel: bool,
     generation: usize,
     drag: Option<MouseScroll>,
 }
@@ -57,6 +58,7 @@ impl ScrollBounceSection {
             list: ListState::new(ROWS, ListAlignment::Top, px(200.)).measure_all(),
             short: ScrollHandle::new(),
             enabled: true,
+            wrapper_wheel: true,
             generation: 0,
             drag: None,
         })
@@ -92,6 +94,20 @@ impl ScrollBounceSection {
                     })
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.enabled = !this.enabled;
+                        cx.notify();
+                    })),
+            )
+            .child(
+                Button::new("scroll-bounce-wheel")
+                    .outline()
+                    .label(if self.wrapper_wheel {
+                        "Wheel: wrapper"
+                    } else {
+                        "Wheel: child"
+                    })
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.wrapper_wheel = !this.wrapper_wheel;
+                        this.generation += 1;
                         cx.notify();
                     })),
             )
@@ -180,7 +196,8 @@ impl ScrollBounceSection {
                                     })
                                     .flex_1(),
                                 )
-                                .enabled(self.enabled),
+                                .enabled(self.enabled)
+                                .scroll_wheel(self.wrapper_wheel),
                             ),
                     ),
             )
@@ -225,7 +242,10 @@ impl ScrollBounceSection {
                                         ),
                                 ),
                         )
-                        .enabled(self.enabled),
+                        // With no overflow the wrapper-owned wheel cannot
+                        // stretch, so this pane keeps the child-owned path.
+                        .enabled(self.enabled)
+                        .scroll_wheel(false),
                     ),
             )
     }
@@ -236,8 +256,10 @@ impl Render for ScrollBounceSection {
         v_flex().gap_3().w_full().items_center().p_4().child(
             section("scroll-bounce-demo", "Edge stretch")
                 .description(
-                    "Hold the left mouse button on the list and drag past an edge, then \
-                         release. Trackpad scrolling also works.",
+                    "Wheel: wrapper runs the shared engine, so a trackpad bounces and the \
+                         innermost area keeps the whole gesture. Wheel: child leaves scrolling \
+                         to the list and stretches only drag input. Hold the left mouse \
+                         button and drag past an edge, then release.",
                 )
                 .child(
                     div()
