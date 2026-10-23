@@ -388,9 +388,8 @@ impl ShaderCanvasPage {
                                 .on_click(cx.listener(|this, _, _, cx| this.start_runtime(cx))),
                         ),
                 )
-                // The ticker keeps draining retired frames while the error
-                // panel shows; its kick gate refuses frames while the error
-                // is set.
+                // The ticker stays mounted on error: it keeps draining retired
+                // frames, and its kick gate refuses frames while error is set.
                 .child(self.render_ticker(cx)),
             None => viewport_border(div())
                 .child(Canvas::new("shader-canvas", self.canvas.clone()))
