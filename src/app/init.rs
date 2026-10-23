@@ -106,6 +106,7 @@ pub fn init(cx: &mut App) {
         "app_menu",
         "command_registry",
         "wgpu_embed",
+        "canvas_shaders",
         "music_playback",
         "tutorial",
     ];
@@ -128,6 +129,22 @@ pub fn init(cx: &mut App) {
             degraded: false,
             reason: Some(
                 "Offscreen wgpu rendering is native-only; the web build ships no bridge.".into(),
+            ),
+            last_error: None,
+        },
+        cx,
+    );
+
+    // The shader canvas rides the same native-only bridge.
+    #[cfg(target_family = "wasm")]
+    crate::capabilities::set(
+        crate::views::CAPABILITY_SHADERS,
+        crate::capabilities::CapabilityStatus {
+            supported: false,
+            enabled: false,
+            degraded: true,
+            reason: Some(
+                "WGSL shader rendering needs an offscreen wgpu device; the web build ships no bridge.".into(),
             ),
             last_error: None,
         },

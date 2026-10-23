@@ -31,6 +31,7 @@ pub(crate) const VALID_HOSTS: &[&str] = &[
     Page::SignIn.host(),
     Page::DesktopWidgets.host(),
     Page::Wgpu.host(),
+    Page::ShaderCanvas.host(),
 ];
 
 const INVALID_SEGMENT_CHARS: &[char] = &['/', '\\', '\0', '<', '>', '|', '"'];

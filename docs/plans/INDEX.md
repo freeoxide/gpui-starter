@@ -393,7 +393,7 @@ foundations), one plan per commit, gates green between steps:
 | 09 | floating-ui | 3 | implemented |
 | 14 | image-editor | 3 | implemented |
 | 10 | floating-canvas | 3 | implemented |
-| 07 | canvas-shaders | 4 | |
+| 07 | canvas-shaders | 4 | implemented |
 | 18 | microphone | 4 | implemented |
 | 19 | audio-playback | 4 | implemented |
 | 12 | real-app-ui | 5 | implemented |

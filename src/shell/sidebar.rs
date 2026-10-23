@@ -26,6 +26,7 @@ pub enum Page {
     SignIn,
     DesktopWidgets,
     Wgpu,
+    ShaderCanvas,
 }
 
 impl Page {
@@ -54,6 +55,7 @@ impl Page {
             Page::SignIn => "Sign In",
             Page::DesktopWidgets => "Desktop Widgets",
             Page::Wgpu => "WGPU",
+            Page::ShaderCanvas => "Shader Canvas",
         }
     }
 
@@ -84,6 +86,7 @@ impl Page {
             Page::SignIn => "nav_sign_in",
             Page::DesktopWidgets => "nav_desktop_widgets",
             Page::Wgpu => "nav_wgpu",
+            Page::ShaderCanvas => "nav_shader_canvas",
         }
     }
 
@@ -118,6 +121,7 @@ impl Page {
             Page::SignIn => "sign-in",
             Page::DesktopWidgets => "desktop-widgets",
             Page::Wgpu => "wgpu",
+            Page::ShaderCanvas => "shader-canvas",
         }
     }
 
@@ -159,6 +163,7 @@ impl Page {
             Page::SignIn => IconName::User,
             Page::DesktopWidgets => IconName::PanelBottom,
             Page::Wgpu => IconName::Cpu,
+            Page::ShaderCanvas => IconName::Palette,
         }
     }
 
@@ -187,6 +192,7 @@ impl Page {
             Page::SignIn,
             Page::DesktopWidgets,
             Page::Wgpu,
+            Page::ShaderCanvas,
         ]
     }
 }

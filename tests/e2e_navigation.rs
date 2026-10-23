@@ -11,14 +11,14 @@ use gpui_starter::sidebar::Page;
 #[test]
 fn test_sidebar_pages_exist() {
     let all = Page::all();
-    // The app must expose exactly twenty-three pages (nine feature pages +
+    // The app must expose exactly twenty-four pages (nine feature pages +
     // System Controls + Gallery + Canvas Showcase + Infinite Canvas + Shared
     // Canvas + Floating UI + Image Editor + Microphone + Audio + Analytics +
-    // Music + Sign In + Desktop Widgets + WGPU).
+    // Music + Sign In + Desktop Widgets + WGPU + Shader Canvas).
     assert_eq!(
         all.len(),
-        23,
-        "expected 23 sidebar pages, got {}",
+        24,
+        "expected 24 sidebar pages, got {}",
         all.len()
     );
 
@@ -47,6 +47,7 @@ fn test_sidebar_pages_exist() {
         Page::SignIn,
         Page::DesktopWidgets,
         Page::Wgpu,
+        Page::ShaderCanvas,
     ];
 
     for page in &expected {
