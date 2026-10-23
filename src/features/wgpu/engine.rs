@@ -73,9 +73,6 @@ impl WgpuEngine {
     ) -> Result<Vec<u8>> {
         let padded = padded_bytes_per_row(width);
         let size = (padded * height as usize) as u64;
-        // Held until the bytes are read back and the buffer is unmapped, so
-        // overlapping callers serialize instead of double-mapping the
-        // reused buffer; an early `?` return just drops the cache entry.
         let mut slot = self.readback.lock().expect("wgpu readback cache");
         let buffer = match slot.take() {
             Some((cached_size, buffer)) if cached_size == size => buffer,

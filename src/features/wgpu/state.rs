@@ -146,9 +146,8 @@ impl WgpuPageState {
         self.engine_ms_ema += 0.2 * (engine_ms - self.engine_ms_ema);
         self.frames_rendered += 1;
         self.frame_in_flight = false;
-        // The deadline advances from the previous deadline, not from now, so
-        // render time overlaps the sleep instead of adding to it; the clamp
-        // drops the debt once a frame can no longer make its slot.
+        // The deadline advances from the previous deadline, not now, so
+        // render time overlaps the sleep; the clamp drops missed-slot debt.
         self.next_frame_at = Some(match self.next_frame_at {
             Some(previous) => (previous + FRAME_INTERVAL).max(now),
             None => now + FRAME_INTERVAL,
