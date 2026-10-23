@@ -199,6 +199,9 @@ impl Render for AppRoot {
             let sidebar_panel = resizable_panel()
                 .size(px(255.))
                 .size_range(px(180.)..px(400.))
+                // The sidebar keeps the width the user dragged it to; window
+                // resizes are absorbed by the content panel.
+                .fixed()
                 .child(
                     div()
                         .id("sidebar-nav")

@@ -232,7 +232,13 @@ impl Render for NowPlayingBar {
                     .child(div().child("/"))
                     .child(div().child(format_time(duration))),
             )
-            .child(Slider::new(&self.seek).horizontal().flex_1().min_w_0())
+            .child(
+                Slider::new(&self.seek)
+                    .horizontal()
+                    .flex_1()
+                    .min_w_0()
+                    .accessibility_label(crate::i18n::localize("music_seek")),
+            )
             .child(
                 h_flex()
                     .id("npb-volume")
@@ -241,7 +247,11 @@ impl Render for NowPlayingBar {
                     .gap_2()
                     .items_center()
                     .child(Icon::new(IconName::Settings2).xsmall())
-                    .child(Slider::new(&self.volume).w(rems(8.))),
+                    .child(
+                        Slider::new(&self.volume)
+                            .w(rems(8.))
+                            .accessibility_label(crate::i18n::localize("music_volume")),
+                    ),
             )
     }
 }

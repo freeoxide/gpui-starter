@@ -4,8 +4,9 @@ use gpui_kit::component::{
     table::{Column, ColumnFixed, ColumnSort, TableDelegate, TableState},
 };
 use gpui_kit::{
-    App, Context, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement as _,
-    Stateful, Styled as _, TextAlign, Window, div, prelude::FluentBuilder as _,
+    App, Context, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
+    Pixels, SharedString, Stateful, Styled as _, TextAlign, TextRun, Window, div,
+    prelude::FluentBuilder as _, px,
 };
 
 use super::model::{ChannelKey, ChannelRow};
@@ -115,6 +116,12 @@ impl ChannelTableDelegate {
         self.size = size;
     }
 
+    pub(crate) fn set_col_widths(&mut self, widths: &[Pixels]) {
+        for (column, width) in self.columns.iter_mut().zip(widths) {
+            column.width = *width;
+        }
+    }
+
     pub(crate) fn key_at(&self, row_ix: usize) -> Option<ChannelKey> {
         self.rows.get(row_ix).map(ChannelKey::of)
     }
@@ -177,6 +184,21 @@ impl ChannelTableDelegate {
             })
             .when(col.align == TextAlign::Right, |this| this.justify_end())
     }
+
+    fn cell_text(row: &ChannelRow, col: &Column) -> String {
+        match col.key.as_ref() {
+            "page" => row.page.to_string(),
+            "channel" => row.channel.to_string(),
+            "visitors" => format::compact(row.visitors),
+            "sessions" => format::compact(row.sessions),
+            "revenue" => format::money(row.revenue),
+            "conversion" => format::percent(row.conversion, 1),
+            _ => {
+                let secs = row.avg_session_secs as usize;
+                format!("{}m {}s", secs / 60, secs % 60)
+            }
+        }
+    }
 }
 
 impl TableDelegate for ChannelTableDelegate {
@@ -237,39 +259,69 @@ impl TableDelegate for ChannelTableDelegate {
             return div().into_any_element();
         };
 
+        let text = Self::cell_text(row, col);
         match col.key.as_ref() {
             "page" => self
                 .value_cell(col)
-                .child(div().truncate().child(row.page.clone()))
+                .child(div().truncate().child(text))
                 .into_any_element(),
             "channel" => self
                 .value_cell(col)
                 .text_color(cx.theme().muted_foreground)
-                .child(row.channel.clone())
+                .child(text)
                 .into_any_element(),
-            "visitors" => self
-                .value_cell(col)
-                .child(format::compact(row.visitors))
-                .into_any_element(),
-            "sessions" => self
-                .value_cell(col)
-                .child(format::compact(row.sessions))
-                .into_any_element(),
-            "revenue" => self
-                .value_cell(col)
-                .child(format::money(row.revenue))
-                .into_any_element(),
-            "conversion" => self
-                .value_cell(col)
-                .child(format::percent(row.conversion, 1))
-                .into_any_element(),
-            _ => {
-                let secs = row.avg_session_secs as usize;
-                self.value_cell(col)
-                    .child(format!("{}m {}s", secs / 60, secs % 60))
-                    .into_any_element()
-            }
+            _ => self.value_cell(col).child(text).into_any_element(),
         }
+    }
+
+    fn fit_column(
+        &mut self,
+        col_ix: usize,
+        window: &mut Window,
+        _: &mut Context<TableState<Self>>,
+    ) -> Option<Pixels> {
+        let col = self.columns.get(col_ix)?.clone();
+        let rem = window.rem_size();
+        let font_size = match self.size {
+            Size::XSmall => rem * 0.75,
+            Size::Large | Size::Size(_) => rem,
+            _ => rem * 0.875,
+        };
+        let font = window.text_style().font();
+        let text_width = |text: &str| -> Pixels {
+            window
+                .text_system()
+                .shape_line(
+                    SharedString::from(text),
+                    font_size,
+                    &[TextRun {
+                        len: text.len(),
+                        font: font.clone(),
+                        color: Hsla::default(),
+                        background_color: None,
+                        underline: None,
+                        strikethrough: None,
+                    }],
+                    None,
+                )
+                .width
+        };
+
+        let cells = self
+            .rows
+            .iter()
+            .map(|row| text_width(&Self::cell_text(row, &col)))
+            .fold(px(0.), Pixels::max);
+        let sort_icon = rem * 0.75 + px(4.);
+        let header = text_width(col.name.as_ref()) + sort_icon;
+        let mut width = cells.max(header);
+        // The numeric columns are p_0 but draw the default cell padding inside
+        // value_cell, so the table's zero-padding fit math needs a top-up.
+        if col.paddings.is_some() {
+            let padding = self.size.table_cell_padding();
+            width += padding.left + padding.right;
+        }
+        Some(width)
     }
 
     fn perform_sort(

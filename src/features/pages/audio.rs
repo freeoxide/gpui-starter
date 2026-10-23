@@ -463,7 +463,12 @@ impl AudioPage {
                     .child(crate::i18n::localize(status_key(status)))
             }))
             .child(Icon::new(IconName::Settings2))
-            .child(Slider::new(&self.volume_slider).horizontal().w_32())
+            .child(
+                Slider::new(&self.volume_slider)
+                    .horizontal()
+                    .w_32()
+                    .accessibility_label(crate::i18n::localize("audio_volume")),
+            )
             .child(
                 Button::new("audio-device-refresh")
                     .ghost()

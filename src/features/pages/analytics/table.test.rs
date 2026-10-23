@@ -1,5 +1,6 @@
+use gpui_kit::component::Size;
 use gpui_kit::component::table::{ColumnSort, TableDelegate, TableState};
-use gpui_kit::{TestAppContext, WindowHandle, px, size};
+use gpui_kit::{Hsla, TestAppContext, TextRun, WindowHandle, px, size};
 
 use super::super::model::{ChannelRow, Segment, WorkspaceData};
 use super::ChannelTableDelegate;
@@ -136,4 +137,48 @@ async fn set_loading_drives_the_loading_flag(cx: &mut TestAppContext) {
         let delegate = entity.read(cx).delegate();
         assert!(delegate.loading(cx));
     });
+}
+
+#[gpui_kit::test]
+async fn fitted_page_column_holds_the_longest_cell_text(cx: &mut TestAppContext) {
+    let table = load_table(cx);
+    let entity = table.root(cx).unwrap();
+    let longest_page = cx.read(|cx| {
+        let delegate = entity.read(cx).delegate();
+        (0..delegate.rows_count(cx))
+            .map(|ix| delegate.row(ix).unwrap().page.clone())
+            .max_by_key(|page| page.len())
+            .expect("fixture has rows")
+    });
+
+    table
+        .update(cx, |state, window, cx| {
+            assert!(state.fit_col(0, window, cx));
+            let width = state.col_width(0).expect("column 0 exists");
+            let rem = window.rem_size();
+            let font = window.text_style().font();
+            let text = window
+                .text_system()
+                .shape_line(
+                    longest_page.clone(),
+                    rem * 0.875,
+                    &[TextRun {
+                        len: longest_page.len(),
+                        font,
+                        color: Hsla::default(),
+                        background_color: None,
+                        underline: None,
+                        strikethrough: None,
+                    }],
+                    None,
+                )
+                .width;
+            let padding = Size::default().table_cell_padding();
+            let content_box = width - padding.left - padding.right;
+            assert!(
+                content_box >= text,
+                "fitted content box {content_box} must hold {text} of page text"
+            );
+        })
+        .unwrap();
 }

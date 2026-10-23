@@ -4,7 +4,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{
     AnyWindowHandle, AppContext as _, Context, Entity, Render as _, TestAppContext, Window,
-    WindowOptions,
+    WindowOptions, px,
 };
 
 use super::AnalyticsPage;
@@ -225,4 +225,33 @@ async fn page_renders_in_every_region_state_without_panicking(cx: &TestAppContex
         })
     });
     render_here(cx);
+}
+
+#[gpui_kit::test]
+async fn fitted_column_width_survives_a_reload(cx: &TestAppContext) {
+    let (handle, page) = open_page(cx);
+    commit_first_reload(cx, &page);
+
+    let fitted = {
+        let mut fitted = px(0.);
+        with_window(cx, &handle, &page, |page, window, cx| {
+            page.table.update(cx, |table, table_cx| {
+                assert!(table.fit_col(0, window, table_cx));
+                fitted = table.col_width(0).expect("column 0 exists");
+            });
+        });
+        fitted
+    };
+    assert_ne!(
+        fitted,
+        px(200.),
+        "fitting the page column must move it off its spec width"
+    );
+
+    commit_first_reload(cx, &page);
+    cx.read(|cx| {
+        let table = page.read(cx).table.read(cx);
+        assert_eq!(table.col_width(0), Some(fitted));
+        assert_eq!(table.delegate().column(0, cx).width, fitted);
+    });
 }

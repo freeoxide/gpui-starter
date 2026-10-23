@@ -317,9 +317,22 @@ impl MessageScrollerSection {
     fn reset_stream(&mut self, cx: &mut Context<Self>) {
         self.streaming = false;
         self.stream_task = None;
+        let streamed = self
+            .stream_messages
+            .len()
+            .saturating_sub(INITIAL_STREAM_MESSAGE_COUNT);
         self.stream_messages.truncate(INITIAL_STREAM_MESSAGE_COUNT);
         self.stream_scroller.update(cx, |state, cx| {
-            state.reset(INITIAL_STREAM_MESSAGE_COUNT, cx)
+            if streamed > 0 {
+                // splice keeps the reading anchor; reset would yank to tail
+                _ = state.splice(
+                    INITIAL_STREAM_MESSAGE_COUNT..INITIAL_STREAM_MESSAGE_COUNT + streamed,
+                    0,
+                    cx,
+                );
+            } else {
+                state.reset(INITIAL_STREAM_MESSAGE_COUNT, cx);
+            }
         });
         cx.notify();
     }
@@ -451,9 +464,10 @@ impl Render for MessageScrollerSection {
         let status = {
             let state = self.scroller.read(cx);
             format!(
-                "Following tail: {} · Scrolled up: {}",
+                "Following tail: {} · Scrolled up: {} · Top row: {}",
                 state.is_following_tail(),
-                state.is_scrolled_up()
+                state.is_scrolled_up(),
+                state.logical_scroll_top().item_ix + 1
             )
         };
 

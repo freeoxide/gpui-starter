@@ -157,21 +157,31 @@ impl SystemControlsPage {
             ControlState::Ready(volume) => {
                 let mute_label = crate::i18n::localize("system_controls_mute");
                 let status = format!("{:.0}%", self.volume.read(cx).value().start() * 100.);
-                group("volume-group", label, IconName::Settings2, Some(status), cx).child(
-                    v_flex().gap_2().child(Slider::new(&self.volume)).child(
-                        h_flex()
-                            .items_center()
-                            .justify_between()
-                            .child(Label::new(mute_label.clone()))
-                            .child(
-                                Switch::new("volume-mute")
-                                    .accessibility_label(mute_label)
-                                    .checked(volume.muted)
-                                    .on_click(|checked, _, cx| {
-                                        crate::system_controls::set_volume_muted(*checked, cx);
-                                    }),
-                            ),
-                    ),
+                group(
+                    "volume-group",
+                    label.clone(),
+                    IconName::Settings2,
+                    Some(status),
+                    cx,
+                )
+                .child(
+                    v_flex()
+                        .gap_2()
+                        .child(Slider::new(&self.volume).accessibility_label(label))
+                        .child(
+                            h_flex()
+                                .items_center()
+                                .justify_between()
+                                .child(Label::new(mute_label.clone()))
+                                .child(
+                                    Switch::new("volume-mute")
+                                        .accessibility_label(mute_label)
+                                        .checked(volume.muted)
+                                        .on_click(|checked, _, cx| {
+                                            crate::system_controls::set_volume_muted(*checked, cx);
+                                        }),
+                                ),
+                        ),
                 )
             }
             state => group("volume-group", label, IconName::Settings2, None, cx)
@@ -188,8 +198,14 @@ impl SystemControlsPage {
         match &snapshot.brightness {
             ControlState::Ready(_) => {
                 let status = format!("{:.0}%", self.brightness.read(cx).value().start() * 100.);
-                group("brightness-group", label, IconName::Sun, Some(status), cx)
-                    .child(Slider::new(&self.brightness))
+                group(
+                    "brightness-group",
+                    label.clone(),
+                    IconName::Sun,
+                    Some(status),
+                    cx,
+                )
+                .child(Slider::new(&self.brightness).accessibility_label(label))
             }
             state => group("brightness-group", label, IconName::Sun, None, cx)
                 .child(reason_row(state, cx)),

@@ -251,6 +251,12 @@ impl AnalyticsPage {
                 self.selected_key = self.table.read(cx).delegate().key_at(*row_ix);
                 self.open_detail(window, cx);
             }
+            // refresh() rebuilds col groups from the delegate's Column specs,
+            // so user-fitted widths must live there to survive a reload.
+            TableEvent::ColumnWidthsChanged(widths) => {
+                self.table
+                    .update(cx, |table, _| table.delegate_mut().set_col_widths(widths));
+            }
             _ => {}
         }
     }
