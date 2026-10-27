@@ -202,7 +202,6 @@ opentelemetry_sdk = { version = "0.24.1", optional = true, features = [
     "rt-tokio",
     "trace",
 ] }
-rfd = "0.15.4"
 notify = "8.2.0"
 undo = "0.52.0"
 sys-locale = "0.3"

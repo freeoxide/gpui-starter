@@ -353,11 +353,13 @@ impl ImageEditorPage {
 
     fn on_open(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.save_state = SaveState::Idle;
-        let Some(path) = crate::desktop_actions::pick_file(cx) else {
-            return;
-        };
         let canvas = self.canvas.clone();
         self._open_task = Some(cx.spawn(async move |this, cx| {
+            // The prompt must resolve inside this task; a dialog callback that
+            // re-enters the app mid-turn panics (RCA §5.2.1).
+            let Some(path) = crate::desktop_actions::pick_file(cx).await else {
+                return;
+            };
             let bytes = cx
                 .background_spawn(async move { std::fs::read(&path).map_err(|e| e.to_string()) })
                 .await;
@@ -382,17 +384,20 @@ impl ImageEditorPage {
             return;
         }
         self.save_state = SaveState::Idle;
-        let Some(path) = crate::desktop_actions::save_file(cx) else {
-            return;
-        };
         let Some(base) = self.doc.read(cx).base().cloned() else {
             return;
         };
         let filters = self.doc.read(cx).filters();
         let annotations = self.doc.read(cx).annotation_shapes();
-        self.save_state = SaveState::Busy;
-        cx.notify();
         self._save_task = Some(cx.spawn(async move |this, cx| {
+            let Some(path) = crate::desktop_actions::save_file(cx).await else {
+                return;
+            };
+            this.update(cx, |page, cx| {
+                page.save_state = SaveState::Busy;
+                cx.notify();
+            })
+            .ok();
             let img = cx
                 .background_spawn(
                     async move { bake::compose_export(&base, &filters, &annotations) },
