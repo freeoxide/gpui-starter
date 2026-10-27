@@ -133,6 +133,7 @@ pub(crate) fn register_capabilities(cx: &mut App) {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 fn macos_only() -> crate::capabilities::CapabilityStatus {
     crate::capabilities::CapabilityStatus {
         supported: false,

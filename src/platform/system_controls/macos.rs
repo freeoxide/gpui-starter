@@ -7,13 +7,13 @@ use objc2_core_audio::{
     kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyElementMain,
     kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyScopeOutput, kAudioObjectSystemObject,
 };
-use objc2_foundation::{NSArray, NSProcessInfo};
+use objc2_foundation::NSProcessInfo;
 use objc2_io_bluetooth::{BluetoothHCIPowerState, IOBluetoothDevice, IOBluetoothHostController};
 
 use super::SystemOp;
 use crate::system_controls::{
-    BatteryStatus, BluetoothStatus, BrightnessStatus, ControlState, PairedDevice,
-    REASON_MACOS_BRIGHTNESS, SystemControlsSnapshot, VolumeStatus,
+    BatteryStatus, BluetoothStatus, ControlState, PairedDevice, REASON_MACOS_BRIGHTNESS,
+    SystemControlsSnapshot, VolumeStatus,
 };
 
 pub(super) fn read() -> SystemControlsSnapshot {
@@ -31,7 +31,9 @@ pub(super) fn apply(op: SystemOp) -> Result<(), String> {
     match op {
         SystemOp::SetVolume { level } => set_volume(level),
         SystemOp::SetVolumeMuted { muted } => set_volume_muted(muted),
-        SystemOp::SetBrightness { .. } => Err("macOS has no public brightness API".to_string()),
+        SystemOp::SetBrightness { level } => Err(format!(
+            "macOS has no public brightness API (requested level {level})"
+        )),
         SystemOp::SetBluetoothPowered { .. } => {
             Err("bluetooth power is read-only on macOS".to_string())
         }

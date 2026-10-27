@@ -61,7 +61,7 @@ fn open(cx: &mut App) -> anyhow::Result<()> {
         ..Default::default()
     };
     let (handle, _) = gpui_kit::open_window(options, cx, |_, cx| {
-        cx.new(|cx| super::view::NotchFloaterView::new(layout.clone(), true, cx))
+        cx.new(|cx| super::view::NotchFloaterView::new(layout, true, cx))
     })?;
     let pinned = handle
         .update(cx, |_, window, _| {
