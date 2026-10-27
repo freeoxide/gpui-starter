@@ -410,6 +410,20 @@ pub fn init(cx: &mut App) {
         // flush runs before the process exits.
         #[cfg(any(unix, windows))]
         {
+            // RCA §5.4 budget check: refuse before arming so a capped restart
+            // keeps the app running instead of quitting into a dead relaunch.
+            if crate::app::reload::relaunch_verdict_now()
+                == crate::app::reload::RelaunchVerdict::SafeMode
+            {
+                tracing::warn!(
+                    target: "gpui_starter::reload",
+                    "restart refused: relaunch budget spent, staying running (safe mode)"
+                );
+                crate::lifecycle::track_recent_error(
+                    "restart refused: relaunch budget spent (safe mode)".into(),
+                );
+                return;
+            }
             crate::app::request_reload();
             crate::lifecycle::set_shutdown_step("restart", cx);
         }
