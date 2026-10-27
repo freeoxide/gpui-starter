@@ -1,4 +1,7 @@
 use std::path::Path;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use gpui_kit::App;
 #[cfg(not(target_family = "wasm"))]
@@ -33,14 +36,17 @@ impl CrashReport {
         render_path: bool,
         recent_errors: Vec<String>,
     ) -> Self {
+        // Runs inside the panic hook: id and timestamp come from std only so
+        // no external crate can be mid-borrow when this executes.
+        let nanos = unix_now_nanos();
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: report_id(nanos),
             panic_message: scrub(&panic_message, MAX_PANIC_MESSAGE_CHARS),
             backtrace: scrub(&backtrace, MAX_BACKTRACE_CHARS),
             app_version: env!("CARGO_PKG_VERSION").to_string(),
             os: std::env::consts::OS.to_string(),
             arch: std::env::consts::ARCH.to_string(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
+            timestamp: rfc3339(nanos),
             render_path,
             recent_errors: recent_errors
                 .into_iter()
@@ -49,6 +55,61 @@ impl CrashReport {
                 .collect(),
         }
     }
+}
+
+/// Clock collisions cannot produce duplicate ids; the counter guarantees it.
+static REPORT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+fn unix_now_nanos() -> u128 {
+    // Pre-epoch clocks (misconfigured guests) clamp to the epoch: the hook
+    // path never panics.
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
+}
+
+fn report_id(nanos: u128) -> String {
+    let seq = REPORT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    format!("crash-{nanos:x}-{}-{seq}", std::process::id())
+}
+
+/// RFC3339 in fixed-width form so lexicographic order matches chronology
+/// without chrono.
+fn rfc3339(nanos: u128) -> String {
+    let secs = (nanos / 1_000_000_000) as i64;
+    let subsec = (nanos % 1_000_000_000) as u32;
+    let (year, month, day) = civil_from_days(secs.div_euclid(86_400));
+    let time_of_day = secs.rem_euclid(86_400);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{subsec:09}+00:00",
+        time_of_day / 3600,
+        (time_of_day % 3600) / 60,
+        time_of_day % 60,
+    )
+}
+
+/// Days since the Unix epoch to proleptic Gregorian Y/M/D (Howard Hinnant's
+/// civil_from_days).
+fn civil_from_days(days: i64) -> (i64, u32, u32) {
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let day_of_era = (z - era * 146_097) as u64;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = (day_of_year - (153 * month_prime + 2) / 5 + 1) as u32;
+    let month = (if month_prime < 10 {
+        month_prime + 3
+    } else {
+        month_prime - 9
+    }) as u32;
+    (
+        year_of_era as i64 + era * 400 + i64::from(month <= 2),
+        month,
+        day,
+    )
 }
 
 fn scrub(text: &str, max_chars: usize) -> String {
@@ -98,22 +159,89 @@ pub fn snapshot(cx: &App) -> CrashReportSnapshot {
         .unwrap_or_default()
 }
 
-/// Intentionally synchronous `std::fs`: the panic hook has no async runtime.
+/// Synchronous and stdlib-only: the panic hook owns this path, so no async
+/// runtime and no logging/serialization framework may run down it.
 pub fn write_crash_report(report: &CrashReport, data_dir: &Path) -> std::io::Result<()> {
+    // Panics on other threads serialize here; a poisoned lock means an
+    // earlier write panicked and this one should still proceed.
+    static WRITE_LOCK: Mutex<()> = Mutex::new(());
+    let _guard = WRITE_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+
     let reports_dir = data_dir.join("crash_reports");
     std::fs::create_dir_all(&reports_dir)?;
 
     let file_path = reports_dir.join(format!("{}.json", report.id));
-    let json = serde_json::to_string_pretty(report)?;
-    std::fs::write(&file_path, json)?;
-
-    tracing::info!(
-        target: "gpui_starter::crash_report",
-        path = %file_path.display(),
-        "crash report written to disk"
-    );
-
+    std::fs::write(&file_path, report_json(report))?;
     Ok(())
+}
+
+/// Same shape serde_json::to_string_pretty produced historically; the
+/// reader-side round-trip tests pin the schema.
+fn report_json(report: &CrashReport) -> String {
+    let mut out = String::with_capacity(512);
+    out.push('{');
+    json_str_field(&mut out, "id", &report.id);
+    json_str_field(&mut out, "panic_message", &report.panic_message);
+    json_str_field(&mut out, "backtrace", &report.backtrace);
+    json_str_field(&mut out, "app_version", &report.app_version);
+    json_str_field(&mut out, "os", &report.os);
+    json_str_field(&mut out, "arch", &report.arch);
+    json_str_field(&mut out, "timestamp", &report.timestamp);
+    out.push_str(",\n  \"render_path\": ");
+    out.push_str(if report.render_path { "true" } else { "false" });
+    out.push_str(",\n  \"recent_errors\": [");
+    if !report.recent_errors.is_empty() {
+        for (index, error) in report.recent_errors.iter().enumerate() {
+            if index > 0 {
+                out.push(',');
+            }
+            out.push_str("\n    ");
+            push_json_string(&mut out, error);
+        }
+        out.push_str("\n  ");
+    }
+    out.push_str("]\n}");
+    out
+}
+
+fn json_str_field(out: &mut String, key: &str, value: &str) {
+    if out.ends_with('{') {
+        out.push('\n');
+    } else {
+        out.push_str(",\n");
+    }
+    out.push_str("  \"");
+    out.push_str(key);
+    out.push_str("\": ");
+    push_json_string(out, value);
+}
+
+/// Escapes exactly the characters serde_json escapes; everything else
+/// (including non-ASCII) passes through as UTF-8.
+fn push_json_string(out: &mut String, text: &str) {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    out.push('"');
+    for ch in text.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0c}' => out.push_str("\\f"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if (ch as u32) < 0x20 => {
+                let code = ch as u32;
+                out.push_str("\\u00");
+                out.push(HEX[((code >> 4) & 0xf) as usize] as char);
+                out.push(HEX[(code & 0xf) as usize] as char);
+            }
+            ch => out.push(ch),
+        }
+    }
+    out.push('"');
 }
 
 /// Non-JSON files and malformed entries are silently skipped.

@@ -124,3 +124,93 @@ fn new_caps_report_sizes() {
     assert_eq!(report.recent_errors.len(), 20);
     assert_eq!(report.recent_errors[0].chars().count(), 512);
 }
+
+#[test]
+fn rfc3339_pins_known_instants() {
+    assert_eq!(rfc3339(0), "1970-01-01T00:00:00.000000000+00:00");
+    assert_eq!(
+        rfc3339(1_000_000_000),
+        "1970-01-01T00:00:01.000000000+00:00"
+    );
+    assert_eq!(
+        rfc3339(951_825_600_000_000_000),
+        "2000-02-29T12:00:00.000000000+00:00",
+        "century leap day",
+    );
+    assert_eq!(
+        rfc3339(1_709_213_445_123_456_789),
+        "2024-02-29T13:30:45.123456789+00:00",
+        "leap day with nanoseconds",
+    );
+    assert_eq!(
+        rfc3339(1_793_145_599_999_999_999),
+        "2026-10-27T23:59:59.999999999+00:00",
+        "end of day",
+    );
+}
+
+#[test]
+fn report_ids_stay_unique_and_filename_safe() {
+    let mut seen = std::collections::HashSet::new();
+    for _ in 0..32 {
+        let report = CrashReport::new("m".into(), "bt".into(), false, vec![]);
+        assert!(
+            report
+                .id
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
+            "id is used as a filename and must stay safe: {}",
+            report.id
+        );
+        assert!(
+            seen.insert(report.id.clone()),
+            "duplicate report id: {}",
+            report.id
+        );
+    }
+}
+
+#[test]
+fn hand_written_json_round_trips_through_the_serde_reader() {
+    let nasty = "quote \" backslash \\ newline \n tab \t control \u{1} unicode 日本語 slash /";
+    let report = CrashReport::new(
+        nasty.to_string(),
+        format!("bt {nasty}"),
+        true,
+        vec![nasty.to_string(), String::new()],
+    );
+    let dir = tempdir().expect("tempdir");
+    write_crash_report(&report, dir.path()).expect("write");
+
+    // The on-disk schema is whatever the serde reader accepts: readers and
+    // the storage/upload paths parse reports through CrashReport's derive.
+    let disk = std::fs::read_to_string(
+        dir.path()
+            .join("crash_reports")
+            .join(format!("{}.json", report.id)),
+    )
+    .expect("read written report");
+    let parsed: CrashReport = serde_json::from_str(&disk).expect("valid JSON, existing schema");
+    assert_eq!(parsed, report);
+
+    let detected = detect_pending_reports(dir.path());
+    assert_eq!(detected.len(), 1);
+    assert_eq!(detected[0], report);
+}
+
+#[test]
+fn timestamps_sort_lexicographically_in_write_order() {
+    let stamps: Vec<String> = (0..8)
+        .map(|i| {
+            let report =
+                CrashReport::new(format!("ordered-{i}").into(), "bt".into(), false, vec![]);
+            report.timestamp
+        })
+        .collect();
+    let mut sorted = stamps.clone();
+    sorted.sort();
+    assert_eq!(
+        stamps, sorted,
+        "fixed-width RFC3339 must sort the way detect_pending_reports sorts"
+    );
+}
