@@ -5,9 +5,9 @@ use gpui_kit::component::{
     menu::{AppMenuBar, DropdownMenu as _},
 };
 use gpui_kit::{
-    Anchor, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement,
-    MouseButton, ParentElement as _, Render, Role, SharedString, Styled as _, Window, div,
-    prelude::FluentBuilder as _, px,
+    Anchor, App, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _,
+    IntoElement, MouseButton, ParentElement as _, Render, Role, SharedString, Styled as _, Window,
+    div, prelude::FluentBuilder as _, px,
 };
 
 use crate::accessibility::A11yExt;
@@ -87,7 +87,7 @@ impl Render for AppTitleBar {
                                     .ghost()
                                     .compact()
                                     .icon(IconName::Search)
-                                    .accessibility_label(search_a11y_label())
+                                    .accessibility_label(search_a11y_label(cx))
                                     .on_click(|_, _, cx| {
                                         crate::launcher::open_launcher(cx);
                                     }),
@@ -211,10 +211,10 @@ impl Render for SettingsDropdown {
 
 /// Announced name for the icon-only search button, derived from the
 /// ToggleSearch binding so the modifier matches the platform keymap.
-fn search_a11y_label() -> String {
+fn search_a11y_label(cx: &App) -> String {
     format!(
         "{} ({})",
         crate::i18n::localize("titlebar_search"),
-        crate::app::keys::label(crate::app::keys::TOGGLE_SEARCH)
+        crate::app::keys::label(crate::app::keys::TOGGLE_SEARCH, cx.platform_info().os)
     )
 }

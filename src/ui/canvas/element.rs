@@ -273,7 +273,7 @@ impl Element for CanvasElement {
         window.on_mouse_event({
             let hitbox = hitbox.clone();
             let state = state.clone();
-            move |e: &ScrollWheelEvent, phase, window, cx| {
+            move |e: &ScrollEvent, phase, window, cx| {
                 if !phase.bubble() || !hitbox.should_handle_scroll(window) {
                     return;
                 }

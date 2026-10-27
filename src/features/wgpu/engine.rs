@@ -31,6 +31,7 @@ impl WgpuEngine {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 force_fallback_adapter: false,
                 compatible_surface: None,
+                apply_limit_buckets: false,
             })
             .await
             .context("requesting wgpu adapter")?;
@@ -125,7 +126,10 @@ impl WgpuEngine {
             .context("mapping wgpu readback buffer")?;
 
         let mut out = Vec::with_capacity(width as usize * height as usize * 4);
-        let mapped = buffer.slice(..).get_mapped_range();
+        let mapped = buffer
+            .slice(..)
+            .get_mapped_range()
+            .context("reading wgpu readback range")?;
         for row in mapped.chunks_exact(padded).take(height as usize) {
             out.extend_from_slice(&row[..width as usize * 4]);
         }

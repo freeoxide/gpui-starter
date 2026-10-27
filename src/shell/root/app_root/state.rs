@@ -206,28 +206,29 @@ impl AppRoot {
             crate::app_state::with_config(cx, |c| (c.active_route.clone(), c.sidebar_collapsed));
 
         let pages = Page::all();
-        cx.bind_keys(
-            pages
-                .iter()
-                .enumerate()
-                .filter_map(|(i, _)| {
-                    if i < 9 {
-                        Some(KeyBinding::new(
-                            &crate::app::keys::page(i),
-                            NavigateToPage(i),
-                            None,
-                        ))
-                    } else {
-                        None
-                    }
-                })
-                .chain(std::iter::once(KeyBinding::new(
-                    crate::app::keys::TOGGLE_SIDEBAR,
-                    super::super::actions::ToggleSidebar,
-                    None,
-                )))
-                .collect::<Vec<_>>(),
-        );
+        let bindings = pages
+            .iter()
+            .enumerate()
+            .filter_map(|(i, _)| {
+                if i < 9 {
+                    Some(crate::app::keys::binding(
+                        &crate::app::keys::page(i),
+                        NavigateToPage(i),
+                        None,
+                        cx,
+                    ))
+                } else {
+                    None
+                }
+            })
+            .chain(std::iter::once(crate::app::keys::binding(
+                crate::app::keys::TOGGLE_SIDEBAR,
+                super::super::actions::ToggleSidebar,
+                None,
+                cx,
+            )))
+            .collect::<Vec<_>>();
+        cx.bind_keys(bindings);
 
         Self {
             focus_handle: cx.focus_handle(),

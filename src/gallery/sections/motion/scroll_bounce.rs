@@ -19,14 +19,14 @@ struct MouseScroll {
 }
 
 impl MouseScroll {
-    fn event(&mut self, position: Point<Pixels>, phase: TouchPhase) -> ScrollWheelEvent {
+    fn event(&mut self, position: Point<Pixels>, phase: TouchPhase) -> ScrollEvent {
         let delta = if phase == TouchPhase::Moved {
             position.y - self.previous.y
         } else {
             px(0.)
         };
         self.previous = position;
-        ScrollWheelEvent {
+        ScrollEvent {
             position: self.anchor,
             delta: ScrollDelta::Pixels(point(px(0.), delta)),
             touch_phase: phase,
@@ -35,11 +35,11 @@ impl MouseScroll {
     }
 }
 
-fn send_scroll(event: ScrollWheelEvent, window: &Window, cx: &mut App) {
+fn send_scroll(event: ScrollEvent, window: &Window, cx: &mut App) {
     // Mouse listeners are temporarily taken out during dispatch. Re-entering
     // dispatch synchronously would miss the viewport's scroll listeners.
     window.defer(cx, move |window, cx| {
-        window.dispatch_event(PlatformInput::ScrollWheel(event), cx);
+        window.dispatch_event(PlatformInput::Scroll(event), cx);
     });
 }
 

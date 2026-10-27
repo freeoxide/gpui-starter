@@ -70,7 +70,7 @@ impl QueryPlaygroundPage {
                     .px_4()
                     .max_h(px(200.))
                     // Block scroll events from bubbling to the outer page scroll.
-                    .on_scroll_wheel(|_, _, cx| {
+                    .on_scroll(|_, _, cx| {
                         cx.stop_propagation();
                     })
                     .child(render_virtual_list(

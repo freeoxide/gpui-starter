@@ -15,6 +15,7 @@ use gpui_kit::component::{
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
+use crate::app::keys::binding;
 use crate::gallery::registry::GallerySection;
 
 use super::demo::section;
@@ -232,7 +233,7 @@ fn with_entries(command: Command, entries: impl IntoIterator<Item = CommandEntry
         })
 }
 
-fn key_hint(keys: &[&str], label: &'static str) -> AnyElement {
+fn key_hint(keys: &[&'static str], label: &'static str) -> AnyElement {
     h_flex()
         .gap_1()
         .items_center()
@@ -263,27 +264,19 @@ const STOCKS: [Stock; 10] = [
 
 impl CommandSection {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let primary = if cfg!(target_os = "macos") {
-            "cmd"
-        } else {
-            "ctrl"
-        };
-        cx.bind_keys([
-            KeyBinding::new(&format!("{primary}-p"), OpenProfile, Some(COMMAND_CONTEXT)),
-            KeyBinding::new(&format!("{primary}-b"), OpenBilling, Some(COMMAND_CONTEXT)),
-            KeyBinding::new(&format!("{primary}-s"), OpenSettings, Some(COMMAND_CONTEXT)),
-            KeyBinding::new(&format!("{primary}-h"), GoHome, Some(COMMAND_CONTEXT)),
-            KeyBinding::new(&format!("{primary}-i"), OpenInbox, Some(COMMAND_CONTEXT)),
-            KeyBinding::new(
-                &format!("{primary}-d"),
-                OpenDocuments,
-                Some(COMMAND_CONTEXT),
-            ),
-            KeyBinding::new(&format!("{primary}-f"), OpenFolders, Some(COMMAND_CONTEXT)),
-            KeyBinding::new(&format!("{primary}-n"), NewFile, Some(COMMAND_CONTEXT)),
-            KeyBinding::new(&format!("{primary}-c"), CopyItem, Some(COMMAND_CONTEXT)),
+        let bindings = [
+            binding("secondary-p", OpenProfile, Some(COMMAND_CONTEXT), cx),
+            binding("secondary-b", OpenBilling, Some(COMMAND_CONTEXT), cx),
+            binding("secondary-s", OpenSettings, Some(COMMAND_CONTEXT), cx),
+            binding("secondary-h", GoHome, Some(COMMAND_CONTEXT), cx),
+            binding("secondary-i", OpenInbox, Some(COMMAND_CONTEXT), cx),
+            binding("secondary-d", OpenDocuments, Some(COMMAND_CONTEXT), cx),
+            binding("secondary-f", OpenFolders, Some(COMMAND_CONTEXT), cx),
+            binding("secondary-n", NewFile, Some(COMMAND_CONTEXT), cx),
+            binding("secondary-c", CopyItem, Some(COMMAND_CONTEXT), cx),
             KeyBinding::new("backspace", DeleteItem, Some(COMMAND_CONTEXT)),
-        ]);
+        ];
+        cx.bind_keys(bindings);
 
         let inline = cx.new(|cx| CommandState::new(window, cx));
         let dialog = cx.new(|cx| CommandState::new(window, cx));
