@@ -7,17 +7,21 @@ use windows::Win32::System::Com::{
 
 use super::SystemOp;
 use crate::system_controls::{
-    BrightnessStatus, ControlState, REASON_WINDOWS_BLUETOOTH, SystemControlsSnapshot, VolumeStatus,
+    BluetoothStatus, BrightnessStatus, ControlState, CoreControlsSnapshot,
+    REASON_WINDOWS_BLUETOOTH, VolumeStatus,
 };
 
-pub(super) fn read() -> SystemControlsSnapshot {
-    SystemControlsSnapshot {
+pub(super) fn read_core() -> CoreControlsSnapshot {
+    CoreControlsSnapshot {
         battery: super::read_battery(None),
-        bluetooth: ControlState::Unsupported {
-            reason_key: REASON_WINDOWS_BLUETOOTH,
-        },
         volume: read_volume(),
         brightness: read_brightness(),
+    }
+}
+
+pub(super) fn read_bluetooth() -> ControlState<BluetoothStatus> {
+    ControlState::Unsupported {
+        reason_key: REASON_WINDOWS_BLUETOOTH,
     }
 }
 

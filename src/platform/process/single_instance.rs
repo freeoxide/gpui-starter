@@ -9,9 +9,9 @@ pub use native::{
 // Test-only internals (the ipc round-trip tests exercise these directly).
 #[cfg(all(test, not(target_family = "wasm")))]
 pub(crate) use native::{
-    AcquireOutcome, MAX_LINE_BYTES, SCHEME, append_forwarded_link, drain_forwarded_links,
-    link_path_for_log, read_bounded_line, resolve_ipc_name, retry_until_single,
-    send_forwarded_link_via_ipc,
+    AcquireOutcome, MAX_LINE_BYTES, SCHEME, acquire_instance_lock, append_forwarded_link,
+    create_forwarder_listener, drain_forwarded_links, link_path_for_log, lock_file_path,
+    read_bounded_line, resolve_ipc_name, retry_until_single, send_forwarded_link_via_ipc,
 };
 
 // The Windows deep-link registration derives its registry key name from SCHEME.
@@ -23,7 +23,7 @@ mod native {
     use std::{
         fs,
         io::{BufRead, BufReader, Read, Write},
-        path::PathBuf,
+        path::{Path, PathBuf},
         sync::{
             Arc,
             atomic::{AtomicBool, Ordering},
@@ -35,7 +35,7 @@ mod native {
 
     use gpui_kit::{App, Global};
     use interprocess::local_socket::{
-        GenericFilePath, GenericNamespaced, ListenerOptions, Stream, prelude::*,
+        GenericFilePath, GenericNamespaced, Listener, ListenerOptions, Stream, prelude::*,
     };
     use single_instance::SingleInstance;
     use std::time::Duration;
@@ -140,19 +140,53 @@ mod native {
         args.iter().find(|arg| arg.starts_with(SCHEME)).cloned()
     }
 
-    pub fn preflight() -> Preflight {
-        let args: Vec<String> = std::env::args().collect();
-        let deep_link = initial_deep_link(&args);
-        let ipc_name = ipc_name();
-        let queue_file = queue_file_path();
-
-        let acquire = || match SingleInstance::new(INSTANCE_NAME) {
+    /// One lock-acquisition attempt. Every platform primitive (flock file,
+    /// abstract socket, named mutex) is kernel-reclaimed on holder death, so
+    /// a leftover lock file is inert and no pidfile check applies.
+    pub(crate) fn acquire_instance_lock(lock_name: &str) -> AcquireOutcome<SingleInstance> {
+        match SingleInstance::new(lock_name) {
             Ok(instance) if instance.is_single() => AcquireOutcome::Acquired(instance),
             Ok(_) => AcquireOutcome::Busy,
             Err(err) => {
                 eprintln!("single-instance init failed: {err}");
                 AcquireOutcome::Failed
             }
+        }
+    }
+
+    /// Fixed per-user home of the lock file, beside the forwarder artifacts.
+    pub(crate) fn lock_file_path() -> Option<PathBuf> {
+        queue_file_path()
+            .map(|queue| queue.with_file_name(INSTANCE_NAME))
+            .or_else(|| fallback_runtime_dir().map(|dir| dir.join(INSTANCE_NAME)))
+    }
+
+    fn lock_name() -> Option<String> {
+        if cfg!(target_os = "macos") {
+            // macOS flock lock: the name is a file path, so it must be an
+            // absolute per-user path or launches from two CWDs both win.
+            lock_file_path().map(|path| {
+                if let Some(parent) = path.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                path.display().to_string()
+            })
+        } else {
+            Some(INSTANCE_NAME.to_string())
+        }
+    }
+
+    pub fn preflight() -> Preflight {
+        let args: Vec<String> = std::env::args().collect();
+        let deep_link = initial_deep_link(&args);
+        let ipc_name = ipc_name();
+        let queue_file = queue_file_path();
+
+        let acquire = || match lock_name() {
+            Some(name) => acquire_instance_lock(&name),
+            // No per-user location at all: same degrade as a broken lock
+            // subsystem; a cache-less machine must not lose the app.
+            None => AcquireOutcome::Failed,
         };
         let outcome = if std::env::var_os(crate::app::reload::RESTART_HANDOFF_ENV).is_some() {
             retry_until_single(acquire, RESTART_LOCK_ATTEMPTS, RESTART_LOCK_INTERVAL)
@@ -168,6 +202,9 @@ mod native {
                 initial_deep_link: deep_link,
             },
             AcquireOutcome::Acquired(instance) => {
+                // Pre-fix macOS builds left a CWD-relative lock file behind.
+                #[cfg(target_os = "macos")]
+                let _ = fs::remove_file(INSTANCE_NAME);
                 if let Some(path) = &queue_file {
                     if let Some(parent) = path.parent() {
                         let _ = fs::create_dir_all(parent);
@@ -311,6 +348,59 @@ mod native {
         .detach();
     }
 
+    /// Bind the forwarder listener with stale-file recovery: EADDRINUSE plus
+    /// a refused connect unlinks the leftover and retries once; a live peer
+    /// keeps its socket (`try_overwrite` displaces a live listener too).
+    pub(crate) fn create_forwarder_listener(ipc_name: &str) -> Option<Listener> {
+        let try_bind = || -> std::io::Result<Listener> {
+            let name = resolve_ipc_name(ipc_name)?;
+            ListenerOptions::new().name(name).create_sync()
+        };
+        match try_bind() {
+            Ok(listener) => Some(listener),
+            Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => {
+                if is_socket_live(Some(ipc_name)) {
+                    tracing::error!(
+                        target: LOG,
+                        error = %err,
+                        "ipc socket owned by a live instance; forwarding degraded"
+                    );
+                    return None;
+                }
+                // Only a real file path can be unlinked; a bare namespaced
+                // name must never resolve against the CWD.
+                if !Path::new(ipc_name).is_absolute() || fs::remove_file(ipc_name).is_err() {
+                    tracing::error!(
+                        target: LOG,
+                        error = %err,
+                        "stale ipc socket not recoverable; forwarding degraded"
+                    );
+                    return None;
+                }
+                tracing::warn!(
+                    target: LOG,
+                    path = ipc_name,
+                    "removed stale ipc socket left by a crashed run; retrying bind"
+                );
+                match try_bind() {
+                    Ok(listener) => Some(listener),
+                    Err(retry) => {
+                        tracing::error!(
+                            target: LOG,
+                            error = %retry,
+                            "ipc listener retry failed; forwarding degraded"
+                        );
+                        None
+                    }
+                }
+            }
+            Err(err) => {
+                tracing::error!(target: LOG, error = %err, "failed to create ipc listener");
+                None
+            }
+        }
+    }
+
     fn start_ipc_forwarder(
         ipc_name: Option<String>,
         ipc_running: Arc<AtomicBool>,
@@ -325,24 +415,9 @@ mod native {
         let thread = std::thread::Builder::new()
             .name("gpui-ipc-forwarder".to_string())
             .spawn(move || {
-                let name = match resolve_ipc_name(&ipc_name_for_thread) {
-                    Ok(name) => name,
-                    Err(err) => {
-                        tracing::error!(
-                            target: LOG,
-                            error = %err,
-                            "failed to resolve ipc listener name"
-                        );
-                        return;
-                    }
-                };
-
-                let listener = match ListenerOptions::new().name(name).create_sync() {
-                    Ok(listener) => listener,
-                    Err(err) => {
-                        tracing::error!(target: LOG, error = %err, "failed to create ipc listener");
-                        return;
-                    }
+                let listener = match create_forwarder_listener(&ipc_name_for_thread) {
+                    Some(listener) => listener,
+                    None => return,
                 };
 
                 tracing::info!(target: LOG, ipc = %ipc_name_for_thread, "starting ipc deep-link listener");
@@ -532,7 +607,9 @@ mod native {
     pub(crate) fn resolve_ipc_name<'a>(
         ipc_name: &'a str,
     ) -> std::io::Result<interprocess::local_socket::Name<'a>> {
-        if GenericNamespaced::is_supported() {
+        // An absolute path is a filesystem socket by definition; only bare
+        // names may use the abstract/named-pipe namespace.
+        if GenericNamespaced::is_supported() && !Path::new(ipc_name).is_absolute() {
             ipc_name.to_ns_name::<GenericNamespaced>()
         } else {
             ipc_name.to_fs_name::<GenericFilePath>()

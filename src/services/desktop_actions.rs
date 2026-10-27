@@ -6,7 +6,7 @@ use std::{
 
 #[cfg(not(target_family = "wasm"))]
 use arboard::Clipboard;
-use gpui_kit::{App, BorrowAppContext as _, Global};
+use gpui_kit::{App, AsyncApp, BorrowAppContext as _, Global, PathPromptOptions};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
 #[derive(Debug, thiserror::Error)]
@@ -26,8 +26,6 @@ pub enum DesktopActionError {
         #[source]
         source: std::io::Error,
     },
-    #[error("file dialog failed: {0}")]
-    DialogFailed(String),
     #[error("watcher error: {0}")]
     Watcher(#[from] notify::Error),
     #[error("desktop actions unavailable")]
@@ -72,7 +70,7 @@ impl Global for DesktopActionsState {}
 
 pub fn initialize(cx: &mut App) {
     // Wasm swaps in `navigator.clipboard` (see platform::web::clipboard) and
-    // compiles out rfd/`open`; the notify watchers simply never fire there.
+    // compiles out `open`; path prompts report unavailable, watchers never fire.
     #[cfg(not(target_family = "wasm"))]
     let clipboard_ok = Clipboard::new().is_ok();
     #[cfg(target_family = "wasm")]
@@ -190,58 +188,157 @@ pub fn open_url(url: &str, cx: &mut App) -> Result<(), DesktopActionError> {
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
-pub fn pick_file(cx: &mut App) -> Option<PathBuf> {
-    pick_with_dialog("pick_file", rfd::FileDialog::new().pick_file(), cx)
+/// Opens the platform open-file dialog. Returns the picked path, or `None` on
+/// cancel/wasm. The prompt resolves on GPUI's run loop, so callers may update
+/// entities from the awaiting task (RCA §5.2.1: dialog callbacks must never
+/// re-enter the app outside a task turn).
+pub async fn pick_file(cx: &mut AsyncApp) -> Option<PathBuf> {
+    prompt_paths("pick_file", pick_file_options(), cx).await
 }
 
-#[cfg(target_family = "wasm")]
-pub fn pick_file(cx: &mut App) -> Option<PathBuf> {
-    pick_with_dialog("pick_file", None, cx)
+/// Opens the platform directory-pick dialog; same contract as [`pick_file`].
+pub async fn pick_folder(cx: &mut AsyncApp) -> Option<PathBuf> {
+    prompt_paths("pick_folder", pick_folder_options(), cx).await
 }
 
-#[cfg(not(target_family = "wasm"))]
-pub fn pick_folder(cx: &mut App) -> Option<PathBuf> {
-    pick_with_dialog("pick_folder", rfd::FileDialog::new().pick_folder(), cx)
-}
-
-#[cfg(target_family = "wasm")]
-pub fn pick_folder(cx: &mut App) -> Option<PathBuf> {
-    pick_with_dialog("pick_folder", None, cx)
-}
-
-#[cfg(not(target_family = "wasm"))]
-pub fn save_file(cx: &mut App) -> Option<PathBuf> {
-    pick_with_dialog("save_file", rfd::FileDialog::new().save_file(), cx)
-}
-
-#[cfg(target_family = "wasm")]
-pub fn save_file(cx: &mut App) -> Option<PathBuf> {
-    pick_with_dialog("save_file", None, cx)
-}
-
-/// `rfd::FileDialog` does not exist on wasm, so the dialog helpers report
-/// "unavailable" and return `None` there.
-fn pick_with_dialog(action: &'static str, _file: Option<PathBuf>, cx: &mut App) -> Option<PathBuf> {
+/// Opens the platform save dialog starting at the user's home directory.
+/// Returns the target path, or `None` on cancel/wasm.
+pub async fn save_file(cx: &mut AsyncApp) -> Option<PathBuf> {
     #[cfg(target_family = "wasm")]
     {
-        tracing::debug!(
-            target: "gpui_starter::desktop_actions",
-            action,
-            "file dialog unavailable on wasm"
-        );
-        update_result(
-            action,
-            Some("file dialog unavailable on wasm".to_string()),
-            cx,
-        );
+        report_dialog_unavailable("save_file", cx);
         return None;
     }
     #[cfg(not(target_family = "wasm"))]
     {
-        tracing::info!(target: "gpui_starter::desktop_actions", file = ?_file, "file picker result");
-        update_result(action, None, cx);
-        _file
+        let directory = directories::BaseDirs::new()
+            .map(|dirs| dirs.home_dir().to_path_buf())
+            .unwrap_or_default();
+        let outcome = match cx
+            .update(|app| app.prompt_for_new_path(&directory, None))
+            .await
+        {
+            Ok(result) => path_outcome(result),
+            Err(_) => PickOutcome::Failed("file dialog closed without a response".to_string()),
+        };
+        commit_pick_outcome("save_file", outcome, cx)
+    }
+}
+
+fn pick_file_options() -> PathPromptOptions {
+    PathPromptOptions {
+        files: true,
+        directories: false,
+        multiple: false,
+        prompt: None,
+    }
+}
+
+fn pick_folder_options() -> PathPromptOptions {
+    PathPromptOptions {
+        files: false,
+        directories: true,
+        multiple: false,
+        prompt: None,
+    }
+}
+
+// The prompt result mappers run only where a platform prompt exists; wasm
+// arms return before reaching them.
+#[cfg(not(target_family = "wasm"))]
+enum PickOutcome {
+    Picked(PathBuf),
+    Cancelled,
+    Failed(String),
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn paths_outcome(result: anyhow::Result<Option<Vec<PathBuf>>>) -> PickOutcome {
+    match result {
+        Ok(Some(paths)) => paths
+            .into_iter()
+            .next()
+            .map(PickOutcome::Picked)
+            .unwrap_or(PickOutcome::Cancelled),
+        Ok(None) => PickOutcome::Cancelled,
+        Err(err) => PickOutcome::Failed(err.to_string()),
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn path_outcome(result: anyhow::Result<Option<PathBuf>>) -> PickOutcome {
+    match result {
+        Ok(Some(path)) => PickOutcome::Picked(path),
+        Ok(None) => PickOutcome::Cancelled,
+        Err(err) => PickOutcome::Failed(err.to_string()),
+    }
+}
+
+async fn prompt_paths(
+    action: &'static str,
+    _options: PathPromptOptions,
+    cx: &mut AsyncApp,
+) -> Option<PathBuf> {
+    #[cfg(target_family = "wasm")]
+    {
+        report_dialog_unavailable(action, cx);
+        return None;
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let outcome = match cx.update(|app| app.prompt_for_paths(_options)).await {
+            Ok(result) => paths_outcome(result),
+            Err(_) => PickOutcome::Failed("file dialog closed without a response".to_string()),
+        };
+        commit_pick_outcome(action, outcome, cx)
+    }
+}
+
+// Only the wasm pick arms call this; every native path has a real prompt.
+#[cfg(target_family = "wasm")]
+fn report_dialog_unavailable(action: &'static str, cx: &mut AsyncApp) {
+    tracing::debug!(
+        target: "gpui_starter::desktop_actions",
+        action,
+        "file dialog unavailable on wasm"
+    );
+    cx.update(|app| {
+        update_result(
+            action,
+            Some("file dialog unavailable on wasm".to_string()),
+            app,
+        )
+    });
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn commit_pick_outcome(
+    action: &'static str,
+    outcome: PickOutcome,
+    cx: &mut AsyncApp,
+) -> Option<PathBuf> {
+    match outcome {
+        PickOutcome::Picked(path) => {
+            tracing::info!(
+                target: "gpui_starter::desktop_actions",
+                file = %path.display(),
+                "file picker result"
+            );
+            cx.update(|app| update_result(action, None, app));
+            Some(path)
+        }
+        PickOutcome::Cancelled => {
+            tracing::info!(
+                target: "gpui_starter::desktop_actions",
+                "file picker cancelled"
+            );
+            cx.update(|app| update_result(action, None, app));
+            None
+        }
+        PickOutcome::Failed(error) => {
+            cx.update(|app| update_result(action, Some(error), app));
+            None
+        }
     }
 }
 
@@ -430,5 +527,58 @@ fn update_result(action: &str, error: Option<String>, cx: &mut App) {
             action,
             "desktop action succeeded"
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pick_file_options_requests_a_single_file() {
+        let options = pick_file_options();
+        assert!(options.files);
+        assert!(!options.directories);
+        assert!(!options.multiple);
+        assert!(options.prompt.is_none());
+    }
+
+    #[test]
+    fn pick_folder_options_requests_a_single_directory() {
+        let options = pick_folder_options();
+        assert!(!options.files);
+        assert!(options.directories);
+        assert!(!options.multiple);
+        assert!(options.prompt.is_none());
+    }
+
+    #[test]
+    fn paths_outcome_maps_first_pick_cancel_and_error() {
+        assert!(matches!(
+            paths_outcome(Ok(Some(vec![PathBuf::from("/tmp/a.wav")]))),
+            PickOutcome::Picked(ref path) if path == &PathBuf::from("/tmp/a.wav")
+        ));
+        assert!(matches!(
+            paths_outcome(Ok(Some(Vec::new()))),
+            PickOutcome::Cancelled
+        ));
+        assert!(matches!(paths_outcome(Ok(None)), PickOutcome::Cancelled));
+        assert!(matches!(
+            paths_outcome(Err(anyhow::anyhow!("portal missing"))),
+            PickOutcome::Failed(_)
+        ));
+    }
+
+    #[test]
+    fn path_outcome_maps_pick_cancel_and_error() {
+        assert!(matches!(
+            path_outcome(Ok(Some(PathBuf::from("/tmp/out.png")))),
+            PickOutcome::Picked(_)
+        ));
+        assert!(matches!(path_outcome(Ok(None)), PickOutcome::Cancelled));
+        assert!(matches!(
+            path_outcome(Err(anyhow::anyhow!("no panel"))),
+            PickOutcome::Failed(_)
+        ));
     }
 }

@@ -1,3 +1,4 @@
+use gpui_kit::component::button::Button;
 use gpui_kit::component::label::Label;
 use gpui_kit::component::slider::{Slider, SliderEvent, SliderState};
 use gpui_kit::component::switch::Switch;
@@ -6,8 +7,8 @@ use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::system_controls::{
-    BatteryChargeState, BatteryStatus, BluetoothStatus, ControlState, REASON_MACOS_BLUETOOTH_POWER,
-    SystemControlsSnapshot,
+    BatteryChargeState, BatteryStatus, BluetoothAccess, BluetoothStatus, ControlState,
+    REASON_MACOS_BLUETOOTH_POWER, SystemControlsSnapshot,
 };
 
 #[cfg(not(target_family = "wasm"))]
@@ -136,13 +137,13 @@ impl SystemControlsPage {
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
         let label = crate::i18n::localize("system_controls_bluetooth");
-        let body = match &snapshot.bluetooth {
-            ControlState::Ready(bluetooth) => v_flex()
-                .gap_2()
-                .child(powered_row(bluetooth, cx))
-                .child(devices_list(bluetooth, cx))
-                .into_any_element(),
-            state => reason_row(state, cx).into_any_element(),
+        let body = match bluetooth_panel(snapshot) {
+            BluetoothPanel::Enable { busy } => enable_body(busy, cx).into_any_element(),
+            BluetoothPanel::Live => live_body(snapshot, cx).into_any_element(),
+            BluetoothPanel::UnsupportedPlatform => {
+                reason_row(&snapshot.bluetooth, cx).into_any_element()
+            }
+            BluetoothPanel::Denied { reason } => denied_body(reason, cx).into_any_element(),
         };
         group("bluetooth-group", label, IconName::Network, None, cx).child(body)
     }
@@ -324,6 +325,91 @@ fn reason_row<T>(state: &ControlState<T>, cx: &App) -> Div {
         .child(detail)
 }
 
+/// What the Bluetooth section renders for a gate state. Branch on the
+/// `BluetoothAccess` enum, never on the Denied reason text.
+#[derive(Clone, Debug, PartialEq)]
+enum BluetoothPanel {
+    Enable { busy: bool },
+    Live,
+    UnsupportedPlatform,
+    Denied { reason: SharedString },
+}
+
+fn bluetooth_panel(snapshot: &SystemControlsSnapshot) -> BluetoothPanel {
+    match &snapshot.bluetooth_access {
+        BluetoothAccess::NotRequested => BluetoothPanel::Enable { busy: false },
+        BluetoothAccess::Requesting => BluetoothPanel::Enable { busy: true },
+        BluetoothAccess::Active => BluetoothPanel::Live,
+        BluetoothAccess::Denied { reason } => match snapshot.bluetooth {
+            ControlState::Unsupported { .. } => BluetoothPanel::UnsupportedPlatform,
+            _ => BluetoothPanel::Denied {
+                reason: reason.clone(),
+            },
+        },
+    }
+}
+
+fn hint_text(text: SharedString, cx: &App) -> Div {
+    div()
+        .text_sm()
+        .text_color(cx.theme().muted_foreground)
+        .child(text)
+}
+
+fn enable_body(busy: bool, cx: &App) -> Div {
+    // A loading button is inert, so the handshake cannot be double-fired.
+    let enable = Button::new("bluetooth-enable")
+        .label(crate::i18n::localize("system_controls_bluetooth_enable"))
+        .when(busy, |button| {
+            button.icon(IconName::LoaderCircle).loading(true)
+        })
+        .on_click(|_, _, cx| crate::system_controls::enable_bluetooth(cx));
+    v_flex()
+        .gap_2()
+        .child(hint_text(
+            crate::i18n::localize("system_controls_bluetooth_enable_hint").into(),
+            cx,
+        ))
+        .child(h_flex().child(enable))
+}
+
+fn live_body(snapshot: &SystemControlsSnapshot, cx: &App) -> Div {
+    let rows = match &snapshot.bluetooth {
+        ControlState::Ready(bluetooth) => v_flex()
+            .gap_2()
+            .child(powered_row(bluetooth, cx))
+            .child(devices_list(bluetooth, cx))
+            .into_any_element(),
+        state => reason_row(state, cx).into_any_element(),
+    };
+    v_flex().gap_2().child(rows).child(
+        h_flex().child(
+            Button::new("bluetooth-stop")
+                .outline()
+                .label(crate::i18n::localize("system_controls_bluetooth_stop"))
+                .on_click(|_, _, cx| crate::system_controls::disable_bluetooth(cx)),
+        ),
+    )
+}
+
+fn denied_body(reason: SharedString, cx: &App) -> Div {
+    v_flex()
+        .gap_2()
+        .child(hint_text(
+            crate::i18n::localize("system_controls_bluetooth_denied_hint").into(),
+            cx,
+        ))
+        .child(hint_text(reason, cx))
+        .child(
+            h_flex().child(
+                Button::new("bluetooth-retry")
+                    .label(crate::i18n::localize("system_controls_bluetooth_retry"))
+                    // Manual only: the service never re-polls a denied gate.
+                    .on_click(|_, _, cx| crate::system_controls::enable_bluetooth(cx)),
+            ),
+        )
+}
+
 fn powered_row(bluetooth: &BluetoothStatus, cx: &App) -> Div {
     let label = crate::i18n::localize("system_controls_powered");
     let Some(powered) = bluetooth.powered else {
@@ -407,3 +493,7 @@ fn devices_list(bluetooth: &BluetoothStatus, cx: &App) -> AnyElement {
         }))
         .into_any_element()
 }
+
+#[cfg(test)]
+#[path = "system_controls.test.rs"]
+mod system_controls_test;

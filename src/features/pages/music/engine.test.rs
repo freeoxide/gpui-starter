@@ -91,6 +91,25 @@ fn ticks_advance_position_while_playing(cx: &mut TestAppContext) {
     cx.read(|cx| assert_eq!(engine.read(cx).position_ms(), 750));
 }
 
+// PlayerEngine::new spawns the tick; its entity updates are legal only from
+// that task once the timer elapses, never at spawn or construction time.
+#[gpui_kit::test]
+fn engine_updates_only_when_the_tick_timer_fires(cx: &mut TestAppContext) {
+    let engine = engine(cx);
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.play_queue(vec![T0, T1, T2], 0, cx)));
+    cx.run_until_parked();
+    cx.read(|cx| {
+        assert_eq!(
+            engine.read(cx).position_ms(),
+            0,
+            "the construction spawn must not update the entity before its timer"
+        );
+    });
+    cx.executor().advance_clock(Duration::from_millis(TICK_MS));
+    cx.run_until_parked();
+    cx.read(|cx| assert_eq!(engine.read(cx).position_ms(), 250));
+}
+
 #[gpui_kit::test]
 fn end_of_track_auto_advances_into_the_next_track(cx: &mut TestAppContext) {
     let engine = engine(cx);

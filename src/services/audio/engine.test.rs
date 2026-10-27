@@ -5,7 +5,7 @@ use gpui_kit::prelude::*;
 
 use super::super::demo;
 use super::{AudioEngine, PlaybackStatus};
-use crate::ui::waveform::WaveformState;
+use crate::ui::waveform::{DEFAULT_RETENTION, WaveformState};
 
 fn loaded_sweep_engine(cx: &mut TestAppContext) -> gpui_kit::Entity<AudioEngine> {
     let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
@@ -167,6 +167,55 @@ fn refresh_devices_and_unknown_select_are_safe(cx: &mut TestAppContext) {
         engine.update(cx, |engine, cx| engine.select_device("no such device", cx));
         assert_eq!(engine.read(cx).selected_device(), None);
     });
+}
+
+// The cpal host scan is synchronous and slow: it must never run on the
+// caller's turn, only inside the task that delivers the result (RCA 5.2.3).
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
+fn refresh_devices_scans_off_the_caller_and_commits_from_a_task(cx: &mut TestAppContext) {
+    let expected = super::super::output::enumerate();
+    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    cx.update(|cx| {
+        engine.update(cx, |engine, cx| engine.refresh_devices(cx));
+        assert!(
+            engine.read(cx).devices().is_empty(),
+            "the device scan must not run inline on the caller's turn"
+        );
+    });
+    cx.run_until_parked();
+    cx.update(|cx| assert_eq!(engine.read(cx).devices(), expected));
+}
+
+#[gpui_kit::test]
+fn meter_pushes_from_a_foreign_thread_only_land_via_the_timer_drain(cx: &mut TestAppContext) {
+    let waveform = cx.update(|cx| cx.new(|_| WaveformState::new()));
+    let mut producer = cx.update(|cx| {
+        waveform.update(cx, |state, cx| {
+            state.attach_source(48_000, 2, DEFAULT_RETENTION, cx)
+        })
+    });
+    let samples: Vec<f32> = (0..2048)
+        .flat_map(|i| {
+            let s = (440. * i as f32 / 48_000. * std::f32::consts::TAU).sin() * 0.5;
+            [s, s]
+        })
+        .collect();
+    // The cpal data callback runs off the GPUI thread; pushing is its only
+    // legal effect. Nothing may observe the samples until the drain tick.
+    std::thread::spawn(move || producer.push_interleaved(&samples))
+        .join()
+        .unwrap();
+    cx.run_until_parked();
+    cx.update(|cx| {
+        assert!(
+            waveform.read(cx).spectrum().is_none(),
+            "a push must never advance the meter; only the timer drain does"
+        );
+    });
+    cx.executor().advance_clock(Duration::from_millis(34));
+    cx.run_until_parked();
+    cx.update(|cx| assert!(waveform.read(cx).spectrum().is_some()));
 }
 
 #[cfg(not(target_family = "wasm"))]

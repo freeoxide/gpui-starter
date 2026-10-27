@@ -237,9 +237,16 @@ impl AudioPage {
                     .label(crate::i18n::localize("audio_open_file"))
                     .disabled(loading)
                     .on_click(move |_, _, cx| {
-                        if let Some(path) = crate::desktop_actions::pick_file(cx) {
+                        // The platform prompt must resolve on a GPUI task turn:
+                        // dialog callbacks that re-enter the app mid-turn panic.
+                        let open_engine = open_engine.clone();
+                        cx.spawn(async move |cx| {
+                            let Some(path) = crate::desktop_actions::pick_file(cx).await else {
+                                return;
+                            };
                             open_engine.update(cx, |engine, cx| engine.load_path(path, cx));
-                        }
+                        })
+                        .detach();
                     }),
             )
             .child(

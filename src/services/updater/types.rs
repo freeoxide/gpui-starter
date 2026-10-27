@@ -72,9 +72,11 @@ pub struct PlatformAsset {
     pub size: u64,
 }
 
+pub(crate) const PLACEHOLDER_MANIFEST_URL: &str = "https://releases.example.com/manifest.json";
+
 pub(crate) const DEFAULT_MANIFEST_URL: &str = match option_env!("GPUI_UPDATE_MANIFEST_URL") {
     Some(url) => url,
-    None => "https://releases.example.com/manifest.json",
+    None => PLACEHOLDER_MANIFEST_URL,
 };
 
 /// Ed25519 public key matching `UPDATE_SIGNING_KEY` in CI; swap it to deploy.

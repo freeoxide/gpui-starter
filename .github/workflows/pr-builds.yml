@@ -240,22 +240,42 @@ jobs:
       - name: Bundle debug .app and zip
         run: |
           set -euo pipefail
-          APP="$(./scripts/create-release-app.sh "${GITHUB_SHA:0:12}" host-debug)"
+          # ShortVersion must be the Cargo.toml semver (normalize-version.sh
+          # rejects anything that is not X.Y.Z); the commit hash identifies
+          # the build via CFBundleVersion, never the user-facing version.
+          APP_VERSION="$(./scripts/normalize-version.sh \
+            "$(grep -m1 '^version' Cargo.toml | sed 's/.*"\([^"]*\)".*/\1/')")"
+          APP="$(./scripts/create-release-app.sh "$APP_VERSION" host-debug)"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_SHA:0:12}" "$APP/Contents/Info.plist"
           codesign --force --deep --sign - "$APP"
           mkdir -p stage
           ditto -c -k --sequesterRsrc --keepParent "$APP" \
             "stage/gpui-starter-macos-arm64-debug-app.zip"
 
-      - name: Verify bundled app (identifier + icon)
+      - name: Verify bundled app (zip + identifier + plist)
         run: |
           set -euo pipefail
           rm -rf /tmp/appcheck && mkdir -p /tmp/appcheck
-          ditto -x -k --rsrc stage/gpui-starter-macos-arm64-debug-app.zip /tmp/appcheck
+          ZIP="stage/gpui-starter-macos-arm64-debug-app.zip"
+          # unzip -Z1 prints the bare entry list. Single-level zip: the
+          # executable sits directly under the app bundle and a nested .zip
+          # means the artifact was double-packed.
+          ZIP_LIST="$(unzip -Z1 "$ZIP")"
+          echo "$ZIP_LIST" | grep -qx 'GPUI Starter.app/Contents/MacOS/GPUI Starter'
+          if echo "$ZIP_LIST" | grep -q '\.zip$'; then
+            echo "Error: nested zip inside $ZIP" >&2
+            exit 1
+          fi
+          ditto -x -k --rsrc "$ZIP" /tmp/appcheck
           APP="/tmp/appcheck/GPUI Starter.app"
           PLIST="$APP/Contents/Info.plist"
           [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = "com.gpui-starter.app" ]
+          # ShortVersion must be semver; the git hash belongs in CFBundleVersion only.
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST" \
+            | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'
           [ -n "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$PLIST")" ]
           [ -n "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$PLIST")" ]
+          [ -n "$(/usr/libexec/PlistBuddy -c 'Print :NSBluetoothAlwaysUsageDescription' "$PLIST")" ]
           [ -f "$APP/Contents/Resources/gpui-starter.icns" ]
           codesign --verify --deep --strict "$APP"
 

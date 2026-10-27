@@ -33,8 +33,19 @@ mod fallback;
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 use fallback as backend;
 
-pub(crate) fn read() -> crate::system_controls::SystemControlsSnapshot {
-    backend::read()
+pub(crate) fn read_core() -> crate::system_controls::CoreControlsSnapshot {
+    backend::read_core()
+}
+
+pub(crate) fn read_bluetooth()
+-> crate::system_controls::ControlState<crate::system_controls::BluetoothStatus> {
+    backend::read_bluetooth()
+}
+
+/// Whether the platform has a Bluetooth reader at all. A cfg constant, not
+/// a read: probing would itself fire the TCC prompt on macOS.
+pub(crate) fn bluetooth_supported() -> bool {
+    cfg!(any(target_os = "macos", target_os = "linux"))
 }
 
 pub(crate) fn apply(op: SystemOp) -> Result<(), String> {

@@ -55,7 +55,10 @@ pub fn render_desktop_actions_section(
                         .outline()
                         .label(crate::i18n::localize("settings_pick_file"))
                         .on_click(|_, _, cx| {
-                            let _ = desktop_actions::pick_file(cx);
+                            cx.spawn(async move |cx| {
+                                desktop_actions::pick_file(cx).await;
+                            })
+                            .detach();
                         }),
                 )
                 .child(
@@ -63,7 +66,10 @@ pub fn render_desktop_actions_section(
                         .outline()
                         .label(crate::i18n::localize("settings_pick_folder"))
                         .on_click(|_, _, cx| {
-                            let _ = desktop_actions::pick_folder(cx);
+                            cx.spawn(async move |cx| {
+                                desktop_actions::pick_folder(cx).await;
+                            })
+                            .detach();
                         }),
                 ),
         )
@@ -73,7 +79,10 @@ pub fn render_desktop_actions_section(
                     .outline()
                     .label(crate::i18n::localize("settings_save_file"))
                     .on_click(|_, _, cx| {
-                        let _ = desktop_actions::save_file(cx);
+                        cx.spawn(async move |cx| {
+                            desktop_actions::save_file(cx).await;
+                        })
+                        .detach();
                     }),
             ),
         )

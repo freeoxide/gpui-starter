@@ -30,6 +30,60 @@ fn save_and_load_config_uses_json_state_file() {
 }
 
 #[test]
+fn bluetooth_optin_round_trips_through_the_state_file() {
+    let dir = tempdir().unwrap();
+    let state_file = dir.path().join("state.json");
+    let config = AppConfig {
+        bluetooth_monitoring_enabled: true,
+        ..AppConfig::default()
+    };
+
+    save_config(&state_file, &serde_json::to_vec(&config).unwrap()).unwrap();
+    let (loaded, err) = load_config(&state_file);
+
+    assert_eq!(err, None);
+    assert!(loaded.bluetooth_monitoring_enabled);
+}
+
+#[test]
+fn config_without_the_bluetooth_optin_key_defaults_off() {
+    // A state file written before the gate exists has no
+    // bluetooth_monitoring_enabled key; it must parse to "off".
+    let mut value = serde_json::to_value(AppConfig::default()).unwrap();
+    let object = value.as_object_mut().unwrap();
+    assert!(object.remove("bluetooth_monitoring_enabled").is_some());
+    let parsed: AppConfig = serde_json::from_value(value).unwrap();
+    assert!(!parsed.bluetooth_monitoring_enabled);
+}
+
+#[test]
+fn update_check_startup_optin_round_trips_through_the_state_file() {
+    let dir = tempdir().unwrap();
+    let state_file = dir.path().join("state.json");
+    let config = AppConfig {
+        update_check_on_startup: true,
+        ..AppConfig::default()
+    };
+
+    save_config(&state_file, &serde_json::to_vec(&config).unwrap()).unwrap();
+    let (loaded, err) = load_config(&state_file);
+
+    assert_eq!(err, None);
+    assert!(loaded.update_check_on_startup);
+}
+
+#[test]
+fn config_without_the_update_check_key_defaults_off() {
+    // A state file written before the gate exists has no
+    // update_check_on_startup key; it must parse to "off".
+    let mut value = serde_json::to_value(AppConfig::default()).unwrap();
+    let object = value.as_object_mut().unwrap();
+    assert!(object.remove("update_check_on_startup").is_some());
+    let parsed: AppConfig = serde_json::from_value(value).unwrap();
+    assert!(!parsed.update_check_on_startup);
+}
+
+#[test]
 fn corrupt_config_is_quarantined() {
     let dir = tempdir().unwrap();
     let state_file = dir.path().join("state.json");
