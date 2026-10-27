@@ -17,6 +17,10 @@ mod runtime;
 mod state;
 mod tool;
 
+#[cfg(all(test, not(target_family = "wasm")))]
+#[path = "mod.test.rs"]
+mod shaders_test;
+
 use demos::DemoId;
 use state::ShaderState;
 

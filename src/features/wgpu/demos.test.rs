@@ -9,6 +9,20 @@ fn every_wgsl_module_parses_with_naga() {
 }
 
 #[test]
+fn every_wgsl_module_passes_full_naga_validation() {
+    // wgpu validates parse plus module inside create_shader_module; the
+    // concatenated demo sources must clear both, not just the front end.
+    for (name, source) in wgsl_modules() {
+        let module = naga::front::wgsl::parse_str(&source)
+            .unwrap_or_else(|err| panic!("naga rejected {name}: {err}"));
+        let mut validator = naga::valid::Validator::new(Default::default(), Default::default());
+        validator
+            .validate(&module)
+            .unwrap_or_else(|err| panic!("naga validation failed for {name}: {err}"));
+    }
+}
+
+#[test]
 fn wgsl_modules_carry_their_entry_points_and_bgra_swizzle() {
     let modules = wgsl_modules();
     let sources: std::collections::HashMap<&str, &str> = modules
