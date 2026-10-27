@@ -3,13 +3,13 @@ members = ["collab-protocol", "collab-server", "crates/gpui-auth"]
 
 [workspace.dependencies]
 # gpui-form from the freeoxide fork (package freeoxide-gpui-form, lib name
-# gpui_form); rev = the origin/master kit-0.8.0 bump merge (PR #12).
-gpui-form = { package = "freeoxide-gpui-form", git = "https://github.com/freeoxide/gpui-form", rev = "23efdef8f30b8c72819b44b0544ef86f7ff72616" }
+# gpui_form); rev = the origin/master kit-0.8.1 tracking merge (PR #14).
+gpui-form = { package = "freeoxide-gpui-form", git = "https://github.com/freeoxide/gpui-form", rev = "62a8b7daef1de69df4de9b7e0175c1a6eb25f19e" }
 
 # GPUI ecosystem — gpui-kit is the single application-facing dependency
 # (`use gpui_kit::*`; layers: component / base / assets / platform).
 # gpui-pre is the crates.io snapshot of zed gpui (package name gpui-pre,
-# lib name `gpui`); gpui-kit 0.8.0 pins the gpui-pre-* family to =0.3.9.
+# lib name `gpui`); gpui-kit 0.8.1 pins the gpui-pre-* family to =0.3.10.
 # gpui-kit enables font-kit/x11/wayland/runtime_shaders on gpui-pre-platform
 # itself, so backend selection needs no direct platform dependency.
 # qa_migration.rs fails the build if a source file imports gpui-pre or the
@@ -18,8 +18,8 @@ gpui-form = { package = "freeoxide-gpui-form", git = "https://github.com/freeoxi
 # consumers (see gpui-form-codegen), so gpui stays a direct dep too.
 # Never add a direct `accesskit` dep: the kit re-exports gpui's accesskit
 # (0.24.x) and a separately-versioned copy is type-incompatible.
-gpui = { package = "gpui-pre", version = "0.3.9" }
-gpui-kit = "0.8.0"
+gpui = { package = "gpui-pre", version = "0.3.10" }
+gpui-kit = "0.8.1"
 
 # Serialization & data
 anyhow = "1"
@@ -247,9 +247,9 @@ raw-window-handle = "0.6"
 insta.workspace = true
 # Test-only: TestAppContext + deterministic timers for the config-store
 # debounce tests. Dev-dep features never reach production or wasm builds.
-gpui = { package = "gpui-pre", version = "0.3.9", features = ["test-support"] }
+gpui = { package = "gpui-pre", version = "0.3.10", features = ["test-support"] }
 # GPU-free WGSL validation; same version as the lock's naga.
-naga = { version = "=29.0.4", features = ["wgsl-in"] }
+naga = { version = "=30.0.1", features = ["wgsl-in"] }
 
 # Test-only (plan 22 email-auth e2e): fast argon2 cost params for the demo
 # backend plus an RFC 6238 code oracle for the TOTP suites. Same target gate
@@ -459,14 +459,14 @@ openidconnect = { version = "4.0", default-features = false, features = [
 ] }
 # Exact pin shares the lock's single wgpu copy with gpui-pre-wgpu; any other
 # version compiles a second full wgpu/naga stack into the binary.
-wgpu = { version = "=29.0.4" }
+wgpu = { version = "=30.0.1" }
 
 # Web (wasm32-unknown-unknown) dependencies.
 [target.'cfg(target_family = "wasm")'.dependencies]
-# Exact pin: Cargo.lock carries wasm-bindgen 0.2.125 through the gpui web
+# Exact pin: Cargo.lock carries wasm-bindgen 0.2.129 through the gpui web
 # stack (gpui-pre-web), and the wasm-bindgen CLI version used by the web
-# harness MUST match the crate version — keep both at 0.2.125.
-wasm-bindgen = "=0.2.125"
+# harness MUST match the crate version — keep both at 0.2.129.
+wasm-bindgen = "=0.2.129"
 # std::time::{Instant, SystemTime} COMPILE on wasm32-unknown-unknown but PANIC
 # at runtime ("time not implemented on this platform"). The gpui web stack
 # routes its clocks through web-time (browser performance.now()/Date); the app
@@ -494,7 +494,7 @@ chrono = { version = "0.4", features = ["wasmbind"] }
 #     MessagePort, Storage, StorageManager, Blob, Url
 # (Document/Html* transitively enable Element/Node; Window/Clipboard/Node
 # transitively enable EventTarget.)
-web-sys = { version = "=0.3.102", features = [
+web-sys = { version = "=0.3.106", features = [
     "AddEventListenerOptions",
     "Blob",
     "CanvasRenderingContext2d",
@@ -522,8 +522,8 @@ web-sys = { version = "=0.3.102", features = [
     "WorkerOptions",
 ] }
 # Promise/Reflect/JsValue interop for the fire-and-forget clipboard write and
-# the DOM event closures. Exact pin: matches the locked wasm-bindgen =0.2.125.
-js-sys = "=0.3.102"
+# the DOM event closures. Exact pin: matches the locked wasm-bindgen =0.2.129.
+js-sys = "=0.3.106"
 
 
 [profile.dev]
@@ -546,7 +546,7 @@ gpui-pre-macros = { opt-level = 3 }
 # gpui-query source toggle: `just gpui-query-local` / `just gpui-query-cratesio`.
 # DEFAULT (git): hmziqagent/gpui-query branch `gpui-pre-0.6` @69a071f =
 # v0.3.0 (perf campaign, published) merged with the gpui-pre re-point; the
-# workspace root pins `gpui = { package = "gpui-pre", version = "0.3.9" }` — no published or upstream version targets gpui-pre yet, so this
+# workspace root pins `gpui = { package = "gpui-pre", version = "0.3.10" }` — no published or upstream version targets gpui-pre yet, so this
 # patch carries the 0.3.0 line AND re-points the crate onto registry gpui-pre
 # (keeping the graph at ONE gpui). Drop this patch once upstream ships
 # gpui-pre support on crates.io. The old 0.1.4-based fix (f84eac4) remains on

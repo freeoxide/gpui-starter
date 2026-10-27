@@ -580,7 +580,7 @@ impl SceneRenderer {
                 module: &mesh_module,
                 entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
-                buffers: &[wgpu::VertexBufferLayout {
+                buffers: &[Some(wgpu::VertexBufferLayout {
                     array_stride: MESH_VERTEX_STRIDE as u64,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &[
@@ -600,7 +600,7 @@ impl SceneRenderer {
                             shader_location: 2,
                         },
                     ],
-                }],
+                })],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,

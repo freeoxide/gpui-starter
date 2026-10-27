@@ -353,10 +353,10 @@ pub fn init(cx: &mut App) {
     });
 
     cx.bind_keys([
-        KeyBinding::new(crate::app::keys::TOGGLE_SEARCH, ToggleSearch, None),
+        crate::app::keys::binding(crate::app::keys::TOGGLE_SEARCH, ToggleSearch, None, cx),
         KeyBinding::new("/", ToggleSearch, None),
         #[cfg(target_os = "macos")]
-        KeyBinding::new("secondary-q", Quit, None),
+        crate::app::keys::binding("secondary-q", Quit, None, cx),
         #[cfg(not(target_os = "macos"))]
         KeyBinding::new("alt-f4", Quit, None),
         #[cfg(any(unix, windows))]

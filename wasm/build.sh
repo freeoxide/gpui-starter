@@ -10,12 +10,12 @@
 # --target web post-processing into wasm/pkg/ next to index.html.
 #
 # The wasm-bindgen CLI version MUST match the crate's wasm-bindgen pin
-# (=0.2.125 in Cargo.toml) or the post-process fails with schema errors.
+# (=0.2.129 in Cargo.toml) or the post-process fails with schema errors.
 # Both profiles finish by writing wasm/pkg/version.json with a null
 # version (200 for the harness boot probe, SW stays in dev no-op).
 # Acquire the pinned CLI from GitHub release assets:
-#   https://github.com/wasm-bindgen/wasm-bindgen/releases/download/0.2.125/ \
-#     wasm-bindgen-0.2.125-x86_64-unknown-linux-musl.tar.gz
+#   https://github.com/wasm-bindgen/wasm-bindgen/releases/download/0.2.129/ \
+#     wasm-bindgen-0.2.129-x86_64-unknown-linux-musl.tar.gz
 # (the release asset is named `wasm-bindgen-…`, not `wasm-bindgen-cli-…`).
 #
 # --release additionally runs wasm-opt (binaryen) over the bindgen output.
@@ -63,13 +63,13 @@ fi
 
 BINDGEN="${WASM_BINDGEN:-wasm-bindgen}"
 if ! command -v "${BINDGEN}" >/dev/null 2>&1; then
-    echo "error: wasm-bindgen CLI not found (need exactly 0.2.125)" >&2
+    echo "error: wasm-bindgen CLI not found (need exactly 0.2.129)" >&2
     echo "  install: see the URL in this script's header comment" >&2
     exit 1
 fi
 VERSION="$("${BINDGEN}" --version | awk '{print $NF}')"
-if [[ "${VERSION}" != "0.2.125" ]]; then
-    echo "error: wasm-bindgen ${VERSION} found, but Cargo.toml pins =0.2.125" >&2
+if [[ "${VERSION}" != "0.2.129" ]]; then
+    echo "error: wasm-bindgen ${VERSION} found, but Cargo.toml pins =0.2.129" >&2
     echo "  (set WASM_BINDGEN=/path/to/wasm-bindgen to override)" >&2
     exit 1
 fi

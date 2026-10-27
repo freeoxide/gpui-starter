@@ -105,7 +105,7 @@ impl CanvasTool for ExploreTool {
         state: &mut CanvasState,
         cx: &mut Context<CanvasState>,
     ) -> bool {
-        if event.modifiers.secondary() {
+        if event.modifiers.secondary(cx) {
             let factor = page_factor(state.zoom(), (-lines(&event.delta).y * 0.1).exp());
             if factor != 1.0 {
                 state.zoom_at(event.screen_position, factor, cx);
