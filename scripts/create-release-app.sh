@@ -85,6 +85,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
   <string>$BUILD_NUMBER</string>
   <key>LSMinimumSystemVersion</key>
   <string>10.14</string>
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>GPUI Starter reads Bluetooth power state and paired devices to show system status.</string>
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSMicrophoneUsageDescription</key>
