@@ -11,11 +11,14 @@ use gpui_starter::sidebar::Page;
 #[test]
 fn test_sidebar_pages_exist() {
     let all = Page::all();
-    // The app must expose exactly ten pages (nine feature pages + Gallery).
+    // The app must expose exactly twenty-four pages (nine feature pages +
+    // System Controls + Gallery + Canvas Showcase + Infinite Canvas + Shared
+    // Canvas + Floating UI + Image Editor + Microphone + Audio + Analytics +
+    // Music + Sign In + Desktop Widgets + WGPU + Shader Canvas).
     assert_eq!(
         all.len(),
-        10,
-        "expected 10 sidebar pages, got {}",
+        24,
+        "expected 24 sidebar pages, got {}",
         all.len()
     );
 
@@ -31,6 +34,20 @@ fn test_sidebar_pages_exist() {
         Page::QueryDevToolsV2,
         Page::ErrorPlayground,
         Page::About,
+        Page::SystemControls,
+        Page::CanvasShowcase,
+        Page::InfiniteCanvas,
+        Page::MultiuserCanvas,
+        Page::FloatingUi,
+        Page::ImageEditor,
+        Page::Microphone,
+        Page::Audio,
+        Page::Analytics,
+        Page::Music,
+        Page::SignIn,
+        Page::DesktopWidgets,
+        Page::Wgpu,
+        Page::ShaderCanvas,
     ];
 
     for page in &expected {
@@ -69,6 +86,32 @@ fn test_route_parsing() {
             AppRoute::Page(Page::Diagnostics),
         ),
         ("gpui-starter://about", AppRoute::Page(Page::About)),
+        (
+            "gpui-starter://system-controls",
+            AppRoute::Page(Page::SystemControls),
+        ),
+        (
+            "gpui-starter://canvas-showcase",
+            AppRoute::Page(Page::CanvasShowcase),
+        ),
+        (
+            "gpui-starter://infinite-canvas",
+            AppRoute::Page(Page::InfiniteCanvas),
+        ),
+        (
+            "gpui-starter://multiuser-canvas",
+            AppRoute::Page(Page::MultiuserCanvas),
+        ),
+        (
+            "gpui-starter://floating-ui",
+            AppRoute::Page(Page::FloatingUi),
+        ),
+        ("gpui-starter://analytics", AppRoute::Page(Page::Analytics)),
+        ("gpui-starter://sign-in", AppRoute::Page(Page::SignIn)),
+        (
+            "gpui-starter://desktop-widgets",
+            AppRoute::Page(Page::DesktopWidgets),
+        ),
         // Sub-route
         (
             "gpui-starter://settings/notifications",

@@ -10,7 +10,8 @@ pub use native::{
 #[cfg(all(test, not(target_family = "wasm")))]
 pub(crate) use native::{
     AcquireOutcome, MAX_LINE_BYTES, SCHEME, append_forwarded_link, drain_forwarded_links,
-    read_bounded_line, resolve_ipc_name, retry_until_single, send_forwarded_link_via_ipc,
+    link_path_for_log, read_bounded_line, resolve_ipc_name, retry_until_single,
+    send_forwarded_link_via_ipc,
 };
 
 // The Windows deep-link registration derives its registry key name from SCHEME.
@@ -277,6 +278,10 @@ mod native {
         }
     }
 
+    pub(crate) fn link_path_for_log(link: &str) -> &str {
+        link.split('?').next().unwrap_or(link)
+    }
+
     fn start_forwarded_link_poller(queue_file: Option<PathBuf>, cx: &mut App) {
         let Some(queue_file) = queue_file else {
             tracing::info!(target: LOG, "no app dirs; queue-file fallback disabled");
@@ -293,7 +298,11 @@ mod native {
                 }
                 cx.update(move |cx| {
                     for link in links {
-                        tracing::info!(target: LOG, link, "received forwarded deep-link payload");
+                        tracing::info!(
+                            target: LOG,
+                            path = link_path_for_log(&link),
+                            "received forwarded deep-link payload"
+                        );
                         events::emit(AppEventKind::DeepLinkReceived(link), cx);
                     }
                 });
@@ -412,7 +421,11 @@ mod native {
                         events::emit(AppEventKind::RemoteCommand(req.command), cx);
                     }
                     ForwardedPayload::DeepLink(link) => {
-                        tracing::info!(target: LOG, link, "received forwarded deep-link payload via ipc");
+                        tracing::info!(
+                            target: LOG,
+                            path = link_path_for_log(&link),
+                            "received forwarded deep-link payload via ipc"
+                        );
                         events::emit(AppEventKind::DeepLinkReceived(link), cx);
                     }
                 });

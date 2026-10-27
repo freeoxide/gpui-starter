@@ -257,7 +257,11 @@ impl Render for SliderSection {
                                             .child(format!("{}", self.slider1_value)),
                                     ),
                             )
-                            .child(Slider::new(&self.slider1).disabled(self.disabled))
+                            .child(
+                                Slider::new(&self.slider1)
+                                    .disabled(self.disabled)
+                                    .accessibility_label("Output volume"),
+                            )
                             .child(
                                 div()
                                     .text_sm()
@@ -292,7 +296,11 @@ impl Render for SliderSection {
                                             .child(format!("${}", self.slider3.read(cx).value())),
                                     ),
                             )
-                            .child(Slider::new(&self.slider3).disabled(self.disabled))
+                            .child(
+                                Slider::new(&self.slider3)
+                                    .disabled(self.disabled)
+                                    .accessibility_label("Price range"),
+                            )
                             .child(
                                 div()
                                     .text_sm()
@@ -333,7 +341,8 @@ impl Render for SliderSection {
                                 Slider::new(&self.slider_reverse)
                                     .horizontal()
                                     .reverse()
-                                    .disabled(self.disabled),
+                                    .disabled(self.disabled)
+                                    .accessibility_label("Storage remaining"),
                             ),
                     ),
             )
@@ -366,7 +375,9 @@ impl Render for SliderSection {
                                 v_flex()
                                     .px_4()
                                     .child(
-                                        Slider::new(&self.slider_duration).disabled(self.disabled),
+                                        Slider::new(&self.slider_duration)
+                                            .disabled(self.disabled)
+                                            .accessibility_label("Duration (months)"),
                                     )
                                     .child(div().relative().w_full().h(rems(2.125)).children(
                                         (0..=12).map(|month| {
@@ -464,7 +475,11 @@ impl Render for SliderSection {
                                             )),
                                     ),
                             )
-                            .child(Slider::new(&self.slider_temperature).disabled(self.disabled)),
+                            .child(
+                                Slider::new(&self.slider_temperature)
+                                    .disabled(self.disabled)
+                                    .accessibility_label("Color temperature"),
+                            ),
                     ),
             )
             .child(
@@ -496,7 +511,8 @@ impl Render for SliderSection {
                             .child(
                                 Slider::new(&self.slider_hsl[0])
                                     .vertical()
-                                    .disabled(self.disabled),
+                                    .disabled(self.disabled)
+                                    .accessibility_label("Hue"),
                             )
                             .child(
                                 v_flex()
@@ -514,7 +530,8 @@ impl Render for SliderSection {
                             .child(
                                 Slider::new(&self.slider_hsl[1])
                                     .vertical()
-                                    .disabled(self.disabled),
+                                    .disabled(self.disabled)
+                                    .accessibility_label("Saturation"),
                             )
                             .child(
                                 v_flex()
@@ -532,7 +549,8 @@ impl Render for SliderSection {
                             .child(
                                 Slider::new(&self.slider_hsl[2])
                                     .vertical()
-                                    .disabled(self.disabled),
+                                    .disabled(self.disabled)
+                                    .accessibility_label("Lightness"),
                             )
                             .child(
                                 v_flex()
@@ -550,7 +568,8 @@ impl Render for SliderSection {
                             .child(
                                 Slider::new(&self.slider_hsl[3])
                                     .vertical()
-                                    .disabled(self.disabled),
+                                    .disabled(self.disabled)
+                                    .accessibility_label("Alpha"),
                             )
                             .child(
                                 v_flex()
@@ -582,7 +601,8 @@ impl Render for SliderSection {
                             .child(
                                 Slider::new(&self.slider_logarithmic)
                                     .horizontal()
-                                    .disabled(self.disabled),
+                                    .disabled(self.disabled)
+                                    .accessibility_label("Speed"),
                             ),
                     ),
             )

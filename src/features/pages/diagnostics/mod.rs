@@ -78,6 +78,11 @@ impl DiagnosticsPage {
                 cx.notify();
             },
         ));
+        subscriptions.push(
+            cx.observe_global_in::<crate::services::auth_ui::AuthUiState>(window, |_, _, cx| {
+                cx.notify();
+            }),
+        );
         Self {
             _subscriptions: subscriptions,
         }

@@ -39,6 +39,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
   <string>10.14</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Captures microphone audio to display the live input level and waveform.</string>
 </dict>
 </plist>
 PLIST

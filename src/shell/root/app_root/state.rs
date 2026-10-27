@@ -1,11 +1,15 @@
 use gpui_kit::{prelude::*, *};
 
+use crate::features::wgpu::WgpuPage;
 use crate::gallery::GalleryPage;
 use crate::sidebar::Page;
 use crate::title_bar::AppTitleBar;
 use crate::views::{
-    AboutPage, DiagnosticsPage, ErrorPlaygroundPage, FormPage, HomePage, NotificationsPage,
-    QueryDevToolsV2Page, QueryPlaygroundPage, RenderErrorPage, SettingsPage,
+    AboutPage, AnalyticsPage, AudioPage, CanvasShowcasePage, DesktopWidgetsPage, DiagnosticsPage,
+    ErrorPlaygroundPage, FloatingUiPage, FormPage, HomePage, ImageEditorPage, InfiniteCanvasPage,
+    MicrophonePage, MultiuserCanvasPage, MusicPage, NotificationsPage, QueryDevToolsV2Page,
+    QueryPlaygroundPage, RenderErrorPage, SettingsPage, ShaderCanvasPage, SignInPage,
+    SystemControlsPage,
 };
 use crate::{
     events::{self, AppEventKind},
@@ -28,7 +32,26 @@ pub struct AppRoot {
     pub(crate) query_playground_page: Entity<QueryPlaygroundPage>,
     pub(crate) query_devtools_v2_page: Entity<QueryDevToolsV2Page>,
     pub(crate) about_page: Entity<AboutPage>,
+    pub(crate) system_controls_page: Entity<SystemControlsPage>,
     pub(crate) gallery_page: Entity<GalleryPage>,
+    pub(crate) canvas_showcase_page: Entity<CanvasShowcasePage>,
+    pub(crate) infinite_canvas_page: Entity<InfiniteCanvasPage>,
+    pub(crate) multiuser_canvas_page: Entity<MultiuserCanvasPage>,
+    pub(crate) floating_ui_page: Entity<FloatingUiPage>,
+    pub(crate) image_editor_page: Entity<ImageEditorPage>,
+    pub(crate) microphone_page: Entity<MicrophonePage>,
+    pub(crate) audio_page: Entity<AudioPage>,
+    pub(crate) analytics_page: Entity<AnalyticsPage>,
+    pub(crate) music_page: Entity<MusicPage>,
+    pub(crate) sign_in_page: Entity<SignInPage>,
+    pub(crate) desktop_widgets_page: Entity<DesktopWidgetsPage>,
+    pub(crate) now_playing_bar: Entity<crate::features::pages::music::NowPlayingBar>,
+    pub(crate) wgpu_page: Entity<WgpuPage>,
+    pub(crate) shader_canvas_page: Entity<ShaderCanvasPage>,
+    pub(crate) floating_host: Entity<crate::ui::floating::OverlayFloatHost>,
+    pub(crate) floating_ui_session: Entity<crate::features::pages::floating_ui::PaletteSession>,
+    pub(crate) floating_ui_host: Entity<crate::features::pages::floating_ui::PalettePanelHost>,
+    pub(crate) tutorial: Entity<crate::features::tutorial::TourController>,
 
     /// When true, the error fallback view replaces the active page; set on a
     /// render panic, cleared by "Reload Page" or navigation.
@@ -53,7 +76,37 @@ impl AppRoot {
         let query_playground_page = cx.new(|cx| QueryPlaygroundPage::new(window, cx));
         let query_devtools_v2_page = cx.new(|cx| QueryDevToolsV2Page::new(window, cx));
         let about_page = cx.new(|_| AboutPage::new());
+        let system_controls_page = cx.new(|cx| SystemControlsPage::new(window, cx));
         let gallery_page = cx.new(|cx| GalleryPage::new(window, cx));
+        let canvas_showcase_page = cx.new(CanvasShowcasePage::new);
+        let infinite_canvas_page = cx.new(|cx| InfiniteCanvasPage::new(window, cx));
+        let multiuser_canvas_page = cx.new(|cx| MultiuserCanvasPage::new(window, cx));
+        let wgpu_page = cx.new(|cx| WgpuPage::new(window, cx));
+        let shader_canvas_page = cx.new(|cx| ShaderCanvasPage::new(window, cx));
+        let floating_host = cx.new(|cx| crate::ui::floating::OverlayFloatHost::new(window, cx));
+        let floating_ui_session = cx.new(crate::features::pages::floating_ui::PaletteSession::new);
+        let floating_ui_host = cx.new(|cx| {
+            crate::features::pages::floating_ui::PalettePanelHost::new(
+                floating_ui_session.clone(),
+                window,
+                cx,
+            )
+        });
+        let floating_ui_page = cx.new(|cx| FloatingUiPage::new(floating_ui_session.clone(), cx));
+        let image_editor_page = cx.new(|cx| ImageEditorPage::new(window, cx));
+        let microphone_page = cx.new(|cx| MicrophonePage::new(window, cx));
+        let audio_page = cx.new(|cx| AudioPage::new(window, cx));
+        let analytics_page = cx.new(|cx| AnalyticsPage::new(window, cx));
+        let (music_page, now_playing_bar) = crate::views::music::init(window, cx);
+        let sign_in_page = cx.new(|cx| SignInPage::new(window, cx));
+        let desktop_widgets_page = cx.new(|cx| DesktopWidgetsPage::new(window, cx));
+        let tutorial = cx.new(|cx| crate::features::tutorial::TourController::new(window, cx));
+        cx.set_global(crate::features::tutorial::TourHandle(tutorial.clone()));
+        cx.observe_global::<crate::app::window::RootWindow>(|this, cx| {
+            this.floating_ui_session
+                .update(cx, |session, cx| session.restore_windows(cx));
+        })
+        .detach();
 
         // Register the v2 QueryClient global so DevTools/Playground pages can observe it.
         if !cx.has_global::<gpui_query::client::QueryClient>() {
@@ -64,10 +117,15 @@ impl AppRoot {
             for event in events::drain(cx) {
                 match event.kind {
                     AppEventKind::Navigate(route) => this.set_route(route, cx),
-                    AppEventKind::DeepLinkReceived(link) => match AppRoute::parse_deep_link(&link) {
-                        Ok(route) => this.set_route(route, cx),
-                        Err(err) => events::emit_error(err, cx),
-                    },
+                    AppEventKind::DeepLinkReceived(link) => {
+                        if crate::services::auth::handle_callback_link(&link, cx) {
+                            continue;
+                        }
+                        match AppRoute::parse_deep_link(&link) {
+                            Ok(route) => this.set_route(route, cx),
+                            Err(err) => events::emit_error(err, cx),
+                        }
+                    }
                     AppEventKind::AppError { message, severity } => {
                         tracing::warn!(target: "gpui_starter::root", error = %message, ?severity, "app error event received");
                         crate::error_surface::report(
@@ -80,6 +138,9 @@ impl AppRoot {
                         cx.notify();
                     }
                     AppEventKind::DiagnosticsChanged => {}
+                    AppEventKind::PaletteChanged { palette, value } => {
+                        crate::features::pages::floating_ui::apply_change(&palette, &value, cx);
+                    }
                     AppEventKind::Test { message } => {
                         tracing::info!(target: "gpui_starter::root", message, "test event received");
                     }
@@ -92,6 +153,9 @@ impl AppRoot {
                                 crate::features::command_palette::open_launcher(cx);
                             }
                             ForwardedCommand::DeepLink(link) => {
+                                if crate::services::auth::handle_callback_link(&link, cx) {
+                                    continue;
+                                }
                                 match AppRoute::parse_deep_link(&link) {
                                     Ok(route) => this.set_route(route, cx),
                                     Err(err) => events::emit_error(err, cx),
@@ -179,7 +243,26 @@ impl AppRoot {
             query_playground_page,
             query_devtools_v2_page,
             about_page,
+            system_controls_page,
             gallery_page,
+            canvas_showcase_page,
+            infinite_canvas_page,
+            multiuser_canvas_page,
+            wgpu_page,
+            shader_canvas_page,
+            floating_host,
+            floating_ui_session,
+            floating_ui_host,
+            floating_ui_page,
+            image_editor_page,
+            microphone_page,
+            audio_page,
+            analytics_page,
+            music_page,
+            sign_in_page,
+            desktop_widgets_page,
+            now_playing_bar,
+            tutorial,
             render_error: false,
             error_page: None,
         }
@@ -219,7 +302,21 @@ impl AppRoot {
             Page::QueryPlayground => self.query_playground_page.clone().into(),
             Page::QueryDevToolsV2 => self.query_devtools_v2_page.clone().into(),
             Page::About => self.about_page.clone().into(),
+            Page::SystemControls => self.system_controls_page.clone().into(),
             Page::Gallery => self.gallery_page.clone().into(),
+            Page::CanvasShowcase => self.canvas_showcase_page.clone().into(),
+            Page::InfiniteCanvas => self.infinite_canvas_page.clone().into(),
+            Page::MultiuserCanvas => self.multiuser_canvas_page.clone().into(),
+            Page::FloatingUi => self.floating_ui_page.clone().into(),
+            Page::ImageEditor => self.image_editor_page.clone().into(),
+            Page::Microphone => self.microphone_page.clone().into(),
+            Page::Audio => self.audio_page.clone().into(),
+            Page::Analytics => self.analytics_page.clone().into(),
+            Page::Music => self.music_page.clone().into(),
+            Page::SignIn => self.sign_in_page.clone().into(),
+            Page::DesktopWidgets => self.desktop_widgets_page.clone().into(),
+            Page::Wgpu => self.wgpu_page.clone().into(),
+            Page::ShaderCanvas => self.shader_canvas_page.clone().into(),
         }
     }
 

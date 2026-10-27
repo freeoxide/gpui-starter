@@ -1,4 +1,4 @@
-//! Kit 0.7.3 migration invariants the compiler cannot check: manifest pins,
+//! Kit 0.8.0 migration invariants the compiler cannot check: manifest pins,
 //! the single-kit lock graph (the round-1 links-conflict failure mode), the
 //! gpui-form re-pin to the migrated freeoxide repo, and the kit-facade
 //! import surface.
@@ -107,11 +107,11 @@ fn manifest_declares_only_justified_kit_deps() {
     // derives emit ::gpui::Entity/Window/Context into this crate.
     assert!(
         manifest.contains("package = \"gpui-pre\", version = \"0.3.9\""),
-        "gpui (gpui-pre) must stay on the kit-0.7.3 snapshot"
+        "gpui (gpui-pre) must stay on the kit-0.8.0 snapshot"
     );
     assert!(
-        manifest.contains("\ngpui-kit = \"0.7.3\""),
-        "Cargo.toml must pin gpui-kit to 0.7.3"
+        manifest.contains("\ngpui-kit = \"0.8.0\""),
+        "Cargo.toml must pin gpui-kit to 0.8.0"
     );
     // The layer crates are reached through gpui-kit's own re-exports; the
     // anchor is line start so Cargo.toml's comment prose cannot trip this.
@@ -133,11 +133,11 @@ fn lock_graph_holds_one_kit_family() {
     let lock = repo_file("Cargo.lock");
 
     for (package, version) in [
-        ("gpui-kit", "0.7.3"),
-        ("gpui-component", "0.7.3"),
-        ("gpui-component-macros", "0.7.3"),
-        ("gpui-base", "0.7.3"),
-        ("gpui-kit-assets", "0.7.3"),
+        ("gpui-kit", "0.8.0"),
+        ("gpui-component", "0.8.0"),
+        ("gpui-component-macros", "0.8.0"),
+        ("gpui-base", "0.8.0"),
+        ("gpui-kit-assets", "0.8.0"),
         ("gpui-pre", "0.3.9"),
         ("gpui-pre-platform", "0.3.9"),
     ] {
@@ -221,10 +221,11 @@ fn gpui_form_pins_migrated_freeoxide_repo() {
     let manifest = repo_file("Cargo.toml");
     assert!(
         manifest.contains(
-            "gpui-form = { git = \"https://github.com/freeoxide/gpui-form\", \
-             rev = \"710b52439f0a4bb7756b6c15eff83c1340d2e157\" }"
+            "gpui-form = { package = \"freeoxide-gpui-form\", git = \"https://github.com/freeoxide/gpui-form\", \
+             rev = \"23efdef8f30b8c72819b44b0544ef86f7ff72616\" }"
         ),
-        "gpui-form must pin the freeoxide fluent-to-rust-i18n merge byte-exact"
+        "gpui-form must pin the freeoxide kit-0.8.0-bump merge byte-exact \
+         (package renamed freeoxide-gpui-form; lib name gpui_form)"
     );
     assert!(
         !manifest.contains("stayhydated"),
@@ -254,7 +255,7 @@ fn gpui_form_pins_migrated_freeoxide_repo() {
         lock_blocks(&lock, "gpui-form-collection").is_empty(),
         "gpui-form-collection must stay absent from the lock"
     );
-    assert_single_version(&lock, "gpui-form", "0.5.2");
+    assert_single_version(&lock, "freeoxide-gpui-form", "0.10.0");
     let query = lock_blocks(&lock, "gpui-query");
     assert_eq!(
         query.len(),
@@ -348,7 +349,7 @@ fn satellites_stay_on_form_repo_registry_lines() {
     );
     assert!(
         i18n[0].contains("\nversion = \"4."),
-        "rust-i18n must resolve to major 4, the line gpui-kit 0.7.1 builds against"
+        "rust-i18n must resolve to major 4, the line gpui-kit 0.8.0 builds against"
     );
 }
 
@@ -362,15 +363,15 @@ fn gpui_form_resolves_from_freeoxide_git_unpatched() {
     );
 
     let lock = repo_file("Cargo.lock");
-    let blocks = lock_blocks(&lock, "gpui-form");
+    let blocks = lock_blocks(&lock, "freeoxide-gpui-form");
     assert_eq!(
         blocks.len(),
         1,
-        "expected exactly one gpui-form in Cargo.lock"
+        "expected exactly one freeoxide-gpui-form in Cargo.lock"
     );
     assert!(
         blocks[0].contains(
-            "source = \"git+https://github.com/freeoxide/gpui-form?rev=710b52439f0a4bb7756b6c15eff83c1340d2e157"
+            "source = \"git+https://github.com/freeoxide/gpui-form?rev=23efdef8f30b8c72819b44b0544ef86f7ff72616"
         ),
         "gpui-form must resolve from the freeoxide git source at the pinned rev"
     );

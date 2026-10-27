@@ -105,6 +105,10 @@ pub fn init(cx: &mut App) {
         "launcher",
         "app_menu",
         "command_registry",
+        "wgpu_embed",
+        "canvas_shaders",
+        "music_playback",
+        "tutorial",
     ];
     for &name in DEFAULT_ENABLED_CAPABILITIES {
         crate::capabilities::set(
@@ -113,6 +117,39 @@ pub fn init(cx: &mut App) {
             cx,
         );
     }
+    crate::features::menubar_charts::init(cx);
+
+    // Offscreen wgpu is native-only; the wasm page renders a reason panel.
+    #[cfg(target_family = "wasm")]
+    crate::capabilities::set(
+        crate::features::wgpu::CAPABILITY_WGPU,
+        crate::capabilities::CapabilityStatus {
+            supported: false,
+            enabled: false,
+            degraded: false,
+            reason: Some(
+                "Offscreen wgpu rendering is native-only; the web build ships no bridge.".into(),
+            ),
+            last_error: None,
+        },
+        cx,
+    );
+
+    // The shader canvas rides the same native-only bridge.
+    #[cfg(target_family = "wasm")]
+    crate::capabilities::set(
+        crate::views::CAPABILITY_SHADERS,
+        crate::capabilities::CapabilityStatus {
+            supported: false,
+            enabled: false,
+            degraded: true,
+            reason: Some(
+                "WGSL shader rendering needs an offscreen wgpu device; the web build ships no bridge.".into(),
+            ),
+            last_error: None,
+        },
+        cx,
+    );
 
     let system_locale = crate::i18n::detect_system_locale();
     tracing::info!(
@@ -129,6 +166,23 @@ pub fn init(cx: &mut App) {
         persisted.locale.clone()
     };
     set_locale(&locale_to_use, cx);
+
+    // After set_locale so the wasm reason string is captured already
+    // localized; the default-list loop above runs before it.
+    #[cfg(target_family = "wasm")]
+    crate::capabilities::set(
+        "image_editor",
+        crate::capabilities::CapabilityStatus::degraded(crate::i18n::localize(
+            "image_editor_no_picker",
+        )),
+        cx,
+    );
+    #[cfg(not(target_family = "wasm"))]
+    crate::capabilities::set(
+        "image_editor",
+        crate::capabilities::CapabilityStatus::supported_enabled(),
+        cx,
+    );
 
     // Embedded themes are the bundle's only portable theme source; they
     // register before any registry lookup, on native and wasm alike.
@@ -208,6 +262,7 @@ pub fn init(cx: &mut App) {
             crate::services::tokio_runtime::TokioRuntime::new(),
         ));
         crate::connectivity::initialize(cx);
+        crate::system_controls::initialize(cx);
         // Probe once at startup so the status bar and the update checker see
         // a real state instead of Unknown (the updater refuses while Unknown).
         crate::connectivity::check_now(cx);
@@ -216,6 +271,12 @@ pub fn init(cx: &mut App) {
         crate::secure_storage::initialize(cx);
         crate::session::initialize(cx);
         crate::storage::initialize(cx);
+        crate::services::auth::install(cx);
+        #[cfg(not(target_family = "wasm"))]
+        crate::services::auth_social::install(cx);
+        crate::services::auth_ui::initialize(cx);
+        crate::audio::initialize(cx);
+        crate::features::tutorial::initialize(cx);
 
         // SQLite is native-only; wasm storage is never available.
         #[cfg(not(target_family = "wasm"))]
@@ -272,6 +333,11 @@ pub fn init(cx: &mut App) {
     crate::telemetry::record_event("app_runtime_initialized", cx);
     crate::notifications::inbox::initialize(cx);
     crate::notifications::initialize(cx);
+    crate::microphone::initialize(cx);
+    crate::ui::floating::init(cx);
+    crate::features::pages::desktop_widgets::init(cx);
+    crate::features::notch::init(cx);
+    crate::features::pages::floating_ui::init(cx);
     crate::notifications::set_native_notifications_enabled(
         persisted.native_notifications_enabled,
         cx,

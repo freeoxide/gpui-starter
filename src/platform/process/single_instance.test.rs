@@ -8,7 +8,8 @@ use tempfile::tempdir;
 
 use super::{
     AcquireOutcome, MAX_LINE_BYTES, SCHEME, append_forwarded_link, drain_forwarded_links,
-    read_bounded_line, resolve_ipc_name, retry_until_single, send_forwarded_link_via_ipc,
+    link_path_for_log, read_bounded_line, resolve_ipc_name, retry_until_single,
+    send_forwarded_link_via_ipc,
 };
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, prelude::*};
 
@@ -180,4 +181,16 @@ fn retry_failed_short_circuits_without_sleeping() {
     assert!(matches!(outcome, AcquireOutcome::Failed));
     assert_eq!(calls, 1, "Failed must not consume further attempts");
     assert!(start.elapsed() < Duration::from_secs(30));
+}
+
+#[test]
+fn log_path_strips_the_query_and_keeps_plain_links() {
+    assert_eq!(
+        link_path_for_log("gpui-starter://auth/callback?code=x&state=y"),
+        "gpui-starter://auth/callback"
+    );
+    assert_eq!(
+        link_path_for_log("gpui-starter://settings"),
+        "gpui-starter://settings"
+    );
 }

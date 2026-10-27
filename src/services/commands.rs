@@ -16,6 +16,7 @@ pub enum CommandId {
     OpenNotifications,
     OpenDiagnostics,
     OpenAbout,
+    OpenSystemControls,
     ThemeLight,
     ThemeDark,
     StartDemoTask,
@@ -26,6 +27,11 @@ pub enum CommandId {
     Undo,
     Redo,
     Restart,
+    OpenMenubarCharts,
+    StartTour,
+    SignIn,
+    SignOut,
+    OpenDesktopWidgets,
 }
 
 #[derive(Clone, Debug)]
@@ -51,9 +57,12 @@ pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
         | CommandId::OpenNotifications
         | CommandId::OpenDiagnostics
         | CommandId::OpenAbout
+        | CommandId::OpenSystemControls
         | CommandId::ThemeLight
         | CommandId::ThemeDark
-        | CommandId::StartDemoTask => CommandAvailability {
+        | CommandId::StartDemoTask
+        | CommandId::StartTour
+        | CommandId::OpenDesktopWidgets => CommandAvailability {
             enabled: true,
             disabled_reason: None,
         },
@@ -96,6 +105,27 @@ pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
                 !cfg!(any(unix, windows)),
             ),
         },
+        CommandId::OpenMenubarCharts => CommandAvailability {
+            enabled: cfg!(not(target_family = "wasm")),
+            disabled_reason: disabled_reason(
+                "command_reason_menubar_charts_unavailable",
+                cfg!(target_family = "wasm"),
+            ),
+        },
+        CommandId::SignIn => CommandAvailability {
+            enabled: true,
+            disabled_reason: None,
+        },
+        CommandId::SignOut => {
+            let signed_in = matches!(
+                crate::auth_ui::snapshot(cx).state,
+                gpui_auth::AuthState::SignedIn { .. }
+            );
+            CommandAvailability {
+                enabled: signed_in,
+                disabled_reason: disabled_reason("command_reason_signed_out", !signed_in),
+            }
+        }
     }
 }
 
@@ -136,6 +166,12 @@ pub fn registry() -> Vec<CommandSpec> {
             "command_about",
             "command_about_subtitle",
             IconName::Info,
+        ),
+        command(
+            CommandId::OpenSystemControls,
+            "command_system_controls",
+            "command_system_controls_subtitle",
+            IconName::Settings2,
         ),
         command(
             CommandId::ThemeLight,
@@ -197,6 +233,36 @@ pub fn registry() -> Vec<CommandSpec> {
             "command_restart_subtitle",
             IconName::Info,
         ),
+        command(
+            CommandId::OpenMenubarCharts,
+            "command_menubar_charts",
+            "command_menubar_charts_subtitle",
+            IconName::ChartPie,
+        ),
+        command(
+            CommandId::StartTour,
+            "tutorial_command",
+            "tutorial_command_subtitle",
+            IconName::Map,
+        ),
+        command(
+            CommandId::SignIn,
+            "command_sign_in",
+            "command_sign_in_subtitle",
+            IconName::User,
+        ),
+        command(
+            CommandId::SignOut,
+            "command_sign_out",
+            "command_sign_out_subtitle",
+            IconName::CircleUser,
+        ),
+        command(
+            CommandId::OpenDesktopWidgets,
+            "command_desktop_widgets",
+            "command_desktop_widgets_subtitle",
+            IconName::PanelBottom,
+        ),
     ]
 }
 
@@ -208,6 +274,7 @@ pub fn execute(id: CommandId, cx: &mut App) {
         CommandId::OpenNotifications => navigate(Page::Notifications, cx),
         CommandId::OpenDiagnostics => navigate(Page::Diagnostics, cx),
         CommandId::OpenAbout => navigate(Page::About, cx),
+        CommandId::OpenSystemControls => navigate(Page::SystemControls, cx),
         CommandId::ThemeLight => crate::app::set_theme_mode(ThemeMode::Light, cx),
         CommandId::ThemeDark => crate::app::set_theme_mode(ThemeMode::Dark, cx),
         CommandId::StartDemoTask => crate::tasks::start_demo_task(cx),
@@ -281,6 +348,25 @@ pub fn execute(id: CommandId, cx: &mut App) {
                 );
             }
         }
+        CommandId::OpenMenubarCharts => {
+            crate::features::menubar_charts::open_sheet(cx);
+        }
+        CommandId::StartTour => {
+            crate::features::tutorial::start(cx);
+        }
+        CommandId::SignIn => navigate(Page::SignIn, cx),
+        CommandId::OpenDesktopWidgets => navigate(Page::DesktopWidgets, cx),
+        CommandId::SignOut => match crate::services::auth::controller(cx) {
+            Some(entity) => {
+                entity.update(cx, |controller, cx| controller.sign_out(cx));
+            }
+            None => {
+                tracing::warn!(
+                    target: "gpui_starter::commands",
+                    "sign-out requested without an auth controller"
+                );
+            }
+        },
     }
 }
 

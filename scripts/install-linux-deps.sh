@@ -30,6 +30,8 @@ if command -v apt-get >/dev/null 2>&1; then
     libssl-dev
     libvulkan-dev
     libvulkan1
+    libasound2-dev
+    libpulse-dev
   )
 
   echo "Installing ${#PKGS[@]} packages via apt..."

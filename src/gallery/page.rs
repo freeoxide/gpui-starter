@@ -68,30 +68,36 @@ impl Render for GalleryPage {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let matches = self.matching_indexes(&self.query(cx));
 
-        let nav = Sidebar::new("gallery-sidebar")
-            .w_64()
-            .collapsible(SidebarCollapsible::None)
-            .header(
-                SidebarHeader::new().w_full().child(
-                    div()
-                        .bg(cx.theme().sidebar_accent)
-                        .rounded_full_style(cx)
-                        .px_2()
-                        .child(
-                            Input::new(&self.search_input)
-                                .appearance(false)
-                                .cleanable(true),
-                        ),
-                ),
-            )
-            .child(SidebarMenu::new().children(matches.iter().map(|&ix| {
-                SidebarMenuItem::new(self.sections[ix].title())
-                    .active(ix == self.active_ix)
-                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                        this.active_ix = ix;
-                        cx.notify();
-                    }))
-            })));
+        let nav = crate::features::tutorial::target(
+            "gallery-nav",
+            Sidebar::new("gallery-sidebar")
+                .w_64()
+                .collapsible(SidebarCollapsible::None)
+                .header(
+                    SidebarHeader::new()
+                        .w_full()
+                        .child(crate::features::tutorial::target(
+                            "gallery-search",
+                            div()
+                                .bg(cx.theme().sidebar_accent)
+                                .rounded_full_style(cx)
+                                .px_2()
+                                .child(
+                                    Input::new(&self.search_input)
+                                        .appearance(false)
+                                        .cleanable(true),
+                                ),
+                        )),
+                )
+                .child(SidebarMenu::new().children(matches.iter().map(|&ix| {
+                    SidebarMenuItem::new(self.sections[ix].title())
+                        .active(ix == self.active_ix)
+                        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                            this.active_ix = ix;
+                            cx.notify();
+                        }))
+                }))),
+        );
 
         // `active_ix` always points into `matches` while it is non-empty;
         // follow_search and item clicks only pick matching indexes.

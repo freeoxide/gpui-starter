@@ -12,7 +12,21 @@ pub enum Page {
     QueryDevToolsV2,
     ErrorPlayground,
     About,
+    SystemControls,
     Gallery,
+    CanvasShowcase,
+    InfiniteCanvas,
+    MultiuserCanvas,
+    FloatingUi,
+    ImageEditor,
+    Microphone,
+    Audio,
+    Analytics,
+    Music,
+    SignIn,
+    DesktopWidgets,
+    Wgpu,
+    ShaderCanvas,
 }
 
 impl Page {
@@ -27,7 +41,21 @@ impl Page {
             Page::QueryDevToolsV2 => "Query DevTools V2",
             Page::ErrorPlayground => "Error Playground",
             Page::About => "About",
+            Page::SystemControls => "System Controls",
             Page::Gallery => "Gallery",
+            Page::CanvasShowcase => "Canvas Showcase",
+            Page::InfiniteCanvas => "Infinite Canvas",
+            Page::MultiuserCanvas => "Shared Canvas",
+            Page::FloatingUi => "Floating UI",
+            Page::ImageEditor => "Image Editor",
+            Page::Microphone => "Microphone",
+            Page::Audio => "Audio",
+            Page::Analytics => "Analytics",
+            Page::Music => "Music",
+            Page::SignIn => "Sign In",
+            Page::DesktopWidgets => "Desktop Widgets",
+            Page::Wgpu => "WGPU",
+            Page::ShaderCanvas => "Shader Canvas",
         }
     }
 
@@ -44,7 +72,21 @@ impl Page {
             Page::QueryDevToolsV2 => "nav_query_devtools_v2",
             Page::ErrorPlayground => "nav_error_playground",
             Page::About => "nav_about",
+            Page::SystemControls => "nav_system_controls",
             Page::Gallery => "nav_gallery",
+            Page::CanvasShowcase => "nav_canvas_showcase",
+            Page::InfiniteCanvas => "nav_infinite_canvas",
+            Page::MultiuserCanvas => "nav_multiuser_canvas",
+            Page::FloatingUi => "nav_floating_ui",
+            Page::ImageEditor => "nav_image_editor",
+            Page::Microphone => "nav_microphone",
+            Page::Audio => "nav_audio",
+            Page::Analytics => "nav_analytics",
+            Page::Music => "nav_music",
+            Page::SignIn => "nav_sign_in",
+            Page::DesktopWidgets => "nav_desktop_widgets",
+            Page::Wgpu => "nav_wgpu",
+            Page::ShaderCanvas => "nav_shader_canvas",
         }
     }
 
@@ -65,7 +107,21 @@ impl Page {
             Page::QueryPlayground => "query-playground",
             Page::QueryDevToolsV2 => "query-devtools-v2",
             Page::About => "about",
+            Page::SystemControls => "system-controls",
             Page::Gallery => "gallery",
+            Page::CanvasShowcase => "canvas-showcase",
+            Page::InfiniteCanvas => "infinite-canvas",
+            Page::MultiuserCanvas => "multiuser-canvas",
+            Page::FloatingUi => "floating-ui",
+            Page::ImageEditor => "image-editor",
+            Page::Microphone => "microphone",
+            Page::Audio => "audio",
+            Page::Analytics => "analytics",
+            Page::Music => "music",
+            Page::SignIn => "sign-in",
+            Page::DesktopWidgets => "desktop-widgets",
+            Page::Wgpu => "wgpu",
+            Page::ShaderCanvas => "shader-canvas",
         }
     }
 
@@ -85,7 +141,29 @@ impl Page {
             Page::QueryDevToolsV2 => IconName::LayoutDashboard,
             Page::ErrorPlayground => IconName::TriangleAlert,
             Page::About => IconName::Info,
+            // SlidersHorizontal is full-catalog and renders blank on native;
+            // Settings2 is the shipped stand-in.
+            Page::SystemControls => IconName::Settings2,
             Page::Gallery => IconName::GalleryVerticalEnd,
+            Page::CanvasShowcase => IconName::Palette,
+            Page::InfiniteCanvas => IconName::Frame,
+            Page::MultiuserCanvas => IconName::User,
+            // CanvasShowcase already claims Palette; panels name this page.
+            Page::FloatingUi => IconName::PanelLeft,
+            // Full-catalog Image renders blank on native; Frame is the stand-in.
+            Page::ImageEditor => IconName::Frame,
+            Page::Microphone => IconName::Mic,
+            // AudioLines is full-catalog and renders blank on native; Play is
+            // the shipped stand-in.
+            Page::Audio => IconName::Play,
+            Page::Analytics => IconName::ChartPie,
+            // Music is full-catalog and renders blank on native; Play is
+            // the shipped stand-in.
+            Page::Music => IconName::Play,
+            Page::SignIn => IconName::User,
+            Page::DesktopWidgets => IconName::PanelBottom,
+            Page::Wgpu => IconName::Cpu,
+            Page::ShaderCanvas => IconName::Palette,
         }
     }
 
@@ -100,7 +178,21 @@ impl Page {
             Page::QueryDevToolsV2,
             Page::ErrorPlayground,
             Page::About,
+            Page::SystemControls,
             Page::Gallery,
+            Page::CanvasShowcase,
+            Page::InfiniteCanvas,
+            Page::MultiuserCanvas,
+            Page::FloatingUi,
+            Page::ImageEditor,
+            Page::Microphone,
+            Page::Audio,
+            Page::Analytics,
+            Page::Music,
+            Page::SignIn,
+            Page::DesktopWidgets,
+            Page::Wgpu,
+            Page::ShaderCanvas,
         ]
     }
 }

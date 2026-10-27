@@ -726,7 +726,7 @@ Catalog facade: `crate::i18n::localize` / `localize_with_args` (`src/services/i1
 | `tutorial_step_home_heading_title` | Welcome | 欢迎 |
 | `tutorial_step_home_heading_body` | This is the home page. Every page has a title and a short description. | 这是主页。每个页面都有标题和简短说明。 |
 | `tutorial_step_home_cta_title` | Primary actions | 主要操作 |
-| `tutorial_step_home_cta_body` | Get Started opens the docs. The outline button runs a demo background task. | “Get Started”打开文档，描边按钮会启动演示后台任务。 |
+| `tutorial_step_home_cta_body` | Get Started is a sample primary action. The outline button starts a demo background task. | “Get Started”是一个示例主操作。描边按钮会启动演示后台任务。 |
 | `tutorial_step_sidebar_title` | Navigation | 导航 |
 | `tutorial_step_sidebar_body` | Every page of the app is one click away in the sidebar. Next stop: the Gallery. | 应用的每个页面都能从侧边栏一键直达。下一站：画廊。 |
 | `tutorial_step_gallery_nav_title` | Gallery sections | 画廊分区 |

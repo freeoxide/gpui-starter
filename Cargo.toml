@@ -1,14 +1,15 @@
 [workspace]
+members = ["collab-protocol", "collab-server", "crates/gpui-auth"]
 
 [workspace.dependencies]
-# gpui-form from the freeoxide fork; rev = the fluent-to-rust-i18n merge
-# (PR #7) on origin/master.
-gpui-form = { git = "https://github.com/freeoxide/gpui-form", rev = "710b52439f0a4bb7756b6c15eff83c1340d2e157" }
+# gpui-form from the freeoxide fork (package freeoxide-gpui-form, lib name
+# gpui_form); rev = the origin/master kit-0.8.0 bump merge (PR #12).
+gpui-form = { package = "freeoxide-gpui-form", git = "https://github.com/freeoxide/gpui-form", rev = "23efdef8f30b8c72819b44b0544ef86f7ff72616" }
 
 # GPUI ecosystem — gpui-kit is the single application-facing dependency
 # (`use gpui_kit::*`; layers: component / base / assets / platform).
 # gpui-pre is the crates.io snapshot of zed gpui (package name gpui-pre,
-# lib name `gpui`); gpui-kit 0.7.3 pins the gpui-pre-* family to =0.3.9.
+# lib name `gpui`); gpui-kit 0.8.0 pins the gpui-pre-* family to =0.3.9.
 # gpui-kit enables font-kit/x11/wayland/runtime_shaders on gpui-pre-platform
 # itself, so backend selection needs no direct platform dependency.
 # qa_migration.rs fails the build if a source file imports gpui-pre or the
@@ -18,7 +19,7 @@ gpui-form = { git = "https://github.com/freeoxide/gpui-form", rev = "710b52439f0
 # Never add a direct `accesskit` dep: the kit re-exports gpui's accesskit
 # (0.24.x) and a separately-versioned copy is type-incompatible.
 gpui = { package = "gpui-pre", version = "0.3.9" }
-gpui-kit = "0.7.3"
+gpui-kit = "0.8.0"
 
 # Serialization & data
 anyhow = "1"
@@ -208,12 +209,55 @@ sys-locale = "0.3"
 flume = "0.11"
 fuzzy-matcher = "0.3"
 rust-embed = "8"
+# ui::waveform: rtrb is the SPSC ring between audio callback and UI tick;
+# rustfft drives the spectrum analyzer. Both compile on wasm32.
+rtrb = "0.4"
+rustfft = "6.4"
+# Canvas showcase image demo: RenderImage construction needs image::Frame on
+# every platform (the target tables' png-only lines predate the common entry;
+# png+jpeg is the union with plan 14's needs). Pure Rust, wasm-clean.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# Audio playback decode (services/audio): hound is the .wav fast path,
+# symphonia covers FLAC/MP3/OGG. Both pure Rust and wasm32-clean; output
+# itself goes through the native-only cpal entry in the not-wasm table.
+# "pcm" is the 16-bit WAV codec symphonia's own wav path decodes.
+hound = "3.5"
+symphonia = { version = "0.6.1", default-features = false, features = [
+    "wav",
+    "pcm",
+    "flac",
+    "mp3",
+    "ogg",
+    "vorbis",
+    "aac",
+    "isomp4",
+    "alac",
+] }
+# Shared wire types for the multiuser-canvas page and collab-server.
+collab-protocol = { path = "collab-protocol" }
+# Auth foundation (plan 21): token model, PKCE, provider trait, controller
+# entity; the app adapter is src/services/auth.rs. mock stays dev/demo-only
+# until plan 22 registers real providers.
+gpui-auth = { path = "crates/gpui-auth", features = ["mock-provider"] }
+# Floating window shims (src/ui/floating/shims/): raw platform handles on
+# every target incl. wasm (the crate defines the Web handle; wasm-clean).
+raw-window-handle = "0.6"
 
 [dev-dependencies]
 insta.workspace = true
 # Test-only: TestAppContext + deterministic timers for the config-store
 # debounce tests. Dev-dep features never reach production or wasm builds.
 gpui = { package = "gpui-pre", version = "0.3.9", features = ["test-support"] }
+# GPU-free WGSL validation; same version as the lock's naga.
+naga = { version = "=29.0.4", features = ["wgsl-in"] }
+
+# Test-only (plan 22 email-auth e2e): fast argon2 cost params for the demo
+# backend plus an RFC 6238 code oracle for the TOTP suites. Same target gate
+# as the gpui-auth lines so the wasm lane never resolves them.
+[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
+argon2 = "0.5.3"
+hmac = "0.12"
+sha1 = "0.10"
 
 # Windows .exe icon embed; build.rs gates on CARGO_CFG_TARGET_OS so Linux,
 # macOS, and wasm hosts never invoke it (docs/research/icons-and-windows.md A2).
@@ -232,6 +276,7 @@ objc2-foundation = { version = "0.3.0", default-features = false, features = [
     "std",
     "NSBundle",
     "NSError",
+    "NSProcessInfo",
     "NSString",
 ] }
 objc2-user-notifications = { version = "0.3.0", default-features = false, features = [
@@ -244,8 +289,23 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = [
     "std",
     "NSView",
     "NSWindow",
+    "NSScreen",
 ] }
-raw-window-handle = "0.6"
+# Microphone TCC permission (services/microphone/permission.rs). Only the
+# authorization surface; pairs with the locked objc2/block2/foundation line.
+objc2-av-foundation = { version = "0.3.2", default-features = false, features = [
+    "std",
+    "AVCaptureDevice",
+    "AVMediaFormat",
+    "block2",
+] }
+# System controls page (plan 17): CoreAudio HAL volume + IOBluetooth power and
+# paired devices. AudioHardware covers every AudioObject* symbol used.
+objc2-core-audio = { version = "0.3.0", default-features = false, features = [
+    "std",
+    "AudioHardware",
+] }
+objc2-io-bluetooth = "0.3"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Optional: XDG Desktop Portal notification backend (enable with --features
@@ -264,6 +324,22 @@ ashpd = { version = "0.13", optional = true, default-features = false, features 
 # WindowOptions.icon (image is already in the lock via gpui-pre; png-only
 # keeps the lock's feature set from growing).
 image = { version = "0.25", default-features = false, features = ["png"] }
+# X11 EWMH/XShape window shims (src/ui/floating/shims/x11.rs) over the
+# same x11rb 0.13 the lock already carries for gpui-pre-linux; shape gates
+# the XShape protocol module, allow-unsafe-code gates xcb_ffi (wrapping
+# the live connection; no second X connection is opened).
+x11rb = { version = "0.13", default-features = false, features = [
+    "allow-unsafe-code",
+    "shape",
+] }
+# System controls page (plan 17): BlueZ runs on the system bus (zbus blocking
+# wrappers under the default async-io runtime; never add the zbus `tokio`
+# feature alongside async-io); libpulse-binding speaks the native protocol
+# against both PulseAudio and pipewire-pulse (needs libpulse-dev at build
+# time, scripts/install-linux-deps.sh); brightness reads/sets the backlight.
+zbus = "5"
+libpulse-binding = "2.30"
+brightness = "0.8"
 
 # Unpackaged Win32 apps need a Start Menu shortcut carrying the toast AUMID or
 # Windows silently drops every toast; see src/platform/toast_identity.rs. Same
@@ -288,6 +364,8 @@ windows = { version = "0.61", features = [
     "Data_Xml_Dom",
     "Foundation_Collections",
     "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
     "Win32_Storage_FileSystem",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
@@ -298,6 +376,8 @@ windows = { version = "0.61", features = [
     "Win32_UI_WindowsAndMessaging",
     "UI_Notifications",
 ] }
+# System controls page (plan 17): backlight via the brightness crate.
+brightness = "0.8"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -334,7 +414,11 @@ gpui-kit = { workspace = true, features = [
 ] }
 # Per-platform credential stores; a platform left without its store feature
 # silently falls back to keyring's per-entry mock (writes vanish, reads miss).
-keyring = { version = "3.6.3", features = ["apple-native", "windows-native"] }
+keyring = { version = "3.6.3", features = [
+    "apple-native",
+    "linux-native",
+    "windows-native",
+] }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 notify-rust = "4.17.0"
 # `open` hits compile_error!("open is not supported on this platform") and
@@ -351,6 +435,31 @@ tracing-appender = "0.2"
 # (rt + sync + time): `net` and `io-util` have no wasm implementation, and
 # `rt-multi-thread` (tokio_runtime's dedicated I/O runtime) needs threads.
 tokio = { workspace = true, features = ["io-util", "net", "rt-multi-thread"] }
+# Socket.io client for the multiuser-canvas page's live sync; its async
+# feature set needs the tokio features above on a dedicated thread
+# (src/features/pages/multiuser_canvas/net.rs).
+rust_socketio = { version = "0.6", default-features = false, features = ["async"] }
+sysinfo = { version = "0.31", default-features = false, features = ["system"] }
+# Microphone input (services/microphone). ALSA backend needs libasound2-dev
+# at build time (scripts/install-linux-deps.sh); no wasm32 story.
+cpal = "0.18"
+# System controls page (plan 17): cross-platform battery reader.
+starship-battery = "0.12"
+# Social login (services/auth_social, plan 23). oauth2 serves the GitHub
+# flow (no OIDC discovery there); openidconnect adds discovery, id_token
+# validation, and userinfo for Google + generic issuers. reqwest+rustls-tls
+# subset the app's reqwest line above, so one copy resolves in the lock.
+oauth2 = { version = "5.0", default-features = false, features = [
+    "reqwest",
+    "rustls-tls",
+] }
+openidconnect = { version = "4.0", default-features = false, features = [
+    "reqwest",
+    "rustls-tls",
+] }
+# Exact pin shares the lock's single wgpu copy with gpui-pre-wgpu; any other
+# version compiles a second full wgpu/naga stack into the binary.
+wgpu = { version = "=29.0.4" }
 
 # Web (wasm32-unknown-unknown) dependencies.
 [target.'cfg(target_family = "wasm")'.dependencies]

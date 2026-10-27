@@ -69,6 +69,13 @@ fn icon_pixels(size: usize) -> Vec<u8> {
     px
 }
 
+enum TrayAction {
+    OpenLauncher,
+    ToggleCharts {
+        rect: crate::features::menubar_charts::IconRect,
+    },
+}
+
 /// Tray + global-hotkey entry point; call once from `main()` on macOS.
 pub fn setup(cx: &mut App) {
     tracing::info!(target: LOG, "Setting up tray icon");
@@ -78,7 +85,7 @@ pub fn setup(cx: &mut App) {
         .with_icon_as_template(true)
         .with_tooltip(format!(
             "{}  (⌥Space)",
-            crate::i18n::localize("tray_open_launcher")
+            crate::i18n::localize("menubar_charts_tooltip")
         ))
         .with_menu_on_left_click(false)
         .build()
@@ -91,7 +98,7 @@ pub fn setup(cx: &mut App) {
 
     // Tray/hotkey threads park on blocking crossbeam recvs and forward
     // ticks over flume: `AsyncApp` is `!Send`, so they cannot `cx.update`.
-    let (tx, rx) = flume::unbounded::<()>();
+    let (tx, rx) = flume::unbounded::<TrayAction>();
     let tx_hotkey = tx.clone();
 
     if let Err(e) = std::thread::Builder::new()
@@ -105,11 +112,19 @@ pub fn setup(cx: &mut App) {
                 if let TrayIconEvent::Click {
                     button: MouseButton::Left,
                     button_state: MouseButtonState::Up,
+                    rect,
                     ..
                 } = event
                 {
-                    tracing::info!(target: LOG, source = "tray_click", "Launcher trigger");
-                    let _ = tx.send(());
+                    tracing::info!(target: LOG, source = "tray_click", "Charts toggle trigger");
+                    let _ = tx.send(TrayAction::ToggleCharts {
+                        rect: crate::features::menubar_charts::IconRect {
+                            x: rect.position.x,
+                            y: rect.position.y,
+                            width: rect.size.width,
+                            height: rect.size.height,
+                        },
+                    });
                 }
             }
         })
@@ -130,7 +145,7 @@ pub fn setup(cx: &mut App) {
                     return;
                 }
                 tracing::info!(target: LOG, source = "hotkey_alt_space", "Launcher trigger");
-                let _ = tx_hotkey.send(());
+                let _ = tx_hotkey.send(TrayAction::OpenLauncher);
             }
         })
     {
@@ -144,10 +159,18 @@ pub fn setup(cx: &mut App) {
     cx.spawn(async move |cx| {
         loop {
             // Parked until a tray click or hotkey fires — no periodic wake-ups.
-            if rx.recv_async().await.is_err() {
+            let Ok(action) = rx.recv_async().await else {
                 break;
+            };
+            match action {
+                TrayAction::OpenLauncher => {
+                    let _ = cx.update(crate::launcher::open_launcher);
+                }
+                TrayAction::ToggleCharts { rect } => {
+                    let _ =
+                        cx.update(|cx| crate::features::menubar_charts::toggle_popover(rect, cx));
+                }
             }
-            let _ = cx.update(crate::launcher::open_launcher);
         }
     })
     .detach();

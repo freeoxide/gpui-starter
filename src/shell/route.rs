@@ -17,7 +17,21 @@ pub(crate) const VALID_HOSTS: &[&str] = &[
     Page::QueryPlayground.host(),
     Page::QueryDevToolsV2.host(),
     Page::About.host(),
+    Page::SystemControls.host(),
     Page::Gallery.host(),
+    Page::CanvasShowcase.host(),
+    Page::InfiniteCanvas.host(),
+    Page::MultiuserCanvas.host(),
+    Page::FloatingUi.host(),
+    Page::ImageEditor.host(),
+    Page::Microphone.host(),
+    Page::Audio.host(),
+    Page::Analytics.host(),
+    Page::Music.host(),
+    Page::SignIn.host(),
+    Page::DesktopWidgets.host(),
+    Page::Wgpu.host(),
+    Page::ShaderCanvas.host(),
 ];
 
 const INVALID_SEGMENT_CHARS: &[char] = &['/', '\\', '\0', '<', '>', '|', '"'];

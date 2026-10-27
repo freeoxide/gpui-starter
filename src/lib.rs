@@ -1,5 +1,6 @@
-// No recursion_limit override: the old 8192 value only papered over a #[test] ->
-// gpui::test glob-shadow stack overflow, which is fixed at its call sites.
+// Auto-trait analysis of wgpu 29's type graph exceeds the default 128 on
+// nightly (rust-lang/rust#159228); 256 suffices, the old 8192 masked real bugs.
+#![recursion_limit = "256"]
 #![allow(
     clippy::map_unwrap_or,
     clippy::let_unit_value,
@@ -54,10 +55,12 @@ pub use platform::input::shortcuts;
 pub use platform::ipc;
 pub use platform::process::single_instance;
 pub use runtime::{capabilities, events};
+#[cfg(not(target_family = "wasm"))]
+pub use services::auth_social;
 pub use services::{
-    accessibility, commands, connectivity, crash_report, desktop_actions, error_surface, first_run,
-    i18n, logging, notifications, secure_storage, session, storage, tasks, telemetry, undo_stack,
-    updater,
+    accessibility, audio, auth, auth_ui, commands, connectivity, crash_report, desktop_actions,
+    error_surface, first_run, i18n, logging, microphone, notifications, secure_storage, session,
+    storage, system_controls, tasks, telemetry, undo_stack, updater,
 };
 pub use shell::route as routes;
 pub use shell::{menus, root, sidebar, status_bar, title_bar};

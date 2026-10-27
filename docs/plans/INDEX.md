@@ -190,20 +190,21 @@ blind spot: indirect `localize(self.title_key())` calls are invisible to
 (survey §5).
 
 Pin update (post-review). These plans were drafted and reviewed against
-gpui-kit 0.7.1 / gpui-pre 0.3.8 sources; the app now pins gpui-kit 0.7.3 /
+gpui-kit 0.7.1 / gpui-pre 0.3.8 sources; the app now pins gpui-kit 0.8.0 /
 gpui-pre 0.3.9. All `path:line` citations still name the 0.7.1/0.3.8
 registry sources they were verified against — treat them as the historical
-record and re-verify load-bearing claims against the 0.7.3/0.3.9 sources at
-implementation time (the registry keeps both). Known deltas from the 0.7.3
-changelog that touch surfaces the plans rely on: `visible_rows_changed`
-now fires `0..1`/`0..0` for one-row/empty tables (plans 12/13 table usage),
-TextView/Markdown layout defaults changed (visual only), and
-`TooltipRequest::placement` is deprecated in favor of `with_placement`
-(no plan uses it). The default icon set was diffed 0.7.1 → 0.7.3 and is
-IDENTICAL, so §4's icon policy and stand-in table hold unchanged. Plans 21-27
-were drafted against 0.7.3/0.3.9 directly; no re-verification caveat applies
-to their citations. A future pin bump re-opens the 25/26/27 Research Digests
-(25 and 27 name it in their open questions, 26 in its risk 4; §8).
+record and re-verify load-bearing claims against the 0.8.0/0.3.9 sources at
+implementation time (the registry keeps every version). Known deltas from
+the 0.7.3 changelog that touch surfaces the plans rely on:
+`visible_rows_changed` now fires `0..1`/`0..0` for one-row/empty tables
+(plans 12/13 table usage), TextView/Markdown layout defaults changed
+(visual only), and `TooltipRequest::placement` is deprecated in favor of
+`with_placement` (no plan uses it). The default icon set was diffed 0.7.1 →
+0.7.3 → 0.8.0 and is IDENTICAL, so §4's icon policy and stand-in table hold
+unchanged. Plans 21-27 were drafted against 0.7.3/0.3.9 directly; with the
+pin at 0.8.0, their citations are the historical record under the same
+rule. A future pin bump re-opens the 25/26/27 Research Digests (25 and 27
+name it in their open questions, 26 in its risk 4; §8).
 
 Icon policy (applied across all plans post-review). `gpui_kit::component::
 IconName` is generated from the DEFAULT 106 only
@@ -313,7 +314,7 @@ one file, each plan's touches are additive unless noted.
 | `src/features/mod.rs` | 03, 04, 11, 15 | One `pub mod` line each (`notch`, `menubar_charts`, `wgpu`, `tutorial`) |
 | `src/app/init.rs` | 02 03 04 07 09 11 13 14 15 17 18 19 21 23 24 27 | Boot hooks: 02 `floating::init` immediately after `notifications::initialize`; 03 and 09 state their `init` lines go after 02's (03 seam 2, 09 seam 11); apply 02 → 03 → 09 in that order. 26 adds no line of its own — `layer_shell::init(cx)` runs at the end of 02's `floating::init` (26 seam 2); 27's `desktop_widgets::init(cx);` goes directly after 02's `floating::init` line (27 seam 5; independent of 03/09's adjacent lines). 17/18/19 add `initialize` calls in or beside the `runtime_services_init` block per their seams; 04 adds `menubar_charts::init` after the capabilities loop. Auth hooks: 21's `services::auth::install(cx);` after `crate::storage::initialize(cx);` (after tokio 207 / secure storage 216 / session 217, 21 seam 7), then 23's `auth_social::install` (cfg'd out on wasm) and 24's `auth_ui::initialize` each directly after 21's line, either order between them. `DEFAULT_ENABLED_CAPABILITIES` gains: `canvas_shaders` (07), `wgpu_embed` (11), `music_playback` (13), `tutorial` (15); 07 and 11 each add a `#[cfg(target_family = "wasm")]` unsupported block after the loop. 14 adds its `image_editor` capability via `capabilities::set` beside the other startup capability steps (14 seam 8), not in the default list; 21/23 set `auth_email`/`auth_social` (+ per-provider entries) the same way, inside their `install`; 25/26/27 likewise register inside `floating::init` (probe)/`layer_shell::init`/`desktop_widgets::init` — the default list stays untouched by 21-27 |
 | `locales/en.yml` + `zh-CN.yml` | 02 03 04 05 06 07 08 09 11 12 13 14 15 17 18 19 24 27 | Prefixes are unique (§4); append each plan's block, `nav_*` keys inside the nav block. 04 also deletes `tray_open_launcher` (Step 4.3, after its reader swap in 4.2; do not delete early). 24 adds ~40 keys (incl. the nested `sign_in_form:` block and hand-added `nav_sign_in` — scanner blind spot) and deletes the three `settings_session_*` demo keys from both files with its settings rewrite (24 seam 15). 27 adds ~40 `widgets_*` keys incl. the hand-added `nav_desktop_widgets` (same scanner blind spot) plus `command_desktop_widgets*`. 21/22/23/25/26 add none. Lockstep test is the gate |
-| `Cargo.toml` not-wasm table | 04 07 08 11 13(P6) 17 18 19 21 23 | grep-first duplicates: `wgpu`/`naga` shared by 07 and 11 (identical lines; second lander skips); `cpal` shared by 18 and 19 (second lander skips). 11 also puts `image` here (`default-features = false`), which does not collide with the common-table entries (a crate may appear in several tables; features union). 21 appends `"linux-native"` to the keyring feature list (`Cargo.toml:337`; target-gated inside keyring, inert on macOS/Windows). 23 adds `oauth2` + `openidconnect` (`default-features = false`, `reqwest`+`rustls-tls` — subsets the app's reqwest line, one copy). 22's argon2/totp-rs lines sit in the crate's own not-wasm table; 22 ALSO adds the same two crates to the app's NEW `[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]` table (Step 5.3's tests construct `argon2::Params` and generate TOTP codes; dev-deps never reach production or wasm builds) |
+| `Cargo.toml` not-wasm table | 04 07 08 11 13(P6) 17 18 19 21 23 | grep-first duplicates: `wgpu`/`naga` shared by 07 and 11 (identical lines; second lander skips); `cpal` shared by 18 and 19 (second lander skips). 11's planned `image` line here was skipped at landing: the common-table png+jpeg entry (the 05/14 union) is a feature superset on every target, so 11 adds no line of its own (its removal recipe records the common entry as not its own). 21 appends `"linux-native"` to the keyring feature list (`Cargo.toml:337`; target-gated inside keyring, inert on macOS/Windows). 23 adds `oauth2` + `openidconnect` (`default-features = false`, `reqwest`+`rustls-tls` — subsets the app's reqwest line, one copy). 22's argon2/totp-rs lines sit in the crate's own not-wasm table; 22 ALSO adds the same two crates to the app's NEW `[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]` table (Step 5.3's tests construct `argon2::Params` and generate TOTP codes; dev-deps never reach production or wasm builds) |
 | `Cargo.toml` common `[dependencies]` | 05, 14, 16, 19, 25 | 05 adds `image` png-only; 14 adds `image` png+jpeg; one key only, so land the union (`png+jpeg` satisfies 05's png need) and note the divergence in both PRs (see §8). 16 adds `rtrb` + `rustfft`; 19 adds `hound` + `symphonia` (no collisions). 25 moves `raw-window-handle = "0.6"` here from the macOS table (wasm-clean; reverts with 25) |
 | `Cargo.toml` OS tables + `[dev-dependencies]` | 02, 17, 18, 22, 25 | 02 extends the macOS `objc2-app-kit` features (`NSScreen`); 03 deliberately adds nothing (03 seam 5). 17 adds macOS/Linux/Windows entries and features; 18 adds `objc2-av-foundation` (macOS). 25 adds the `x11rb` line (shape + allow-unsafe-code) to the Linux table; macOS and Windows tables untouched by 25. Dev-deps: `naga` (07/11, grep-first); 22 adds argon2 + totp-rs under a NEW not-wasm dev-deps table (see the not-wasm row above) |
 | `[workspace]` members + `justfile` | 08, 21, 22 (Phase 6, optional) | Append, never rewrite; grep `members` first (21 risk 6, 22 risk 7). 08: `collab-protocol`, `collab-server`, `collab-server` recipe. 21: `crates/gpui-auth`. 22 Phase 6: `auth-dev-server` + `auth-dev-server` recipe |
@@ -357,8 +358,8 @@ foundations), one plan per commit, gates green between steps:
 3. Shared resources revert with their last user: `cpal` + `libasound2-dev`
    only after both 18 and 19 are gone (18 removal step 10); `wgpu`/`naga` only
    after both 07 and 11 (07 removal step 2); the common `image` entry only
-   after 05 and 14 (11's `image` line sits in the not-wasm table and reverts
-   with 11, per 11 seam 1); the macOS `NSScreen` feature with 02 (03 carries
+   after 05, 14, and 11 are gone (11 landed with no image line of its own;
+   its RenderImage builders ride the common png+jpeg entry); the macOS `NSScreen` feature with 02 (03 carries
    nothing to revert); `NSMicrophoneUsageDescription` in
    `scripts/macos-dev-app.sh` with 18 and in `scripts/create-release-app.sh`
    with 20 (18 removal step 11). Auth shared resources: the keyring
@@ -381,33 +382,33 @@ foundations), one plan per commit, gates green between steps:
 
 | id | plan | batch | status |
 |---|---|---|---|
-| 01 | canvas-foundation | 1 | |
-| 02 | floating-window-toolkit | 1 | |
-| 11 | wgpu-embed | 1 | |
-| 16 | waveform-foundation | 1 | |
-| 03 | notch-floater | 2 | |
-| 04 | menubar-charts | 2 | |
-| 05 | canvas-showcase | 2 | |
-| 06 | infinite-canvas | 2 | |
-| 08 | multiuser-canvas | 3 | |
-| 09 | floating-ui | 3 | |
-| 14 | image-editor | 3 | |
-| 10 | floating-canvas | 3 | |
-| 07 | canvas-shaders | 4 | |
-| 18 | microphone | 4 | |
-| 19 | audio-playback | 4 | |
-| 12 | real-app-ui | 5 | |
-| 13 | music-player | 5 | |
-| 15 | tutorial-mode | 5 | |
-| 17 | system-controls | 5 | |
-| 20 | release-bundling | 5 | |
-| 21 | auth-foundation | 6 | |
-| 22 | auth-email | 6 | |
-| 23 | auth-social-oidc | 6 | |
-| 24 | auth-ui | 6 | |
-| 25 | widget-window-shims | 7 | |
-| 26 | layer-shell-widgets | 7 | |
-| 27 | desktop-widgets | 7 | |
+| 01 | canvas-foundation | 1 | implemented |
+| 02 | floating-window-toolkit | 1 | implemented |
+| 11 | wgpu-embed | 1 | implemented |
+| 16 | waveform-foundation | 1 | implemented |
+| 03 | notch-floater | 2 | implemented |
+| 04 | menubar-charts | 2 | implemented |
+| 05 | canvas-showcase | 2 | implemented |
+| 06 | infinite-canvas | 2 | implemented |
+| 08 | multiuser-canvas | 3 | implemented |
+| 09 | floating-ui | 3 | implemented |
+| 14 | image-editor | 3 | implemented |
+| 10 | floating-canvas | 3 | implemented |
+| 07 | canvas-shaders | 4 | implemented |
+| 18 | microphone | 4 | implemented |
+| 19 | audio-playback | 4 | implemented |
+| 12 | real-app-ui | 5 | implemented |
+| 13 | music-player | 5 | implemented |
+| 15 | tutorial-mode | 5 | implemented |
+| 17 | system-controls | 5 | implemented |
+| 20 | release-bundling | 5 | implemented |
+| 21 | auth-foundation | 6 | implemented |
+| 22 | auth-email | 6 | implemented |
+| 23 | auth-social-oidc | 6 | implemented |
+| 24 | auth-ui | 6 | implemented |
+| 25 | widget-window-shims | 7 | implemented |
+| 26 | layer-shell-widgets | 7 | implemented |
+| 27 | desktop-widgets | 7 | implemented |
 
 ## 8. Open questions roll-up
 
@@ -581,9 +582,14 @@ Test-harness limits (accept the documented workarounds; do not invent tooling):
   `TestAppContext` state assertions plus manual QA.
 - No scroll-wheel or held-key simulation in the test harness. 01 (wheel
   router), 06 (space-pan); covered by unit math + manual QA.
-- GPU-dependent tests are `#[ignore]`d; CI has no GPU job. 07, 11 (also 11's
-  1M-particle perf target unmeasured, and lavapipe availability on runners
-  unknown, 07).
+- GPU-dependent tests are `#[ignore]`d; CI has no GPU job. 07, 11 (11's
+  1M-particle budget now has a local-only `#[ignore]`d timing smoke:
+  `renders_one_million_particles_within_the_frame_budget` asserts a median
+  render under ~16 ms on hardware adapters and, on software rasterizers,
+  logs the median and asserts only that the 1M path completes — measured
+  2236.5 ms median on this repo's llvmpipe dev container, no GPU present;
+  on-screen manual QA items stay unrun there, no display; lavapipe
+  availability on runners unknown, 07).
 
 Platform verification gaps (first-run watch lists inside each plan):
 

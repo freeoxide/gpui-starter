@@ -190,6 +190,26 @@ jobs:
             xcrun stapler staple "$DMG"
           done
 
+      - name: Verify DMG bundle (identifier + icon)
+        run: |
+          set -euo pipefail
+          VER="${{ steps.version.outputs.value }}"
+          MNT="$(mktemp -d)/dmg"
+          mkdir -p "$MNT"   # hdiutil -mountpoint needs an existing dir
+          for DMG in \
+            "target/release/GPUI-Starter-${VER}.dmg" \
+            "target/release/GPUI-Starter-${VER}-aarch64.dmg" \
+            "target/release/GPUI-Starter-${VER}-x86_64.dmg"; do
+            hdiutil attach -readonly -nobrowse -mountpoint "$MNT" "$DMG" >/dev/null
+            PLIST="$MNT/GPUI Starter.app/Contents/Info.plist"
+            [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = "com.gpui-starter.app" ]
+            [ -n "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$PLIST")" ]
+            [ -n "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$PLIST")" ]
+            [ -f "$MNT/GPUI Starter.app/Contents/Resources/gpui-starter.icns" ]
+            codesign --verify --deep --strict "$MNT/GPUI Starter.app"
+            hdiutil detach "$MNT" >/dev/null
+          done
+
       - name: Upload DMG artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -328,6 +348,16 @@ jobs:
           echo "path=$TARBALL" >> "$GITHUB_OUTPUT"
           echo "name=$TARBALL" >> "$GITHUB_OUTPUT"
 
+      - name: Verify tarball contents
+        run: |
+          set -euo pipefail
+          TARBALL="stage/${{ steps.tarball.outputs.path }}"
+          LIST="$(tar -tzf "$TARBALL")"
+          echo "$LIST" | grep -qx 'gpui-starter/com.gpui-starter.app.desktop'
+          echo "$LIST" | grep -q '^gpui-starter/hicolor/48x48/apps/gpui-starter\.png$'
+          echo "$LIST" | grep -q '^gpui-starter/hicolor/512x512/apps/gpui-starter\.png$'
+          echo "$LIST" | grep -qx 'gpui-starter/install-linux.sh'
+
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v7
         with:
@@ -444,6 +474,27 @@ jobs:
       - name: Build portable artifacts (bare exe + zip)
         shell: bash
         run: ./scripts/build-windows-portable.sh "${{ steps.version.outputs.value }}"
+
+      - name: Verify installer AUMID source
+        shell: bash
+        run: |
+          grep -q 'AppUserModelID: "com.gpui-starter.app"' packaging/windows/gpui-starter.iss
+
+      - name: Verify portable zip embeds an icon
+        shell: pwsh
+        env:
+          VER: ${{ steps.version.outputs.value }}
+        run: |
+          $dst = "$env:RUNNER_TEMP/zipcheck"
+          Remove-Item -Recurse -Force $dst -ErrorAction SilentlyContinue
+          Expand-Archive -Path "target/release/GPUI-Starter-$env:VER-x86_64-windows.zip" -DestinationPath $dst
+          # ICONDIR signature scan; Latin1 round-trip keeps bytes 1:1 and the
+          # string search vectorized instead of a per-byte PowerShell loop.
+          $exe = [System.IO.File]::ReadAllBytes("$dst/gpui-starter.exe")
+          $text = [System.Text.Encoding]::GetEncoding(28591).GetString($exe)
+          if (-not $text.Contains([string][char]0 + [char]0 + [char]1 + [char]0)) {
+            throw "no ICONDIR signature in gpui-starter.exe - build.rs icon embed broken"
+          }
 
       - name: Build Inno Setup installer
         shell: bash

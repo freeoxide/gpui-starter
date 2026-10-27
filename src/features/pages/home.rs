@@ -36,7 +36,8 @@ impl Render for HomePage {
             .items_center()
             .justify_center()
             .gap_6()
-            .child(
+            .child(crate::features::tutorial::target(
+                "home-heading",
                 div()
                     .id("home-title")
                     .a11y(Role::Heading, title.clone())
@@ -44,7 +45,7 @@ impl Render for HomePage {
                     .text_3xl()
                     .font_weight(FontWeight::BOLD)
                     .child(title),
-            )
+            ))
             .child(
                 div()
                     .id("home-subtitle")
@@ -52,14 +53,15 @@ impl Render for HomePage {
                     .text_color(cx.theme().muted_foreground)
                     .child(subtitle),
             )
-            .child(
+            .child(crate::features::tutorial::target(
+                "home-cta",
                 Button::new("get-started")
                     .primary()
                     .label(crate::i18n::localize("home_get_started"))
                     .on_click(|_, _, _| {
                         tracing::info!("Get Started clicked");
                     }),
-            )
+            ))
             .child(
                 Button::new("start-demo-task")
                     .outline()
@@ -72,6 +74,12 @@ impl Render for HomePage {
                         );
                         crate::tasks::start_demo_task_in_window(window, cx);
                     })),
+            )
+            .child(
+                Button::new("home-start-tour")
+                    .outline()
+                    .label(crate::i18n::localize("tutorial_button_start"))
+                    .on_click(cx.listener(|_, _, _, cx| crate::features::tutorial::start(cx))),
             )
             .when(first_run_pending, |this| {
                 let first_run_title = crate::i18n::localize("first_run_title");

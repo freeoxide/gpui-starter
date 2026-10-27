@@ -558,6 +558,20 @@ controller performs exactly one `store.save` per successful exchange and one
 `FlowLaunch` or `TokenSet` (secrets arrive through provider construction in
 plans 22/23 from config input).
 
+Amended by plan 22 (email + password; 22-auth-email.md): eleven `AuthError`
+variants, two `AuthState` variants (`SigningUp`, `AwaitingChallenge`), the
+`AccountCreated` event, the controller's password/TOTP methods with
+`enable_password` / `set_clock`, and the widened `install_with` signature in
+`src/services/auth.rs`. The amendments are append-only and live in
+`22:Interface Contract` (22-auth-email.md, Interface Contract section);
+consumers of this block read that one before building.
+
+Amended by plan 23 (social login; 23-auth-social-oidc.md): `AccountInfo`
+gained `avatar_url: Option<String>` with `#[serde(default)]` (userinfo
+`picture` / GitHub `avatar_url`; old keyring rows parse unchanged). Plan 22's
+exhaustive `AccountInfo` literal gained the matching `avatar_url: None` (23
+seam row 10). The field's contract lives in `23:Interface Contract`.
+
 ## Module Layout
 
 | File | Purpose |

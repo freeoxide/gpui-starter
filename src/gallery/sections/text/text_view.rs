@@ -151,7 +151,7 @@ impl Render for TextViewSection {
                         div()
                             .flex_1()
                             .max_w(rems(20.))
-                            .child(Slider::new(&self.slider)),
+                            .child(Slider::new(&self.slider).accessibility_label("Lines")),
                     )
                     // A fixed width keeps the slider still as the value grows.
                     .child(div().w(rems(1.5)).text_sm().child(max_lines.to_string())),

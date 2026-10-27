@@ -1,0 +1,434 @@
+[
+  {
+    "page": "/dashboard",
+    "channel": "organic",
+    "visitors": 2600,
+    "sessions": 3640,
+    "revenue": 18200.0,
+    "conversion": 3.1,
+    "avg_session_secs": 219
+  },
+  {
+    "page": "/dashboard",
+    "channel": "paid",
+    "visitors": 3033,
+    "sessions": 4550,
+    "revenue": 24264.0,
+    "conversion": 3.5,
+    "avg_session_secs": 234
+  },
+  {
+    "page": "/dashboard",
+    "channel": "social",
+    "visitors": 3274,
+    "sessions": 5238,
+    "revenue": 29466.0,
+    "conversion": 3.9,
+    "avg_session_secs": 249
+  },
+  {
+    "page": "/dashboard",
+    "channel": "direct",
+    "visitors": 3270,
+    "sessions": 5559,
+    "revenue": 32700.0,
+    "conversion": 4.3,
+    "avg_session_secs": 264
+  },
+  {
+    "page": "/pricing",
+    "channel": "organic",
+    "visitors": 2923,
+    "sessions": 4092,
+    "revenue": 20461.0,
+    "conversion": 3.0,
+    "avg_session_secs": 210
+  },
+  {
+    "page": "/pricing",
+    "channel": "paid",
+    "visitors": 2870,
+    "sessions": 4305,
+    "revenue": 22960.0,
+    "conversion": 3.4,
+    "avg_session_secs": 225
+  },
+  {
+    "page": "/pricing",
+    "channel": "social",
+    "visitors": 2999,
+    "sessions": 4798,
+    "revenue": 26991.0,
+    "conversion": 3.8,
+    "avg_session_secs": 240
+  },
+  {
+    "page": "/pricing",
+    "channel": "direct",
+    "visitors": 3262,
+    "sessions": 5545,
+    "revenue": 32620.0,
+    "conversion": 4.2,
+    "avg_session_secs": 255
+  },
+  {
+    "page": "/docs/getting-started",
+    "channel": "organic",
+    "visitors": 3230,
+    "sessions": 4522,
+    "revenue": 22610.0,
+    "conversion": 2.9,
+    "avg_session_secs": 201
+  },
+  {
+    "page": "/docs/getting-started",
+    "channel": "paid",
+    "visitors": 3248,
+    "sessions": 4872,
+    "revenue": 25984.0,
+    "conversion": 3.3,
+    "avg_session_secs": 216
+  },
+  {
+    "page": "/docs/getting-started",
+    "channel": "social",
+    "visitors": 3036,
+    "sessions": 4858,
+    "revenue": 27324.0,
+    "conversion": 3.7,
+    "avg_session_secs": 231
+  },
+  {
+    "page": "/docs/getting-started",
+    "channel": "direct",
+    "visitors": 2706,
+    "sessions": 4600,
+    "revenue": 27060.0,
+    "conversion": 4.1,
+    "avg_session_secs": 246
+  },
+  {
+    "page": "/docs/charts",
+    "channel": "organic",
+    "visitors": 2243,
+    "sessions": 3140,
+    "revenue": 15701.0,
+    "conversion": 2.8,
+    "avg_session_secs": 192
+  },
+  {
+    "page": "/docs/charts",
+    "channel": "paid",
+    "visitors": 2160,
+    "sessions": 3240,
+    "revenue": 17280.0,
+    "conversion": 3.2,
+    "avg_session_secs": 207
+  },
+  {
+    "page": "/docs/charts",
+    "channel": "social",
+    "visitors": 2210,
+    "sessions": 3536,
+    "revenue": 19890.0,
+    "conversion": 3.6,
+    "avg_session_secs": 222
+  },
+  {
+    "page": "/docs/charts",
+    "channel": "direct",
+    "visitors": 2253,
+    "sessions": 3830,
+    "revenue": 22530.0,
+    "conversion": 4.0,
+    "avg_session_secs": 237
+  },
+  {
+    "page": "/blog/analytics-101",
+    "channel": "organic",
+    "visitors": 1963,
+    "sessions": 2748,
+    "revenue": 13741.0,
+    "conversion": 2.7,
+    "avg_session_secs": 183
+  },
+  {
+    "page": "/blog/analytics-101",
+    "channel": "paid",
+    "visitors": 1710,
+    "sessions": 2565,
+    "revenue": 13680.0,
+    "conversion": 3.1,
+    "avg_session_secs": 198
+  },
+  {
+    "page": "/blog/analytics-101",
+    "channel": "social",
+    "visitors": 1395,
+    "sessions": 2232,
+    "revenue": 12555.0,
+    "conversion": 3.5,
+    "avg_session_secs": 213
+  },
+  {
+    "page": "/blog/analytics-101",
+    "channel": "direct",
+    "visitors": 1171,
+    "sessions": 1991,
+    "revenue": 11710.0,
+    "conversion": 3.9,
+    "avg_session_secs": 228
+  },
+  {
+    "page": "/blog/gpui-deep-dive",
+    "channel": "organic",
+    "visitors": 1025,
+    "sessions": 1435,
+    "revenue": 7175.0,
+    "conversion": 2.6,
+    "avg_session_secs": 174
+  },
+  {
+    "page": "/blog/gpui-deep-dive",
+    "channel": "paid",
+    "visitors": 1134,
+    "sessions": 1701,
+    "revenue": 9072.0,
+    "conversion": 3.0,
+    "avg_session_secs": 189
+  },
+  {
+    "page": "/blog/gpui-deep-dive",
+    "channel": "social",
+    "visitors": 1268,
+    "sessions": 2029,
+    "revenue": 11412.0,
+    "conversion": 3.4,
+    "avg_session_secs": 204
+  },
+  {
+    "page": "/blog/gpui-deep-dive",
+    "channel": "direct",
+    "visitors": 1307,
+    "sessions": 2222,
+    "revenue": 13070.0,
+    "conversion": 3.8,
+    "avg_session_secs": 219
+  },
+  {
+    "page": "/changelog",
+    "channel": "organic",
+    "visitors": 1093,
+    "sessions": 1530,
+    "revenue": 7651.0,
+    "conversion": 2.5,
+    "avg_session_secs": 165
+  },
+  {
+    "page": "/changelog",
+    "channel": "paid",
+    "visitors": 980,
+    "sessions": 1470,
+    "revenue": 7840.0,
+    "conversion": 2.9,
+    "avg_session_secs": 180
+  },
+  {
+    "page": "/changelog",
+    "channel": "social",
+    "visitors": 947,
+    "sessions": 1515,
+    "revenue": 8523.0,
+    "conversion": 3.3,
+    "avg_session_secs": 195
+  },
+  {
+    "page": "/changelog",
+    "channel": "direct",
+    "visitors": 1065,
+    "sessions": 1810,
+    "revenue": 10650.0,
+    "conversion": 3.7,
+    "avg_session_secs": 210
+  },
+  {
+    "page": "/download",
+    "channel": "organic",
+    "visitors": 1149,
+    "sessions": 1609,
+    "revenue": 8043.0,
+    "conversion": 2.4,
+    "avg_session_secs": 156
+  },
+  {
+    "page": "/download",
+    "channel": "paid",
+    "visitors": 1368,
+    "sessions": 2052,
+    "revenue": 10944.0,
+    "conversion": 2.8,
+    "avg_session_secs": 171
+  },
+  {
+    "page": "/download",
+    "channel": "social",
+    "visitors": 1497,
+    "sessions": 2395,
+    "revenue": 13473.0,
+    "conversion": 3.2,
+    "avg_session_secs": 186
+  },
+  {
+    "page": "/download",
+    "channel": "direct",
+    "visitors": 1507,
+    "sessions": 2562,
+    "revenue": 15070.0,
+    "conversion": 3.6,
+    "avg_session_secs": 201
+  },
+  {
+    "page": "/enterprise",
+    "channel": "organic",
+    "visitors": 1265,
+    "sessions": 1771,
+    "revenue": 8855.0,
+    "conversion": 2.3,
+    "avg_session_secs": 147
+  },
+  {
+    "page": "/enterprise",
+    "channel": "paid",
+    "visitors": 1263,
+    "sessions": 1894,
+    "revenue": 10104.0,
+    "conversion": 2.7,
+    "avg_session_secs": 162
+  },
+  {
+    "page": "/enterprise",
+    "channel": "social",
+    "visitors": 1353,
+    "sessions": 2165,
+    "revenue": 12177.0,
+    "conversion": 3.1,
+    "avg_session_secs": 177
+  },
+  {
+    "page": "/enterprise",
+    "channel": "direct",
+    "visitors": 1512,
+    "sessions": 2570,
+    "revenue": 15120.0,
+    "conversion": 3.5,
+    "avg_session_secs": 192
+  },
+  {
+    "page": "/integrations",
+    "channel": "organic",
+    "visitors": 1398,
+    "sessions": 1957,
+    "revenue": 9786.0,
+    "conversion": 2.2,
+    "avg_session_secs": 138
+  },
+  {
+    "page": "/integrations",
+    "channel": "paid",
+    "visitors": 1436,
+    "sessions": 2154,
+    "revenue": 11488.0,
+    "conversion": 2.6,
+    "avg_session_secs": 153
+  },
+  {
+    "page": "/integrations",
+    "channel": "social",
+    "visitors": 1372,
+    "sessions": 2195,
+    "revenue": 12348.0,
+    "conversion": 3.0,
+    "avg_session_secs": 168
+  },
+  {
+    "page": "/integrations",
+    "channel": "direct",
+    "visitors": 1255,
+    "sessions": 2134,
+    "revenue": 12550.0,
+    "conversion": 3.4,
+    "avg_session_secs": 183
+  },
+  {
+    "page": "/plugins",
+    "channel": "organic",
+    "visitors": 949,
+    "sessions": 1329,
+    "revenue": 6643.0,
+    "conversion": 2.1,
+    "avg_session_secs": 129
+  },
+  {
+    "page": "/plugins",
+    "channel": "paid",
+    "visitors": 933,
+    "sessions": 1400,
+    "revenue": 7464.0,
+    "conversion": 2.5,
+    "avg_session_secs": 144
+  },
+  {
+    "page": "/plugins",
+    "channel": "social",
+    "visitors": 965,
+    "sessions": 1544,
+    "revenue": 8685.0,
+    "conversion": 2.9,
+    "avg_session_secs": 159
+  },
+  {
+    "page": "/plugins",
+    "channel": "direct",
+    "visitors": 989,
+    "sessions": 1681,
+    "revenue": 9890.0,
+    "conversion": 3.3,
+    "avg_session_secs": 174
+  },
+  {
+    "page": "/support",
+    "channel": "organic",
+    "visitors": 738,
+    "sessions": 1033,
+    "revenue": 5166.0,
+    "conversion": 2.0,
+    "avg_session_secs": 120
+  },
+  {
+    "page": "/support",
+    "channel": "paid",
+    "visitors": 652,
+    "sessions": 978,
+    "revenue": 5216.0,
+    "conversion": 2.4,
+    "avg_session_secs": 135
+  },
+  {
+    "page": "/support",
+    "channel": "social",
+    "visitors": 543,
+    "sessions": 869,
+    "revenue": 4887.0,
+    "conversion": 2.8,
+    "avg_session_secs": 150
+  },
+  {
+    "page": "/support",
+    "channel": "direct",
+    "visitors": 459,
+    "sessions": 780,
+    "revenue": 4590.0,
+    "conversion": 3.2,
+    "avg_session_secs": 165
+  }
+]

@@ -1,4 +1,9 @@
 pub mod accessibility;
+pub mod audio;
+pub mod auth;
+#[cfg(not(target_family = "wasm"))]
+pub mod auth_social;
+pub mod auth_ui;
 pub mod commands;
 pub mod connectivity;
 pub mod crash_report;
@@ -7,12 +12,14 @@ pub mod error_surface;
 pub mod first_run;
 pub mod i18n;
 pub mod logging;
+pub mod microphone;
 pub mod notifications;
 // query module is provided by the gpui_query (v2) crate
 pub mod secure_storage;
 pub mod session;
 pub mod storage;
 pub mod streaming;
+pub mod system_controls;
 pub mod tasks;
 pub mod telemetry;
 pub mod tokio_runtime;

@@ -7,11 +7,15 @@ mod alert;
 mod alert_dialog;
 mod demo;
 mod dialog;
+mod floating;
+mod floating_canvas;
 mod hover_card;
+mod notch_floater;
 mod notification;
 mod popover;
 mod sheet;
 mod tooltip;
+mod window_shims;
 
 use gpui_kit::{App, Window};
 
@@ -23,9 +27,13 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     alert::register(sections, window, cx);
     alert_dialog::register(sections, window, cx);
     dialog::register(sections, window, cx);
+    floating::register(sections, window, cx);
+    floating_canvas::register(sections, window, cx);
     hover_card::register(sections, window, cx);
+    notch_floater::register(sections, window, cx);
     notification::register(sections, window, cx);
     popover::register(sections, window, cx);
     sheet::register(sections, window, cx);
     tooltip::register(sections, window, cx);
+    window_shims::register(sections, window, cx);
 }
