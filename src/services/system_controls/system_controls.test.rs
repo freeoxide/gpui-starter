@@ -291,6 +291,73 @@ async fn disable_returns_the_gate_to_not_requested(cx: &TestAppContext) {
 
 #[cfg(not(target_family = "wasm"))]
 #[gpui_kit::test]
+async fn inflight_handshake_read_cannot_reactivate_a_disabled_gate(cx: &TestAppContext) {
+    let _guard = debounce_test_lock();
+    cx.update(|cx| install_for_tests(AppConfig::default(), cx));
+    let (readers, bluetooth_reads) = mock_readers(ready_bluetooth());
+    cx.update(|cx| cx.set_global(pending_snapshot()));
+
+    cx.update(|cx| enable_with(readers, cx));
+    cx.update(disable_bluetooth);
+    cx.executor().run_until_parked();
+
+    assert_eq!(
+        *bluetooth_reads.lock().unwrap(),
+        1,
+        "the read spawned by the handshake completed after the disable"
+    );
+    let gated = current_snapshot(cx);
+    assert_eq!(gated.bluetooth_access, BluetoothAccess::NotRequested);
+    assert!(
+        !gated.bluetooth.is_ready(),
+        "a disabled gate must not end up Active with a Ready row"
+    );
+
+    cx.update(|cx| set_bluetooth_powered(true, cx));
+    assert_eq!(
+        current_snapshot(cx),
+        gated,
+        "the powered write must stay unreachable while the gate is off"
+    );
+    cx.update(force_save);
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
+async fn inflight_poll_read_cannot_restore_the_gated_bluetooth_row(cx: &TestAppContext) {
+    let _guard = debounce_test_lock();
+    cx.update(|cx| install_for_tests(AppConfig::default(), cx));
+    let (readers, bluetooth_reads) = mock_readers(ready_bluetooth());
+    cx.update(|cx| cx.set_global(pending_snapshot()));
+
+    cx.update(|cx| enable_with(readers.clone(), cx));
+    cx.executor().run_until_parked();
+    assert_eq!(*bluetooth_reads.lock().unwrap(), 1);
+
+    cx.update(|cx| refresh_with(readers, cx));
+    cx.update(disable_bluetooth);
+    cx.executor().run_until_parked();
+
+    let snapshot = current_snapshot(cx);
+    assert_eq!(snapshot.bluetooth_access, BluetoothAccess::NotRequested);
+    assert!(
+        snapshot.battery.is_ready(),
+        "the always-on tracks still merge behind the gate"
+    );
+    assert!(
+        !snapshot.bluetooth.is_ready(),
+        "a poll that was in flight during the disable must not commit its track"
+    );
+    assert_eq!(
+        *bluetooth_reads.lock().unwrap(),
+        2,
+        "handshake read plus the one in-flight poll"
+    );
+    cx.update(force_save);
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
 async fn launch_handshake_reruns_only_with_a_persisted_optin(cx: &TestAppContext) {
     let _guard = debounce_test_lock();
     cx.update(|cx| install_for_tests(AppConfig::default(), cx));

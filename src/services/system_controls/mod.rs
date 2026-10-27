@@ -299,6 +299,9 @@ fn refresh_with(readers: Readers, cx: &mut App) {
         };
         cx.update(|cx| {
             let snapshot = cx.update_global::<SystemControlsSnapshot, _>(|global, _| {
+                // A disable that landed while the read was in flight owns the
+                // gate; the closed gate keeps its gated row.
+                let bluetooth = bluetooth.filter(|_| global.bluetooth_access.polls_bluetooth());
                 *global = merge_refresh(global, core, bluetooth);
                 global.clone()
             });
@@ -364,8 +367,12 @@ fn enable_with(readers: Readers, cx: &mut App) {
             .await;
         cx.update(|cx| {
             let snapshot = cx.update_global::<SystemControlsSnapshot, _>(|global, _| {
-                global.bluetooth = state.clone();
-                global.bluetooth_access = BluetoothAccess::from_read(&state);
+                // A disable that landed while the read was in flight owns the
+                // gate; commit only while this handshake is still pending.
+                if matches!(global.bluetooth_access, BluetoothAccess::Requesting) {
+                    global.bluetooth = state.clone();
+                    global.bluetooth_access = BluetoothAccess::from_read(&state);
+                }
                 global.clone()
             });
             write_capabilities(&snapshot, cx);
@@ -375,7 +382,8 @@ fn enable_with(readers: Readers, cx: &mut App) {
 }
 
 /// User opt-out: stops Bluetooth polling for this launch and persists the
-/// choice so the next launch starts gated again.
+/// choice so the next launch starts gated again. A read that was in flight
+/// when this lands is discarded on completion.
 pub fn disable_bluetooth(cx: &mut App) {
     #[cfg(not(target_family = "wasm"))]
     {
