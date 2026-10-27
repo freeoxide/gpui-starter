@@ -127,3 +127,37 @@ fn spectrum_switch_flips_the_monitor_mode(cx: &mut TestAppContext) {
         );
     });
 }
+
+// RCA 5.2.4: eager demo loads must defer their work off the invoking turn;
+// the click itself may not decode or touch the engine synchronously.
+#[gpui_kit::test]
+fn load_demo_touches_the_engine_only_after_the_click_turn(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::component::theme::init);
+    let mut page = None;
+    cx.add_window(|window, cx| {
+        let view = AudioPage::new(window, cx);
+        page = Some(cx.entity());
+        view
+    });
+    let page = page.unwrap();
+    cx.update(|cx| {
+        page.update(cx, |page, cx| {
+            page.load_demo("sine-sweep.wav", 1, crate::audio::sweep_wav, cx);
+        });
+        assert!(
+            page.read(cx).engine.read(cx).status().is_none(),
+            "the click turn must not decode or update the engine inline"
+        );
+    });
+    cx.run_until_parked();
+    cx.read(|cx| {
+        assert_eq!(
+            page.read(cx).engine.read(cx).status(),
+            Some(PlaybackStatus::Stopped)
+        );
+        assert_eq!(
+            page.read(cx).engine.read(cx).duration(),
+            Some(Duration::from_secs(1))
+        );
+    });
+}
