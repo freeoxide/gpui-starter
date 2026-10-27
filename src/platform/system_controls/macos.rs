@@ -57,7 +57,10 @@ fn read_bluetooth() -> ControlState<BluetoothStatus> {
         let Some(controller) = IOBluetoothHostController::defaultController() else {
             return unavailable("no bluetooth controller");
         };
-        let powered = Some(controller.powerState() == BluetoothHCIPowerState::ON);
+        // SAFETY: the crate's powerState wrapper declares the return 'I' but
+        // the runtime selector is 'i'; the direct i32 send passes the check.
+        let power_state: i32 = objc2::msg_send![&*controller, powerState];
+        let powered = Some(bluetooth_power_state_is_on(power_state));
         let mut devices = IOBluetoothDevice::pairedDevices()
             .map(|paired| {
                 (0..paired.count())
@@ -81,6 +84,12 @@ fn read_bluetooth() -> ControlState<BluetoothStatus> {
         devices.sort_by(|a, b| a.alias.cmp(&b.alias));
         ControlState::Ready(BluetoothStatus { powered, devices })
     }
+}
+
+// Raw -powerState values follow Apple's BluetoothHCIPowerState domain: only
+// ON (1) is powered; OFF (0) and uninitialized (0xFF) read as off.
+fn bluetooth_power_state_is_on(power_state: i32) -> bool {
+    power_state as u32 == BluetoothHCIPowerState::ON.0
 }
 
 fn element_address(selector: u32, element: u32) -> AudioObjectPropertyAddress {
@@ -199,4 +208,36 @@ fn set_volume_muted(muted: bool) -> Result<(), String> {
     let address = element_address(kAudioDevicePropertyMute, kAudioObjectPropertyElementMain);
     write_property::<u32>(device, &address, u32::from(muted))
         .ok_or_else(|| "CoreAudio mute write failed".to_string())
+}
+
+// This module is macOS-cfg, so these arms run only on the CI macos lane.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn power_state_on_reads_powered() {
+        assert!(bluetooth_power_state_is_on(
+            BluetoothHCIPowerState::ON.0 as i32
+        ));
+    }
+
+    #[test]
+    fn power_state_off_reads_not_powered() {
+        assert!(!bluetooth_power_state_is_on(
+            BluetoothHCIPowerState::OFF.0 as i32
+        ));
+    }
+
+    #[test]
+    fn power_state_uninitialized_reads_not_powered() {
+        assert!(!bluetooth_power_state_is_on(
+            BluetoothHCIPowerState::Unintialized.0 as i32
+        ));
+    }
+
+    #[test]
+    fn power_state_unknown_value_reads_not_powered() {
+        assert!(!bluetooth_power_state_is_on(7));
+    }
 }
