@@ -666,6 +666,10 @@ impl Render for ImageEditorPage {
             .relative()
             .flex_1()
             .min_w_0()
+            // h_flex centers rather than stretches its children, and a
+            // percent-height child of an auto-height row measures zero; own the
+            // cross axis or the canvas never gets any height to paint in.
+            .self_stretch()
             .on_prepaint({
                 let page = page.clone();
                 move |bounds, _, cx| {
