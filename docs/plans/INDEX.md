@@ -190,19 +190,20 @@ blind spot: indirect `localize(self.title_key())` calls are invisible to
 (survey §5).
 
 Pin update (post-review). These plans were drafted and reviewed against
-gpui-kit 0.7.1 / gpui-pre 0.3.8 sources; the app now pins gpui-kit 0.8.0 /
-gpui-pre 0.3.9. All `path:line` citations still name the 0.7.1/0.3.8
+gpui-kit 0.7.1 / gpui-pre 0.3.8 sources; the app now pins gpui-kit 0.8.1 /
+gpui-pre 0.3.10. All `path:line` citations still name the 0.7.1/0.3.8
 registry sources they were verified against — treat them as the historical
-record and re-verify load-bearing claims against the 0.8.0/0.3.9 sources at
+record and re-verify load-bearing claims against the 0.8.1/0.3.10 sources at
 implementation time (the registry keeps every version). Known deltas from
 the 0.7.3 changelog that touch surfaces the plans rely on:
 `visible_rows_changed` now fires `0..1`/`0..0` for one-row/empty tables
 (plans 12/13 table usage), TextView/Markdown layout defaults changed
 (visual only), and `TooltipRequest::placement` is deprecated in favor of
 `with_placement` (no plan uses it). The default icon set was diffed 0.7.1 →
-0.7.3 → 0.8.0 and is IDENTICAL, so §4's icon policy and stand-in table hold
+0.7.3 → 0.8.0 → 0.8.1 and is IDENTICAL, so §4's icon policy and stand-in
+table hold
 unchanged. Plans 21-27 were drafted against 0.7.3/0.3.9 directly; with the
-pin at 0.8.0, their citations are the historical record under the same
+pin at 0.8.1, their citations are the historical record under the same
 rule. A future pin bump re-opens the 25/26/27 Research Digests (25 and 27
 name it in their open questions, 26 in its risk 4; §8).
 
