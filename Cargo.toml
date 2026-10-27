@@ -535,6 +535,10 @@ split-debuginfo = "unpacked"
 # the main consumer. Native release builds benefit equally.
 [profile.release]
 lto = "thin"
+# Line tables without full debuginfo keep release backtraces line-resolvable;
+# strip stays off so crash reports from shipped builds still symbolize.
+debug = "line-tables-only"
+strip = "none"
 
 [profile.dev.package]
 gpui-pre = { opt-level = 3 }

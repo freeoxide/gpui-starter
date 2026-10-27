@@ -154,8 +154,14 @@ jobs:
             if [ -n "${APPLE_DEV_CERT_P12:-}" ]; then
               IDENTITY="${APPLE_SIGNING_IDENTITY:-Developer ID Application}"
               codesign --force --deep --options runtime --timestamp --sign "$IDENTITY" "$APP_PATH"
+              # codesign can fall back to ad-hoc without a clear error when
+              # the identity is missing; a cert was configured, so require it.
+              SIGNATURE_INFO="$(codesign -dv "$APP_PATH" 2>&1 || true)"
+              echo "$SIGNATURE_INFO" | grep -q '^Authority=Developer ID Application' \
+                || { echo "Error: $ARCH is not Developer ID signed though APPLE_DEV_CERT_P12 is configured" >&2; exit 1; }
             else
               codesign --force --deep --sign - "$APP_PATH"
+              echo "Note: no signing cert configured; $ARCH stays ad-hoc signed" >&2
             fi
             if [ "$ARCH" = "universal" ]; then
               DMG="target/release/GPUI-Starter-${VER}.dmg"
@@ -190,7 +196,7 @@ jobs:
             xcrun stapler staple "$DMG"
           done
 
-      - name: Verify DMG bundle (identifier + icon)
+      - name: Verify DMG bundle (format + identifier + plist)
         run: |
           set -euo pipefail
           VER="${{ steps.version.outputs.value }}"
@@ -200,11 +206,22 @@ jobs:
             "target/release/GPUI-Starter-${VER}.dmg" \
             "target/release/GPUI-Starter-${VER}-aarch64.dmg" \
             "target/release/GPUI-Starter-${VER}-x86_64.dmg"; do
+            # A raw Mach-O executable once shipped misnamed as .dmg; reject
+            # that case with a clear message, then gate on a real UDIF image.
+            FILE_DESC="$(file "$DMG")"
+            case "$FILE_DESC" in
+              *Mach-O*) echo "Error: $DMG is a Mach-O file, not a disk image: $FILE_DESC" >&2; exit 1 ;;
+            esac
+            hdiutil verify "$DMG" >/dev/null
             hdiutil attach -readonly -nobrowse -mountpoint "$MNT" "$DMG" >/dev/null
             PLIST="$MNT/GPUI Starter.app/Contents/Info.plist"
             [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = "com.gpui-starter.app" ]
+            # VER is validated X.Y.Z by normalize-version.sh, so this pins
+            # ShortVersion to a semver value; a git hash here fails the job.
+            [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")" = "$VER" ]
             [ -n "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$PLIST")" ]
             [ -n "$(/usr/libexec/PlistBuddy -c 'Print :NSMicrophoneUsageDescription' "$PLIST")" ]
+            [ -n "$(/usr/libexec/PlistBuddy -c 'Print :NSBluetoothAlwaysUsageDescription' "$PLIST")" ]
             [ -f "$MNT/GPUI Starter.app/Contents/Resources/gpui-starter.icns" ]
             codesign --verify --deep --strict "$MNT/GPUI Starter.app"
             hdiutil detach "$MNT" >/dev/null
