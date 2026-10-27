@@ -10,7 +10,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 #[path = "windows.test.rs"]
 mod windows_test;
 
-const CLICK_THROUGH_BITS: WINDOW_EX_STYLE = WS_EX_TRANSPARENT | WS_EX_NOACTIVATE;
+// windows-rs 0.61's BitOr for WINDOW_EX_STYLE is not const; tuple-struct
+// construction over the primitive `|` is the const-legal form.
+const CLICK_THROUGH_BITS: WINDOW_EX_STYLE =
+    WINDOW_EX_STYLE(WS_EX_TRANSPARENT.0 | WS_EX_NOACTIVATE.0);
 
 fn with_ex_bits(current: u32, bits: u32, enable: bool) -> u32 {
     if enable {

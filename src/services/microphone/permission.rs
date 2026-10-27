@@ -65,7 +65,9 @@ fn macos_status() -> MicrophonePermissionState {
     if let Err(reason) = bundled_runtime() {
         return MicrophonePermissionState::Unavailable(reason);
     }
-    let Some(media_type) = AVMediaTypeAudio else {
+    // SAFETY: extern static read; AVFoundation initializes the constant
+    // before main, so the reference is always valid.
+    let Some(media_type) = (unsafe { AVMediaTypeAudio }) else {
         return MicrophonePermissionState::Unavailable("AVMediaTypeAudio unavailable".to_string());
     };
     // SAFETY: AVMediaTypeAudio is one of the two media types the API accepts;
@@ -91,7 +93,9 @@ async fn macos_request() -> MicrophonePermissionState {
     if let Err(reason) = bundled_runtime() {
         return MicrophonePermissionState::Unavailable(reason);
     }
-    let Some(media_type) = AVMediaTypeAudio else {
+    // SAFETY: extern static read; AVFoundation initializes the constant
+    // before main, so the reference is always valid.
+    let Some(media_type) = (unsafe { AVMediaTypeAudio }) else {
         return MicrophonePermissionState::Unavailable("AVMediaTypeAudio unavailable".to_string());
     };
     let (tx, rx) = tokio::sync::oneshot::channel::<bool>();

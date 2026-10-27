@@ -39,7 +39,7 @@ pub fn spawn_floating(
         super::layer_shell::note_ignored_once();
     }
     let make_options = |_use_layer: bool| -> WindowOptions {
-        let mut options = WindowOptions {
+        let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(TitlebarOptions {
                 title: Some(spec.window_title()),
@@ -59,14 +59,19 @@ pub fn spawn_floating(
             ..Default::default()
         };
         #[cfg(target_os = "linux")]
-        if _use_layer && let Some(layer) = plan.layer_options.clone() {
+        let options = if _use_layer && let Some(layer) = plan.layer_options.clone() {
             // Option set from crates/gpui/examples/layer_shell.rs at
             // zed@93d7456, the pinned snapshot's reference implementation.
-            options.kind = WindowKind::LayerShell(layer);
-            options.window_background = gpui_kit::WindowBackgroundAppearance::Transparent;
-            options.titlebar = None;
-            options.display_id = plan.display_id;
-        }
+            WindowOptions {
+                kind: WindowKind::LayerShell(layer),
+                window_background: gpui_kit::WindowBackgroundAppearance::Transparent,
+                titlebar: None,
+                display_id: plan.display_id,
+                ..options
+            }
+        } else {
+            options
+        };
         options
     };
     let opened = {

@@ -41,7 +41,10 @@ fn unavailable<T>(error: &str) -> ControlState<T> {
 fn endpoint_volume() -> Option<IAudioEndpointVolume> {
     // SAFETY: plain COM init and activation; no pointers escape.
     unsafe {
-        CoInitializeEx(None, COINIT_MULTITHREADED).ok()?;
+        // windows-rs 0.61 returns a raw HRESULT here, not Result.
+        if CoInitializeEx(None, COINIT_MULTITHREADED).is_err() {
+            return None;
+        }
         let enumerator: IMMDeviceEnumerator =
             CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
         let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole).ok()?;

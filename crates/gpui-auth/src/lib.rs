@@ -2,6 +2,9 @@
 //! controller entity. Security rules: secrets live only in the token store,
 //! `SecretString` never prints, and every browser flow carries PKCE + a fresh
 //! random state.
+// async_trait's expanded shims put #[must_use] on Result-returning boxed
+// futures, which newer clippy flags as double_must_use.
+#![allow(clippy::double_must_use)]
 pub mod controller;
 #[cfg(not(target_family = "wasm"))]
 pub mod demo_backend;

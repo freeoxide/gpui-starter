@@ -1,4 +1,4 @@
-use gpui_kit::{Bounds, Edges, Pixels, point, px, size};
+use gpui_kit::{Bounds, Edges, point, px, size};
 use objc2::MainThreadMarker;
 use objc2_app_kit::NSScreen;
 

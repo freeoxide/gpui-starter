@@ -1,5 +1,6 @@
-// No recursion_limit override: the old 8192 value only papered over a #[test] ->
-// gpui::test glob-shadow stack overflow, which is fixed at its call sites.
+// Auto-trait analysis of wgpu 29's type graph exceeds the default 128 on
+// nightly (rust-lang/rust#159228); 256 suffices, the old 8192 masked real bugs.
+#![recursion_limit = "256"]
 #![allow(
     clippy::map_unwrap_or,
     clippy::let_unit_value,
