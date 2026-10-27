@@ -38,13 +38,16 @@ fn open(cx: &mut App) -> anyhow::Result<()> {
     };
 
     let info = crate::ui::floating::probe(cx);
-    let screen = cx
-        .primary_display()
-        .map(|display| display.bounds())
-        .unwrap_or(Bounds::new(
-            point(px(0.), px(0.)),
-            size(px(1512.), px(982.)),
-        ));
+    // The probe and the notch policy both read mainScreen; geometry must come
+    // from that same screen or the pill lands off-housing on multi-display.
+    let screen = super::macos::main_screen_bounds().unwrap_or_else(|| {
+        cx.primary_display()
+            .map(|display| display.bounds())
+            .unwrap_or(Bounds::new(
+                point(px(0.), px(0.)),
+                size(px(1512.), px(982.)),
+            ))
+    });
     let safe_top = info.notch.map(|n| n.safe_area.top).or(info.menu_bar);
     let layout =
         super::geometry::notch_layout(screen, safe_top, info.notch.and_then(|n| n.camera_housing));
@@ -81,7 +84,9 @@ fn open(cx: &mut App) -> anyhow::Result<()> {
     use gpui_kit::AppContext as _;
     use gpui_kit::{point, px, size};
 
-    let demo_size = size(px(360.), px(140.));
+    // The expanded stack (~150px) plus the float shell header (h_8): a
+    // shorter window flex-shrinks the content and clips the action buttons.
+    let demo_size = size(px(360.), px(232.));
     let layout = super::geometry::notch_layout(
         gpui_kit::Bounds::new(point(px(0.), px(0.)), demo_size),
         None,
