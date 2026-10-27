@@ -7,9 +7,9 @@ use std::{
 use tempfile::tempdir;
 
 use super::{
-    AcquireOutcome, MAX_LINE_BYTES, SCHEME, append_forwarded_link, drain_forwarded_links,
-    link_path_for_log, read_bounded_line, resolve_ipc_name, retry_until_single,
-    send_forwarded_link_via_ipc,
+    AcquireOutcome, MAX_LINE_BYTES, SCHEME, acquire_instance_lock, append_forwarded_link,
+    create_forwarder_listener, drain_forwarded_links, link_path_for_log, lock_file_path,
+    read_bounded_line, resolve_ipc_name, retry_until_single, send_forwarded_link_via_ipc,
 };
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, prelude::*};
 
@@ -193,4 +193,102 @@ fn log_path_strips_the_query_and_keeps_plain_links() {
         link_path_for_log("gpui-starter://settings"),
         "gpui-starter://settings"
     );
+}
+
+#[test]
+fn lock_file_is_pinned_to_the_per_user_cache_dir() {
+    let path = lock_file_path().expect("a per-user dir must resolve in tests");
+    assert!(
+        path.is_absolute(),
+        "the lock must never resolve against the CWD"
+    );
+    assert_eq!(
+        path.file_name().unwrap().to_str().unwrap(),
+        "com.gpui-starter.app.instance",
+        "lock naming stays stable so second-instance forwarding keeps working"
+    );
+    if let Some(dirs) = crate::platform::filesystem::paths::project_dirs() {
+        assert_eq!(
+            path.parent(),
+            Some(dirs.cache_dir().join("runtime").as_path()),
+            "the lock sits beside the forwarder artifacts in the cache dir"
+        );
+    }
+}
+
+#[test]
+fn a_live_lock_holder_forces_the_busy_outcome() {
+    let name = format!("com.gpui-starter.tests.{}", uuid::Uuid::new_v4());
+    let first = acquire_instance_lock(&name);
+    assert!(
+        matches!(first, AcquireOutcome::Acquired(_)),
+        "a unique lock name must be acquirable"
+    );
+    let second = acquire_instance_lock(&name);
+    assert!(
+        matches!(second, AcquireOutcome::Busy),
+        "the owns-it outcome: a live holder must yield Busy, never a second owner"
+    );
+    drop(first);
+}
+
+#[test]
+fn a_released_lock_is_reacquired_by_the_next_instance() {
+    let name = format!("com.gpui-starter.tests.{}", uuid::Uuid::new_v4());
+    let first = acquire_instance_lock(&name);
+    assert!(matches!(first, AcquireOutcome::Acquired(_)));
+    drop(first);
+    let second = acquire_instance_lock(&name);
+    assert!(
+        matches!(second, AcquireOutcome::Acquired(_)),
+        "kernel reclamation must leave no stale lock behind"
+    );
+}
+
+#[cfg(target_family = "unix")]
+#[test]
+fn absolute_paths_resolve_as_filesystem_socket_names() {
+    let name = resolve_ipc_name("/tmp/definitely-a-path/forwarder.sock").expect("fs name");
+    assert!(!name.is_namespaced());
+    assert!(name.is_path());
+}
+
+#[cfg(target_family = "unix")]
+#[test]
+fn a_stale_socket_file_is_unlinked_and_the_bind_retried() {
+    let dir = tempdir().expect("tempdir");
+    let sock = dir.path().join("forwarder.sock");
+    let name = sock.display().to_string();
+
+    // std's UnixListener never unlinks on drop: exactly the file a crashed
+    // run leaves behind on the fixed cache path.
+    let leftover = std::os::unix::net::UnixListener::bind(&sock).expect("bind leftover");
+    drop(leftover);
+    assert!(sock.exists());
+
+    let recovered = create_forwarder_listener(&name);
+    assert!(
+        recovered.is_some(),
+        "EADDRINUSE with a refused connect must unlink the stale file and retry"
+    );
+}
+
+#[cfg(target_family = "unix")]
+#[test]
+fn a_live_listener_keeps_its_socket_under_conflict() {
+    let dir = tempdir().expect("tempdir");
+    let sock = dir.path().join("forwarder.sock");
+    let name = sock.display().to_string();
+
+    let live = create_forwarder_listener(&name).expect("live listener binds a fresh path");
+    let outcome = create_forwarder_listener(&name);
+    assert!(
+        outcome.is_none(),
+        "a live owner must degrade forwarding, not double-bind"
+    );
+    assert!(
+        sock.exists(),
+        "recovery must never steal a live instance's socket file"
+    );
+    drop(live);
 }
