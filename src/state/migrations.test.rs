@@ -22,3 +22,14 @@ fn migrated_legacy_config_leaves_the_bluetooth_optin_off() {
     assert_eq!(migrated.version, APP_STATE_VERSION);
     assert!(!migrated.bluetooth_monitoring_enabled);
 }
+
+#[test]
+fn migrated_legacy_config_leaves_update_checks_off() {
+    let legacy = AppConfig {
+        version: 0,
+        ..AppConfig::default()
+    };
+    let migrated = migrate(legacy);
+    assert_eq!(migrated.version, APP_STATE_VERSION);
+    assert!(!migrated.update_check_on_startup);
+}

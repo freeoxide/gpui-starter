@@ -1,5 +1,10 @@
-use super::types::{DEFAULT_MANIFEST_URL, current_app_version, pending_swap_path, platform_key};
+use super::types::{
+    DEFAULT_MANIFEST_URL, PERIODIC_CHECK_INTERVAL_SECS, PLACEHOLDER_MANIFEST_URL,
+    STARTUP_CHECK_DELAY_SECS, current_app_version, pending_swap_path, platform_key,
+};
 use super::*;
+use crate::app_state::{AppConfig, install_for_tests};
+use gpui_kit::TestAppContext;
 
 #[test]
 fn platform_key_format() {
@@ -108,4 +113,97 @@ fn pending_swap_path_is_consistent() {
 #[test]
 fn default_manifest_url_not_empty() {
     assert!(!DEFAULT_MANIFEST_URL.is_empty());
+}
+
+#[test]
+fn auto_checks_need_optin_and_a_real_manifest_url() {
+    let real_url = "https://updates.example.org/manifest.json";
+    assert!(
+        !auto_checks_enabled(false, real_url),
+        "default config must keep automatic checks off even on a real endpoint"
+    );
+    assert!(
+        !auto_checks_enabled(true, PLACEHOLDER_MANIFEST_URL),
+        "a placeholder endpoint must never be auto-polled"
+    );
+    assert!(
+        auto_checks_enabled(true, real_url),
+        "an opted-in user on a real endpoint keeps automatic checks"
+    );
+}
+
+#[gpui_kit::test]
+async fn initialize_runs_no_auto_check_under_default_config(cx: &TestAppContext) {
+    cx.update(|cx| install_for_tests(AppConfig::default(), cx));
+    cx.update(|cx| initialize(cx));
+
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(STARTUP_CHECK_DELAY_SECS + 1));
+    cx.executor().run_until_parked();
+    assert_eq!(
+        cx.update(|cx| snapshot(cx).status),
+        UpdateStatus::Idle,
+        "the startup check must not fire under the default config"
+    );
+
+    cx.executor()
+        .advance_clock(std::time::Duration::from_secs(PERIODIC_CHECK_INTERVAL_SECS));
+    cx.executor().run_until_parked();
+    assert_eq!(
+        cx.update(|cx| snapshot(cx).status),
+        UpdateStatus::Idle,
+        "the periodic loop must not fire under the default config"
+    );
+}
+
+#[gpui_kit::test]
+async fn placeholder_build_runs_no_auto_check_even_when_opted_in(cx: &TestAppContext) {
+    // This test pins placeholder-build behavior; the test binary bakes the
+    // placeholder URL because CI never sets GPUI_UPDATE_MANIFEST_URL.
+    assert_eq!(DEFAULT_MANIFEST_URL, PLACEHOLDER_MANIFEST_URL);
+    cx.update(|cx| {
+        install_for_tests(
+            AppConfig {
+                update_check_on_startup: true,
+                ..AppConfig::default()
+            },
+            cx,
+        )
+    });
+    cx.update(|cx| initialize(cx));
+
+    cx.executor().advance_clock(std::time::Duration::from_secs(
+        STARTUP_CHECK_DELAY_SECS + PERIODIC_CHECK_INTERVAL_SECS + 1,
+    ));
+    cx.executor().run_until_parked();
+
+    assert_eq!(
+        cx.update(|cx| snapshot(cx).status),
+        UpdateStatus::Idle,
+        "a placeholder manifest url must keep the auto-check loops off even with opt-in"
+    );
+}
+
+#[gpui_kit::test]
+async fn manual_check_still_runs_under_default_config(cx: &TestAppContext) {
+    cx.update(|cx| install_for_tests(AppConfig::default(), cx));
+    cx.update(|cx| initialize(cx));
+
+    cx.update(|cx| check_for_updates(cx));
+
+    // No connectivity global is installed, so the deterministic outcome of
+    // the manual pipeline is the offline short-circuit error.
+    let status = cx.update(|cx| snapshot(cx).status);
+    match &status {
+        UpdateStatus::Error(err) => assert!(
+            err.contains("connectivity"),
+            "expected the offline short-circuit error, got: {err}"
+        ),
+        other => panic!("manual check must leave Idle, got: {other:?}"),
+    }
+    assert_eq!(
+        cx.update(|cx| snapshot(cx).check_retry_count),
+        1,
+        "the first failed manual check schedules its first retry"
+    );
 }

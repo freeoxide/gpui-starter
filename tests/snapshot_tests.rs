@@ -50,6 +50,7 @@ fn test_config_default_serialization() {
         mic_gain_db: 0
         widgets_layout: []
         bluetooth_monitoring_enabled: false
+        update_check_on_startup: false
         "#
         );
 }
@@ -87,6 +88,7 @@ fn test_config_roundtrip() {
         mic_gain_db: 4.5,
         widgets_layout: Vec::new(),
         bluetooth_monitoring_enabled: false,
+        update_check_on_startup: false,
     };
 
     let json = serde_json::to_string(&original).expect("serialize config");
@@ -130,6 +132,7 @@ fn test_config_roundtrip() {
         mic_gain_db: 4.5
         widgets_layout: []
         bluetooth_monitoring_enabled: false
+        update_check_on_startup: false
         "#
         );
 }
