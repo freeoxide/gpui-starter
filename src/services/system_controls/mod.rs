@@ -17,6 +17,8 @@
 use gpui_kit::{App, Global, SharedString};
 #[cfg(not(target_family = "wasm"))]
 use gpui_kit::{AppContext as _, BorrowAppContext as _};
+#[cfg(not(target_family = "wasm"))]
+use std::sync::Arc;
 
 pub(crate) const REASON_WEB: &str = "system_controls_reason_web";
 pub(crate) const REASON_MACOS_BRIGHTNESS: &str = "system_controls_reason_macos_brightness";
@@ -95,13 +97,64 @@ pub struct BrightnessStatus {
     pub level: f32,
 }
 
-/// GPUI Global; Default = every control `Unavailable { "pending first read" }`.
+/// Always-on tracks (battery, volume, brightness); none touch a
+/// TCC-gated subsystem, so the poller may read them from launch.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CoreControlsSnapshot {
+    pub battery: ControlState<BatteryStatus>,
+    pub volume: ControlState<VolumeStatus>,
+    pub brightness: ControlState<BrightnessStatus>,
+}
+
+/// Bluetooth read gate (RCA §4). IOBluetooth has no request-permission
+/// API: the TCC prompt fires on first access, so nothing may call the
+/// platform Bluetooth reader until the user opts in. Runtime-only; every
+/// launch restarts at `NotRequested` and redoes the handshake even with a
+/// persisted opt-in (denial state is not queryable, permission may be
+/// revoked).
+#[derive(Clone, Debug, PartialEq)]
+pub enum BluetoothAccess {
+    /// Default at startup; no Bluetooth read has been requested.
+    NotRequested,
+    /// The single handshake read is in flight; that read is what fires
+    /// the prompt.
+    Requesting,
+    /// The handshake read succeeded at least once; the poller may now
+    /// include the Bluetooth track.
+    Active,
+    /// The handshake failed. Never re-polled automatically; `reason` is
+    /// display text for status surfaces.
+    Denied { reason: SharedString },
+}
+
+impl BluetoothAccess {
+    /// Whether the periodic refresh may include the Bluetooth track.
+    pub fn polls_bluetooth(&self) -> bool {
+        matches!(self, BluetoothAccess::Active)
+    }
+
+    fn from_read(state: &ControlState<BluetoothStatus>) -> Self {
+        match state {
+            ControlState::Ready(_) => BluetoothAccess::Active,
+            ControlState::Unsupported { reason_key } => BluetoothAccess::Denied {
+                reason: reason_literal(*reason_key).into(),
+            },
+            ControlState::Unavailable { error } => BluetoothAccess::Denied {
+                reason: error.clone(),
+            },
+        }
+    }
+}
+
+/// GPUI Global; Default = every control `Unavailable { "pending first read" }`
+/// with the Bluetooth gate at `NotRequested`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SystemControlsSnapshot {
     pub battery: ControlState<BatteryStatus>,
     pub bluetooth: ControlState<BluetoothStatus>,
     pub volume: ControlState<VolumeStatus>,
     pub brightness: ControlState<BrightnessStatus>,
+    pub bluetooth_access: BluetoothAccess,
 }
 
 impl Global for SystemControlsSnapshot {}
@@ -127,6 +180,9 @@ pub(crate) fn web_unsupported_snapshot() -> SystemControlsSnapshot {
         brightness: ControlState::Unsupported {
             reason_key: REASON_WEB,
         },
+        bluetooth_access: BluetoothAccess::Denied {
+            reason: reason_literal(REASON_WEB).into(),
+        },
     }
 }
 
@@ -136,12 +192,25 @@ fn pending<T>() -> ControlState<T> {
     }
 }
 
+fn gated_bluetooth() -> ControlState<BluetoothStatus> {
+    ControlState::Unavailable {
+        error: SharedString::from("bluetooth monitoring not enabled"),
+    }
+}
+
+fn requesting_bluetooth() -> ControlState<BluetoothStatus> {
+    ControlState::Unavailable {
+        error: SharedString::from("awaiting bluetooth access"),
+    }
+}
+
 fn pending_snapshot() -> SystemControlsSnapshot {
     SystemControlsSnapshot {
         battery: pending(),
-        bluetooth: pending(),
+        bluetooth: gated_bluetooth(),
         volume: pending(),
         brightness: pending(),
+        bluetooth_access: BluetoothAccess::NotRequested,
     }
 }
 
@@ -150,8 +219,10 @@ fn clamp01(value: f32) -> f32 {
     value.clamp(0., 1.)
 }
 
-/// Installs the Global and starts the first read; on wasm every control
-/// registers as unsupported.
+/// Installs the Global and starts the always-on tracks (battery, volume,
+/// brightness); on wasm every control registers as unsupported. Bluetooth
+/// stays gated behind [`enable_bluetooth`]: with a persisted opt-in the
+/// handshake reruns anyway, because permission may have been revoked.
 pub fn initialize(cx: &mut App) {
     #[cfg(target_family = "wasm")]
     {
@@ -160,9 +231,17 @@ pub fn initialize(cx: &mut App) {
         write_capabilities(&snapshot, cx);
     }
     #[cfg(not(target_family = "wasm"))]
-    {
-        cx.set_global(pending_snapshot());
-        refresh(cx);
+    initialize_with(Readers::platform(), cx);
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn initialize_with(readers: Readers, cx: &mut App) {
+    let snapshot = pending_snapshot();
+    cx.set_global(snapshot.clone());
+    write_capabilities(&snapshot, cx);
+    refresh_with(readers.clone(), cx);
+    if crate::app_state::with_config(cx, |config| config.bluetooth_monitoring_enabled) {
+        enable_with(readers, cx);
     }
 }
 
@@ -172,20 +251,141 @@ pub fn snapshot(cx: &App) -> SystemControlsSnapshot {
         .unwrap_or_default()
 }
 
-/// Background re-read, Global swap, capability write; no-op on wasm.
+/// Background re-read of the always-on tracks, plus Bluetooth only while
+/// the gate is Active; Global swap, capability write; no-op on wasm.
 pub fn refresh(cx: &mut App) {
     #[cfg(not(target_family = "wasm"))]
-    {
-        cx.spawn(async move |cx| {
-            let snap = cx
-                .background_spawn(async move { crate::platform::system_controls::read() })
-                .await;
-            cx.update(|cx| {
-                cx.update_global::<SystemControlsSnapshot, _>(|global, _| *global = snap.clone());
-                write_capabilities(&snap, cx);
-            })
+    refresh_with(Readers::platform(), cx);
+    #[cfg(target_family = "wasm")]
+    let _ = cx;
+}
+
+/// Platform read seam; Arc'd so tests can substitute counting mocks (the
+/// real Bluetooth reader fires the TCC prompt on first call).
+#[cfg(not(target_family = "wasm"))]
+#[derive(Clone)]
+struct Readers {
+    read_core: Arc<dyn Fn() -> CoreControlsSnapshot + Send + Sync>,
+    read_bluetooth: Arc<dyn Fn() -> ControlState<BluetoothStatus> + Send + Sync>,
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl Readers {
+    fn platform() -> Self {
+        Self {
+            read_core: Arc::new(crate::platform::system_controls::read_core),
+            read_bluetooth: Arc::new(crate::platform::system_controls::read_bluetooth),
+        }
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn refresh_with(readers: Readers, cx: &mut App) {
+    let include_bluetooth = cx
+        .try_global::<SystemControlsSnapshot>()
+        .is_some_and(|snapshot| snapshot.bluetooth_access.polls_bluetooth());
+    cx.spawn(async move |cx| {
+        let core_readers = readers.clone();
+        let core = cx
+            .background_spawn(async move { (core_readers.read_core)() })
+            .await;
+        let bluetooth = if include_bluetooth {
+            Some(
+                cx.background_spawn(async move { (readers.read_bluetooth)() })
+                    .await,
+            )
+        } else {
+            None
+        };
+        cx.update(|cx| {
+            let snapshot = cx.update_global::<SystemControlsSnapshot, _>(|global, _| {
+                *global = merge_refresh(global, core, bluetooth);
+                global.clone()
+            });
+            write_capabilities(&snapshot, cx);
         })
-        .detach();
+    })
+    .detach();
+}
+
+/// Fold a platform read into the Global: core tracks always replace, the
+/// Bluetooth track only when the read included it (gate Active). The
+/// access state belongs to the handshake and is never changed here, so a
+/// runtime poll failure degrades the row without stopping the poller.
+fn merge_refresh(
+    current: &SystemControlsSnapshot,
+    core: CoreControlsSnapshot,
+    bluetooth: Option<ControlState<BluetoothStatus>>,
+) -> SystemControlsSnapshot {
+    let mut next = current.clone();
+    next.battery = core.battery;
+    next.volume = core.volume;
+    next.brightness = core.brightness;
+    if let Some(state) = bluetooth {
+        next.bluetooth = state;
+    }
+    next
+}
+
+/// User opt-in: runs the single handshake read (the one that fires the
+/// TCC prompt), persists the choice, and lets the poller join the
+/// Bluetooth track on success. No-op while a handshake is in flight or
+/// the gate is already Active.
+pub fn enable_bluetooth(cx: &mut App) {
+    #[cfg(not(target_family = "wasm"))]
+    enable_with(Readers::platform(), cx);
+    #[cfg(target_family = "wasm")]
+    let _ = cx;
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn enable_with(readers: Readers, cx: &mut App) {
+    let busy = cx
+        .try_global::<SystemControlsSnapshot>()
+        .is_some_and(|snapshot| {
+            matches!(
+                snapshot.bluetooth_access,
+                BluetoothAccess::Requesting | BluetoothAccess::Active
+            )
+        });
+    if busy {
+        return;
+    }
+    let snapshot = cx.update_global::<SystemControlsSnapshot, _>(|global, _| {
+        global.bluetooth_access = BluetoothAccess::Requesting;
+        global.bluetooth = requesting_bluetooth();
+        global.clone()
+    });
+    write_capabilities(&snapshot, cx);
+    crate::app_state::update_config(cx, |config| config.bluetooth_monitoring_enabled = true);
+    cx.spawn(async move |cx| {
+        let state = cx
+            .background_spawn(async move { (readers.read_bluetooth)() })
+            .await;
+        cx.update(|cx| {
+            let snapshot = cx.update_global::<SystemControlsSnapshot, _>(|global, _| {
+                global.bluetooth = state.clone();
+                global.bluetooth_access = BluetoothAccess::from_read(&state);
+                global.clone()
+            });
+            write_capabilities(&snapshot, cx);
+        })
+    })
+    .detach();
+}
+
+/// User opt-out: stops Bluetooth polling for this launch and persists the
+/// choice so the next launch starts gated again.
+pub fn disable_bluetooth(cx: &mut App) {
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let snapshot = cx.update_global::<SystemControlsSnapshot, _>(|global, _| {
+            global.bluetooth_access = BluetoothAccess::NotRequested;
+            global.bluetooth = gated_bluetooth();
+            global.clone()
+        });
+        write_capabilities(&snapshot, cx);
+        crate::app_state::update_config(cx, |config| config.bluetooth_monitoring_enabled = false);
     }
     #[cfg(target_family = "wasm")]
     let _ = cx;
@@ -260,7 +460,8 @@ pub fn set_brightness(level: f32, cx: &mut App) {
 }
 
 /// Applies the bluetooth power switch where the OS allows it; no-op when
-/// read-only or unsupported.
+/// read-only or unsupported. The `Ready` precondition is reachable only
+/// while the gate is Active (a gated or denied track is never `Ready`).
 pub fn set_bluetooth_powered(powered: bool, cx: &mut App) {
     #[cfg(not(target_family = "wasm"))]
     {
@@ -328,13 +529,21 @@ fn apply_and_refresh(
 
 fn write_capabilities(snapshot: &SystemControlsSnapshot, cx: &mut App) {
     write_capability("system_controls_battery", &snapshot.battery, cx);
-    write_capability("system_controls_bluetooth", &snapshot.bluetooth, cx);
+    crate::capabilities::set(
+        "system_controls_bluetooth",
+        bluetooth_capability(&snapshot.bluetooth_access, &snapshot.bluetooth),
+        cx,
+    );
     write_capability("system_controls_volume", &snapshot.volume, cx);
     write_capability("system_controls_brightness", &snapshot.brightness, cx);
 }
 
 fn write_capability<T>(name: &str, state: &ControlState<T>, cx: &mut App) {
-    let status = match state {
+    crate::capabilities::set(name, control_capability(state), cx);
+}
+
+fn control_capability<T>(state: &ControlState<T>) -> crate::capabilities::CapabilityStatus {
+    match state {
         ControlState::Ready(_) => crate::capabilities::CapabilityStatus::supported_enabled(),
         ControlState::Unsupported { reason_key } => crate::capabilities::CapabilityStatus {
             supported: false,
@@ -346,8 +555,61 @@ fn write_capability<T>(name: &str, state: &ControlState<T>, cx: &mut App) {
         ControlState::Unavailable { error } => {
             crate::capabilities::CapabilityStatus::degraded(error.clone())
         }
-    };
-    crate::capabilities::set(name, status, cx);
+    }
+}
+
+/// Whether a platform Bluetooth reader exists; false on wasm (the whole
+/// platform module is compiled out there). A cfg constant, never a read:
+/// probing would itself fire the TCC prompt on macOS.
+fn bluetooth_supported() -> bool {
+    #[cfg(target_family = "wasm")]
+    {
+        false
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        crate::platform::system_controls::bluetooth_supported()
+    }
+}
+
+/// The Bluetooth capability mirrors the gate, not just the last read:
+/// before opt-in it is off rather than degraded, and a denied handshake
+/// is a terminal error until the user retries.
+fn bluetooth_capability(
+    access: &BluetoothAccess,
+    state: &ControlState<BluetoothStatus>,
+) -> crate::capabilities::CapabilityStatus {
+    let supported = bluetooth_supported();
+    match access {
+        BluetoothAccess::NotRequested => crate::capabilities::CapabilityStatus {
+            supported,
+            enabled: false,
+            degraded: false,
+            reason: Some(SharedString::from("bluetooth monitoring is off")),
+            last_error: None,
+        },
+        BluetoothAccess::Requesting => crate::capabilities::CapabilityStatus {
+            supported,
+            enabled: true,
+            degraded: false,
+            reason: Some(SharedString::from("awaiting bluetooth access")),
+            last_error: None,
+        },
+        BluetoothAccess::Active => control_capability(state),
+        BluetoothAccess::Denied { reason } => {
+            if supported {
+                crate::capabilities::CapabilityStatus::error(reason.clone())
+            } else {
+                crate::capabilities::CapabilityStatus {
+                    supported: false,
+                    enabled: false,
+                    degraded: false,
+                    reason: Some(reason.clone()),
+                    last_error: None,
+                }
+            }
+        }
+    }
 }
 
 fn reason_literal(reason_key: &'static str) -> &'static str {

@@ -98,6 +98,10 @@ pub struct AppConfig {
     pub mic_gain_db: f32,
     #[serde(default)]
     pub widgets_layout: Vec<PersistedWidget>,
+    /// Bluetooth monitoring opt-in: gates every platform Bluetooth read
+    /// behind a per-launch handshake (TCC prompt fires on first access).
+    #[serde(default)]
+    pub bluetooth_monitoring_enabled: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -146,6 +150,7 @@ impl Default for AppConfig {
             mic_device_id: None,
             mic_gain_db: 0.0,
             widgets_layout: Vec::new(),
+            bluetooth_monitoring_enabled: false,
         }
     }
 }

@@ -13,7 +13,7 @@ use brightness::blocking::Brightness as _;
 
 use super::SystemOp;
 use crate::system_controls::{
-    BluetoothStatus, BrightnessStatus, ControlState, PairedDevice, SystemControlsSnapshot,
+    BluetoothStatus, BrightnessStatus, ControlState, CoreControlsSnapshot, PairedDevice,
     VolumeStatus,
 };
 
@@ -25,10 +25,9 @@ const PULSE_TICKS: u32 = 300;
 const PULSE_TICK: Duration = Duration::from_millis(10);
 const PULSE_APP_NAME: &str = "gpui-starter";
 
-pub(super) fn read() -> SystemControlsSnapshot {
-    SystemControlsSnapshot {
+pub(super) fn read_core() -> CoreControlsSnapshot {
+    CoreControlsSnapshot {
         battery: super::read_battery(None),
-        bluetooth: read_bluetooth(),
         volume: read_volume(),
         brightness: read_brightness(),
     }
@@ -83,7 +82,8 @@ fn unavailable<T>(error: String) -> ControlState<T> {
     }
 }
 
-fn read_bluetooth() -> ControlState<BluetoothStatus> {
+// Called only through the service-side Bluetooth gate (RCA §4).
+pub(super) fn read_bluetooth() -> ControlState<BluetoothStatus> {
     match bluetooth_objects() {
         Ok((adapter, objects)) => {
             let devices = paired_devices(&objects);

@@ -12,14 +12,13 @@ use objc2_io_bluetooth::{BluetoothHCIPowerState, IOBluetoothDevice, IOBluetoothH
 
 use super::SystemOp;
 use crate::system_controls::{
-    BatteryStatus, BluetoothStatus, ControlState, PairedDevice, REASON_MACOS_BRIGHTNESS,
-    SystemControlsSnapshot, VolumeStatus,
+    BatteryStatus, BluetoothStatus, ControlState, CoreControlsSnapshot, PairedDevice,
+    REASON_MACOS_BRIGHTNESS, VolumeStatus,
 };
 
-pub(super) fn read() -> SystemControlsSnapshot {
-    SystemControlsSnapshot {
+pub(super) fn read_core() -> CoreControlsSnapshot {
+    CoreControlsSnapshot {
         battery: read_battery(),
-        bluetooth: read_bluetooth(),
         volume: read_volume(),
         brightness: ControlState::Unsupported {
             reason_key: REASON_MACOS_BRIGHTNESS,
@@ -50,7 +49,9 @@ fn read_battery() -> ControlState<BatteryStatus> {
     super::read_battery(Some(NSProcessInfo::processInfo().isLowPowerModeEnabled()))
 }
 
-fn read_bluetooth() -> ControlState<BluetoothStatus> {
+// Called only through the service-side Bluetooth gate: the first read is
+// what fires the macOS TCC prompt (RCA §4).
+pub(super) fn read_bluetooth() -> ControlState<BluetoothStatus> {
     // SAFETY: IOBluetooth queries are thread-safe and none of these selectors
     // throw Objective-C exceptions.
     unsafe {
