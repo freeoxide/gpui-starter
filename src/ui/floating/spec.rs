@@ -130,7 +130,7 @@ impl FloatingSpec {
     }
 
     /// Drops the shell chrome: no header or drag strip, the body is the
-    /// whole window. Esc still dismisses; drag becomes Alt+drag.
+    /// whole window. Esc still dismisses; native drag is Alt+drag; wasm panes cannot move.
     pub fn chromeless(mut self, enabled: bool) -> Self {
         self.chromeless = enabled;
         self
