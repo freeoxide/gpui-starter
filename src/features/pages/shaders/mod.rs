@@ -52,8 +52,8 @@ use std::sync::Arc;
 /// Capability-registry name registered at startup ("canvas_shaders").
 pub const CAPABILITY_SHADERS: &str = "canvas_shaders";
 
-/// Backstop deadline for a lost init: the fenced init bounds the attempt
-/// itself, and this watchdog surfaces a timeout if its result never lands.
+/// Backstop deadline for a lost init: the fenced engine init and runtime
+/// build bound the attempt; this watchdog catches a result that never lands.
 #[cfg(not(target_family = "wasm"))]
 const INIT_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -214,8 +214,8 @@ impl ShaderCanvasPage {
 
     #[cfg(not(target_family = "wasm"))]
     fn start_runtime(&mut self, cx: &mut Context<Self>) {
-        // The fence joins each init attempt with a timeout and detaches a
-        // wedged one; the drops stop the watchdog and free any poisoned engine.
+        // Engine init and the runtime build both run behind the fence (a
+        // wedged thread detaches); the drops stop the watchdog and free the engine.
         self.init_task = None;
         self.init_watchdog = None;
         self.runtime = None;
@@ -236,8 +236,13 @@ impl ShaderCanvasPage {
                         std::future::pending::<()>().await;
                     }
                     let engine = Arc::new(WgpuEngine::new_fenced()?);
-                    let runtime = Arc::new(runtime::ShaderRuntime::new(engine.clone()));
-                    anyhow::Ok((engine, runtime))
+                    let builder = engine.clone();
+                    // The pipeline compiles run inside the driver; the fence
+                    // bounds them so a wedge cannot pin this executor thread.
+                    let runtime = builder.render_fenced(move || {
+                        anyhow::Ok(Arc::new(runtime::ShaderRuntime::new(engine)))
+                    })?;
+                    anyhow::Ok((builder, runtime))
                 })
                 .await;
             let _ = this.update(cx, |page, cx| match built {

@@ -534,10 +534,16 @@ async fn frame_task(
     let renderer = match page.read_with(cx, |p, _| p.renderer.clone()) {
         Some(renderer) => renderer,
         None => {
-            let engine_for_create = engine.clone();
+            // First-frame pipeline/buffer creation runs inside the driver;
+            // fence it so a wedge poisons and reaches the panel, not a
+            // parked frame task.
+            let builder = engine.clone();
+            let for_new = engine.clone();
             let created = cx
                 .background_executor()
-                .spawn(async move { SceneRenderer::new(engine_for_create, &job) })
+                .spawn(
+                    async move { builder.render_fenced(move || SceneRenderer::new(for_new, &job)) },
+                )
                 .await;
             match created {
                 Ok(renderer) => {
