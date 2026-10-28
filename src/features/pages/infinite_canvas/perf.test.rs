@@ -131,8 +131,10 @@ fn pan_frames_reuse_every_paint_cache(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn pan_frame_budget_stays_under_ceiling(cx: &mut TestAppContext) {
     let frames = if cfg!(debug_assertions) { 5 } else { 24 };
+    // Debug medians run ~60ms here but the host varies ~2x between sessions,
+    // so the debug ceiling keeps >4x headroom; release is the tuned lane.
     let ceiling_us = if cfg!(debug_assertions) {
-        150_000
+        250_000
     } else {
         40_000
     };

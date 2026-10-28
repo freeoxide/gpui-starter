@@ -40,11 +40,8 @@ pub(crate) mod minimap_probe {
     }
 }
 
-/// Rasterized dot field, retained across frames: the dots depend only on the
-/// note field, palette, and minimap geometry, none of which change while
-/// panning or zooming the main canvas. Plain shared scratch state on the
-/// page: creating an entity mid-paint makes the test platform's second
-/// paint pass re-measure the tree.
+/// Dot raster retained across frames (field/palette/geometry keyed). Held
+/// as page scratch: an entity created mid-paint re-measures on pass two.
 #[derive(Default)]
 pub(crate) struct MinimapDots {
     key: Option<u64>,
@@ -99,10 +96,8 @@ fn dots_key(
     hasher.finish()
 }
 
-/// Rasterizes every anchor as a solid square into a transparent BGRA buffer.
-/// `origin` is the canvas bounds origin the image will be painted into; the
-/// projection stays border-box-relative so dot positions match the viewport
-/// rectangle, which is projected with the same `pr`.
+/// Paints every anchor as a solid square into a transparent BGRA buffer; the
+/// border-box-relative projection keeps dots aligned with the viewport rect.
 pub(crate) fn rasterize_dots(
     field: &NoteField,
     palette: &[Hsla; PALETTE_LEN],

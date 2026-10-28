@@ -5,11 +5,8 @@ use gpui_kit::*;
 
 use super::scene::{CanvasShape, ShapeStyle, StrokeStyle};
 
-/// One slot per painted artifact. Entries are validated per paint
-/// `generation` (document identity, revision, zoom): a matching generation
-/// reuses the entry without rehashing shape content, so viewport motion
-/// (pan) never pays the content hash. A changed generation rehashes and
-/// rebuilds only entries whose content key actually changed.
+/// One slot per painted artifact: a matching paint generation reuses the
+/// entry without rehashing; a changed one rebuilds only if content changed.
 #[derive(Default)]
 pub(crate) struct ShapeCache {
     generation: Option<u64>,
