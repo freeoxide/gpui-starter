@@ -26,3 +26,10 @@ fn percent_formats_with_the_requested_digits() {
     assert_eq!(percent(3.456, 1), "3.5%");
     assert_eq!(percent(2., 0), "2%");
 }
+
+#[test]
+fn duration_formats_minutes_and_seconds() {
+    assert_eq!(duration(0.), "0m 0s");
+    assert_eq!(duration(75.), "1m 15s");
+    assert_eq!(duration(6042.), "100m 42s");
+}

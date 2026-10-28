@@ -649,7 +649,6 @@ impl AnalyticsPage {
                     card.flex_1().min_w(rems(24.))
                 }
             })
-            .min_w_0()
             .gap_2()
             .border_1()
             .border_color(cx.theme().border)
@@ -678,7 +677,6 @@ impl AnalyticsPage {
         let card = v_flex()
             .flex_1()
             .min_w(rems(24.))
-            .min_w_0()
             .gap_2()
             .border_1()
             .border_color(cx.theme().border)

@@ -485,3 +485,35 @@ async fn sessions_chart_bands_on_distinct_pages(cx: &TestAppContext) {
         assert_eq!(unique.len(), frame.len(), "duplicate band keys: {frame:?}");
     });
 }
+
+/// Narrow windows must wrap the chart cards to full-width lines instead of
+/// compressing them below the 24rem floor the wide-layout test relies on.
+#[gpui_kit::test]
+async fn layout_narrow_window_stacks_chart_cards_full_width(cx: &TestAppContext) {
+    let (handle, page) = open_page_sized(cx, 684., 982.);
+    commit_first_reload(cx, &page);
+    let regions = paint_regions(cx, &handle);
+
+    let mut cards = distinct(&all(&regions, "chart-card"));
+    assert_eq!(cards.len(), 3, "three chart cards, got {cards:?}");
+    cards.sort_by_key(|b| b.origin.y.as_f32() as i32);
+    for (ix, card) in cards.iter().enumerate() {
+        // The probe reads the padding box: 2px inside the card's border.
+        assert!(
+            (card.size.width - px(634.)).abs() <= px(2.),
+            "card {ix} must span the 636px content width, got {card:?}"
+        );
+        if ix > 0 {
+            assert!(
+                card.origin.y > cards[ix - 1].origin.y + px(100.),
+                "card {ix} must sit on its own line, got {cards:?}"
+            );
+        }
+    }
+    for plot in all(&regions, "chart-plot") {
+        assert!(
+            plot.size.width >= px(380.),
+            "plot keeps the card inset, got {plot:?}"
+        );
+    }
+}

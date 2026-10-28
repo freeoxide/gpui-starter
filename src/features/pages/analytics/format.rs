@@ -28,6 +28,11 @@ pub(crate) fn percent(value: f64, digits: usize) -> String {
     format!("{:.*}%", digits, value)
 }
 
+pub(crate) fn duration(total_secs: f64) -> String {
+    let secs = total_secs as usize;
+    format!("{}m {}s", secs / 60, secs % 60)
+}
+
 pub(crate) fn area_gradient(color: Hsla) -> Background {
     linear_gradient(
         0.,

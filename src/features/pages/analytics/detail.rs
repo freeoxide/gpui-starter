@@ -88,7 +88,6 @@ impl ChannelDetail {
     }
 
     fn render_ready(&self, cx: &Context<Self>) -> impl IntoElement {
-        let secs = self.row.avg_session_secs as usize;
         let sparkline = LineChart::new(self.series.clone())
             .x(|point: &(SharedString, f64)| point.0.clone())
             .y(|point| point.1)
@@ -130,7 +129,7 @@ impl ChannelDetail {
                 ))
                 .child(Self::item(
                     "analytics_detail_avg_session",
-                    format!("{}m {}s", secs / 60, secs % 60),
+                    format::duration(self.row.avg_session_secs),
                 ))
                 .child(DescriptionItem::Separator)
                 .child(
