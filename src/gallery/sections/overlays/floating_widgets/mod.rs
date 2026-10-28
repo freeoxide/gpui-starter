@@ -261,7 +261,7 @@ impl Render for FloatingWidgetsSection {
             .child(
                 section("fw-off-window", "Not window-scoped")
                     .description(
-                        "Screen floats clamp to the display edge, never the main window; Alt-drag this one past the window edge.",
+                        "Screen floats clamp to the display edge, never the main window; Alt-drag this one past the window edge. Overlay pane on web.",
                     )
                     .w(rems(32.5))
                     .child(
@@ -301,7 +301,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     sections.push(GallerySection::new(
         "floating-widgets",
         "Chromeless Floats",
-        "Interactive screen floats without window chrome: a dictation waveform HUD, a sketch pad, a menu card.",
+        "Interactive screen floats without window chrome: a dictation waveform HUD, a sketch pad, a menu card, plus independent and off-window float variants.",
         FloatingWidgetsSection::view(window, cx),
     ));
 }
