@@ -26,8 +26,8 @@ use super::engine::WgpuEngine;
 #[cfg(not(target_family = "wasm"))]
 use super::state::PARTICLE_COUNTS;
 
-/// Upper bound on adapter/device init before the page surfaces a timeout
-/// error instead of parking on "waiting" forever (a hung init never errors).
+/// Backstop deadline for a lost init: the fenced init bounds the attempt
+/// itself, and this watchdog surfaces a timeout if its result never lands.
 #[cfg(not(target_family = "wasm"))]
 const INIT_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -50,6 +50,26 @@ enum InitSeam {
 #[cfg(test)]
 fn set_init_seam(seam: InitSeam) {
     INIT_SEAM.with(|slot| slot.set(seam));
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Test seam for the fenced frame: Wedge parks the render work below
+    /// the fence deadline, tripping the real fence without a GPU wedge.
+    static FRAME_SEAM: std::cell::Cell<FrameSeam> =
+        const { std::cell::Cell::new(FrameSeam::Real) };
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy)]
+enum FrameSeam {
+    Real,
+    Wedge,
+}
+
+#[cfg(test)]
+fn set_frame_seam(seam: FrameSeam) {
+    FRAME_SEAM.with(|slot| slot.set(seam));
 }
 
 pub struct WgpuPage {
@@ -92,8 +112,8 @@ impl WgpuPage {
 
     #[cfg(not(target_family = "wasm"))]
     fn start_engine(&mut self, cx: &mut Context<Self>) {
-        // Dropping the previous attempt's tasks cancels its hung init and
-        // its watchdog; stored handles double as the cancellation switch.
+        // The fence joins each init attempt with a timeout and detaches a
+        // wedged one; the drops stop the watchdog and free any poisoned engine.
         self.init_task = None;
         self.init_watchdog = None;
         self.engine = None;
@@ -113,7 +133,7 @@ impl WgpuPage {
                     if matches!(seam, InitSeam::Park) {
                         std::future::pending::<()>().await;
                     }
-                    WgpuEngine::new().await
+                    WgpuEngine::new_fenced()
                 })
                 .await;
             match engine {
@@ -533,14 +553,27 @@ async fn frame_task(
         }
     };
 
+    // Read on the caller thread before the spawn so the worker never
+    // touches the thread-local seam.
+    #[cfg(test)]
+    let frame_seam = FRAME_SEAM.with(std::cell::Cell::get);
     let rendered = cx
         .background_executor()
         .spawn(async move {
-            let started = Instant::now();
-            let mut guard = renderer.lock().expect("wgpu renderer mutex");
-            guard
-                .render(job)
-                .map(|bytes| (bytes, started.elapsed().as_secs_f32() * 1000.0))
+            engine.render_fenced(move || {
+                #[cfg(test)]
+                if matches!(frame_seam, FrameSeam::Wedge) {
+                    // Stand-in for a readback wedged inside the driver; the
+                    // fence trips while this parks.
+                    let (_tx, rx) = std::sync::mpsc::channel::<()>();
+                    let _ = rx.recv();
+                }
+                let started = Instant::now();
+                let mut guard = renderer.lock().expect("wgpu renderer mutex");
+                guard
+                    .render(job)
+                    .map(|bytes| (bytes, started.elapsed().as_secs_f32() * 1000.0))
+            })
         })
         .await;
 

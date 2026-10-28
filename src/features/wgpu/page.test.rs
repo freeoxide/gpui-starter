@@ -24,6 +24,23 @@ impl Drop for SeamGuard {
     }
 }
 
+/// Pins the frame seam for the test's lifetime; resets to Real on drop,
+/// including on panic.
+struct FrameSeamGuard;
+
+impl FrameSeamGuard {
+    fn arm(seam: super::FrameSeam) -> Self {
+        super::set_frame_seam(seam);
+        Self
+    }
+}
+
+impl Drop for FrameSeamGuard {
+    fn drop(&mut self) {
+        super::set_frame_seam(super::FrameSeam::Real);
+    }
+}
+
 /// Mounts the page the way AppRoot does: constructed at window open, but
 /// rendered only once `visited` flips, so construction stays GPU-free.
 struct PageHost {
@@ -215,4 +232,98 @@ async fn success_after_the_timeout_clears_the_error_panel(cx: &mut TestAppContex
             "a late success must clear the timeout error panel"
         );
     }
+}
+
+#[gpui_kit::test]
+#[ignore = "needs a working wgpu adapter (GPU or lavapipe); run with --ignored locally"]
+async fn a_wedged_frame_poisons_the_engine_and_retry_builds_a_fresh_one(cx: &mut TestAppContext) {
+    let _seam = FrameSeamGuard::arm(super::FrameSeam::Wedge);
+    let (page, host, mut cx) = open_hosted_page(cx);
+    host.update(&mut cx, |host, cx| {
+        host.visited = true;
+        cx.notify();
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.run_until_parked();
+    let first_engine = cx.read(|cx| {
+        page.read(cx)
+            .engine
+            .clone()
+            .expect("adapter hosts must land an engine")
+    });
+    assert!(!first_engine.poisoned());
+
+    // One kicked frame parks inside the fence until the deadline trips.
+    cx.update(|window, cx| {
+        window.draw(cx).clear(cx);
+        window.simulate_next_frame(cx);
+    });
+    cx.executor().advance_clock(Duration::from_millis(40));
+    cx.run_until_parked();
+    let expected = format!(
+        "wgpu render missed its {}s deadline; engine poisoned (wedged render thread detached)",
+        crate::features::wgpu::fence::FRAME_DEADLINE.as_secs()
+    );
+    assert_eq!(
+        runtime_error(&page, &cx),
+        Some(expected),
+        "the fenced deadline must land in the error panel"
+    );
+    assert!(
+        cx.read(|cx| page.read(cx).engine.as_ref().is_some_and(|e| e.poisoned())),
+        "the missed deadline must poison the engine"
+    );
+
+    // Retry must build a fresh engine; a poisoned one is never reused.
+    super::set_frame_seam(super::FrameSeam::Real);
+    // The 100k tier keeps the resumed frames comfortably inside the fence.
+    page.update(&mut cx, |p, cx| {
+        p.state
+            .update(cx, |s, cx| s.set_particle_count(100_000, cx))
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let mut retried = false;
+    for y in (240..560usize).step_by(8) {
+        cx.simulate_click(point(px(400.), px(y as f32)), Modifiers::none());
+        if runtime_error(&page, &cx).is_none() {
+            retried = true;
+            break;
+        }
+    }
+    assert!(
+        retried,
+        "the Retry click must re-enter init and clear the error"
+    );
+    cx.executor().advance_clock(Duration::from_millis(40));
+    cx.run_until_parked();
+
+    let fresh_engine = cx.read(|cx| {
+        page.read(cx)
+            .engine
+            .clone()
+            .expect("retry must land a fresh engine")
+    });
+    assert!(
+        !fresh_engine.poisoned(),
+        "retry must build an unpoisoned engine"
+    );
+    assert!(
+        !std::sync::Arc::ptr_eq(&first_engine, &fresh_engine),
+        "retry must build a new engine instance, not reuse the poisoned one"
+    );
+
+    for _ in 0..8 {
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            window.simulate_next_frame(cx);
+        });
+        cx.executor().advance_clock(Duration::from_millis(40));
+        cx.run_until_parked();
+    }
+    let frames = cx.read(|cx| page.read(cx).state.read(cx).frames_rendered());
+    assert!(frames >= 1, "playback must resume on the fresh engine");
+    assert!(
+        runtime_error(&page, &cx).is_none(),
+        "resumed playback must stay out of the error panel"
+    );
 }
