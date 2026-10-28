@@ -90,7 +90,11 @@ fn open_floating_window(
         super::layer_shell::note_ignored_once();
     }
     let make_options = |_use_layer: bool| -> WindowOptions {
+        // Only the linux layer-shell branch mutates the options.
+        #[cfg(target_os = "linux")]
         let mut options = float_window_options(&spec, bounds);
+        #[cfg(not(target_os = "linux"))]
+        let options = float_window_options(&spec, bounds);
         #[cfg(target_os = "linux")]
         if _use_layer && let Some(layer) = plan.layer_options.clone() {
             // Option set from crates/gpui/examples/layer_shell.rs at
