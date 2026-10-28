@@ -261,49 +261,61 @@ fn clamp_axis(value: Pixels, size: Pixels, min: Pixels, available: Pixels) -> Pi
     }
 }
 
-pub(crate) fn anchor_rect(
-    anchor: &FloatAnchor,
-    cx: &mut App,
-) -> Option<(Bounds<Pixels>, Bounds<Pixels>)> {
+/// Why an anchor did or did not resolve. `DispatchBlocked` is the only
+/// transient cause: the anchor window's own event dispatch holds the gpui
+/// update lease, so the same resolution succeeds once the cycle settles.
+pub(crate) enum AnchorResolution {
+    Resolved((Bounds<Pixels>, Bounds<Pixels>)),
+    DispatchBlocked,
+    Unavailable,
+}
+
+pub(crate) fn resolve_anchor(anchor: &FloatAnchor, cx: &mut App) -> AnchorResolution {
     match anchor {
         FloatAnchor::Window { window, .. } => {
-            let bounds = window
+            let Some(bounds) = window
                 .update(cx, |_, window, _| window.window_bounds().get_bounds())
-                .ok()?;
-            let clamp = cx
+                .ok()
+            else {
+                return if window_is_open(window, cx) {
+                    AnchorResolution::DispatchBlocked
+                } else {
+                    AnchorResolution::Unavailable
+                };
+            };
+            let Some(clamp) = cx
                 .displays()
                 .into_iter()
                 .map(|display| display.visible_bounds())
                 .find(|display_bounds| display_bounds.contains(&bounds.center()))
-                .or_else(|| cx.primary_display().map(|display| display.visible_bounds()))?;
-            Some((bounds, clamp))
+                .or_else(|| cx.primary_display().map(|display| display.visible_bounds()))
+            else {
+                return AnchorResolution::Unavailable;
+            };
+            AnchorResolution::Resolved((bounds, clamp))
         }
-        FloatAnchor::Screen { display, .. } => {
-            let platform_display = match display {
-                Some(id) => cx.find_display(*id),
-                None => cx.primary_display(),
-            }?;
-            let bounds = platform_display.visible_bounds();
-            Some((bounds, bounds))
-        }
+        FloatAnchor::Screen { display, .. } => match display {
+            Some(id) => match cx.find_display(*id) {
+                Some(platform_display) => {
+                    let bounds = platform_display.visible_bounds();
+                    AnchorResolution::Resolved((bounds, bounds))
+                }
+                None => AnchorResolution::Unavailable,
+            },
+            None => match cx.primary_display() {
+                Some(platform_display) => {
+                    let bounds = platform_display.visible_bounds();
+                    AnchorResolution::Resolved((bounds, bounds))
+                }
+                None => AnchorResolution::Unavailable,
+            },
+        },
     }
 }
 
-/// Whether `handle` refers to a window that is still open. A resolution
-/// failure for an open window means its event dispatch holds the gpui update
-/// lease (`AnyWindowHandle::update` cannot re-enter a window mid-dispatch),
-/// not that the window is gone.
+/// Whether `handle` refers to a window that is still open.
 pub(crate) fn window_is_open(handle: &AnyWindowHandle, cx: &App) -> bool {
     cx.windows().contains(handle)
-}
-
-/// True when `anchor` targets an open window whose dispatch is on the stack:
-/// anchor_rect cannot resolve it now, but will once the cycle settles.
-pub(crate) fn anchor_blocked_by_dispatch(anchor: &FloatAnchor, cx: &App) -> bool {
-    match anchor {
-        FloatAnchor::Window { window, .. } => window_is_open(window, cx),
-        FloatAnchor::Screen { .. } => false,
-    }
 }
 
 #[cfg(test)]

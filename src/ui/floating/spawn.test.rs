@@ -316,6 +316,35 @@ async fn a_stale_anchor_window_fails_the_spawn_without_opening_a_window(cx: &mut
 }
 
 #[gpui_kit::test]
+async fn a_screen_anchor_spawn_with_an_unknown_display_fails_without_deferring(
+    cx: &mut TestAppContext,
+) {
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    let result = cx.update(|cx| {
+        spawn_floating(
+            FloatingSpec::new(
+                FloatingWindowId("stale-display".into()),
+                size(px(120.), px(90.)),
+            )
+            .anchor(FloatAnchor::Screen {
+                display: Some(gpui_kit::DisplayId::new(999)),
+                placement: Placement9::Center,
+                offset: Point::default(),
+            }),
+            blank_view,
+            cx,
+        )
+    });
+    let error = result.expect_err("a real Screen-anchor failure must surface, not defer");
+    assert_eq!(error.to_string(), "floating anchor unavailable");
+    assert!(
+        cx.read(|cx| floating_snapshot(cx)).is_empty(),
+        "no interim entry, no window, no retry for a display failure"
+    );
+}
+
+#[gpui_kit::test]
 async fn close_floating_closes_once_and_empties_the_registry(cx: &mut TestAppContext) {
     cx.update(gpui_kit::init);
     cx.update(init);
