@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::{prelude::*, *};
@@ -13,6 +13,30 @@ pub struct OverlayFloatHost {
     focus_handle: FocusHandle,
     pane_handles: HashMap<FloatingWindowId, FocusHandle>,
     empty: bool,
+}
+
+/// Panes registered as chromeless: `OverlayPane` carries no spec flags, so
+/// this id set is the spawn-to-host channel, rewritten on each registration.
+#[derive(Default)]
+struct ChromelessPanes(HashSet<FloatingWindowId>);
+
+impl Global for ChromelessPanes {}
+
+/// Marks a pane chromeless for the host. Wasm-lane only: native floats are
+/// never panes, so the setter exists for the overlay registry and tests.
+#[cfg(any(test, target_family = "wasm"))]
+pub(crate) fn set_pane_chromeless(id: &FloatingWindowId, enabled: bool, cx: &mut App) {
+    let panes = cx.default_global::<ChromelessPanes>();
+    if enabled {
+        panes.0.insert(id.clone());
+    } else {
+        panes.0.remove(id);
+    }
+}
+
+fn pane_is_chromeless(id: &FloatingWindowId, cx: &App) -> bool {
+    cx.try_global::<ChromelessPanes>()
+        .is_some_and(|panes| panes.0.contains(id))
 }
 
 impl OverlayFloatHost {
@@ -57,6 +81,11 @@ impl Render for OverlayFloatHost {
 impl OverlayFloatHost {
     fn render_pane(&self, pane: OverlayPane, cx: &App) -> AnyElement {
         let id = pane.id.clone();
+        let body = div()
+            .flex_1()
+            .min_h_0()
+            .overflow_hidden()
+            .child(pane.view.clone());
         let mut pane_el = v_flex()
             .id(SharedString::from(format!("floating-pane-{}", pane.id.0)))
             .absolute()
@@ -73,15 +102,16 @@ impl OverlayFloatHost {
             .overflow_hidden()
             .on_action(move |_: &DismissFloating, _, cx| {
                 registry::remove_entry(&id, cx);
-            })
-            .child(float_header(&pane.id, &pane.title, cx))
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_hidden()
-                    .child(pane.view.clone()),
-            );
+            });
+        // Chromeless panes keep the overlay surface and Esc dismissal; only
+        // the header strip goes away.
+        if pane_is_chromeless(&pane.id, cx) {
+            pane_el = pane_el.child(body);
+        } else {
+            pane_el = pane_el
+                .child(float_header(&pane.id, &pane.title, cx))
+                .child(body);
+        }
         if let Some(handle) = self.pane_handles.get(&pane.id) {
             pane_el = pane_el.track_focus(handle);
         }

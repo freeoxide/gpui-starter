@@ -12,6 +12,7 @@ pub(crate) struct FloatingShell {
     id: FloatingWindowId,
     title: SharedString,
     content: AnyView,
+    chromeless: bool,
     focus_handle: FocusHandle,
 }
 
@@ -21,12 +22,14 @@ impl FloatingShell {
         id: FloatingWindowId,
         title: SharedString,
         content: AnyView,
+        chromeless: bool,
         cx: &mut Context<Self>,
     ) -> Self {
         Self {
             id,
             title,
             content,
+            chromeless,
             focus_handle: cx.focus_handle(),
         }
     }
@@ -35,7 +38,7 @@ impl FloatingShell {
 #[cfg(not(target_family = "wasm"))]
 impl Render for FloatingShell {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        v_flex()
+        let shell = v_flex()
             .size_full()
             .key_context("floating")
             .track_focus(&self.focus_handle)
@@ -46,9 +49,22 @@ impl Render for FloatingShell {
             .overflow_hidden()
             .on_action(cx.listener(|_, _: &DismissFloating, window, _| {
                 window.remove_window();
-            }))
-            .child(float_header(&self.id, &self.title, cx))
-            .child(div().size_full().child(self.content.clone()))
+            }));
+        if self.chromeless {
+            // Invisible drag: Alt/Option+left-drag anywhere; macOS also keeps
+            // its hidden titlebar drag. Plain clicks fall through to the body.
+            shell
+                .on_mouse_down(MouseButton::Left, |event, window, _| {
+                    if event.modifiers.alt {
+                        window.start_window_move();
+                    }
+                })
+                .child(div().size_full().child(self.content.clone()))
+        } else {
+            shell
+                .child(float_header(&self.id, &self.title, cx))
+                .child(div().size_full().child(self.content.clone()))
+        }
     }
 }
 
@@ -85,3 +101,7 @@ pub(crate) fn float_header(_id: &FloatingWindowId, title: &SharedString, cx: &Ap
     });
     header
 }
+
+#[cfg(all(test, not(target_family = "wasm")))]
+#[path = "shell.test.rs"]
+mod shell_test;

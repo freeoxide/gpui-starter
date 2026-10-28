@@ -131,6 +131,7 @@ fn spec_defaults_center_on_the_primary_display() {
     assert!(!spec.is_focus());
     assert!(!spec.is_resizable());
     assert!(spec.is_movable());
+    assert!(!spec.is_chromeless());
     assert!(!spec.is_click_through());
     assert_eq!(spec.min_window_size(), None);
 }
@@ -149,6 +150,16 @@ fn movable_defaults_true_and_round_trips() {
         "drag-to-move is the widget drag affordance"
     );
     assert!(!spec.movable(false).is_movable());
+}
+
+#[test]
+fn chromeless_builder_round_trips() {
+    let spec = FloatingSpec::new(FloatingWindowId("demo".into()), float_size());
+    assert!(!spec.is_chromeless());
+    let spec = spec.chromeless(true);
+    assert!(spec.is_chromeless());
+    let spec = spec.chromeless(false);
+    assert!(!spec.is_chromeless());
 }
 
 #[test]

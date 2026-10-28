@@ -70,6 +70,7 @@ pub struct FloatingSpec {
     focus: bool,
     resizable: bool,
     movable: bool,
+    chromeless: bool,
     click_through: bool,
     layer_shell: Option<LayerShellSpec>,
     min_size: Option<Size<Pixels>>,
@@ -91,6 +92,7 @@ impl FloatingSpec {
             focus: false,
             resizable: false,
             movable: true,
+            chromeless: false,
             click_through: false,
             layer_shell: None,
             min_size: None,
@@ -124,6 +126,13 @@ impl FloatingSpec {
 
     pub fn movable(mut self, movable: bool) -> Self {
         self.movable = movable;
+        self
+    }
+
+    /// Drops the shell chrome: no header or drag strip, the body is the
+    /// whole window. Esc still dismisses; drag becomes Alt+drag.
+    pub fn chromeless(mut self, enabled: bool) -> Self {
+        self.chromeless = enabled;
         self
     }
 
@@ -177,6 +186,10 @@ impl FloatingSpec {
 
     pub fn is_movable(&self) -> bool {
         self.movable
+    }
+
+    pub fn is_chromeless(&self) -> bool {
+        self.chromeless
     }
 
     pub fn is_click_through(&self) -> bool {

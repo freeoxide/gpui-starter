@@ -104,11 +104,12 @@ fn open_floating_window(
     let opened = {
         let id = spec.id().clone();
         let title = spec.window_title();
+        let chromeless = spec.is_chromeless();
         let build_view = factory.clone();
         gpui_kit::open_window(make_options(use_layer), cx, move |window, cx| {
             window.set_window_title(&title);
             let view = build_view(window, cx);
-            cx.new(|cx| FloatingShell::new(id, title, view, cx))
+            cx.new(|cx| FloatingShell::new(id, title, view, chromeless, cx))
         })
     };
     let (window, surface) = match opened {
@@ -136,12 +137,13 @@ fn open_floating_window(
                     super::layer_shell::state::record_unsupported(&err, cx);
                     let id = spec.id().clone();
                     let title = spec.window_title();
+                    let chromeless = spec.is_chromeless();
                     let build_view = factory.clone();
                     let (window, _) =
                         gpui_kit::open_window(make_options(false), cx, move |window, cx| {
                             window.set_window_title(&title);
                             let view = build_view(window, cx);
-                            cx.new(|cx| FloatingShell::new(id, title, view, cx))
+                            cx.new(|cx| FloatingShell::new(id, title, view, chromeless, cx))
                         })?;
                     (window, super::layer_shell::FloatSurface::Window)
                 } else {
@@ -252,7 +254,9 @@ fn register_overlay(
     let view = root
         .update(cx, |_, window, cx| build_view(window, cx))
         .map_err(|_| anyhow!("no main window to host overlay float"))?;
-    let handle = FloatingHandle::Overlay(spec.id().clone());
+    let id = spec.id().clone();
+    let chromeless = spec.is_chromeless();
+    let handle = FloatingHandle::Overlay(id.clone());
     set_entry(
         RegistryEntry {
             spec,
@@ -264,6 +268,7 @@ fn register_overlay(
         },
         cx,
     );
+    super::overlay_host::set_pane_chromeless(&id, chromeless, cx);
     Ok(handle)
 }
 
