@@ -7,6 +7,8 @@ use anyhow::{Context as _, Result};
 use super::fence::{EngineFence, FRAME_DEADLINE, FenceError, INIT_DEADLINE, run_bounded};
 use super::frame::padded_bytes_per_row;
 
+const LOG: &str = "gpui_starter::wgpu_engine";
+
 #[cfg(test)]
 use std::cell::Cell;
 
@@ -52,19 +54,23 @@ impl WgpuEngine {
         });
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
+                // None: headless readback needs no discrete GPU, and the
+                // dGPU path is a known wedge vector on dual-GPU Macs.
+                power_preference: wgpu::PowerPreference::None,
                 force_fallback_adapter: false,
                 compatible_surface: None,
                 apply_limit_buckets: false,
             })
             .await
             .context("requesting wgpu adapter")?;
+        let info = adapter.get_info();
+        let adapter_label = format!("{} ({})", info.name, info.backend);
+        tracing::info!(target: LOG, adapter = %adapter_label, "wgpu adapter acquired");
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor::default())
             .await
             .context("requesting wgpu device")?;
-        let info = adapter.get_info();
-        let adapter_label = format!("{} ({})", info.name, info.backend);
+        tracing::debug!(target: LOG, "wgpu device acquired");
         Ok(Self {
             device,
             queue,
@@ -105,7 +111,10 @@ impl WgpuEngine {
             runtime.block_on(Self::new())
         })
         .map_err(|err| match err {
-            FenceError::Deadline { secs } => anyhow::Error::new(FenceError::InitTimeout { secs }),
+            FenceError::Deadline { secs } => {
+                tracing::warn!(target: LOG, secs, "wgpu init missed its deadline; thread detached");
+                anyhow::Error::new(FenceError::InitTimeout { secs })
+            }
             other => other.into_anyhow(),
         })?;
         Ok(engine)

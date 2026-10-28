@@ -11,6 +11,8 @@ use std::time::Duration;
 
 use anyhow::Result;
 
+const LOG: &str = "gpui_starter::wgpu_fence";
+
 /// Overall budget for one fenced render+readback. wgpu's internal waits
 /// allow 30s each; the Metal wedge sits below them, so this trips first.
 pub(in crate::features::wgpu) const FRAME_DEADLINE: Duration = Duration::from_secs(5);
@@ -154,6 +156,7 @@ impl EngineFence {
         }
         match run_bounded("wgpu-render", deadline, work) {
             Err(err @ FenceError::Deadline { .. }) => {
+                tracing::warn!(target: LOG, "wgpu render missed its deadline; poisoning engine");
                 self.tripped.store(true, Ordering::Release);
                 Err(err)
             }
