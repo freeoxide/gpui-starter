@@ -14,6 +14,14 @@ fn money_keeps_the_sign_in_front_of_the_dollar() {
 }
 
 #[test]
+fn money_keeps_cents_for_small_amounts() {
+    assert_eq!(money(9.2), "$9.20");
+    assert_eq!(money(-0.5), "-$0.50");
+    assert_eq!(money(999.99), "$999.99");
+    assert_eq!(money(1000.), "$1.0K");
+}
+
+#[test]
 fn percent_formats_with_the_requested_digits() {
     assert_eq!(percent(3.456, 1), "3.5%");
     assert_eq!(percent(2., 0), "2%");

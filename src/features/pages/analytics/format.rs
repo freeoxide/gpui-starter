@@ -14,10 +14,13 @@ pub(crate) fn compact(value: f64) -> String {
 }
 
 pub(crate) fn money(value: f64) -> String {
-    if value < 0. {
-        format!("-${}", compact(-value))
+    let sign = if value < 0. { "-" } else { "" };
+    let magnitude = value.abs();
+    // Small amounts keep their cents: compact would flatten $9.20 to $9.2.
+    if magnitude < 1_000. {
+        format!("{sign}${magnitude:.2}")
     } else {
-        format!("${}", compact(value))
+        format!("{sign}${}", compact(magnitude))
     }
 }
 

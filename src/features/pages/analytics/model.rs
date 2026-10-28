@@ -15,7 +15,7 @@ pub(crate) struct DailyRow {
     pub(crate) revenue: f64,
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, PartialEq, Deserialize)]
 pub(crate) struct ChannelRow {
     pub(crate) page: SharedString,
     pub(crate) channel: SharedString,
@@ -24,6 +24,14 @@ pub(crate) struct ChannelRow {
     pub(crate) revenue: f64,
     pub(crate) conversion: f64,
     pub(crate) avg_session_secs: f64,
+}
+
+/// Sessions summed over every channel of one page: the unit a per-page chart
+/// bands on, where a raw row would collide with its sibling channels.
+#[derive(Clone, Deserialize)]
+pub(crate) struct PageSessions {
+    pub(crate) page: SharedString,
+    pub(crate) sessions: f64,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -220,6 +228,24 @@ impl WorkspaceData {
             .filter(|row| segment.matches(&row.channel))
             .cloned()
             .collect()
+    }
+
+    /// The `count` pages with the most sessions in `segment`, one aggregated
+    /// entry per page so every band key is unique.
+    pub(crate) fn top_pages(&self, segment: Segment, count: usize) -> Vec<PageSessions> {
+        let mut totals: Vec<PageSessions> = Vec::new();
+        for row in self.channels(segment) {
+            match totals.iter_mut().find(|total| total.page == row.page) {
+                Some(total) => total.sessions += row.sessions,
+                None => totals.push(PageSessions {
+                    page: row.page.clone(),
+                    sessions: row.sessions,
+                }),
+            }
+        }
+        totals.sort_by(|a, b| b.sessions.total_cmp(&a.sessions));
+        totals.truncate(count);
+        totals
     }
 
     pub(crate) fn channel_row(&self, key: &ChannelKey) -> Option<ChannelRow> {
