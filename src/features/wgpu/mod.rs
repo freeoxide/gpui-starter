@@ -14,6 +14,8 @@
 mod demos;
 #[cfg(not(target_family = "wasm"))]
 mod engine;
+#[cfg(not(target_family = "wasm"))]
+mod fence;
 mod frame;
 mod math;
 mod page;
@@ -35,3 +37,9 @@ pub use frame::{bgra_to_render_image, rgba_to_render_image};
 // Native-only bridge.
 #[cfg(not(target_family = "wasm"))]
 pub use engine::WgpuEngine;
+
+// Fence errors escape the engine wrapped in anyhow; the type is exported
+// so callers can match on the wedge variants (Deadline, Poisoned,
+// InitTimeout) after a downcast.
+#[cfg(not(target_family = "wasm"))]
+pub use fence::FenceError;
