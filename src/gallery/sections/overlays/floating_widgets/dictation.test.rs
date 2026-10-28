@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use gpui_kit::prelude::*;
-use gpui_kit::{Modifiers, TestAppContext, VisualTestContext, point, px, size};
+use gpui_kit::{Entity, Modifiers, TestAppContext, VisualTestContext, point, px, size};
 
 use crate::ui::floating::{FloatAnchor, FloatLevel, FloatingHandle, floating_snapshot, init};
 
@@ -88,6 +88,48 @@ fn hud_start_feeds_the_waveform_and_stop_clears_the_source(cx: &mut TestAppConte
         assert!(!waveform.read(cx).has_source());
         assert!(!hud.read(cx).is_listening());
     });
+}
+
+#[gpui_kit::test]
+fn reduced_motion_freezes_the_displayed_spectrum(cx: &mut TestAppContext) {
+    fn bars_at(hud: &Entity<DictationHud>, cx: &TestAppContext) -> Vec<f32> {
+        cx.read(|cx| {
+            hud.read(cx)
+                .waveform
+                .read(cx)
+                .spectrum()
+                .expect("samples must have arrived")
+                .bars()
+                .to_vec()
+        })
+    }
+
+    let live = cx.new(DictationHud::new);
+    live.update(cx, |hud, cx| hud.set_listening(true, cx));
+    cx.executor().advance_clock(Duration::from_millis(200));
+    cx.run_until_parked();
+    let live_first = bars_at(&live, cx);
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    let live_second = bars_at(&live, cx);
+    assert_ne!(
+        live_first, live_second,
+        "the default display must keep animating"
+    );
+
+    cx.update(|cx| cx.set_reduce_motion(true));
+    let frozen = cx.new(DictationHud::new);
+    frozen.update(cx, |hud, cx| hud.set_listening(true, cx));
+    cx.executor().advance_clock(Duration::from_millis(200));
+    cx.run_until_parked();
+    let frozen_first = bars_at(&frozen, cx);
+    cx.executor().advance_clock(Duration::from_millis(400));
+    cx.run_until_parked();
+    let frozen_second = bars_at(&frozen, cx);
+    assert_eq!(
+        frozen_first, frozen_second,
+        "reduced motion must freeze the displayed waveform"
+    );
 }
 
 #[gpui_kit::test]

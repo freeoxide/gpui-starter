@@ -29,12 +29,12 @@ pub(crate) fn menu_rows() -> &'static [MenuRow] {
         MenuRow {
             id: ROW_DICTATION,
             icon: IconName::Mic,
-            label: "Dictation HUD",
+            label: "Dictation HUD…",
         },
         MenuRow {
             id: ROW_SKETCH,
             icon: IconName::Palette,
-            label: "Sketch pad",
+            label: "Sketch pad…",
         },
         MenuRow {
             id: ROW_CLOSE,
