@@ -18,9 +18,8 @@ static NEXT_DOC_NONCE: AtomicU64 = AtomicU64::new(1);
 const DOC_CACHE_DOMAIN: u64 = 0;
 const OVERLAY_CACHE_DOMAIN: u64 = 1;
 
-/// Finalizer over the cache-invalidating inputs (identity, revision, zoom);
-/// bit 63 is the domain tag, so cross-domain generations never compare equal
-/// and pan never changes the result.
+/// Finalizer over the cache-invalidating inputs (identity, revision, zoom —
+/// never pan); bit 63 is the domain tag, so cross-domain generations differ.
 fn mix_paint_generation(nonce: u64, domain: u64, revision: u64, zoom: f32) -> u64 {
     let mut z = nonce ^ revision.rotate_left(32) ^ u64::from(zoom.to_bits()).rotate_left(13);
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);

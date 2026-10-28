@@ -173,7 +173,7 @@ fn overlay_revalidates_slots_freed_by_a_removed_shape(cx: &mut TestAppContext) {
     use crate::ui::canvas::perf_probe;
 
     let (state, mut cx) = mounted_host(cx);
-    let (first, second) = state.update(&mut cx, |s, cx| {
+    let (_first, second) = state.update(&mut cx, |s, cx| {
         let layer = s.add_layer(cx);
         let stroke = ShapeStyle::stroked(crate::ui::canvas::StrokeStyle::default());
         let first = s
@@ -211,13 +211,8 @@ fn overlay_revalidates_slots_freed_by_a_removed_shape(cx: &mut TestAppContext) {
     });
     cx.update(|window, cx| window.draw(cx).clear(cx));
 
-    // Drive the overlay revision across the value that aliased the freed
-    // slot's last doc-validated generation (rev 3 in this construction).
-    // Reset before set_tool_overlay: the test platform may paint during the
-    // effect flush inside the update.
-    // Aliasing repro: bump the overlay revision to the freed slot's last
-    // doc-validated revision (3) inside ONE update (effects flush and paint
-    // per update), so the first overlay paint there must compare content.
+    // Aliasing repro: bump the overlay revision to the freed slot's stored
+    // one (3) inside ONE update (flushes paint per update), after the reset.
     perf_probe::reset();
     state.update(&mut cx, |s, cx| {
         for _ in 0..3 {
@@ -264,6 +259,5 @@ fn overlay_revalidates_slots_freed_by_a_removed_shape(cx: &mut TestAppContext) {
              {path_builds} builds / {key_hashes} hashes"
         );
     }
-    let _ = first;
     state.update(&mut cx, |s, cx| s.set_tool_overlay(None, cx));
 }
