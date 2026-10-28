@@ -227,9 +227,8 @@ fn spawn_floating_settled(
     register_overlay(spec, factory, bounds, &root, cx)
 }
 
-/// Spawn a float that owns its lifecycle: Screen-anchored, so it never
-/// reads the root-window global and stays registered after that window
-/// closes. Wasm has no separate windows; the float hosts as an overlay.
+/// Spawn a Screen-anchored float that survives the main window closing:
+/// native never reads the root window; wasm hosts it as a root overlay.
 pub fn spawn_screen_floating(
     spec: FloatingSpec,
     build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
