@@ -126,3 +126,63 @@ fn clicking_an_interior_minimap_point_jumps_there(cx: &mut TestAppContext) {
     cx.simulate_click(click, gpui_kit::Modifiers::none());
     assert_doc_at_local_center(&cx, &page, probe_doc);
 }
+
+#[test]
+fn rasterized_dots_paint_at_projected_positions_in_palette_colors() {
+    use super::content::{NoteField, PALETTE_LEN};
+    use super::minimap::rasterize_dots;
+    use gpui_kit::{DevicePixels, Hsla, Size};
+
+    let field = NoteField { seed: 7, count: 4 };
+    let palette: [Hsla; PALETTE_LEN] = [
+        Hsla::red(),
+        Hsla::green(),
+        Hsla::blue(),
+        Hsla::black(),
+        Hsla::white(),
+    ];
+    let minimap = rect(10., 20., 160., 96.);
+    let pr: MiniProjection = fit_projection(field.span(), minimap);
+    let image = rasterize_dots(
+        &field,
+        &palette,
+        &pr,
+        minimap.origin,
+        Size {
+            width: gpui_kit::px(160.),
+            height: gpui_kit::px(96.),
+        },
+        1.,
+    );
+    assert_eq!(
+        image.size(0),
+        gpui_kit::size(DevicePixels(160), DevicePixels(96))
+    );
+    let frame = image.as_bytes(0).unwrap();
+    let px_at = |x: u32, y: u32| {
+        let start = ((y * 160 + x) * 4) as usize;
+        frame[start..start + 4].to_vec()
+    };
+    assert_eq!(
+        px_at(0, 0),
+        vec![0, 0, 0, 0],
+        "background stays transparent"
+    );
+    for anchor in field.anchors() {
+        let local = project_doc_to_minimap(anchor.center, &pr) - minimap.origin;
+        let x = local.x.as_f32().round() as u32;
+        let y = local.y.as_f32().round() as u32;
+        let rgba = palette[anchor.palette_ix].to_rgb();
+        let expected = vec![
+            (rgba.b * 255.).round() as u8,
+            (rgba.g * 255.).round() as u8,
+            (rgba.r * 255.).round() as u8,
+            (rgba.a * 255.).round() as u8,
+        ];
+        assert_eq!(
+            px_at(x, y),
+            expected,
+            "dot at ({x},{y}) must be BGRA {expected:?}"
+        );
+    }
+}

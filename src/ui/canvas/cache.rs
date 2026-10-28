@@ -5,24 +5,67 @@ use gpui_kit::*;
 
 use super::scene::{CanvasShape, ShapeStyle, StrokeStyle};
 
+/// One slot per painted artifact. Entries are validated per paint
+/// `generation` (document identity, revision, zoom): a matching generation
+/// reuses the entry without rehashing shape content, so viewport motion
+/// (pan) never pays the content hash. A changed generation rehashes and
+/// rebuilds only entries whose content key actually changed.
 #[derive(Default)]
 pub(crate) struct ShapeCache {
-    key: Option<u64>,
+    generation: Option<u64>,
+    content_key: Option<u64>,
     path: Option<Path<Pixels>>,
+    line: Option<ShapedLine>,
 }
 
 impl ShapeCache {
-    pub(crate) fn get(
+    /// Returns true when the artifact must be rebuilt; records the
+    /// generation either way so unmodified entries skip the key closure on
+    /// every subsequent same-generation paint.
+    fn invalidated(&mut self, generation: u64, content_key: impl FnOnce() -> u64) -> bool {
+        if self.generation == Some(generation) {
+            return false;
+        }
+        let key = content_key();
+        let changed = self.content_key != Some(key);
+        self.generation = Some(generation);
+        if changed {
+            self.content_key = Some(key);
+        }
+        changed
+    }
+
+    pub(crate) fn get_path(
         &mut self,
-        key: u64,
+        generation: u64,
+        content_key: impl FnOnce() -> u64,
         origin: Point<Pixels>,
         build: impl FnOnce() -> Option<Path<Pixels>>,
     ) -> Option<Path<Pixels>> {
-        if self.key != Some(key) {
+        if self.invalidated(generation, content_key) {
+            #[cfg(test)]
+            super::perf_probe::add_path_build();
+            self.path = None;
+            self.line = None;
             self.path = build();
-            self.key = Some(key);
         }
         self.path.as_ref().map(|path| translated(path, origin))
+    }
+
+    pub(crate) fn get_line(
+        &mut self,
+        generation: u64,
+        content_key: impl FnOnce() -> u64,
+        build: impl FnOnce() -> ShapedLine,
+    ) -> ShapedLine {
+        if self.invalidated(generation, content_key) || self.line.is_none() {
+            #[cfg(test)]
+            super::perf_probe::add_text_shaping();
+            self.path = None;
+            self.line = None;
+            self.line = Some(build());
+        }
+        self.line.clone().expect("line built above")
     }
 }
 
@@ -91,7 +134,16 @@ fn hash_style(hasher: &mut DefaultHasher, style: &ShapeStyle) {
     }
 }
 
+fn hash_hsla(hasher: &mut DefaultHasher, color: Hsla) {
+    hash_f32(hasher, color.h);
+    hash_f32(hasher, color.s);
+    hash_f32(hasher, color.l);
+    hash_f32(hasher, color.a);
+}
+
 pub(crate) fn shape_key(shape: &CanvasShape, zoom: f32) -> u64 {
+    #[cfg(test)]
+    super::perf_probe::add_key_hash();
     let mut hasher = DefaultHasher::new();
     std::mem::discriminant(shape).hash(&mut hasher);
     hash_f32(&mut hasher, zoom);
@@ -108,11 +160,14 @@ pub(crate) fn shape_key(shape: &CanvasShape, zoom: f32) -> u64 {
         }
         CanvasShape::Text {
             position,
+            text,
             font_size,
-            ..
+            color,
         } => {
             hash_point(&mut hasher, position);
             hash_pixels(&mut hasher, *font_size);
+            text.hash(&mut hasher);
+            hash_hsla(&mut hasher, *color);
         }
         CanvasShape::Image { bounds, .. } => {
             hash_bounds(&mut hasher, bounds);
