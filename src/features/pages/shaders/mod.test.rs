@@ -204,9 +204,8 @@ async fn hung_init_times_out_into_the_error_panel_and_retry_re_enters(cx: &mut T
 
 #[gpui_kit::test]
 async fn success_after_the_timeout_clears_the_error_panel(cx: &mut TestAppContext) {
-    // Init lands after the watchdog deadline. On an adapter host the late
-    // Ok must dismiss the timeout panel; on an adapter-less host the late
-    // Err replaces it with the real cause either way.
+    // Late Ok must clear the timeout panel; a late Err (adapter-less hosts)
+    // replaces it with the real cause.
     let _seam = SeamGuard::arm(super::InitSeam::Delay(
         super::INIT_TIMEOUT + Duration::from_secs(5),
     ));
