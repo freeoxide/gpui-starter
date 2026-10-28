@@ -42,19 +42,20 @@ fn installed_image(
     })
 }
 
-/// Arms the never-resolving init seam for the test's lifetime.
-struct HangInit;
+/// Pins the init seam for the test's lifetime; resets to Real on drop,
+/// including on panic.
+struct SeamGuard;
 
-impl HangInit {
-    fn arm() -> Self {
-        super::set_hang_init(true);
+impl SeamGuard {
+    fn arm(seam: super::InitSeam) -> Self {
+        super::set_init_seam(seam);
         Self
     }
 }
 
-impl Drop for HangInit {
+impl Drop for SeamGuard {
     fn drop(&mut self) {
-        super::set_hang_init(false);
+        super::set_init_seam(super::InitSeam::Real);
     }
 }
 
@@ -133,7 +134,7 @@ async fn engine_init_waits_for_the_first_render(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 async fn hung_init_times_out_into_the_error_panel_and_retry_re_enters(cx: &mut TestAppContext) {
-    let _hang = HangInit::arm();
+    let _seam = SeamGuard::arm(super::InitSeam::Park);
     let (page, host, mut cx) = open_hosted_page(cx);
     host.update(&mut cx, |host, cx| {
         host.visited = true;
@@ -199,6 +200,66 @@ async fn hung_init_times_out_into_the_error_panel_and_retry_re_enters(cx: &mut T
         Some(expected),
         "the re-entered init must hang and time out again"
     );
+}
+
+#[gpui_kit::test]
+async fn success_after_the_timeout_clears_the_error_panel(cx: &mut TestAppContext) {
+    // Init lands after the watchdog deadline. On an adapter host the late
+    // Ok must dismiss the timeout panel; on an adapter-less host the late
+    // Err replaces it with the real cause either way.
+    let _seam = SeamGuard::arm(super::InitSeam::Delay(
+        super::INIT_TIMEOUT + Duration::from_secs(5),
+    ));
+    let (page, host, mut cx) = open_hosted_page(cx);
+    host.update(&mut cx, |host, cx| {
+        host.visited = true;
+        cx.notify();
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.run_until_parked();
+
+    cx.executor()
+        .advance_clock(super::INIT_TIMEOUT + Duration::from_secs(1));
+    cx.run_until_parked();
+    let timeout_message = format!(
+        "wgpu adapter/device init timed out after {}s",
+        super::INIT_TIMEOUT.as_secs()
+    );
+    assert_eq!(
+        cx.read(|cx| page
+            .read(cx)
+            .shader
+            .read(cx)
+            .runtime_error()
+            .map(str::to_string)),
+        Some(timeout_message.clone()),
+        "the watchdog must fire while the attempt is still delayed"
+    );
+
+    cx.executor().advance_clock(Duration::from_secs(6));
+    cx.run_until_parked();
+    let (runtime, error) = cx.read(|cx| {
+        let page_view = page.read(cx);
+        (
+            page_view.runtime.is_some(),
+            page_view
+                .shader
+                .read(cx)
+                .runtime_error()
+                .map(str::to_string),
+        )
+    });
+    assert_ne!(
+        error.as_deref(),
+        Some(timeout_message.as_str()),
+        "a landed attempt must replace or clear the stale timeout error"
+    );
+    if runtime {
+        assert!(
+            error.is_none(),
+            "a late success must clear the timeout error panel"
+        );
+    }
 }
 
 #[gpui_kit::test]

@@ -33,14 +33,23 @@ const INIT_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[cfg(test)]
 thread_local! {
-    /// Test seam: park every engine init forever so the watchdog is the
-    /// only way init can end.
-    static HANG_INIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Test seam for the init task: park it forever, or delay it past the
+    /// watchdog deadline before running the real init.
+    static INIT_SEAM: std::cell::Cell<InitSeam> =
+        const { std::cell::Cell::new(InitSeam::Real) };
 }
 
 #[cfg(test)]
-fn set_hang_init(hang: bool) {
-    HANG_INIT.with(|flag| flag.set(hang));
+#[derive(Clone, Copy)]
+enum InitSeam {
+    Real,
+    Park,
+    Delay(Duration),
+}
+
+#[cfg(test)]
+fn set_init_seam(seam: InitSeam) {
+    INIT_SEAM.with(|slot| slot.set(seam));
 }
 
 pub struct WgpuPage {
@@ -90,12 +99,18 @@ impl WgpuPage {
         self.engine = None;
         self.renderer = None;
         self.state.update(cx, |s, cx| s.clear_error(cx));
+        #[cfg(test)]
+        let seam = INIT_SEAM.with(std::cell::Cell::get);
         self.init_task = Some(cx.spawn(async move |this, cx| {
+            #[cfg(test)]
+            if let InitSeam::Delay(delay) = seam {
+                cx.background_executor().timer(delay).await;
+            }
             let engine = cx
                 .background_executor()
                 .spawn(async move {
                     #[cfg(test)]
-                    if HANG_INIT.with(std::cell::Cell::get) {
+                    if matches!(seam, InitSeam::Park) {
                         std::future::pending::<()>().await;
                     }
                     WgpuEngine::new().await
