@@ -70,7 +70,9 @@ fn icon_pixels(size: usize) -> Vec<u8> {
 }
 
 enum TrayAction {
-    OpenLauncher,
+    Hotkey {
+        id: u32,
+    },
     ToggleCharts {
         rect: crate::features::menubar_charts::IconRect,
     },
@@ -141,11 +143,14 @@ pub fn setup(cx: &mut App) {
         .spawn(move || {
             let hotkey_rx = GlobalHotKeyEvent::receiver();
             loop {
-                if hotkey_rx.recv().is_err() {
+                let Ok(event) = hotkey_rx.recv() else {
                     return;
+                };
+                // The crate emits Pressed and Released per press; forwarding
+                // both would fire the accelerator twice per tap.
+                if event.state() == global_hotkey::HotKeyState::Pressed {
+                    let _ = tx_hotkey.send(TrayAction::Hotkey { id: event.id() });
                 }
-                tracing::info!(target: LOG, source = "hotkey_alt_space", "Launcher trigger");
-                let _ = tx_hotkey.send(TrayAction::OpenLauncher);
             }
         })
     {
@@ -163,8 +168,8 @@ pub fn setup(cx: &mut App) {
                 break;
             };
             match action {
-                TrayAction::OpenLauncher => {
-                    let _ = cx.update(crate::launcher::open_launcher);
+                TrayAction::Hotkey { id } => {
+                    let _ = cx.update(|cx| crate::shortcuts::dispatch_hotkey(id, cx));
                 }
                 TrayAction::ToggleCharts { rect } => {
                     let _ =

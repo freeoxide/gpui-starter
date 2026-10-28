@@ -6,6 +6,10 @@ use gpui_kit::{Action, App, KeyBinding, KeyBindingContextPredicate, Keystroke, O
 // modifier, which is the Windows key there and mostly OS-intercepted.
 pub const TOGGLE_SEARCH: &str = "secondary-k";
 pub const TOGGLE_SIDEBAR: &str = "secondary-b";
+// In-app fallback for the quick-float accelerator; works on every platform
+// while the app has focus. The OS-global Alt+Shift+D registration behind
+// shortcuts::QUICK_FLOAT exists on macOS and Windows only.
+pub const TOGGLE_QUICK_FLOAT: &str = "alt-shift-d";
 
 /// NavigateToPage keystroke for sidebar slot i (1-based in the UI, 0-based action).
 pub fn page(i: usize) -> String {

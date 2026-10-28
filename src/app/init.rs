@@ -356,6 +356,12 @@ pub fn init(cx: &mut App) {
     cx.bind_keys([
         crate::app::keys::binding(crate::app::keys::TOGGLE_SEARCH, ToggleSearch, None, cx),
         KeyBinding::new("/", ToggleSearch, None),
+        crate::app::keys::binding(
+            crate::app::keys::TOGGLE_QUICK_FLOAT,
+            crate::shortcuts::ToggleQuickFloat,
+            None,
+            cx,
+        ),
         #[cfg(target_os = "macos")]
         crate::app::keys::binding("secondary-q", Quit, None, cx),
         #[cfg(not(target_os = "macos"))]
@@ -363,6 +369,12 @@ pub fn init(cx: &mut App) {
         #[cfg(any(unix, windows))]
         KeyBinding::new("ctrl-r", Restart, None),
     ]);
+
+    // Fallback lane for the quick-float accelerator: the KeyBinding above
+    // fires while the app has focus; the OS-global hotkey converges here.
+    cx.on_action(|_: &crate::shortcuts::ToggleQuickFloat, cx| {
+        crate::shortcuts::trigger(crate::shortcuts::QUICK_FLOAT, cx);
+    });
 
     cx.on_action(|_: &Quit, cx| {
         crate::lifecycle::set_shutdown_step("begin_shutdown", cx);
