@@ -1,7 +1,7 @@
 use gpui_kit::component::TitleBar;
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext as _, Bounds, Focusable as _, Global, SharedString, Size,
-    WindowBounds, WindowKind, WindowOptions, point, px, size,
+    AnyWindowHandle, App, AppContext as _, Bounds, Focusable as _, Global, QuitMode, SharedString,
+    Size, WindowBounds, WindowId, WindowKind, WindowOptions, point, px, size,
 };
 
 /// The main app window, recorded at creation so code off the OS-input path
@@ -19,6 +19,34 @@ fn note_root_window(handle: AnyWindowHandle, cx: &mut App) {
 /// The recorded main window, if one has been opened.
 pub fn root_window(cx: &App) -> Option<AnyWindowHandle> {
     cx.try_global::<RootWindow>().map(|root| root.0)
+}
+
+/// Root-window close wiring, called once from `app::init`: quit policy plus
+/// stale-global cleanup.
+pub fn install_close_tracker(cx: &mut App) {
+    // Off macOS gpui quits when the last window closes, floats included;
+    // Explicit hands that decision to the root close path alone.
+    cx.set_quit_mode(QuitMode::Explicit);
+    cx.on_window_closed(|cx, window_id| forget_root_window(window_id, cx))
+        .detach();
+}
+
+// A stale root global reads as live to tray routing and float anchors; the
+// guard exists because remove_global panics on a missing global.
+fn forget_root_window(window_id: WindowId, cx: &mut App) {
+    let Some(root) = root_window(cx) else {
+        return;
+    };
+    if root.window_id() != window_id {
+        return;
+    }
+    cx.remove_global::<RootWindow>();
+    // Float-only sessions must outlive the root; a normal session still
+    // ends when the root is the last window to close.
+    #[cfg(not(target_os = "macos"))]
+    if cx.windows().is_empty() {
+        cx.quit();
+    }
 }
 
 /// Dispatch Quit at the recorded root window, falling back to app-level
@@ -118,3 +146,7 @@ pub fn create_new_window(title: &str, cx: &mut App) {
     })
     .detach();
 }
+
+#[cfg(test)]
+#[path = "window.test.rs"]
+mod window_test;

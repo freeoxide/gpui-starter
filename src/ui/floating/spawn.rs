@@ -227,6 +227,20 @@ fn spawn_floating_settled(
     register_overlay(spec, factory, bounds, &root, cx)
 }
 
+/// Spawn a float that owns its lifecycle: Screen-anchored, so it never
+/// reads the root-window global and stays registered after that window
+/// closes. Wasm has no separate windows; the float hosts as an overlay.
+pub fn spawn_screen_floating(
+    spec: FloatingSpec,
+    build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    cx: &mut App,
+) -> anyhow::Result<FloatingHandle> {
+    if !matches!(spec.float_anchor(), FloatAnchor::Screen { .. }) {
+        return Err(anyhow!("independent floats require a Screen anchor"));
+    }
+    spawn_floating(spec, build, cx)
+}
+
 #[cfg(target_family = "wasm")]
 fn register_overlay(
     spec: FloatingSpec,

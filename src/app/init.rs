@@ -326,6 +326,7 @@ pub fn init(cx: &mut App) {
     // diagnostics page honest.
     cx.on_window_closed(|cx, _| crate::accessibility::refresh(cx))
         .detach();
+    crate::app::window::install_close_tracker(cx);
     crate::crash_report::initialize(cx);
     if previous_crash.is_some() {
         crate::crash_report::upload_pending_reports(cx);

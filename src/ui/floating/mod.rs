@@ -30,7 +30,7 @@ pub use registry::{
 };
 pub use spawn::{
     close_all_floating, close_floating, respawn_floating, set_floating_always_on_top,
-    set_floating_click_through, spawn_floating,
+    set_floating_click_through, spawn_floating, spawn_screen_floating,
 };
 pub use spec::{FloatAnchor, FloatLevel, FloatingSpec, FloatingWindowId, Placement9};
 

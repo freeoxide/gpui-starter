@@ -261,9 +261,8 @@ fn clamp_axis(value: Pixels, size: Pixels, min: Pixels, available: Pixels) -> Pi
     }
 }
 
-/// Why an anchor did or did not resolve. `DispatchBlocked` is the only
-/// transient cause: the anchor window's own event dispatch holds the gpui
-/// update lease, so the same resolution succeeds once the cycle settles.
+/// Why an anchor did or did not resolve. `DispatchBlocked` is the anchor
+/// window's dispatch holding the update lease; it clears once the cycle settles.
 pub(crate) enum AnchorResolution {
     Resolved((Bounds<Pixels>, Bounds<Pixels>)),
     DispatchBlocked,
