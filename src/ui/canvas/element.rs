@@ -125,11 +125,14 @@ impl Element for CanvasElement {
         let hitbox = prepaint.clone();
         let id = self.id.clone();
 
+        #[cfg(test)]
+        let paint_started = crate::platform::clock::Instant::now();
         state.update(cx, |s, cx| {
             window.with_content_mask(Some(ContentMask { bounds }), |window| {
                 paint_grid(bounds, s.grid(), s.transform(), window, cx);
                 let caches = CanvasCaches::for_paint((id.clone(), "caches"), window, cx);
                 caches.update(cx, |caches, cx| {
+                    let doc_gen = s.doc_paint_generation();
                     let mut shape_ix = 0usize;
                     for layer in s.document().layers() {
                         if !layer.is_visible() {
@@ -138,6 +141,7 @@ impl Element for CanvasElement {
                         for (_, shape) in layer.shapes() {
                             paint_shape(
                                 shape,
+                                doc_gen,
                                 s.transform(),
                                 bounds,
                                 caches,
@@ -152,6 +156,7 @@ impl Element for CanvasElement {
                     if let Some(overlay) = s.tool_overlay() {
                         paint_shape(
                             overlay,
+                            s.overlay_paint_generation(),
                             s.transform(),
                             bounds,
                             caches,
@@ -172,6 +177,8 @@ impl Element for CanvasElement {
                 });
             });
         });
+        #[cfg(test)]
+        super::store_last_paint_us(paint_started.elapsed().as_micros() as u64);
 
         window.set_cursor_style(state.read(cx).active_tool_cursor(), &hitbox);
 

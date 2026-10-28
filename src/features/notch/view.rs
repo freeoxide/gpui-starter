@@ -121,10 +121,14 @@ impl NotchFloaterView {
     }
 
     fn render_expanded(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let entity = cx.entity();
         v_flex()
             .size_full()
             .p_4()
             .gap_3()
+            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                entity.update(cx, |this, cx| this.toggle_pinned(window, cx));
+            })
             .child(
                 h_flex()
                     .gap_4()
@@ -139,6 +143,8 @@ impl NotchFloaterView {
                 h_flex()
                     .justify_end()
                     .gap_2()
+                    // Pressing collapse/close must not flip the pin state.
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .child(
                         Button::new("notch-collapse")
                             .ghost()
@@ -165,18 +171,13 @@ impl NotchFloaterView {
 impl Render for NotchFloaterView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let entity = cx.entity();
+        let hover_entity = entity.clone();
         div()
             .id("notch-floater")
             .size_full()
             .track_focus(&self.focus_handle)
             .on_hover(move |hovered, window, cx| {
-                entity.update(cx, |this, cx| this.set_hovered(*hovered, window, cx));
-            })
-            .on_mouse_down(MouseButton::Left, {
-                let entity = cx.entity();
-                move |_, window, cx| {
-                    entity.update(cx, |this, cx| this.toggle_pinned(window, cx));
-                }
+                hover_entity.update(cx, |this, cx| this.set_hovered(*hovered, window, cx));
             })
             .bg(cx.theme().popover)
             .border_b_1()
@@ -186,7 +187,16 @@ impl Render for NotchFloaterView {
             .child(if self.is_expanded() {
                 self.render_expanded(cx).into_any_element()
             } else {
-                widgets::collapsed_pill(&self.minute, cx).into_any_element()
+                div()
+                    .size_full()
+                    .on_mouse_down(MouseButton::Left, {
+                        let entity = entity.clone();
+                        move |_, window, cx| {
+                            entity.update(cx, |this, cx| this.toggle_pinned(window, cx));
+                        }
+                    })
+                    .child(widgets::collapsed_pill(&self.minute, cx))
+                    .into_any_element()
             })
     }
 }

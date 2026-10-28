@@ -1,4 +1,4 @@
-use gpui_kit::TestAppContext;
+use gpui_kit::{Modifiers, TestAppContext, VisualTestContext, point, px};
 
 use super::*;
 use crate::app_state::{AppConfig, debounce_test_lock, force_save, install_for_tests};
@@ -140,7 +140,26 @@ async fn setters_tolerate_a_closed_widget_and_reject_unknown_layers(cx: &mut Tes
     assert_eq!(cx.read(widget_layout)[0].layer, "pinned");
     assert!(!cx.update(|cx| set_widget_layer(WidgetKind::Metrics, "weird", cx)));
     assert!(cx.update(|cx| { set_widget_click_through(WidgetKind::Metrics, true, cx) }));
-    assert!(cx.update(|cx| set_widget_always_on_top(WidgetKind::Metrics, false, cx)));
+    assert!(cx.update(|cx| { set_widget_always_on_top(WidgetKind::Metrics, false, cx) }));
     assert_eq!(cx.read(floating_snapshot).len(), 0);
     cx.update(force_save);
+}
+
+#[gpui_kit::test]
+async fn a_spawned_widget_window_is_chromeless_but_esc_dismisses_it(cx: &mut TestAppContext) {
+    let _guard = debounce_test_lock();
+    boot(cx);
+    assert!(cx.update(|cx| set_widget_enabled(WidgetKind::Clock, true, cx)));
+    let FloatingHandle::Native(window) = cx.read(floating_snapshot)[0].handle.clone() else {
+        panic!("expected a native widget window");
+    };
+    let mut cx = VisualTestContext::from_window(window, cx);
+    // The widget body click focuses the shell (the header is the drag
+    // surface, unimplemented on the test platform); Esc then dismisses.
+    cx.simulate_click(point(px(110.), px(60.)), Modifiers::none());
+    cx.simulate_keystrokes("escape");
+    assert!(
+        cx.read(floating_snapshot).is_empty(),
+        "Esc must dismiss a widget that has no close button"
+    );
 }

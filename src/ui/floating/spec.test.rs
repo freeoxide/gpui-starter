@@ -136,6 +136,22 @@ fn spec_defaults_center_on_the_primary_display() {
 }
 
 #[test]
+fn title_builder_round_trips_the_chromeless_window_title() {
+    let spec = FloatingSpec::new(FloatingWindowId("demo".into()), float_size()).title("Weather");
+    assert_eq!(spec.window_title(), "Weather");
+}
+
+#[test]
+fn movable_defaults_true_and_round_trips() {
+    let spec = FloatingSpec::new(FloatingWindowId("demo".into()), float_size());
+    assert!(
+        spec.is_movable(),
+        "drag-to-move is the widget drag affordance"
+    );
+    assert!(!spec.movable(false).is_movable());
+}
+
+#[test]
 fn click_through_builder_round_trips() {
     let spec = FloatingSpec::new(FloatingWindowId("demo".into()), float_size()).click_through(true);
     assert!(spec.is_click_through());

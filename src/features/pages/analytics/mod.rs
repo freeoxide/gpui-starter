@@ -42,11 +42,38 @@ pub(crate) mod format;
 pub(crate) mod model;
 pub(crate) mod table;
 
+#[cfg(test)]
+thread_local! {
+    /// Layout bounds recorded by `mark` during a paint pass, in paint order.
+    pub(crate) static LAYOUT_PROBE: std::cell::RefCell<Vec<(&'static str, Bounds<Pixels>)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    /// Band keys fed to the sessions chart by the last render, in order.
+    pub(crate) static SESSION_BAND_KEYS: std::cell::RefCell<Vec<String>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Test-only: attaches an absolute measuring canvas so bounds tests can read
+/// this element's resolved frame. Production builds compile the identity.
+#[cfg(test)]
+fn mark<E>(name: &'static str, el: E) -> E
+where
+    E: gpui_kit::base::ElementExt,
+{
+    el.on_prepaint(move |bounds, _, _| {
+        LAYOUT_PROBE.with_borrow_mut(|rows| rows.push((name, bounds)));
+    })
+}
+
+#[cfg(not(test))]
+fn mark<E>(_name: &'static str, el: E) -> E {
+    el
+}
+
 use detail::ChannelDetail;
 
 actions!(analytics, [OpenChannelDetails]);
 
-#[derive(Action, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
 #[action(namespace = analytics, no_json)]
 enum PreviewStateToggle {
     Live,
@@ -316,36 +343,31 @@ impl AnalyticsPage {
     }
 
     fn render_state(&self, empty: bool, cx: &mut Context<Self>) -> AnyElement {
-        if empty {
-            return Empty::new()
-                .header(
-                    EmptyHeader::new()
-                        .media(
-                            EmptyMedia::new()
-                                .with_variant(EmptyMediaVariant::Icon)
-                                .child(Icon::new(IconName::Inbox)),
-                        )
-                        .title(EmptyTitle::new().child(localize("analytics_empty_title")))
-                        .description(
-                            EmptyDescription::new().child(localize("analytics_empty_description")),
-                        ),
+        let header = if empty {
+            EmptyHeader::new()
+                .media(
+                    EmptyMedia::new()
+                        .with_variant(EmptyMediaVariant::Icon)
+                        .child(Icon::new(IconName::Inbox)),
                 )
-                .into_any_element();
-        }
-        Empty::new()
-            .header(
-                EmptyHeader::new()
-                    .media(
-                        EmptyMedia::new()
-                            .with_variant(EmptyMediaVariant::Icon)
-                            .child(Icon::new(IconName::TriangleAlert)),
-                    )
-                    .title(EmptyTitle::new().child(localize("analytics_error_title")))
-                    .description(
-                        EmptyDescription::new().child(localize("analytics_error_description")),
-                    ),
-            )
-            .content(
+                .title(EmptyTitle::new().child(localize("analytics_empty_title")))
+                .description(EmptyDescription::new().child(localize("analytics_empty_description")))
+        } else {
+            EmptyHeader::new()
+                .media(
+                    EmptyMedia::new()
+                        .with_variant(EmptyMediaVariant::Icon)
+                        .child(Icon::new(IconName::TriangleAlert)),
+                )
+                .title(EmptyTitle::new().child(localize("analytics_error_title")))
+                .description(EmptyDescription::new().child(localize("analytics_error_description")))
+        };
+        // States own the whole region width; as a wrap-row flex item they
+        // would shrink to their content instead of centering in the section.
+        let empty_view = if empty {
+            Empty::new().header(header)
+        } else {
+            Empty::new().header(header).content(
                 EmptyContent::new().child(
                     Button::new("analytics-retry")
                         .outline()
@@ -357,87 +379,88 @@ impl AnalyticsPage {
                         })),
                 ),
             )
-            .into_any_element()
+        };
+        mark("region-state", v_flex().w_full().py_4().child(empty_view)).into_any_element()
     }
 
     fn render_toolbar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let size = self.density.size();
         let preview = self.preview;
-        h_flex()
+        let range = Select::new(&self.range_select)
+            .title_prefix(localize("analytics_filter_range"))
+            .w(rems(15.))
+            .with_size(size);
+        let segment = Select::new(&self.segment_select)
+            .title_prefix(localize("analytics_filter_segment"))
+            .w(rems(15.))
+            .with_size(size);
+        let refresh = Button::new("analytics-refresh")
+            .outline()
+            .icon(IconName::RotateCw)
+            .label(localize("analytics_refresh"))
+            .on_click(cx.listener(|this, _, _, cx| this.reload(cx)));
+        let density = div()
+            .id("analytics-density-group")
+            .a11y(Role::Group, localize("analytics_density"))
+            .child(
+                TabBar::new("analytics-density")
+                    .segmented()
+                    .selected_index(self.density as usize)
+                    .on_click(cx.listener(|this, ix: &usize, _, cx| {
+                        this.set_density(
+                            if *ix == 0 {
+                                Density::Compact
+                            } else {
+                                Density::Comfortable
+                            },
+                            cx,
+                        );
+                    }))
+                    .child(Tab::new().label(localize("analytics_density_compact")))
+                    .child(Tab::new().label(localize("analytics_density_comfortable"))),
+            );
+        let preview_btn = DropdownButton::new("analytics-preview")
+            .button(
+                Button::new("analytics-preview-trigger")
+                    .ghost()
+                    .label(localize("analytics_preview_label")),
+            )
+            .dropdown_menu(move |menu, _, _| {
+                menu.menu_with_check(
+                    localize("analytics_preview_live"),
+                    preview == PreviewState::Live,
+                    Box::new(PreviewStateToggle::Live),
+                )
+                .menu_with_check(
+                    localize("analytics_preview_loading"),
+                    preview == PreviewState::Loading,
+                    Box::new(PreviewStateToggle::Loading),
+                )
+                .menu_with_check(
+                    localize("analytics_preview_empty"),
+                    preview == PreviewState::Empty,
+                    Box::new(PreviewStateToggle::Empty),
+                )
+                .menu_with_check(
+                    localize("analytics_preview_error"),
+                    preview == PreviewState::Error,
+                    Box::new(PreviewStateToggle::Error),
+                )
+            });
+        let toolbar = h_flex()
             .flex_wrap()
             .items_center()
             .gap_3()
-            .child(
-                Select::new(&self.range_select)
-                    .title_prefix(localize("analytics_filter_range"))
-                    .w(rems(15.))
-                    .with_size(size),
-            )
-            .child(
-                Select::new(&self.segment_select)
-                    .title_prefix(localize("analytics_filter_segment"))
-                    .w(rems(15.))
-                    .with_size(size),
-            )
-            .child(
-                Button::new("analytics-refresh")
-                    .outline()
-                    .icon(IconName::RotateCw)
-                    .label(localize("analytics_refresh"))
-                    .on_click(cx.listener(|this, _, _, cx| this.reload(cx))),
-            )
-            .child(
-                div()
-                    .id("analytics-density-group")
-                    .a11y(Role::Group, localize("analytics_density"))
-                    .child(
-                        TabBar::new("analytics-density")
-                            .segmented()
-                            .selected_index(self.density as usize)
-                            .on_click(cx.listener(|this, ix: &usize, _, cx| {
-                                this.set_density(
-                                    if *ix == 0 {
-                                        Density::Compact
-                                    } else {
-                                        Density::Comfortable
-                                    },
-                                    cx,
-                                );
-                            }))
-                            .child(Tab::new().label(localize("analytics_density_compact")))
-                            .child(Tab::new().label(localize("analytics_density_comfortable"))),
-                    ),
-            )
-            .child(
-                DropdownButton::new("analytics-preview")
-                    .button(
-                        Button::new("analytics-preview-trigger")
-                            .ghost()
-                            .label(localize("analytics_preview_label")),
-                    )
-                    .dropdown_menu(move |menu, _, _| {
-                        menu.menu_with_check(
-                            localize("analytics_preview_live"),
-                            preview == PreviewState::Live,
-                            Box::new(PreviewStateToggle::Live),
-                        )
-                        .menu_with_check(
-                            localize("analytics_preview_loading"),
-                            preview == PreviewState::Loading,
-                            Box::new(PreviewStateToggle::Loading),
-                        )
-                        .menu_with_check(
-                            localize("analytics_preview_empty"),
-                            preview == PreviewState::Empty,
-                            Box::new(PreviewStateToggle::Empty),
-                        )
-                        .menu_with_check(
-                            localize("analytics_preview_error"),
-                            preview == PreviewState::Error,
-                            Box::new(PreviewStateToggle::Error),
-                        )
-                    }),
-            )
+            // BaseSelect roots are size_full; two of them alone in a wrap row
+            // measure stacked under taffy 0.15, so keep them content-boxed.
+            .child(div().child(range))
+            .child(div().child(segment))
+            .child(refresh)
+            .child(density)
+            .child(preview_btn);
+        // No mark here: the absolute measuring child changes how taffy 0.15
+        // resolves this wrap row's height. The kpis offset pins it instead.
+        toolbar
     }
 
     fn render_section_heading(&self, key: &'static str) -> Stateful<Div> {
@@ -456,37 +479,44 @@ impl AnalyticsPage {
         let view = self.region_view();
         let compact = matches!(self.density, Density::Compact);
         let refreshing = self.phase == Phase::Refreshing;
-        v_flex()
+        // Stretch keeps wrapped card rows sharing one top and bottom line;
+        // h_flex's cross-axis center would stack unequal cards mid-band.
+        let kpi_row =
+            mark("kpi-row", h_flex().flex_wrap().gap_3().items_stretch()).map(|row| match view {
+                RegionView::Skeleton => row.children((0..4).map(|_| self.render_kpi_skeleton(cx))),
+                RegionView::Empty | RegionView::Error => {
+                    row.child(self.render_state(view == RegionView::Empty, cx))
+                }
+                RegionView::Content => row.children(
+                    self.data
+                        .kpis(self.range)
+                        .into_iter()
+                        .map(|kpi| self.render_kpi_card(kpi, compact, cx)),
+                ),
+            });
+        let section = v_flex()
             .gap_3()
             .child(
                 h_flex()
                     .justify_between()
                     .items_center()
+                    .gap_3()
                     .child(self.render_section_heading("analytics_section_overview"))
-                    .when(refreshing, |this| this.child(Spinner::new().xsmall())),
-            )
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(cx.theme().muted_foreground)
-                    .child(localize("analytics_note_fixture")),
-            )
-            .child(h_flex().flex_wrap().gap_3().map(|row| {
-                match view {
-                    RegionView::Skeleton => {
-                        row.children((0..4).map(|_| self.render_kpi_skeleton(cx)))
-                    }
-                    RegionView::Empty | RegionView::Error => {
-                        row.child(self.render_state(view == RegionView::Empty, cx))
-                    }
-                    RegionView::Content => row.children(
-                        self.data
-                            .kpis(self.range)
-                            .into_iter()
-                            .map(|kpi| self.render_kpi_card(kpi, compact, cx)),
+                    .child(
+                        h_flex()
+                            .items_center()
+                            .gap_2()
+                            .when(refreshing, |this| this.child(Spinner::new().xsmall()))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(localize("analytics_note_fixture")),
+                            ),
                     ),
-                }
-            }))
+            )
+            .child(kpi_row);
+        mark("kpis", section)
     }
 
     fn render_kpi_card(
@@ -495,8 +525,10 @@ impl AnalyticsPage {
         compact: bool,
         cx: &Context<Self>,
     ) -> impl IntoElement {
+        // A flat delta is neither up nor down: no arrow, no status color.
+        // 0.05 is half the last digit percent(_, 1) can show.
         let delta_row = match kpi.delta {
-            Some(delta) => {
+            Some(delta) if delta.abs() >= 0.05 => {
                 let up = delta >= 0.;
                 let color = if up {
                     cx.theme().success
@@ -529,15 +561,33 @@ impl AnalyticsPage {
                     )
                     .into_any_element()
             }
+            Some(_) => h_flex()
+                .gap_1()
+                .items_center()
+                .child(
+                    div()
+                        .text_sm()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(format::percent(0., 1)),
+                )
+                .child(
+                    div()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(localize("analytics_vs_previous")),
+                )
+                .into_any_element(),
             None => div()
                 .text_xs()
                 .text_color(cx.theme().muted_foreground)
                 .child("-")
                 .into_any_element(),
         };
-        v_flex()
+        // 13rem keeps four cards up at the shell's content width and wraps
+        // them 2+2 below ~700px, the line the wrap layout test pins.
+        let card = v_flex()
             .flex_1()
-            .min_w(rems(14.))
+            .min_w(rems(13.))
             .gap_1()
             .border_1()
             .border_color(cx.theme().border)
@@ -550,13 +600,14 @@ impl AnalyticsPage {
                     .child(localize(kpi.label_key).to_uppercase()),
             )
             .child(div().text_xl().font_semibold().child(kpi.value))
-            .child(delta_row)
+            .child(delta_row);
+        mark("kpi-card", card)
     }
 
     fn render_kpi_skeleton(&self, cx: &Context<Self>) -> Div {
-        v_flex()
+        let card = v_flex()
             .flex_1()
-            .min_w(rems(14.))
+            .min_w(rems(13.))
             .gap_2()
             .border_1()
             .border_color(cx.theme().border)
@@ -569,7 +620,8 @@ impl AnalyticsPage {
                 }
             })
             .child(Skeleton::new().w_2_3().h_4().rounded(cx.theme().radius))
-            .child(Skeleton::new().w_1_3().h_6().rounded(cx.theme().radius))
+            .child(Skeleton::new().w_1_3().h_6().rounded(cx.theme().radius));
+        mark("kpi-skeleton", card)
     }
 
     fn render_chart_card(
@@ -577,13 +629,19 @@ impl AnalyticsPage {
         id: &'static str,
         label: String,
         current: (String, Hsla),
+        legend: Option<Div>,
         chart: AnyElement,
         full_width: bool,
         min_height_rems: f32,
         cx: &Context<Self>,
     ) -> impl IntoElement {
         let compact = matches!(self.density, Density::Compact);
-        v_flex()
+        let plot = mark(
+            "chart-plot",
+            div().flex_1().min_h(rems(min_height_rems)).min_w_0(),
+        )
+        .child(chart);
+        let card = v_flex()
             .map(|card| {
                 if full_width {
                     card.w_full()
@@ -591,7 +649,6 @@ impl AnalyticsPage {
                     card.flex_1().min_w(rems(24.))
                 }
             })
-            .min_w_0()
             .gap_2()
             .border_1()
             .border_color(cx.theme().border)
@@ -601,6 +658,7 @@ impl AnalyticsPage {
                 h_flex()
                     .justify_between()
                     .items_center()
+                    .gap_2()
                     .child(div().text_sm().font_medium().child(label))
                     .child(
                         div()
@@ -610,14 +668,15 @@ impl AnalyticsPage {
                             .child(current.0),
                     ),
             )
-            .child(div().flex_1().min_h(rems(min_height_rems)).child(chart))
+            .children(legend)
+            .child(plot);
+        mark("chart-card", card)
     }
 
     fn render_chart_skeleton(&self, cx: &Context<Self>) -> Div {
-        v_flex()
+        let card = v_flex()
             .flex_1()
             .min_w(rems(24.))
-            .min_w_0()
             .gap_2()
             .border_1()
             .border_color(cx.theme().border)
@@ -636,10 +695,39 @@ impl AnalyticsPage {
                     .rounded(cx.theme().radius),
             )
             .child(Skeleton::new().w_full().h_4().rounded(cx.theme().radius))
-            .child(Skeleton::new().w_2_3().h_4().rounded(cx.theme().radius))
+            .child(Skeleton::new().w_2_3().h_4().rounded(cx.theme().radius));
+        mark("chart-skeleton", card)
     }
 
-    fn render_charts(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    /// One legend entry per series: a fixed swatch slot keeps every label on
+    /// the same lane whatever its color.
+    fn render_legend(&self, series: &[(Hsla, String)], cx: &Context<Self>) -> Div {
+        h_flex()
+            .flex_wrap()
+            .items_center()
+            .gap_x_4()
+            .gap_y_1()
+            .children(series.iter().map(|(color, name)| {
+                h_flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .size_3()
+                            .flex_shrink_0()
+                            .rounded(cx.theme().radius)
+                            .bg(*color),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(name.clone()),
+                    )
+            }))
+    }
+
+    fn render_charts(&self, cx: &mut Context<Self>) -> AnyElement {
         let view = self.region_view();
         let window_rows: Vec<model::DailyRow> = self.data.window(self.range).to_vec();
         let min_height = if matches!(self.density, Density::Compact) {
@@ -647,16 +735,37 @@ impl AnalyticsPage {
         } else {
             12_f32
         };
-        h_flex().flex_wrap().gap_3().map(|row| match view {
+        if matches!(view, RegionView::Empty | RegionView::Error) {
+            return self.render_state(view == RegionView::Empty, cx);
+        }
+        // Stretch keeps the paired cards' tops and bottoms on shared lines;
+        // h_flex centers its cross-axis, which would stagger them.
+        let row = mark("charts-row", h_flex().flex_wrap().gap_3().items_stretch());
+        let row = match view {
             RegionView::Skeleton => row
                 .child(self.render_chart_skeleton(cx))
                 .child(self.render_chart_skeleton(cx))
                 .child(self.render_chart_skeleton(cx).flex_none().w_full()),
-            RegionView::Empty | RegionView::Error => {
-                row.child(self.render_state(view == RegionView::Empty, cx))
-            }
             RegionView::Content => {
                 let theme = cx.theme();
+                let segments = [
+                    (
+                        theme.chart_1,
+                        localize("analytics_segment_organic").to_string(),
+                    ),
+                    (
+                        theme.chart_2,
+                        localize("analytics_segment_paid").to_string(),
+                    ),
+                    (
+                        theme.chart_3,
+                        localize("analytics_segment_social").to_string(),
+                    ),
+                    (
+                        theme.chart_4,
+                        localize("analytics_segment_direct").to_string(),
+                    ),
+                ];
                 let visitors_chart = AreaChart::new(window_rows.clone())
                     .x(|row: &model::DailyRow| row.date.clone())
                     .y(|row| row.organic)
@@ -693,13 +802,18 @@ impl AnalyticsPage {
                     .x_tick_count(4)
                     .id("analytics-revenue");
 
-                let mut top_rows = self.data.channels(self.segment);
-                top_rows.sort_by(|a, b| b.sessions.total_cmp(&a.sessions));
-                top_rows.truncate(6);
-                let sessions_total: f64 = top_rows.iter().map(|row| row.sessions).sum();
+                // ScaleBand keys bands by page, so two rows of one page would
+                // draw into the same band and overpaint each other; feed one
+                // aggregated row per page.
+                let top_pages = self.data.top_pages(self.segment, 6);
+                #[cfg(test)]
+                SESSION_BAND_KEYS.with_borrow_mut(|keys| {
+                    *keys = top_pages.iter().map(|row| row.page.to_string()).collect();
+                });
+                let sessions_total: f64 = top_pages.iter().map(|row| row.sessions).sum();
                 let sessions_fill = theme.chart_2;
-                let sessions_chart = BarChart::new(top_rows)
-                    .band(|row| row.page.clone())
+                let sessions_chart = BarChart::new(top_pages)
+                    .band(|row: &model::PageSessions| row.page.clone())
                     .value(|row| row.sessions)
                     .name(localize("analytics_chart_sessions"))
                     .fill(move |_, _, _, _| sessions_fill)
@@ -721,6 +835,7 @@ impl AnalyticsPage {
                     "visitors",
                     localize("analytics_chart_visitors"),
                     (visitors_now, theme.chart_1),
+                    Some(self.render_legend(&segments, cx)),
                     visitors_chart.into_any_element(),
                     false,
                     min_height,
@@ -730,6 +845,7 @@ impl AnalyticsPage {
                     "revenue",
                     localize("analytics_chart_revenue"),
                     (revenue_now, theme.chart_5),
+                    None,
                     revenue_chart.into_any_element(),
                     false,
                     min_height,
@@ -739,13 +855,16 @@ impl AnalyticsPage {
                     "sessions",
                     localize("analytics_chart_sessions"),
                     (format::compact(sessions_total), theme.chart_2),
+                    None,
                     sessions_chart.into_any_element(),
                     true,
                     min_height,
                     cx,
                 ))
             }
-        })
+            RegionView::Empty | RegionView::Error => unreachable!("handled above"),
+        };
+        row.into_any_element()
     }
 
     fn render_table(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -773,44 +892,44 @@ impl AnalyticsPage {
         });
         let refreshing = self.phase == Phase::Refreshing;
 
-        v_flex()
-            .gap_3()
-            .child(self.render_section_heading("analytics_section_channels"))
-            .child(
-                h_flex()
-                    .flex_wrap()
-                    .justify_between()
-                    .items_center()
-                    .gap_2()
-                    .child(
-                        h_flex()
-                            .flex_wrap()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .id("analytics-rows-summary")
-                                    .a11y(Role::Status, summary.clone())
-                                    .a11y_live(accesskit::Live::Polite)
-                                    .text_xs()
-                                    .text_color(cx.theme().muted_foreground)
-                                    .child(summary),
-                            )
-                            .when_some(selected_summary, |this, chip| {
-                                this.child(
+        let section =
+            v_flex()
+                .gap_3()
+                .child(self.render_section_heading("analytics_section_channels"))
+                .child(
+                    h_flex()
+                        .flex_wrap()
+                        .justify_between()
+                        .items_center()
+                        .gap_2()
+                        .child(
+                            h_flex()
+                                .flex_wrap()
+                                .items_center()
+                                .gap_2()
+                                .child(
                                     div()
-                                        .id("analytics-selected-summary")
+                                        .id("analytics-rows-summary")
+                                        .a11y(Role::Status, summary.clone())
+                                        .a11y_live(accesskit::Live::Polite)
                                         .text_xs()
-                                        .text_color(cx.theme().foreground)
-                                        .child(chip),
+                                        .text_color(cx.theme().muted_foreground)
+                                        .child(summary),
                                 )
-                            }),
-                    )
-                    .when(refreshing, |this| this.child(Spinner::new().xsmall())),
-            )
-            .map(|section| match view {
-                RegionView::Skeleton => {
-                    section.child(
+                                .when_some(selected_summary, |this, chip| {
+                                    this.child(
+                                        div()
+                                            .id("analytics-selected-summary")
+                                            .text_xs()
+                                            .text_color(cx.theme().foreground)
+                                            .child(chip),
+                                    )
+                                }),
+                        )
+                        .when(refreshing, |this| this.child(Spinner::new().xsmall())),
+                )
+                .map(|section| match view {
+                    RegionView::Skeleton => section.child(
                         div()
                             .border_1()
                             .border_color(cx.theme().border)
@@ -819,20 +938,20 @@ impl AnalyticsPage {
                             .child(v_flex().gap_2().children((0..6).map(|_| {
                                 Skeleton::new().h_6().w_full().rounded(cx.theme().radius)
                             }))),
-                    )
-                }
-                RegionView::Empty | RegionView::Error => {
-                    section.child(self.render_state(view == RegionView::Empty, cx))
-                }
-                RegionView::Content => section.child(
-                    div().h(rems(30.)).w_full().child(
-                        DataTable::new(&self.table)
-                            .bordered(true)
-                            .stripe(true)
-                            .with_size(size),
                     ),
-                ),
-            })
+                    RegionView::Empty | RegionView::Error => {
+                        section.child(self.render_state(view == RegionView::Empty, cx))
+                    }
+                    RegionView::Content => section.child(
+                        mark("table-box", div().h(rems(30.)).w_full()).child(
+                            DataTable::new(&self.table)
+                                .bordered(true)
+                                .stripe(true)
+                                .with_size(size),
+                        ),
+                    ),
+                });
+        mark("table-section", section)
     }
 }
 
@@ -841,7 +960,7 @@ impl Render for AnalyticsPage {
         v_flex()
             .min_h_full()
             .p_6()
-            .gap_4()
+            .gap_6()
             .on_action(cx.listener(|this, _: &OpenChannelDetails, window, cx| {
                 this.open_detail(window, cx);
             }))

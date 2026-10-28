@@ -5,24 +5,63 @@ use gpui_kit::*;
 
 use super::scene::{CanvasShape, ShapeStyle, StrokeStyle};
 
+/// One slot per painted artifact; the boxed line avoids ~3 KB/slot of inline
+/// SmallVec storage (a matching generation reuses the entry unhashed).
 #[derive(Default)]
 pub(crate) struct ShapeCache {
-    key: Option<u64>,
+    generation: Option<u64>,
+    content_key: Option<u64>,
     path: Option<Path<Pixels>>,
+    line: Option<Box<ShapedLine>>,
 }
 
 impl ShapeCache {
-    pub(crate) fn get(
+    /// True when the artifact must rebuild; records the generation either
+    /// way so same-generation paints skip the key closure.
+    fn invalidated(&mut self, generation: u64, content_key: impl FnOnce() -> u64) -> bool {
+        if self.generation == Some(generation) {
+            return false;
+        }
+        let key = content_key();
+        let changed = self.content_key != Some(key);
+        self.generation = Some(generation);
+        if changed {
+            self.content_key = Some(key);
+        }
+        changed
+    }
+
+    pub(crate) fn get_path(
         &mut self,
-        key: u64,
+        generation: u64,
+        content_key: impl FnOnce() -> u64,
         origin: Point<Pixels>,
         build: impl FnOnce() -> Option<Path<Pixels>>,
     ) -> Option<Path<Pixels>> {
-        if self.key != Some(key) {
+        if self.invalidated(generation, content_key) {
+            #[cfg(test)]
+            super::perf_probe::add_path_build();
+            self.path = None;
+            self.line = None;
             self.path = build();
-            self.key = Some(key);
         }
         self.path.as_ref().map(|path| translated(path, origin))
+    }
+
+    pub(crate) fn get_line(
+        &mut self,
+        generation: u64,
+        content_key: impl FnOnce() -> u64,
+        build: impl FnOnce() -> ShapedLine,
+    ) -> ShapedLine {
+        if self.invalidated(generation, content_key) || self.line.is_none() {
+            #[cfg(test)]
+            super::perf_probe::add_text_shaping();
+            self.path = None;
+            self.line = None;
+            self.line = Some(Box::new(build()));
+        }
+        self.line.as_deref().cloned().expect("line built above")
     }
 }
 
@@ -91,7 +130,16 @@ fn hash_style(hasher: &mut DefaultHasher, style: &ShapeStyle) {
     }
 }
 
+fn hash_hsla(hasher: &mut DefaultHasher, color: Hsla) {
+    hash_f32(hasher, color.h);
+    hash_f32(hasher, color.s);
+    hash_f32(hasher, color.l);
+    hash_f32(hasher, color.a);
+}
+
 pub(crate) fn shape_key(shape: &CanvasShape, zoom: f32) -> u64 {
+    #[cfg(test)]
+    super::perf_probe::add_key_hash();
     let mut hasher = DefaultHasher::new();
     std::mem::discriminant(shape).hash(&mut hasher);
     hash_f32(&mut hasher, zoom);
@@ -108,15 +156,17 @@ pub(crate) fn shape_key(shape: &CanvasShape, zoom: f32) -> u64 {
         }
         CanvasShape::Text {
             position,
+            text,
             font_size,
-            ..
+            color,
         } => {
             hash_point(&mut hasher, position);
             hash_pixels(&mut hasher, *font_size);
+            text.hash(&mut hasher);
+            hash_hsla(&mut hasher, *color);
         }
-        CanvasShape::Image { bounds, .. } => {
-            hash_bounds(&mut hasher, bounds);
-        }
+        // Image paints uncached; nothing else contributes to its key.
+        _ => {}
     }
     hasher.finish()
 }

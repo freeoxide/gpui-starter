@@ -54,6 +54,7 @@ pub struct InfiniteCanvasPage {
     palette: [Hsla; 5],
     viewport: Bounds<Pixels>,
     minimap_bounds: Bounds<Pixels>,
+    minimap_dots: std::rc::Rc<std::cell::RefCell<minimap::MinimapDots>>,
     space_pan: bool,
     preset_ix: usize,
     _subscriptions: Vec<Subscription>,
@@ -85,6 +86,7 @@ impl InfiniteCanvasPage {
             palette,
             viewport: Bounds::default(),
             minimap_bounds: Bounds::default(),
+            minimap_dots: Default::default(),
             space_pan: false,
             preset_ix: DEFAULT_PRESET_IX,
             _subscriptions: vec![subscription],
@@ -380,7 +382,12 @@ impl Render for InfiniteCanvasPage {
                     })
                     .child(Canvas::new("infinite-canvas", self.state.clone()))
                     .child(interaction_probe(page.clone(), self.state.clone()))
-                    .child(minimap::minimap(page.clone(), self.state.clone(), cx)),
+                    .child(minimap::minimap(
+                        page.clone(),
+                        self.minimap_dots.clone(),
+                        self.state.clone(),
+                        cx,
+                    )),
             );
 
         let render_us = started.elapsed().as_micros() as u64;

@@ -1,5 +1,7 @@
 use gpui_kit::*;
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use super::geometry::CanvasTransform;
 use super::scene::{CanvasDocument, CanvasShape, LayerId, ShapeId};
 use super::tool::{BuiltinTool, CanvasTool, NoopTool, PanTool};
@@ -8,6 +10,23 @@ pub const MIN_ZOOM: f32 = 0.05;
 pub const MAX_ZOOM: f32 = 32.0;
 /// Minimum hit-test tolerance in screen pixels; doc-space tolerance = this / zoom.
 pub const HIT_TOLERANCE: Pixels = px(4.);
+
+static NEXT_DOC_NONCE: AtomicU64 = AtomicU64::new(1);
+
+/// Cache domains: the overlay slot index lands on slots freed by shape-count
+/// drops, so its generation must never equal a stored doc generation.
+const DOC_CACHE_DOMAIN: u64 = 0;
+const OVERLAY_CACHE_DOMAIN: u64 = 1;
+
+/// Finalizer over the cache-invalidating inputs (identity, revision, zoom —
+/// never pan); bit 63 is the domain tag, so cross-domain generations differ.
+fn mix_paint_generation(nonce: u64, domain: u64, revision: u64, zoom: f32) -> u64 {
+    let mut z = nonce ^ revision.rotate_left(32) ^ u64::from(zoom.to_bits()).rotate_left(13);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    let mixed = z ^ (z >> 31);
+    (mixed & !(1u64 << 63)) | (domain << 63)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
@@ -43,6 +62,8 @@ pub struct CanvasState {
     grid: CanvasGrid,
     selection: Vec<ShapeId>,
     doc_revision: u64,
+    doc_nonce: u64,
+    overlay_revision: u64,
     tool: Box<dyn CanvasTool>,
     overlay: Option<CanvasShape>,
     pub(crate) middle_pan: Option<Point<Pixels>>,
@@ -65,11 +86,35 @@ impl CanvasState {
             grid: CanvasGrid::default(),
             selection: Vec::new(),
             doc_revision: 0,
+            doc_nonce: NEXT_DOC_NONCE.fetch_add(1, Ordering::Relaxed),
+            overlay_revision: 0,
             tool: Box::new(PanTool::new()),
             overlay: None,
             middle_pan: None,
             pointer_active: false,
         }
+    }
+
+    /// Cache generation covering every mutation path of the document
+    /// (`edit_document` bumps `doc_revision`; nothing else mutates it).
+    pub(crate) fn doc_paint_generation(&self) -> u64 {
+        mix_paint_generation(
+            self.doc_nonce,
+            DOC_CACHE_DOMAIN,
+            self.doc_revision,
+            self.transform.zoom,
+        )
+    }
+
+    /// Cache generation for the tool overlay, which mutates without touching
+    /// the document.
+    pub(crate) fn overlay_paint_generation(&self) -> u64 {
+        mix_paint_generation(
+            self.doc_nonce,
+            OVERLAY_CACHE_DOMAIN,
+            self.overlay_revision,
+            self.transform.zoom,
+        )
     }
 
     pub(crate) fn dispatch_tool_event<R>(
@@ -255,6 +300,7 @@ impl CanvasState {
     /// clears it.
     pub fn set_tool_overlay(&mut self, overlay: Option<CanvasShape>, cx: &mut Context<Self>) {
         self.overlay = overlay;
+        self.overlay_revision += 1;
         cx.notify();
     }
 

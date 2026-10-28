@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use gpui_kit::{AnyView, AnyWindowHandle, App, Bounds, Pixels, Size, Window, point};
 
 #[cfg(not(target_family = "wasm"))]
-use gpui_kit::{AppContext as _, TitlebarOptions, WindowBounds, WindowKind, WindowOptions};
+use gpui_kit::{AppContext as _, WindowBounds, WindowKind, WindowOptions};
 
 use super::registry::{
     FloatingHandle, RegistryEntry, ViewFactory, floating_snapshot, remove_entry, set_entry,
@@ -28,7 +28,6 @@ pub fn spawn_floating(
 ) -> anyhow::Result<FloatingHandle> {
     let factory: ViewFactory = Rc::new(build);
     let bounds = resolve_float_bounds(&spec, cx)?;
-    let level = spec.float_level();
     #[cfg(target_os = "linux")]
     let plan = super::layer_shell::wayland::plan(&spec, cx);
     #[cfg(target_os = "linux")]
@@ -39,39 +38,15 @@ pub fn spawn_floating(
         super::layer_shell::note_ignored_once();
     }
     let make_options = |_use_layer: bool| -> WindowOptions {
-        let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
-            titlebar: Some(TitlebarOptions {
-                title: Some(spec.window_title()),
-                appears_transparent: true,
-                traffic_light_position: None,
-            }),
-            focus: spec.is_focus(),
-            kind: match level {
-                FloatLevel::Floating => WindowKind::Floating,
-                FloatLevel::AlwaysOnTop => WindowKind::PopUp,
-            },
-            is_resizable: spec.is_resizable() && level != FloatLevel::AlwaysOnTop,
-            is_minimizable: false,
-            is_movable: spec.is_movable(),
-            window_min_size: spec.min_window_size(),
-            app_id: Some("gpui-starter".to_string()),
-            ..Default::default()
-        };
+        let mut options = float_window_options(&spec, bounds);
         #[cfg(target_os = "linux")]
-        let options = if _use_layer && let Some(layer) = plan.layer_options.clone() {
+        if _use_layer && let Some(layer) = plan.layer_options.clone() {
             // Option set from crates/gpui/examples/layer_shell.rs at
             // zed@93d7456, the pinned snapshot's reference implementation.
-            WindowOptions {
-                kind: WindowKind::LayerShell(layer),
-                window_background: gpui_kit::WindowBackgroundAppearance::Transparent,
-                titlebar: None,
-                display_id: plan.display_id,
-                ..options
-            }
-        } else {
-            options
-        };
+            options.kind = WindowKind::LayerShell(layer);
+            options.window_background = gpui_kit::WindowBackgroundAppearance::Transparent;
+            options.display_id = plan.display_id;
+        }
         options
     };
     let opened = {
@@ -79,6 +54,7 @@ pub fn spawn_floating(
         let title = spec.window_title();
         let build_view = factory.clone();
         gpui_kit::open_window(make_options(use_layer), cx, move |window, cx| {
+            window.set_window_title(&title);
             let view = build_view(window, cx);
             cx.new(|cx| FloatingShell::new(id, title, view, cx))
         })
@@ -111,6 +87,7 @@ pub fn spawn_floating(
                     let build_view = factory.clone();
                     let (window, _) =
                         gpui_kit::open_window(make_options(false), cx, move |window, cx| {
+                            window.set_window_title(&title);
                             let view = build_view(window, cx);
                             cx.new(|cx| FloatingShell::new(id, title, view, cx))
                         })?;
@@ -264,6 +241,31 @@ pub fn respawn_floating(id: &FloatingWindowId, cx: &mut App) -> bool {
             let spec = entry.spec;
             spawn_floating(spec, move |window, cx| factory(window, cx), cx).is_ok()
         }
+    }
+}
+
+// Floats are widget panels: no titlebar anywhere, so no traffic lights or WM
+// close/min/max. Esc (DismissFloating) and the owning manager close them.
+#[cfg(not(target_family = "wasm"))]
+fn float_window_options(spec: &FloatingSpec, bounds: Bounds<Pixels>) -> WindowOptions {
+    let level = spec.float_level();
+    WindowOptions {
+        window_bounds: Some(WindowBounds::Windowed(bounds)),
+        titlebar: None,
+        focus: spec.is_focus(),
+        kind: match level {
+            FloatLevel::Floating => WindowKind::Floating,
+            FloatLevel::AlwaysOnTop => WindowKind::PopUp,
+        },
+        is_resizable: spec.is_resizable() && level != FloatLevel::AlwaysOnTop,
+        is_minimizable: false,
+        is_movable: spec.is_movable(),
+        window_min_size: spec.min_window_size(),
+        app_id: Some("gpui-starter".to_string()),
+        // Server-side decorations would draw a WM titlebar with window buttons.
+        #[cfg(target_os = "linux")]
+        window_decorations: Some(gpui_kit::WindowDecorations::Client),
+        ..Default::default()
     }
 }
 

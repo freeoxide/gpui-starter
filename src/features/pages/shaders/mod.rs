@@ -17,6 +17,10 @@ mod runtime;
 mod state;
 mod tool;
 
+#[cfg(all(test, not(target_family = "wasm")))]
+#[path = "mod.test.rs"]
+mod shaders_test;
+
 use demos::DemoId;
 use state::ShaderState;
 
@@ -39,7 +43,7 @@ use crate::ui::canvas::{BuiltinTool, Canvas, CanvasGrid, CanvasShape, ShapeId};
 #[cfg(not(target_family = "wasm"))]
 use crate::features::wgpu::WgpuEngine;
 #[cfg(not(target_family = "wasm"))]
-use crate::platform::clock::{self, Instant};
+use crate::platform::clock::{self, Duration, Instant};
 #[cfg(not(target_family = "wasm"))]
 use demos::{DEMOS, DemoSpec};
 #[cfg(not(target_family = "wasm"))]
@@ -47,6 +51,32 @@ use std::sync::Arc;
 
 /// Capability-registry name registered at startup ("canvas_shaders").
 pub const CAPABILITY_SHADERS: &str = "canvas_shaders";
+
+/// Upper bound on adapter/device init before the page surfaces a timeout
+/// error instead of parking on "waiting" forever (a hung init never errors).
+#[cfg(not(target_family = "wasm"))]
+const INIT_TIMEOUT: Duration = Duration::from_secs(15);
+
+#[cfg(test)]
+thread_local! {
+    /// Test seam for the init task: park it forever, or delay it past the
+    /// watchdog deadline before running the real init.
+    static INIT_SEAM: std::cell::Cell<InitSeam> =
+        const { std::cell::Cell::new(InitSeam::Real) };
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy)]
+enum InitSeam {
+    Real,
+    Park,
+    Delay(Duration),
+}
+
+#[cfg(test)]
+fn set_init_seam(seam: InitSeam) {
+    INIT_SEAM.with(|slot| slot.set(seam));
+}
 
 #[cfg(not(target_family = "wasm"))]
 fn button_id(id: DemoId) -> &'static str {
@@ -99,12 +129,18 @@ pub struct ShaderCanvasPage {
     runtime: Option<Arc<runtime::ShaderRuntime>>,
     #[cfg(not(target_family = "wasm"))]
     image_shape: Option<ShapeId>,
+    #[cfg(not(target_family = "wasm"))]
+    init_started: bool,
+    #[cfg(not(target_family = "wasm"))]
+    init_task: Option<Task<()>>,
+    #[cfg(not(target_family = "wasm"))]
+    init_watchdog: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl ShaderCanvasPage {
-    /// Constructs the page, mounts its entities, and on native starts the
-    /// wgpu engine init task. Callers never block.
+    /// Constructs the page and mounts its entities. GPU-free: on native the
+    /// engine init starts at the first render, not here.
     pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
         let canvas = cx.new(|_| CanvasState::new());
         let shader = cx.new(|cx| ShaderState::new(DemoId::Gradient, cx));
@@ -123,11 +159,15 @@ impl ShaderCanvasPage {
             runtime: None,
             #[cfg(not(target_family = "wasm"))]
             image_shape: None,
+            #[cfg(not(target_family = "wasm"))]
+            init_started: false,
+            #[cfg(not(target_family = "wasm"))]
+            init_task: None,
+            #[cfg(not(target_family = "wasm"))]
+            init_watchdog: None,
             _subscriptions: Vec::new(),
         };
         page.wire_subscriptions(cx);
-        #[cfg(not(target_family = "wasm"))]
-        page.start_runtime(cx);
         page
     }
 
@@ -149,12 +189,26 @@ impl ShaderCanvasPage {
 
     #[cfg(not(target_family = "wasm"))]
     fn start_runtime(&mut self, cx: &mut Context<Self>) {
+        // Dropping the previous attempt's tasks cancels its hung init and
+        // its watchdog; stored handles double as the cancellation switch.
+        self.init_task = None;
+        self.init_watchdog = None;
         self.runtime = None;
         self.shader.update(cx, |s, cx| s.clear_error(cx));
-        cx.spawn(async move |this, cx| {
+        #[cfg(test)]
+        let seam = INIT_SEAM.with(std::cell::Cell::get);
+        self.init_task = Some(cx.spawn(async move |this, cx| {
+            #[cfg(test)]
+            if let InitSeam::Delay(delay) = seam {
+                cx.background_executor().timer(delay).await;
+            }
             let runtime = cx
                 .background_executor()
                 .spawn(async move {
+                    #[cfg(test)]
+                    if matches!(seam, InitSeam::Park) {
+                        std::future::pending::<()>().await;
+                    }
                     let engine = Arc::new(WgpuEngine::new().await?);
                     anyhow::Ok(Arc::new(runtime::ShaderRuntime::new(engine)))
                 })
@@ -162,6 +216,9 @@ impl ShaderCanvasPage {
             let _ = this.update(cx, |page, cx| match runtime {
                 Ok(runtime) => {
                     page.runtime = Some(runtime);
+                    // A slow success landing after the watchdog must dismiss
+                    // the timeout panel, not stack a runtime under it.
+                    page.shader.update(cx, |s, cx| s.clear_error(cx));
                     crate::capabilities::set(
                         CAPABILITY_SHADERS,
                         crate::capabilities::CapabilityStatus::supported_enabled(),
@@ -181,8 +238,29 @@ impl ShaderCanvasPage {
                     cx.notify();
                 }
             });
-        })
-        .detach();
+        }));
+        self.init_watchdog = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(INIT_TIMEOUT).await;
+            let _ = this.update(cx, |page, cx| {
+                // A landed attempt carries an engine or an error; only a
+                // hung init still has neither when the deadline passes.
+                if page.runtime.is_some() || page.shader.read(cx).runtime_error().is_some() {
+                    return;
+                }
+                let err = anyhow::anyhow!(
+                    "wgpu adapter/device init timed out after {}s",
+                    INIT_TIMEOUT.as_secs()
+                );
+                crate::capabilities::set(
+                    CAPABILITY_SHADERS,
+                    crate::capabilities::CapabilityStatus::error(err.to_string()),
+                    cx,
+                );
+                page.shader
+                    .update(cx, |s, cx| s.frame_failed(err.to_string(), cx));
+                cx.notify();
+            });
+        }));
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -272,6 +350,12 @@ impl ShaderCanvasPage {
 
     #[cfg(not(target_family = "wasm"))]
     fn render_native(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Lazy engine start: construction stays GPU-free; the first visit
+        // (this render) kicks exactly one init attempt.
+        if !self.init_started {
+            self.init_started = true;
+            self.start_runtime(cx);
+        }
         let (playing, demo, slider_value, fps, error, frames) = {
             let shader = self.shader.read(cx);
             (

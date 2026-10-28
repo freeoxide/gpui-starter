@@ -1,12 +1,9 @@
 #[cfg(not(target_family = "wasm"))]
 use gpui_kit::component::v_flex;
-use gpui_kit::component::{
-    ActiveTheme as _, IconName,
-    button::{Button, ButtonVariants as _},
-    h_flex,
-};
+use gpui_kit::component::{ActiveTheme as _, h_flex};
 use gpui_kit::{prelude::*, *};
 
+#[cfg(not(target_family = "wasm"))]
 use super::DismissFloating;
 use super::spec::FloatingWindowId;
 
@@ -62,16 +59,18 @@ impl Focusable for FloatingShell {
     }
 }
 
-pub(crate) fn float_header(id: &FloatingWindowId, title: &SharedString, cx: &App) -> Div {
+/// The float header carries the title and the drag affordance only; no
+/// window-control button (widgets are chromeless; Esc dismisses).
+pub(crate) fn float_header(_id: &FloatingWindowId, title: &SharedString, cx: &App) -> Div {
     let header = h_flex()
         .w_full()
         .h_8()
         .px_2()
-        .gap_2()
         .items_center()
         .flex_shrink_0()
         .border_b_1()
         .border_color(cx.theme().border)
+        .cursor_grab()
         .child(
             div()
                 .flex_1()
@@ -79,16 +78,6 @@ pub(crate) fn float_header(id: &FloatingWindowId, title: &SharedString, cx: &App
                 .text_sm()
                 .text_color(cx.theme().muted_foreground)
                 .child(title.clone()),
-        )
-        .child(
-            Button::new(format!("floating-close-{}", id.0))
-                .ghost()
-                .icon(IconName::Close)
-                .accessibility_label(crate::i18n::localize("floating_close"))
-                .tooltip(crate::i18n::localize("floating_close"))
-                .on_click(|_, window, cx| {
-                    window.dispatch_action(Box::new(DismissFloating), cx);
-                }),
         );
     #[cfg(not(target_os = "macos"))]
     let header = header.on_mouse_down(MouseButton::Left, |_, window, _| {

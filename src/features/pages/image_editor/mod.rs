@@ -666,6 +666,9 @@ impl Render for ImageEditorPage {
             .relative()
             .flex_1()
             .min_w_0()
+            // h_flex centers on the cross axis; a percent-height child of the
+            // auto-height row measures zero under taffy 0.15.
+            .self_stretch()
             .on_prepaint({
                 let page = page.clone();
                 move |bounds, _, cx| {

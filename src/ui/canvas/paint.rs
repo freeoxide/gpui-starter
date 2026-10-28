@@ -166,6 +166,7 @@ fn paint_dot(center: Point<Pixels>, diameter: Pixels, color: Hsla, window: &mut 
 
 pub(crate) fn paint_shape(
     shape: &CanvasShape,
+    generation: u64,
     transform: CanvasTransform,
     bounds: Bounds<Pixels>,
     caches: &mut CanvasCaches,
@@ -202,12 +203,16 @@ pub(crate) fn paint_shape(
                 let width = shape_bounds.size.width * zoom;
                 let height = shape_bounds.size.height * zoom;
                 let origin = bounds.origin + transform.to_screen(shape_bounds.origin);
-                let key = shape_key(shape, zoom);
-                if let Some(path) = caches.slot(stroke_slot).get(key, origin, || {
-                    let mut builder = stroke_builder(stroke, zoom);
-                    rect_outline_into(&mut builder, width, height);
-                    builder.build().ok()
-                }) {
+                if let Some(path) = caches.slot(stroke_slot).get_path(
+                    generation,
+                    || shape_key(shape, zoom),
+                    origin,
+                    || {
+                        let mut builder = stroke_builder(stroke, zoom);
+                        rect_outline_into(&mut builder, width, height);
+                        builder.build().ok()
+                    },
+                ) {
                     window.paint_path(path, stroke.color);
                 }
             }
@@ -219,22 +224,31 @@ pub(crate) fn paint_shape(
             let radius_x = shape_bounds.size.width * zoom * 0.5;
             let radius_y = shape_bounds.size.height * zoom * 0.5;
             let center = bounds.origin + transform.to_screen(shape_bounds.center());
-            let key = shape_key(shape, zoom);
             if let Some(fill_color) = style.fill() {
-                if let Some(path) = caches.slot(fill_slot).get(key, center, || {
-                    let mut builder = PathBuilder::fill();
-                    ellipse_outline_into(&mut builder, radius_x, radius_y);
-                    builder.build().ok()
-                }) {
+                if let Some(path) = caches.slot(fill_slot).get_path(
+                    generation,
+                    || shape_key(shape, zoom),
+                    center,
+                    || {
+                        let mut builder = PathBuilder::fill();
+                        ellipse_outline_into(&mut builder, radius_x, radius_y);
+                        builder.build().ok()
+                    },
+                ) {
                     window.paint_path(path, fill_color);
                 }
             }
             if let Some(stroke) = style.stroke() {
-                if let Some(path) = caches.slot(stroke_slot).get(key, center, || {
-                    let mut builder = stroke_builder(stroke, zoom);
-                    ellipse_outline_into(&mut builder, radius_x, radius_y);
-                    builder.build().ok()
-                }) {
+                if let Some(path) = caches.slot(stroke_slot).get_path(
+                    generation,
+                    || shape_key(shape, zoom),
+                    center,
+                    || {
+                        let mut builder = stroke_builder(stroke, zoom);
+                        ellipse_outline_into(&mut builder, radius_x, radius_y);
+                        builder.build().ok()
+                    },
+                ) {
                     window.paint_path(path, stroke.color);
                 }
             }
@@ -250,18 +264,22 @@ pub(crate) fn paint_shape(
             }
             let doc_origin = doc_bounds.origin;
             let origin = bounds.origin + transform.to_screen(doc_origin);
-            let key = shape_key(shape, zoom);
-            if let Some(path) = caches.slot(stroke_slot).get(key, origin, || {
-                let scaled: Vec<Point<Pixels>> =
-                    points.iter().map(|p| (*p - doc_origin) * zoom).collect();
-                let mut builder = stroke_builder(style, zoom);
-                builder.move_to(scaled[0]);
-                for (to, ctrl) in smoothed_segments(&scaled) {
-                    builder.curve_to(to, ctrl);
-                }
-                builder.line_to(scaled[scaled.len() - 1]);
-                builder.build().ok()
-            }) {
+            if let Some(path) = caches.slot(stroke_slot).get_path(
+                generation,
+                || shape_key(shape, zoom),
+                origin,
+                || {
+                    let scaled: Vec<Point<Pixels>> =
+                        points.iter().map(|p| (*p - doc_origin) * zoom).collect();
+                    let mut builder = stroke_builder(style, zoom);
+                    builder.move_to(scaled[0]);
+                    for (to, ctrl) in smoothed_segments(&scaled) {
+                        builder.curve_to(to, ctrl);
+                    }
+                    builder.line_to(scaled[scaled.len() - 1]);
+                    builder.build().ok()
+                },
+            ) {
                 window.paint_path(path, style.color);
             }
         }
@@ -272,18 +290,24 @@ pub(crate) fn paint_shape(
             color,
         } => {
             let screen_font = *font_size * zoom;
-            let run = TextRun {
-                len: text.len(),
-                font: Font::default(),
-                color: *color,
-                background_color: None,
-                underline: None,
-                strikethrough: None,
-            };
-            let shaped = window
-                .text_system()
-                .shape_line(text.clone(), screen_font, &[run], None);
             let origin = bounds.origin + transform.to_screen(*position);
+            let shaped = caches.slot(stroke_slot).get_line(
+                generation,
+                || shape_key(shape, zoom),
+                || {
+                    let run = TextRun {
+                        len: text.len(),
+                        font: Font::default(),
+                        color: *color,
+                        background_color: None,
+                        underline: None,
+                        strikethrough: None,
+                    };
+                    window
+                        .text_system()
+                        .shape_line(text.clone(), screen_font, &[run], None)
+                },
+            );
             if let Err(err) = shaped.paint(
                 origin,
                 screen_font * 1.25,

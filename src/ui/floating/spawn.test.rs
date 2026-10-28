@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui_kit::{
-    AnyView, App, AppContext as _, Bounds, Context, IntoElement, Render, TestAppContext, Window,
-    div, point, px, size,
+    AnyView, App, AppContext as _, Bounds, Context, IntoElement, Modifiers, Render, TestAppContext,
+    VisualTestContext, Window, div, point, px, size,
 };
 
 use super::*;
@@ -18,6 +18,90 @@ impl Render for Blank {
 
 fn blank_view(_: &mut Window, cx: &mut App) -> AnyView {
     cx.new(|_| Blank).into()
+}
+
+fn float_bounds() -> Bounds<gpui_kit::Pixels> {
+    Bounds {
+        origin: point(px(0.), px(0.)),
+        size: size(px(120.), px(90.)),
+    }
+}
+
+#[test]
+fn float_window_options_carry_no_native_chrome() {
+    let spec = FloatingSpec::new(FloatingWindowId("chrome".into()), float_bounds().size);
+    let options = float_window_options(&spec, float_bounds());
+    assert!(
+        options.titlebar.is_none(),
+        "a titlebar option set adds traffic lights or a WM caption"
+    );
+    assert!(!options.is_minimizable);
+    assert!(options.is_movable, "the header drag surface needs it");
+    assert_eq!(options.kind, WindowKind::Floating);
+    assert!(options.is_resizable == spec.is_resizable());
+    #[cfg(target_os = "linux")]
+    assert_eq!(
+        options.window_decorations,
+        Some(gpui_kit::WindowDecorations::Client),
+        "server decorations would draw a WM titlebar with window buttons"
+    );
+
+    let pinned = float_window_options(
+        &FloatingSpec::new(FloatingWindowId("pinned".into()), float_bounds().size)
+            .level(FloatLevel::AlwaysOnTop)
+            .resizable(true),
+        float_bounds(),
+    );
+    assert_eq!(pinned.kind, WindowKind::PopUp);
+    assert!(!pinned.is_resizable, "always-on-top floats are fixed-size");
+}
+
+#[gpui_kit::test]
+async fn a_spawned_float_still_carries_a_window_title_without_chrome(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    let handle = cx
+        .update(|cx| {
+            spawn_floating(
+                FloatingSpec::new(FloatingWindowId("titled".into()), size(px(120.), px(90.)))
+                    .title("Weather"),
+                blank_view,
+                cx,
+            )
+        })
+        .unwrap();
+    let FloatingHandle::Native(window) = handle else {
+        panic!("expected a native handle");
+    };
+    let mut cx = VisualTestContext::from_window(window, cx);
+    assert_eq!(cx.window_title().as_deref(), Some("Weather"));
+}
+
+#[gpui_kit::test]
+async fn escape_dismisses_a_spawned_float_after_a_click_focuses_it(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    let handle = cx
+        .update(|cx| {
+            spawn_floating(
+                FloatingSpec::new(FloatingWindowId("esc".into()), size(px(200.), px(120.))),
+                blank_view,
+                cx,
+            )
+        })
+        .unwrap();
+    let FloatingHandle::Native(window) = handle else {
+        panic!("expected a native handle");
+    };
+    let mut cx = VisualTestContext::from_window(window, cx);
+    // Click below the header: the header is the drag surface, whose
+    // start_window_move is unimplemented on the test platform.
+    cx.simulate_click(point(px(100.), px(60.)), Modifiers::none());
+    cx.simulate_keystrokes("escape");
+    assert!(
+        cx.read(|cx| floating_snapshot(cx)).is_empty(),
+        "Esc must still dismiss now that no close button exists"
+    );
 }
 
 #[gpui_kit::test]

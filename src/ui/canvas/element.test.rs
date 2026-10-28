@@ -165,3 +165,99 @@ fn brush_stroke_through_real_window_events(cx: &mut TestAppContext) {
     assert_eq!(point_count, 3);
     assert!(!has_overlay);
 }
+
+/// A shape-count drop frees doc slots the overlay then lands on; its
+/// generation must never equal the freed slot's stored doc generation.
+#[gpui_kit::test]
+fn overlay_revalidates_slots_freed_by_a_removed_shape(cx: &mut TestAppContext) {
+    use crate::ui::canvas::perf_probe;
+
+    let (state, mut cx) = mounted_host(cx);
+    let (_first, second) = state.update(&mut cx, |s, cx| {
+        let layer = s.add_layer(cx);
+        let stroke = ShapeStyle::stroked(crate::ui::canvas::StrokeStyle::default());
+        let first = s
+            .add_shape(
+                layer,
+                CanvasShape::rect(
+                    Bounds {
+                        origin: point(px(50.), px(50.)),
+                        size: size(px(100.), px(100.)),
+                    },
+                    stroke.clone(),
+                ),
+                cx,
+            )
+            .unwrap();
+        let second = s
+            .add_shape(
+                layer,
+                CanvasShape::rect(
+                    Bounds {
+                        origin: point(px(250.), px(50.)),
+                        size: size(px(100.), px(100.)),
+                    },
+                    stroke,
+                ),
+                cx,
+            )
+            .unwrap();
+        (first, second)
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    // Freed slot 2 (the removed shape's) is exactly where the next overlay paints.
+    state.update(&mut cx, |s, cx| {
+        s.remove_shape(second, cx);
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+
+    // Aliasing repro: bump the overlay revision to the freed slot's stored
+    // one (3) inside ONE update (flushes paint per update), after the reset.
+    perf_probe::reset();
+    state.update(&mut cx, |s, cx| {
+        for _ in 0..3 {
+            s.set_tool_overlay(
+                Some(CanvasShape::rect(
+                    Bounds {
+                        origin: point(px(20.), px(20.)),
+                        size: size(px(5.), px(5.)),
+                    },
+                    ShapeStyle::stroked(crate::ui::canvas::StrokeStyle::default()),
+                )),
+                cx,
+            );
+        }
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let [path_builds, key_hashes, _] = perf_probe::snapshot();
+    assert!(
+        path_builds + key_hashes >= 1,
+        "overlay generation must not satisfy a freed doc slot's stored generation: \
+         {path_builds} builds / {key_hashes} hashes"
+    );
+
+    // Every later overlay mutation must still revalidate its own slot.
+    for _ in 0..3 {
+        perf_probe::reset();
+        state.update(&mut cx, |s, cx| {
+            s.set_tool_overlay(
+                Some(CanvasShape::rect(
+                    Bounds {
+                        origin: point(px(25.), px(25.)),
+                        size: size(px(5.), px(5.)),
+                    },
+                    ShapeStyle::stroked(crate::ui::canvas::StrokeStyle::default()),
+                )),
+                cx,
+            )
+        });
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let [path_builds, key_hashes, _] = perf_probe::snapshot();
+        assert!(
+            path_builds + key_hashes >= 1,
+            "overlay paint must revalidate the slot it lands on, got \
+             {path_builds} builds / {key_hashes} hashes"
+        );
+    }
+    state.update(&mut cx, |s, cx| s.set_tool_overlay(None, cx));
+}

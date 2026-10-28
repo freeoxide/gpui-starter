@@ -1,7 +1,7 @@
 //! NSWindow reach-in: borderless non-activating panel pinned over the notch
 //! strip, resized top-anchored through `setFrame:display:animate:`.
 
-use gpui_kit::{Bounds, Pixels, Window};
+use gpui_kit::{Bounds, Pixels, Window, point, px, size};
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSScreen, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
 use objc2_foundation::{NSPoint, NSRect, NSSize};
@@ -12,6 +12,18 @@ use super::geometry::NotchLayout;
 // The nonactivating bit is absent from objc2-app-kit's generated bitflags;
 // gpui constructs the same value the same way.
 const NONACTIVATING_PANEL: NSWindowStyleMask = NSWindowStyleMask::from_bits_retain(1 << 7);
+
+/// Screen-local, top-left-origin size of mainScreen, the same screen
+/// `notch_geometry` probes and the policy below pins to. Only the size is
+/// meaningful: coordinates in this module are mainScreen-local.
+pub(crate) fn main_screen_bounds() -> Option<Bounds<Pixels>> {
+    let mtm = MainThreadMarker::new()?;
+    let frame = NSScreen::mainScreen(mtm)?.frame();
+    Some(Bounds::new(
+        point(px(0.), px(0.)),
+        size(px(frame.size.width as f32), px(frame.size.height as f32)),
+    ))
+}
 
 fn ns_window(window: &Window) -> Option<objc2::rc::Retained<NSWindow>> {
     // The trait call is deliberate: Window's inherent window_handle() returns
@@ -47,9 +59,12 @@ pub(crate) fn apply_notch_policy(window: &mut Window, layout: &NotchLayout) -> b
         return false;
     };
     ns_window.setStyleMask(NSWindowStyleMask::Borderless | NONACTIVATING_PANEL);
-    // Without FullScreenAuxiliary the system hides the panel while any window
-    // is fullscreen on its display.
-    ns_window.setCollectionBehavior(NSWindowCollectionBehavior::CanJoinAllSpaces);
+    // setCollectionBehavior replaces flags: re-add the FullScreenAuxiliary
+    // bit PopUp installed, or fullscreen spaces hide the panel.
+    ns_window.setCollectionBehavior(
+        NSWindowCollectionBehavior::CanJoinAllSpaces
+            | NSWindowCollectionBehavior::FullScreenAuxiliary,
+    );
     ns_window.setFrame_display_animate(appkit_rect(layout.collapsed, screen.frame()), true, false);
     true
 }

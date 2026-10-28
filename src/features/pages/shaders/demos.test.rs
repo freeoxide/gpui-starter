@@ -54,6 +54,20 @@ fn every_wgsl_module_parses_with_naga() {
 }
 
 #[test]
+fn every_wgsl_module_passes_full_naga_validation() {
+    // wgpu runs parse plus module validation inside create_shader_module;
+    // a parse-only pin lets a type or binding error slip to the first frame.
+    for spec in DEMOS.iter() {
+        let module = naga::front::wgsl::parse_str(spec.wgsl)
+            .unwrap_or_else(|err| panic!("naga rejected {:?}: {err}", spec.id));
+        let mut validator = naga::valid::Validator::new(Default::default(), Default::default());
+        validator
+            .validate(&module)
+            .unwrap_or_else(|err| panic!("naga validation failed for {:?}: {err}", spec.id));
+    }
+}
+
+#[test]
 fn every_fragment_keeps_the_bgra_readback_swizzle() {
     for spec in DEMOS.iter() {
         assert!(

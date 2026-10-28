@@ -193,10 +193,7 @@ impl ChannelTableDelegate {
             "sessions" => format::compact(row.sessions),
             "revenue" => format::money(row.revenue),
             "conversion" => format::percent(row.conversion, 1),
-            _ => {
-                let secs = row.avg_session_secs as usize;
-                format!("{}m {}s", secs / 60, secs % 60)
-            }
+            _ => format::duration(row.avg_session_secs),
         }
     }
 }

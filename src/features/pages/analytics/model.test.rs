@@ -74,3 +74,35 @@ fn channel_row_resolves_a_domain_key() {
     assert_eq!(found.page, row.page);
     assert_eq!(found.channel, row.channel);
 }
+
+#[test]
+fn top_pages_returns_unique_pages_sorted_by_session_total() {
+    let data = load();
+    let top = data.top_pages(Segment::All, 6);
+    assert_eq!(top.len(), 6);
+    let pages: Vec<&str> = top.iter().map(|row| &*row.page).collect();
+    let unique: std::collections::HashSet<&str> = pages.iter().copied().collect();
+    assert_eq!(unique.len(), pages.len(), "band keys must not collide");
+    assert!(
+        top.windows(2)
+            .all(|pair| pair[0].sessions >= pair[1].sessions)
+    );
+
+    let by_hand: f64 = data
+        .channels(Segment::All)
+        .iter()
+        .filter(|row| row.page == top[0].page)
+        .map(|row| row.sessions)
+        .sum();
+    assert_eq!(top[0].sessions, by_hand);
+}
+
+#[test]
+fn top_pages_honors_the_segment_filter() {
+    let data = load();
+    let top = data.top_pages(Segment::Social, 6);
+    let social = data.channels(Segment::Social);
+    let social_pages: std::collections::HashSet<&str> =
+        social.iter().map(|row| &*row.page).collect();
+    assert!(top.iter().all(|row| social_pages.contains(&*row.page)));
+}
