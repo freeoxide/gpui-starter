@@ -47,6 +47,9 @@ thread_local! {
     /// Layout bounds recorded by `mark` during a paint pass, in paint order.
     pub(crate) static LAYOUT_PROBE: std::cell::RefCell<Vec<(&'static str, Bounds<Pixels>)>> =
         const { std::cell::RefCell::new(Vec::new()) };
+    /// Band keys fed to the sessions chart by the last render, in order.
+    pub(crate) static SESSION_BAND_KEYS: std::cell::RefCell<Vec<String>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// Test-only: attaches an absolute measuring canvas so bounds tests can read
@@ -522,8 +525,8 @@ impl AnalyticsPage {
         compact: bool,
         cx: &Context<Self>,
     ) -> impl IntoElement {
-        // A flat delta is neither up nor down: no arrow and no status color,
-        // so zero never reads as a green gain.
+        // A flat delta is neither up nor down: no arrow, no status color.
+        // 0.05 is half the last digit percent(_, 1) can show.
         let delta_row = match kpi.delta {
             Some(delta) if delta.abs() >= 0.05 => {
                 let up = delta >= 0.;
@@ -580,6 +583,8 @@ impl AnalyticsPage {
                 .child("-")
                 .into_any_element(),
         };
+        // 13rem keeps four cards up at the shell's content width and wraps
+        // them 2+2 below ~700px, the line the wrap layout test pins.
         let card = v_flex()
             .flex_1()
             .min_w(rems(13.))
@@ -803,6 +808,10 @@ impl AnalyticsPage {
                 // draw into the same band and overpaint each other; feed one
                 // aggregated row per page.
                 let top_pages = self.data.top_pages(self.segment, 6);
+                #[cfg(test)]
+                SESSION_BAND_KEYS.with_borrow_mut(|keys| {
+                    *keys = top_pages.iter().map(|row| row.page.to_string()).collect();
+                });
                 let sessions_total: f64 = top_pages.iter().map(|row| row.sessions).sum();
                 let sessions_fill = theme.chart_2;
                 let sessions_chart = BarChart::new(top_pages)

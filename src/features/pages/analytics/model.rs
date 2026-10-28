@@ -15,7 +15,7 @@ pub(crate) struct DailyRow {
     pub(crate) revenue: f64,
 }
 
-#[derive(Clone, PartialEq, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub(crate) struct ChannelRow {
     pub(crate) page: SharedString,
     pub(crate) channel: SharedString,

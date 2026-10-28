@@ -468,13 +468,20 @@ async fn layout_empty_state_spans_the_region(cx: &TestAppContext) {
     }
 }
 
+/// The sessions chart must band on aggregated per-page rows: ScaleBand keeps
+/// a repeated key's first index, so raw channel rows (duplicate pages) would
+/// collapse into overpainting bands — the fragmentation defect.
 #[gpui_kit::test]
-async fn scratch_check_toolbar_via_kpis(cx: &TestAppContext) {
+async fn sessions_chart_bands_on_distinct_pages(cx: &TestAppContext) {
     let (handle, page) = open_page_sized(cx, 1512., 982.);
     commit_first_reload(cx, &page);
-    let regions = paint_regions(cx, &handle);
-    let k = all(&regions, "kpis");
-    let kpis = k[k.len() - 1];
-    let toolbar_h = kpis.origin.y - px(24.) - px(24.);
-    println!("kpis at {:?} => toolbar height {toolbar_h:?}", kpis.origin);
+    super::SESSION_BAND_KEYS.with_borrow_mut(|keys| keys.clear());
+    paint_regions(cx, &handle);
+    super::SESSION_BAND_KEYS.with_borrow(|keys| {
+        assert!(!keys.is_empty(), "sessions chart must render bands");
+        let frame = &keys[keys.len() - 6..];
+        assert_eq!(frame.len(), 6, "six bands, got {frame:?}");
+        let unique: std::collections::HashSet<&str> = frame.iter().map(String::as_str).collect();
+        assert_eq!(unique.len(), frame.len(), "duplicate band keys: {frame:?}");
+    });
 }
