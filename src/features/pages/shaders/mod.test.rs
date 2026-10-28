@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use gpui_kit::{DevicePixels, Size, TestAppContext, VisualTestContext, px, size};
+use gpui_kit::{
+    AppContext as _, Context, DevicePixels, IntoElement, Modifiers, ParentElement as _, Render,
+    Size, Styled as _, TestAppContext, VisualTestContext, Window, div, point, px, size,
+};
 
 use super::ShaderCanvasPage;
 use super::demos::{DEMOS, DemoId};
@@ -37,6 +40,165 @@ fn installed_image(
             other => panic!("expected an image shape, got {other:?}"),
         }
     })
+}
+
+/// Arms the never-resolving init seam for the test's lifetime.
+struct HangInit;
+
+impl HangInit {
+    fn arm() -> Self {
+        super::set_hang_init(true);
+        Self
+    }
+}
+
+impl Drop for HangInit {
+    fn drop(&mut self) {
+        super::set_hang_init(false);
+    }
+}
+
+/// Mounts the page the way AppRoot does: constructed at window open, but
+/// rendered only once `visited` flips, so construction stays GPU-free.
+struct PageHost {
+    page: gpui_kit::Entity<ShaderCanvasPage>,
+    visited: bool,
+}
+
+impl Render for PageHost {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        if self.visited {
+            div().size_full().child(self.page.clone())
+        } else {
+            div().size_full()
+        }
+    }
+}
+
+fn open_hosted_page(
+    cx: &mut TestAppContext,
+) -> (
+    gpui_kit::Entity<ShaderCanvasPage>,
+    gpui_kit::Entity<PageHost>,
+    VisualTestContext,
+) {
+    // gpui_kit::init installs the base globals the click path needs (e.g.
+    // text-selection suppression); theme::init is what render_native reads.
+    cx.update(gpui_kit::init);
+    cx.update(gpui_kit::component::theme::init);
+    let mut page_slot = None;
+    let handle = cx.open_window(size(px(800.), px(600.)), |window, cx| {
+        let page = cx.new(|cx| ShaderCanvasPage::new(window, cx));
+        page_slot = Some(page.clone());
+        PageHost {
+            page,
+            visited: false,
+        }
+    });
+    let page = page_slot.expect("the host must capture the page entity");
+    let host = handle.root(cx).unwrap();
+    let cx = VisualTestContext::from_window(handle.into(), cx);
+    (page, host, cx)
+}
+
+#[gpui_kit::test]
+async fn engine_init_waits_for_the_first_render(cx: &mut TestAppContext) {
+    let (page, host, mut cx) = open_hosted_page(cx);
+    cx.run_until_parked();
+    // Constructed but never rendered: no attempt started, no outcome landed.
+    cx.read(|cx| {
+        let page_view = page.read(cx);
+        assert!(
+            !page_view.init_started,
+            "construction must not start engine init"
+        );
+        assert!(page_view.runtime.is_none());
+        assert!(page_view.shader.read(cx).runtime_error().is_none());
+    });
+
+    host.update(&mut cx, |host, cx| {
+        host.visited = true;
+        cx.notify();
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.run_until_parked();
+    cx.read(|cx| {
+        let page_view = page.read(cx);
+        assert!(page_view.init_started, "the first render must start init");
+        let landed =
+            page_view.runtime.is_some() || page_view.shader.read(cx).runtime_error().is_some();
+        assert!(landed, "init must land a runtime or an error");
+    });
+}
+
+#[gpui_kit::test]
+async fn hung_init_times_out_into_the_error_panel_and_retry_re_enters(cx: &mut TestAppContext) {
+    let _hang = HangInit::arm();
+    let (page, host, mut cx) = open_hosted_page(cx);
+    host.update(&mut cx, |host, cx| {
+        host.visited = true;
+        cx.notify();
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.run_until_parked();
+
+    // Pre-deadline: the watchdog stays silent and the page keeps waiting.
+    cx.executor().advance_clock(Duration::from_secs(14));
+    cx.run_until_parked();
+    assert!(
+        cx.read(|cx| page.read(cx).shader.read(cx).runtime_error().is_none()),
+        "the watchdog must not fire before the deadline"
+    );
+
+    // Later frames must not re-arm the watchdog (init is once per visit).
+    for _ in 0..3 {
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+    }
+    cx.executor().advance_clock(Duration::from_secs(2));
+    cx.run_until_parked();
+    let expected = format!(
+        "wgpu adapter/device init timed out after {}s",
+        super::INIT_TIMEOUT.as_secs()
+    );
+    assert_eq!(
+        cx.read(|cx| page
+            .read(cx)
+            .shader
+            .read(cx)
+            .runtime_error()
+            .map(str::to_string)),
+        Some(expected.clone()),
+        "the hung init must land in the error panel with the timeout message"
+    );
+
+    // The panel's Retry button is the only interactive element in the
+    // centered column; scanning it proves the click path re-enters init.
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let mut retried = false;
+    for y in (240..560usize).step_by(8) {
+        cx.simulate_click(point(px(400.), px(y as f32)), Modifiers::none());
+        if cx.read(|cx| page.read(cx).shader.read(cx).runtime_error().is_none()) {
+            retried = true;
+            break;
+        }
+    }
+    assert!(
+        retried,
+        "the Retry click must re-enter init and clear the error"
+    );
+
+    cx.executor().advance_clock(Duration::from_secs(16));
+    cx.run_until_parked();
+    assert_eq!(
+        cx.read(|cx| page
+            .read(cx)
+            .shader
+            .read(cx)
+            .runtime_error()
+            .map(str::to_string)),
+        Some(expected),
+        "the re-entered init must hang and time out again"
+    );
 }
 
 #[gpui_kit::test]
@@ -85,6 +247,8 @@ async fn every_demo_installs_its_document_and_tool_without_a_gpu(cx: &mut TestAp
 #[ignore = "needs a working wgpu adapter (GPU or lavapipe); run with --ignored locally"]
 async fn the_page_loop_lands_sustained_frames_for_every_demo(cx: &mut TestAppContext) {
     let (page, mut cx) = open_page(cx);
+    // Engine init is lazy: the first render (not construction) kicks it.
+    cx.update(|window, cx| window.draw(cx).clear(cx));
     cx.run_until_parked();
 
     let init_error = cx.read(|cx| {
