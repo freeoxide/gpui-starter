@@ -16,7 +16,7 @@ use super::InfiniteCanvasPage;
 use super::content::{NoteField, PALETTE_LEN};
 use super::viewport::local_viewport;
 
-pub(crate) const MINIMAP_MAX_DOTS: usize = 20_000;
+const MINIMAP_MAX_DOTS: usize = 20_000;
 const DOT_PX: f32 = 2.;
 
 #[cfg(test)]

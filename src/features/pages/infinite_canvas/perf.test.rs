@@ -47,10 +47,8 @@ fn pan_and_draw(page: &Entity<InfiniteCanvasPage>, vcx: &mut VisualTestContext, 
     vcx.update(|window, cx| window.draw(cx).clear(cx));
 }
 
-/// Two pans that return to the starting offset: a warmup pass over the same
-/// pair guarantees the measured pass only revisits painted states, so a
-/// first-appearance build at a cull boundary can never masquerade as a cache
-/// miss.
+/// Two pans returning to the starting offset; warmup over the same pair
+/// keeps cull-boundary first appearances out of the measured pass.
 fn pan_pair(page: &Entity<InfiniteCanvasPage>, vcx: &mut VisualTestContext) {
     pan_and_draw(page, vcx, 0);
     pan_and_draw(page, vcx, 1);
@@ -78,9 +76,8 @@ fn assert_quiet_pans(page: &Entity<InfiniteCanvasPage>, vcx: &mut VisualTestCont
     );
 }
 
-/// Viewport motion must not rebuild paths, rehash shape content, reshape
-/// labels, or reproject minimap anchors: those depend on the document and
-/// zoom only, and pan changes neither.
+/// Pan must not rebuild paths, rehash content, reshape labels, or reproject
+/// minimap anchors: those depend on document and zoom only.
 #[gpui_kit::test]
 fn pan_frames_reuse_every_paint_cache(cx: &mut TestAppContext) {
     let (page, mut vcx) = drawn_page(cx);

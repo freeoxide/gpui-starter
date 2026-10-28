@@ -125,6 +125,7 @@ impl Element for CanvasElement {
         let hitbox = prepaint.clone();
         let id = self.id.clone();
 
+        #[cfg(test)]
         let paint_started = crate::platform::clock::Instant::now();
         state.update(cx, |s, cx| {
             window.with_content_mask(Some(ContentMask { bounds }), |window| {
@@ -176,6 +177,7 @@ impl Element for CanvasElement {
                 });
             });
         });
+        #[cfg(test)]
         super::store_last_paint_us(paint_started.elapsed().as_micros() as u64);
 
         window.set_cursor_style(state.read(cx).active_tool_cursor(), &hitbox);

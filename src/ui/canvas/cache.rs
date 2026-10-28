@@ -5,10 +5,8 @@ use gpui_kit::*;
 
 use super::scene::{CanvasShape, ShapeStyle, StrokeStyle};
 
-/// One slot per painted artifact: a matching paint generation reuses the
-/// entry without rehashing; a changed one rebuilds only if content changed.
-/// The shaped line stays boxed: ShapedLine carries a SmallVec<[DecorationRun;
-/// 32]> inline (~3 KB) that would otherwise sit in every slot.
+/// One slot per painted artifact; the boxed line avoids ~3 KB/slot of inline
+/// SmallVec storage (a matching generation reuses the entry unhashed).
 #[derive(Default)]
 pub(crate) struct ShapeCache {
     generation: Option<u64>,
@@ -18,9 +16,8 @@ pub(crate) struct ShapeCache {
 }
 
 impl ShapeCache {
-    /// Returns true when the artifact must be rebuilt; records the
-    /// generation either way so unmodified entries skip the key closure on
-    /// every subsequent same-generation paint.
+    /// True when the artifact must rebuild; records the generation either
+    /// way so same-generation paints skip the key closure.
     fn invalidated(&mut self, generation: u64, content_key: impl FnOnce() -> u64) -> bool {
         if self.generation == Some(generation) {
             return false;

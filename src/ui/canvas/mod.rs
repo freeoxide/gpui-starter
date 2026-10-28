@@ -3,6 +3,7 @@
 //! Removal = delete this directory and revert its single seam touch: the
 //! `pub mod canvas;` line in src/ui/mod.rs.
 
+#[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
 
 mod cache;
@@ -13,6 +14,7 @@ mod scene;
 mod state;
 mod tool;
 
+#[cfg(test)]
 static LAST_PAINT_US: AtomicU64 = AtomicU64::new(0);
 
 /// Duration of the most recent `CanvasElement` paint, in microseconds.
@@ -21,6 +23,7 @@ pub(crate) fn last_paint_us() -> u64 {
     LAST_PAINT_US.load(Ordering::Relaxed)
 }
 
+#[cfg(test)]
 pub(crate) fn store_last_paint_us(elapsed_us: u64) {
     LAST_PAINT_US.store(elapsed_us, Ordering::Relaxed);
 }
