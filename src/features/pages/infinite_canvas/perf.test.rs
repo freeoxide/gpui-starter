@@ -162,12 +162,13 @@ fn pan_frame_budget_stays_under_ceiling(cx: &mut TestAppContext) {
         );
     };
 
-    // Fit view: every body shape on screen, labels LOD'd off (zoom 0.1).
+    // Fit view: fit wants ~0.04 zoom but clamps to 0.1, the most-visible
+    // zoom the page allows (~1.3k of the bodies on screen); labels LOD'd off.
     page.update(&mut vcx, |page, cx| page.fit_view(cx));
     scenario("fit_5k_pan", None, &mut vcx);
     // Labels-on view: the label layer is visible from zoom 0.5 up.
     scenario("labels_5k_pan", Some(0.6), &mut vcx);
-    // 20k preset, fit view: the heaviest shipped field.
+    // 20k preset, fit view: the heaviest shipped field (same visible count).
     page.update(&mut vcx, |page, cx| page.regenerate(20_000, cx));
     page.update(&mut vcx, |page, cx| page.fit_view(cx));
     scenario("fit_20k_pan", None, &mut vcx);

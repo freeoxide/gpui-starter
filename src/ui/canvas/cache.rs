@@ -7,12 +7,14 @@ use super::scene::{CanvasShape, ShapeStyle, StrokeStyle};
 
 /// One slot per painted artifact: a matching paint generation reuses the
 /// entry without rehashing; a changed one rebuilds only if content changed.
+/// The shaped line stays boxed: ShapedLine carries a SmallVec<[DecorationRun;
+/// 32]> inline (~3 KB) that would otherwise sit in every slot.
 #[derive(Default)]
 pub(crate) struct ShapeCache {
     generation: Option<u64>,
     content_key: Option<u64>,
     path: Option<Path<Pixels>>,
-    line: Option<ShapedLine>,
+    line: Option<Box<ShapedLine>>,
 }
 
 impl ShapeCache {
@@ -60,9 +62,9 @@ impl ShapeCache {
             super::perf_probe::add_text_shaping();
             self.path = None;
             self.line = None;
-            self.line = Some(build());
+            self.line = Some(Box::new(build()));
         }
-        self.line.clone().expect("line built above")
+        self.line.as_deref().cloned().expect("line built above")
     }
 }
 
@@ -166,9 +168,8 @@ pub(crate) fn shape_key(shape: &CanvasShape, zoom: f32) -> u64 {
             text.hash(&mut hasher);
             hash_hsla(&mut hasher, *color);
         }
-        CanvasShape::Image { bounds, .. } => {
-            hash_bounds(&mut hasher, bounds);
-        }
+        // Image paints uncached; nothing else contributes to its key.
+        _ => {}
     }
     hasher.finish()
 }

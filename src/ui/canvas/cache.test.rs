@@ -219,3 +219,10 @@ fn shape_key_is_stable_for_identical_input() {
     );
     assert_eq!(super::shape_key(&shape, 1.), super::shape_key(&shape, 1.));
 }
+
+#[test]
+fn slot_stays_pointer_sized_for_the_shaped_line() {
+    // An inline ShapedLine (SmallVec<[DecorationRun; 32]> storage) measures
+    // ~3 KB, which at 100k+ slots is OOM class; it must stay boxed.
+    assert!(std::mem::size_of::<super::ShapeCache>() <= 256);
+}
