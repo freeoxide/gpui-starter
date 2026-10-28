@@ -443,28 +443,38 @@ async fn layout_skeleton_regions_keep_definite_bounds(cx: &TestAppContext) {
 /// shrinking to their content inside a wrap row.
 #[gpui_kit::test]
 async fn layout_empty_state_spans_the_region(cx: &TestAppContext) {
-    let (handle, page) = open_page_sized(cx, 1512., 982.);
-    commit_first_reload(cx, &page);
-    cx.update(|cx| {
-        page.update(cx, |page, cx| {
-            page.set_preview(super::PreviewStateToggle::Empty, cx)
-        })
-    });
-    let regions = paint_regions(cx, &handle);
+    for toggle in [
+        super::PreviewStateToggle::Empty,
+        super::PreviewStateToggle::Error,
+    ] {
+        let (handle, page) = open_page_sized(cx, 1512., 982.);
+        commit_first_reload(cx, &page);
+        cx.update(|cx| page.update(cx, |page, cx| page.set_preview(toggle, cx)));
+        let regions = paint_regions(cx, &handle);
 
-    assert!(
-        all(&regions, "charts-row").is_empty(),
-        "charts replace with the state"
-    );
-    assert!(
-        all(&regions, "table-box").is_empty(),
-        "table replaces with the state"
-    );
-    let states = all(&regions, "region-state");
-    assert!(states.len() >= 3, "one state per region, got {states:?}");
-    for state in &states {
-        assert!(state.size.width >= px(1400.), "state width {state:?}");
-        assert!(state.size.height >= px(80.), "state height {state:?}");
+        assert!(
+            all(&regions, "charts-row").is_empty(),
+            "{toggle:?}: charts replace with the state"
+        );
+        assert!(
+            all(&regions, "table-box").is_empty(),
+            "{toggle:?}: table replaces with the state"
+        );
+        let states = all(&regions, "region-state");
+        assert!(
+            states.len() >= 3,
+            "{toggle:?}: one state per region, got {states:?}"
+        );
+        for state in &states {
+            assert!(
+                state.size.width >= px(1400.),
+                "{toggle:?}: state width {state:?}"
+            );
+            assert!(
+                state.size.height >= px(80.),
+                "{toggle:?}: state height {state:?}"
+            );
+        }
     }
 }
 
@@ -479,8 +489,8 @@ async fn sessions_chart_bands_on_distinct_pages(cx: &TestAppContext) {
     paint_regions(cx, &handle);
     super::SESSION_BAND_KEYS.with_borrow(|keys| {
         assert!(!keys.is_empty(), "sessions chart must render bands");
+        assert!(keys.len() >= 6, "six bands per frame, got {keys:?}");
         let frame = &keys[keys.len() - 6..];
-        assert_eq!(frame.len(), 6, "six bands, got {frame:?}");
         let unique: std::collections::HashSet<&str> = frame.iter().map(String::as_str).collect();
         assert_eq!(unique.len(), frame.len(), "duplicate band keys: {frame:?}");
     });

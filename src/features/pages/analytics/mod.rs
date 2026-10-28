@@ -73,7 +73,7 @@ use detail::ChannelDetail;
 
 actions!(analytics, [OpenChannelDetails]);
 
-#[derive(Action, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Action, Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
 #[action(namespace = analytics, no_json)]
 enum PreviewStateToggle {
     Live,
