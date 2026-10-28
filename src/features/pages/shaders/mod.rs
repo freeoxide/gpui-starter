@@ -59,8 +59,8 @@ const INIT_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[cfg(test)]
 thread_local! {
-    /// Test seam for the init task: park it forever, or delay it past the
-    /// watchdog deadline before running the real init.
+    /// Test seam for the init task: park it forever, delay it past the
+    /// watchdog deadline, or wedge the fenced runtime build.
     static INIT_SEAM: std::cell::Cell<InitSeam> =
         const { std::cell::Cell::new(InitSeam::Real) };
 }
@@ -71,6 +71,7 @@ enum InitSeam {
     Real,
     Park,
     Delay(Duration),
+    WedgeBuild,
 }
 
 #[cfg(test)]
@@ -240,6 +241,13 @@ impl ShaderCanvasPage {
                     // The pipeline compiles run inside the driver; the fence
                     // bounds them so a wedge cannot pin this executor thread.
                     let runtime = builder.render_fenced(move || {
+                        #[cfg(test)]
+                        if matches!(seam, InitSeam::WedgeBuild) {
+                            // Stand-in for a pipeline compile wedged inside
+                            // the driver; the fence trips while this parks.
+                            let (_tx, rx) = std::sync::mpsc::channel::<()>();
+                            let _ = rx.recv();
+                        }
                         anyhow::Ok(Arc::new(runtime::ShaderRuntime::new(engine)))
                     })?;
                     anyhow::Ok((builder, runtime))

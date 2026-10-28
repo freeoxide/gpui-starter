@@ -54,8 +54,8 @@ fn set_init_seam(seam: InitSeam) {
 
 #[cfg(test)]
 thread_local! {
-    /// Test seam for the fenced frame: Wedge parks the render work below
-    /// the fence deadline, tripping the real fence without a GPU wedge.
+    /// Test seam for the fenced frame: Wedge parks the render work and
+    /// WedgeCreate the renderer build, tripping the real fence.
     static FRAME_SEAM: std::cell::Cell<FrameSeam> =
         const { std::cell::Cell::new(FrameSeam::Real) };
 }
@@ -65,6 +65,7 @@ thread_local! {
 enum FrameSeam {
     Real,
     Wedge,
+    WedgeCreate,
 }
 
 #[cfg(test)]
@@ -531,19 +532,31 @@ async fn frame_task(
         width,
         height,
     };
+    // Read on the caller thread before the spawns so the workers never
+    // touch the thread-local seam.
+    #[cfg(test)]
+    let frame_seam = FRAME_SEAM.with(std::cell::Cell::get);
     let renderer = match page.read_with(cx, |p, _| p.renderer.clone()) {
         Some(renderer) => renderer,
         None => {
-            // First-frame pipeline/buffer creation runs inside the driver;
-            // fence it so a wedge poisons and reaches the panel, not a
-            // parked frame task.
+            // Creation compiles pipelines in the driver; a wedge must
+            // poison and reach the panel, not park the frame task.
             let builder = engine.clone();
             let for_new = engine.clone();
             let created = cx
                 .background_executor()
-                .spawn(
-                    async move { builder.render_fenced(move || SceneRenderer::new(for_new, &job)) },
-                )
+                .spawn(async move {
+                    builder.render_fenced(move || {
+                        #[cfg(test)]
+                        if matches!(frame_seam, FrameSeam::WedgeCreate) {
+                            // Stand-in for a pipeline compile wedged inside
+                            // the driver; the fence trips while this parks.
+                            let (_tx, rx) = std::sync::mpsc::channel::<()>();
+                            let _ = rx.recv();
+                        }
+                        SceneRenderer::new(for_new, &job)
+                    })
+                })
                 .await;
             match created {
                 Ok(renderer) => {
@@ -559,10 +572,6 @@ async fn frame_task(
         }
     };
 
-    // Read on the caller thread before the spawn so the worker never
-    // touches the thread-local seam.
-    #[cfg(test)]
-    let frame_seam = FRAME_SEAM.with(std::cell::Cell::get);
     let rendered = cx
         .background_executor()
         .spawn(async move {
