@@ -289,6 +289,23 @@ pub(crate) fn anchor_rect(
     }
 }
 
+/// Whether `handle` refers to a window that is still open. A resolution
+/// failure for an open window means its event dispatch holds the gpui update
+/// lease (`AnyWindowHandle::update` cannot re-enter a window mid-dispatch),
+/// not that the window is gone.
+pub(crate) fn window_is_open(handle: &AnyWindowHandle, cx: &App) -> bool {
+    cx.windows().contains(handle)
+}
+
+/// True when `anchor` targets an open window whose dispatch is on the stack:
+/// anchor_rect cannot resolve it now, but will once the cycle settles.
+pub(crate) fn anchor_blocked_by_dispatch(anchor: &FloatAnchor, cx: &App) -> bool {
+    match anchor {
+        FloatAnchor::Window { window, .. } => window_is_open(window, cx),
+        FloatAnchor::Screen { .. } => false,
+    }
+}
+
 #[cfg(test)]
 #[path = "spec.test.rs"]
 mod spec_test;

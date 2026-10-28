@@ -13,21 +13,72 @@ use super::registry::{
 #[cfg(not(target_family = "wasm"))]
 use super::shell::FloatingShell;
 use super::shims;
+#[cfg(target_family = "wasm")]
+use super::spec::window_is_open;
 use super::spec::{
-    FloatAnchor, FloatLevel, FloatingSpec, FloatingWindowId, anchor_rect, resolve_bounds,
+    FloatAnchor, FloatLevel, FloatingSpec, FloatingWindowId, anchor_blocked_by_dispatch,
+    anchor_rect, resolve_bounds,
 };
 
 /// Spawn a float for `spec`. Native errors: the anchor cannot be resolved or
-/// window creation failed. On wasm the only error is that no main window has
-/// been recorded yet.
+/// window creation failed. A Window anchor whose window is mid-dispatch
+/// defers the open to the end of the cycle and returns an inert registry
+/// handle; the real entry lands moments later with exact anchor bounds.
 #[cfg(not(target_family = "wasm"))]
 pub fn spawn_floating(
     spec: FloatingSpec,
     build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     cx: &mut App,
 ) -> anyhow::Result<FloatingHandle> {
-    let factory: ViewFactory = Rc::new(build);
+    let interim_id = spec.id().clone();
+    let bounds = match resolve_float_bounds(&spec, cx) {
+        Ok(bounds) => bounds,
+        Err(err) => {
+            if anchor_blocked_by_dispatch(spec.float_anchor(), cx) {
+                defer_past_dispatch(spec, build, cx);
+                return Ok(FloatingHandle::Overlay(interim_id));
+            }
+            return Err(err);
+        }
+    };
+    open_floating_window(spec, build, bounds, cx)
+}
+
+/// Resolve-then-open with no deferral: the retry path after a dispatch
+/// lease unwinds, where resolution must succeed or fail on its own merits.
+#[cfg(not(target_family = "wasm"))]
+fn spawn_floating_settled(
+    spec: FloatingSpec,
+    build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    cx: &mut App,
+) -> anyhow::Result<FloatingHandle> {
     let bounds = resolve_float_bounds(&spec, cx)?;
+    open_floating_window(spec, build, bounds, cx)
+}
+
+/// Effects flush after the anchor window's dispatch unwinds and releases its
+/// update lease; the retry then resolves real anchor bounds.
+#[cfg(not(target_family = "wasm"))]
+fn defer_past_dispatch(
+    spec: FloatingSpec,
+    build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    cx: &mut App,
+) {
+    cx.defer(move |cx| {
+        if let Err(err) = spawn_floating_settled(spec, build, cx) {
+            tracing::warn!(target: shims::LOG, error = %err, "deferred float spawn failed");
+        }
+    });
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn open_floating_window(
+    spec: FloatingSpec,
+    build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    bounds: Bounds<Pixels>,
+    cx: &mut App,
+) -> anyhow::Result<FloatingHandle> {
+    let factory: ViewFactory = Rc::new(build);
     #[cfg(target_os = "linux")]
     let plan = super::layer_shell::wayland::plan(&spec, cx);
     #[cfg(target_os = "linux")]
@@ -139,8 +190,56 @@ pub fn spawn_floating(
     }
     let root = crate::app::window::root_window(cx)
         .ok_or_else(|| anyhow!("no main window to host overlay float"))?;
+    let interim_id = spec.id().clone();
+    let bounds = match overlay_bounds(&root, spec.float_anchor(), spec.size(), cx) {
+        Ok(bounds) => bounds,
+        Err(err) => {
+            // The main window's own dispatch also holds its update lease, so
+            // either the anchor window or the root blocks the bounds read.
+            let blocked =
+                window_is_open(&root, cx) || anchor_blocked_by_dispatch(spec.float_anchor(), cx);
+            if blocked {
+                cx.defer(move |cx| {
+                    if let Err(err) = spawn_floating_settled(spec, build, cx) {
+                        tracing::warn!(
+                            target: "gpui_starter::ui::floating",
+                            error = %err,
+                            "deferred overlay float spawn failed"
+                        );
+                    }
+                });
+                return Ok(FloatingHandle::Overlay(interim_id));
+            }
+            return Err(err);
+        }
+    };
     let factory: ViewFactory = Rc::new(build);
+    register_overlay(spec, factory, bounds, &root, cx)
+}
+
+/// Resolve-then-register with no deferral: the retry path after the main
+/// window's dispatch lease unwinds.
+#[cfg(target_family = "wasm")]
+fn spawn_floating_settled(
+    spec: FloatingSpec,
+    build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    cx: &mut App,
+) -> anyhow::Result<FloatingHandle> {
+    let root = crate::app::window::root_window(cx)
+        .ok_or_else(|| anyhow!("no main window to host overlay float"))?;
     let bounds = overlay_bounds(&root, spec.float_anchor(), spec.size(), cx)?;
+    let factory: ViewFactory = Rc::new(build);
+    register_overlay(spec, factory, bounds, &root, cx)
+}
+
+#[cfg(target_family = "wasm")]
+fn register_overlay(
+    spec: FloatingSpec,
+    factory: ViewFactory,
+    bounds: Bounds<Pixels>,
+    root: &AnyWindowHandle,
+    cx: &mut App,
+) -> anyhow::Result<FloatingHandle> {
     let build_view = factory.clone();
     let view = root
         .update(cx, |_, window, cx| build_view(window, cx))

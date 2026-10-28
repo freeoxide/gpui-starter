@@ -247,3 +247,60 @@ async fn anchor_rect_returns_none_for_an_unknown_display(cx: &TestAppContext) {
     });
     assert!(resolved.is_none());
 }
+
+#[gpui_kit::test]
+async fn anchor_rect_returns_none_while_the_anchor_window_is_mid_dispatch(cx: &mut TestAppContext) {
+    struct Blank;
+    impl Render for Blank {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+        }
+    }
+
+    let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
+    // gpui cannot re-enter a window whose dispatch is on the stack; the
+    // spawn layer must bridge this (defer past the cycle), not anchor_rect.
+    let resolved = cx.update(|cx| {
+        window.update(cx, |_, _, cx| {
+            anchor_rect(
+                &FloatAnchor::Window {
+                    window: window.into(),
+                    placement: Placement9::Center,
+                    offset: Point::default(),
+                },
+                cx,
+            )
+        })
+    });
+    assert!(
+        matches!(resolved, Ok(None)),
+        "mid-dispatch resolution must report None, not error"
+    );
+}
+
+#[gpui_kit::test]
+async fn window_is_open_stays_true_while_dispatching_and_false_after_close(
+    cx: &mut TestAppContext,
+) {
+    struct Blank;
+    impl Render for Blank {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+        }
+    }
+
+    let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
+    let handle: gpui_kit::AnyWindowHandle = window.into();
+    let mid_dispatch = cx.update(|cx| {
+        handle
+            .update(cx, |_, _, cx| window_is_open(&handle, cx))
+            .unwrap()
+    });
+    assert!(mid_dispatch, "the dispatch lease must not read as closed");
+    cx.update(|cx| {
+        handle
+            .update(cx, |_, window, _| window.remove_window())
+            .unwrap();
+    });
+    assert!(!cx.update(|cx| window_is_open(&handle, cx)));
+}
