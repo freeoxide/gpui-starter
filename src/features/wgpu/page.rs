@@ -382,7 +382,7 @@ impl WgpuPage {
         };
 
         v_flex()
-            .min_h_full()
+            .size_full()
             .p_6()
             .gap_4()
             .child(header)

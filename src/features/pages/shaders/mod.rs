@@ -352,9 +352,11 @@ impl ShaderCanvasPage {
                 let layer = d.add_layer();
                 d.add_shape(layer, CanvasShape::image(doc_bounds(spec), blank_image()))
             });
-            s.reset_view(cx);
             shape
         });
+        // reset_view would land after the initial fit consumed it; a fresh
+        // fit request re-centers on the next ticker paint instead.
+        self.shader.update(cx, |s, cx| s.request_fit(cx));
         let slider_spec = spec.slider;
         self.slider = cx.new(|_| {
             SliderState::new()
@@ -531,7 +533,7 @@ impl ShaderCanvasPage {
         };
 
         v_flex()
-            .min_h_full()
+            .size_full()
             .p_6()
             .gap_4()
             .child(header)
