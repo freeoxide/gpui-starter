@@ -48,9 +48,17 @@ use crate::platform::clock::{self, Duration, Instant};
 use demos::{DEMOS, DemoSpec};
 #[cfg(not(target_family = "wasm"))]
 use std::sync::Arc;
+#[cfg(not(target_family = "wasm"))]
+use std::sync::atomic::Ordering;
 
 /// Capability-registry name registered at startup ("canvas_shaders").
 pub const CAPABILITY_SHADERS: &str = "canvas_shaders";
+
+#[cfg(not(target_family = "wasm"))]
+const LOG: &str = "gpui_starter::shader_page";
+
+#[cfg(not(target_family = "wasm"))]
+static FRAME_MISS_LOG: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Backstop deadline for a lost init: the fenced engine init and runtime
 /// build bound the attempt; this watchdog catches a result that never lands.
@@ -648,13 +656,28 @@ async fn frame_task(
                 return;
             }
             let _ = canvas.update(cx, |s, cx| {
-                s.edit_document(cx, |d| {
-                    d.update_shape(shape_id, |shape| {
-                        if let CanvasShape::Image { image: slot, .. } = shape {
+                let landed = s.edit_document(cx, |d| {
+                    d.update_shape(shape_id, |shape| match shape {
+                        CanvasShape::Image { image: slot, .. } => {
                             *slot = image.clone();
+                            true
                         }
+                        _ => false,
                     })
-                })
+                    .is_some_and(|patched| patched)
+                });
+                if !landed {
+                    // Throttled: a render that never reaches the shape slot
+                    // would otherwise log once per frame.
+                    let misses = FRAME_MISS_LOG.fetch_add(1, Ordering::Relaxed);
+                    if misses < 3 || misses.is_multiple_of(100) {
+                        tracing::warn!(
+                            target: LOG,
+                            count = misses + 1,
+                            "rendered frame did not land in the canvas image slot"
+                        );
+                    }
+                }
             });
             shader.update(cx, |s, cx| s.frame_done(Instant::now(), image, cx));
         }
