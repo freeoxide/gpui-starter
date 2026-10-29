@@ -1,11 +1,12 @@
 use std::rc::Rc;
 
 use gpui_kit::{
-    AnyView, App, AppContext as _, Bounds, Context, IntoElement, Modifiers, Render, TestAppContext,
-    VisualTestContext, Window, div, point, px, size,
+    AnyView, App, AppContext as _, Bounds, Context, IntoElement, Modifiers, ParentElement as _,
+    Point, Render, Styled as _, TestAppContext, VisualTestContext, Window, div, point, px, size,
 };
 
 use super::*;
+use crate::app::window::{RootWindow, install_close_tracker, root_window};
 use crate::ui::floating::{FloatSurface, LayerShellSpec, Placement9, init};
 
 struct Blank;
@@ -158,6 +159,190 @@ async fn spawns_a_window_anchored_float_at_the_anchor_placement(cx: &mut TestApp
     let snapshot = cx.read(|cx| floating_snapshot(cx));
     assert_eq!(snapshot.len(), 1);
     assert_eq!(snapshot[0].bounds.origin, point(px(708.), px(8.)));
+}
+
+#[gpui_kit::test]
+async fn a_window_anchored_float_spawned_from_a_click_inside_the_anchor_window_opens(
+    cx: &mut TestAppContext,
+) {
+    struct SpawnHost;
+    impl Render for SpawnHost {
+        fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            div().size_full().child(
+                gpui_kit::component::button::Button::new("spawn-float")
+                    .label("Spawn float")
+                    .on_click(cx.listener(|_, _, window, cx| {
+                        // The anchor window is mid-dispatch here: its update
+                        // lease is held, the field failure mode.
+                        let spec = FloatingSpec::new(
+                            FloatingWindowId("click-anchored".into()),
+                            size(px(100.), px(80.)),
+                        )
+                        .anchor(FloatAnchor::Window {
+                            window: window.window_handle(),
+                            placement: Placement9::TopRight,
+                            offset: point(px(8.), px(8.)),
+                        });
+                        let spawned = spawn_floating(spec, blank_view, cx);
+                        assert!(
+                            spawned.is_ok(),
+                            "a mid-dispatch spawn must not report failure"
+                        );
+                    })),
+            )
+        }
+    }
+
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    let window = cx.open_window(size(px(800.), px(600.)), |_, _| SpawnHost);
+    let mut cx = VisualTestContext::from_window(window.into(), cx);
+    cx.simulate_click(point(px(30.), px(12.)), Modifiers::none());
+    let snapshot = cx.read(|cx| floating_snapshot(cx));
+    assert_eq!(snapshot.len(), 1, "the deferred open must settle");
+    assert_eq!(snapshot[0].id.0, "click-anchored");
+    assert!(matches!(snapshot[0].handle, FloatingHandle::Native(_)));
+    assert_eq!(
+        snapshot[0].bounds.origin,
+        point(px(708.), px(8.)),
+        "bounds must match the settled-dispatch anchor, not a fallback"
+    );
+}
+
+#[gpui_kit::test]
+async fn a_mid_dispatch_window_anchor_defers_until_the_cycle_settles(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
+    let anchor: gpui_kit::AnyWindowHandle = window.into();
+    let mid_dispatch_empty = std::cell::Cell::new(false);
+    let interim = cx.update(|cx| {
+        let probe = &mid_dispatch_empty;
+        anchor.update(cx, move |_, _, cx| {
+            let spawned = spawn_floating(
+                FloatingSpec::new(FloatingWindowId("deferred".into()), size(px(120.), px(90.)))
+                    .anchor(FloatAnchor::Window {
+                        window: anchor,
+                        placement: Placement9::Center,
+                        offset: Point::default(),
+                    }),
+                blank_view,
+                cx,
+            );
+            probe.set(floating_snapshot(cx).is_empty());
+            spawned
+        })
+    });
+    let handle = interim
+        .expect("the anchor window update itself must succeed")
+        .expect("the mid-dispatch spawn returns an interim handle");
+    assert!(
+        matches!(handle, FloatingHandle::Overlay(_)),
+        "the interim handle must be inert, not a window"
+    );
+    assert!(
+        mid_dispatch_empty.get(),
+        "no window may open before bounds resolve"
+    );
+    let settled = cx.read(|cx| floating_snapshot(cx));
+    assert_eq!(settled.len(), 1, "the effect flush completes the open");
+    assert!(matches!(settled[0].handle, FloatingHandle::Native(_)));
+    assert_eq!(
+        settled[0].bounds.origin,
+        point(px(340.), px(255.)),
+        "800x600 anchor centered: 400-60, 300-45"
+    );
+}
+
+#[gpui_kit::test]
+async fn a_mid_dispatch_screen_anchor_spawn_does_not_defer(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
+    let anchor: gpui_kit::AnyWindowHandle = window.into();
+    let handle = cx.update(|cx| {
+        anchor.update(cx, |_, _, cx| {
+            spawn_floating(
+                FloatingSpec::new(
+                    FloatingWindowId("screen-mid-dispatch".into()),
+                    size(px(120.), px(90.)),
+                )
+                .anchor(FloatAnchor::Screen {
+                    display: None,
+                    placement: Placement9::Center,
+                    offset: Point::default(),
+                }),
+                blank_view,
+                cx,
+            )
+        })
+    });
+    let handle = handle
+        .expect("the anchor window update itself must succeed")
+        .expect("screen anchors resolve inside a dispatch");
+    assert!(matches!(handle, FloatingHandle::Native(_)));
+    assert_eq!(cx.read(|cx| floating_snapshot(cx)).len(), 1);
+}
+
+#[gpui_kit::test]
+async fn a_stale_anchor_window_fails_the_spawn_without_opening_a_window(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
+    let anchor: gpui_kit::AnyWindowHandle = window.into();
+    cx.update(|cx| {
+        anchor
+            .update(cx, |_, window, _| window.remove_window())
+            .unwrap();
+    });
+    let result = cx.update(|cx| {
+        spawn_floating(
+            FloatingSpec::new(FloatingWindowId("stale".into()), size(px(120.), px(90.))).anchor(
+                FloatAnchor::Window {
+                    window: anchor,
+                    placement: Placement9::Center,
+                    offset: Point::default(),
+                },
+            ),
+            blank_view,
+            cx,
+        )
+    });
+    let error = result.expect_err("a dead handle must not resolve");
+    assert_eq!(error.to_string(), "floating anchor unavailable");
+    assert!(
+        cx.read(|cx| floating_snapshot(cx)).is_empty(),
+        "no deferral and no window for a closed anchor"
+    );
+}
+
+#[gpui_kit::test]
+async fn a_screen_anchor_spawn_with_an_unknown_display_fails_without_deferring(
+    cx: &mut TestAppContext,
+) {
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    let result = cx.update(|cx| {
+        spawn_floating(
+            FloatingSpec::new(
+                FloatingWindowId("stale-display".into()),
+                size(px(120.), px(90.)),
+            )
+            .anchor(FloatAnchor::Screen {
+                display: Some(gpui_kit::DisplayId::new(999)),
+                placement: Placement9::Center,
+                offset: Point::default(),
+            }),
+            blank_view,
+            cx,
+        )
+    });
+    let error = result.expect_err("a real Screen-anchor failure must surface, not defer");
+    assert_eq!(error.to_string(), "floating anchor unavailable");
+    assert!(
+        cx.read(|cx| floating_snapshot(cx)).is_empty(),
+        "no interim entry, no window, no retry for a display failure"
+    );
 }
 
 #[gpui_kit::test]
@@ -359,4 +544,165 @@ async fn topmost_toggle_tolerates_a_closed_native_handle(cx: &mut TestAppContext
     cx.update(|cx| close_floating(&handle, cx));
     assert!(!cx.update(|cx| set_floating_always_on_top(&handle, true, cx)));
     assert!(!cx.update(|cx| set_floating_click_through(&handle, true, cx)));
+}
+
+#[gpui_kit::test]
+async fn an_independent_float_spawns_with_no_main_window_ever_opened(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    let handle = cx
+        .update(|cx| {
+            spawn_screen_floating(
+                FloatingSpec::new(FloatingWindowId("free".into()), size(px(160.), px(100.))),
+                blank_view,
+                cx,
+            )
+        })
+        .unwrap();
+    assert!(matches!(handle, FloatingHandle::Native(_)));
+    assert!(
+        cx.read(root_window).is_none(),
+        "the spawn path must never consult the root-window global"
+    );
+    assert_eq!(cx.read(|cx| floating_snapshot(cx)).len(), 1);
+}
+
+#[gpui_kit::test]
+async fn screen_floats_outlive_the_main_window_and_spawn_after_its_close(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    cx.update(install_close_tracker);
+    let main = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
+    cx.update(|cx| cx.set_global(RootWindow(main.into())));
+    let handle = cx
+        .update(|cx| {
+            spawn_screen_floating(
+                FloatingSpec::new(
+                    FloatingWindowId("survivor".into()),
+                    size(px(160.), px(100.)),
+                ),
+                blank_view,
+                cx,
+            )
+        })
+        .unwrap();
+    let FloatingHandle::Native(float_window) = handle else {
+        panic!("expected a native handle");
+    };
+    cx.update(|cx| {
+        main.update(cx, |_, window, _| window.remove_window())
+            .unwrap();
+    });
+    assert!(
+        cx.read(root_window).is_none(),
+        "the root record must die with the window"
+    );
+    let snapshot = cx.read(|cx| floating_snapshot(cx));
+    assert_eq!(snapshot.len(), 1, "closing the root must not orphan floats");
+    assert_eq!(snapshot[0].id.0, "survivor");
+    assert!(
+        cx.read(|cx| cx.windows().contains(&float_window)),
+        "closing the root must not close floats"
+    );
+    let after = cx
+        .update(|cx| {
+            spawn_screen_floating(
+                FloatingSpec::new(
+                    FloatingWindowId("after-close".into()),
+                    size(px(120.), px(90.)),
+                ),
+                blank_view,
+                cx,
+            )
+        })
+        .unwrap();
+    assert!(matches!(after, FloatingHandle::Native(_)));
+}
+
+#[gpui_kit::test]
+async fn spawn_screen_floating_rejects_a_window_anchor(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
+    let result = cx.update(|cx| {
+        spawn_screen_floating(
+            FloatingSpec::new(
+                FloatingWindowId("dependent".into()),
+                size(px(120.), px(90.)),
+            )
+            .anchor(FloatAnchor::Window {
+                window: window.into(),
+                placement: Placement9::Center,
+                offset: Point::default(),
+            }),
+            blank_view,
+            cx,
+        )
+    });
+    let error = result.expect_err("a window anchor depends on another window by definition");
+    assert_eq!(
+        error.to_string(),
+        "independent floats require a Screen anchor"
+    );
+    assert!(
+        cx.read(|cx| floating_snapshot(cx)).is_empty(),
+        "a rejected independent spawn must open nothing"
+    );
+}
+
+#[gpui_kit::test]
+async fn a_screen_anchored_float_clamps_to_the_display_not_the_main_window(
+    cx: &mut TestAppContext,
+) {
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
+    let clamped = cx
+        .update(|cx| {
+            spawn_screen_floating(
+                FloatingSpec::new(
+                    FloatingWindowId("off-window".into()),
+                    size(px(120.), px(90.)),
+                )
+                .anchor(FloatAnchor::Screen {
+                    display: None,
+                    placement: Placement9::TopLeft,
+                    offset: point(px(1500.), px(900.)),
+                }),
+                blank_view,
+                cx,
+            )
+        })
+        .unwrap();
+    assert!(matches!(clamped, FloatingHandle::Native(_)));
+    let snapshot = cx.read(|cx| floating_snapshot(cx));
+    assert_eq!(
+        snapshot[0].bounds.origin,
+        point(px(1500.), px(900.)),
+        "inside the 1920x1080 display but outside the 800x600 main window"
+    );
+    let past_display = cx
+        .update(|cx| {
+            spawn_screen_floating(
+                FloatingSpec::new(
+                    FloatingWindowId("past-display".into()),
+                    size(px(120.), px(90.)),
+                )
+                .anchor(FloatAnchor::Screen {
+                    display: None,
+                    placement: Placement9::TopLeft,
+                    offset: point(px(2000.), px(1200.)),
+                }),
+                blank_view,
+                cx,
+            )
+        })
+        .unwrap();
+    assert!(matches!(past_display, FloatingHandle::Native(_)));
+    let snapshot = cx.read(|cx| floating_snapshot(cx));
+    assert_eq!(
+        snapshot[1].bounds.origin,
+        point(px(1800.), px(990.)),
+        "display edge clamp, not the main-window clamp at (680, 510)"
+    );
 }

@@ -4,7 +4,32 @@ use std::time::Duration;
 
 use anyhow::{Context as _, Result};
 
+use super::fence::{EngineFence, FRAME_DEADLINE, FenceError, INIT_DEADLINE, run_bounded};
 use super::frame::padded_bytes_per_row;
+
+const LOG: &str = "gpui_starter::wgpu_engine";
+
+#[cfg(test)]
+use std::cell::Cell;
+
+#[cfg(test)]
+thread_local! {
+    /// Test seam for the fenced init: Park wedges the init thread below
+    /// any deadline a test can afford.
+    static INIT_SEAM: Cell<InitSeam> = const { Cell::new(InitSeam::Real) };
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy)]
+enum InitSeam {
+    Real,
+    Park,
+}
+
+#[cfg(test)]
+fn set_init_seam(seam: InitSeam) {
+    INIT_SEAM.with(|slot| slot.set(seam));
+}
 
 /// Headless wgpu device shared by this feature and future consumers.
 /// `Send + Sync`; every handle wraps the same underlying device.
@@ -13,6 +38,7 @@ pub struct WgpuEngine {
     queue: wgpu::Queue,
     adapter_label: String,
     readback: Mutex<Option<(u64, wgpu::Buffer)>>,
+    fence: EngineFence,
 }
 
 impl WgpuEngine {
@@ -28,25 +54,70 @@ impl WgpuEngine {
         });
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
+                // None: headless readback needs no discrete GPU, and the
+                // dGPU path is a known wedge vector on dual-GPU Macs.
+                power_preference: wgpu::PowerPreference::None,
                 force_fallback_adapter: false,
                 compatible_surface: None,
                 apply_limit_buckets: false,
             })
             .await
             .context("requesting wgpu adapter")?;
+        let info = adapter.get_info();
+        let adapter_label = format!("{} ({})", info.name, info.backend);
+        tracing::info!(target: LOG, adapter = %adapter_label, "wgpu adapter acquired");
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor::default())
             .await
             .context("requesting wgpu device")?;
-        let info = adapter.get_info();
-        let adapter_label = format!("{} ({})", info.name, info.backend);
+        tracing::debug!(target: LOG, "wgpu device acquired");
         Ok(Self {
             device,
             queue,
             adapter_label,
             readback: Mutex::new(None),
+            fence: EngineFence::new(),
         })
+    }
+
+    /// Blocking [`Self::new`] bounded by `INIT_DEADLINE`: the async init
+    /// runs on a dedicated thread the caller waits on, so a hung
+    /// `request_adapter` cannot outlive its caller. On timeout the init
+    /// thread is detached (it cannot be cancelled) and an init-timeout
+    /// error is returned. Blocks up to `INIT_DEADLINE`; never call from
+    /// a UI thread.
+    pub fn new_fenced() -> Result<Self> {
+        Self::new_fenced_with_deadline(INIT_DEADLINE)
+    }
+
+    /// Deadline-taking core of [`Self::new_fenced`]; tests pass
+    /// sub-second deadlines so the timeout path runs fast.
+    pub(in crate::features::wgpu) fn new_fenced_with_deadline(deadline: Duration) -> Result<Self> {
+        #[cfg(test)]
+        let seam = INIT_SEAM.with(Cell::get);
+        let engine = run_bounded("wgpu-init", deadline, move || {
+            #[cfg(test)]
+            if matches!(seam, InitSeam::Park) {
+                // Stands in for request_adapter wedged inside the driver;
+                // the fence trips while this parks.
+                let (_tx, rx) = mpsc::channel::<()>();
+                let _ = rx.recv();
+            }
+            // One current-thread runtime per init: gpui's executor is not
+            // tokio and this thread owns nothing else to poll.
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .context("building wgpu init runtime")?;
+            runtime.block_on(Self::new())
+        })
+        .map_err(|err| match err {
+            FenceError::Deadline { secs } => {
+                tracing::warn!(target: LOG, secs, "wgpu init missed its deadline; thread detached");
+                anyhow::Error::new(FenceError::InitTimeout { secs })
+            }
+            other => other.into_anyhow(),
+        })?;
+        Ok(engine)
     }
 
     pub fn device(&self) -> &wgpu::Device {
@@ -60,6 +131,44 @@ impl WgpuEngine {
     /// Human-readable adapter and backend label for diagnostics.
     pub fn adapter_label(&self) -> &str {
         &self.adapter_label
+    }
+
+    /// Runs one unit of blocking render/readback work on a dedicated OS
+    /// thread bounded by `FRAME_DEADLINE`, outside wgpu's own calls (the
+    /// 30s waits inside `read_texture_bytes` stay as defense in depth).
+    /// On a missed deadline the engine is poisoned: this call returns a
+    /// deadline error, every later fenced call refuses work without
+    /// touching wgpu, and the wedged thread stays detached (one leaked
+    /// thread per poisoned engine). Blocks the caller up to the
+    /// deadline; never call from a UI thread.
+    pub fn render_fenced<T, F>(&self, work: F) -> Result<T>
+    where
+        F: FnOnce() -> Result<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        self.render_fenced_with_deadline(FRAME_DEADLINE, work)
+    }
+
+    /// Deadline-taking core of [`Self::render_fenced`]; tests pass
+    /// sub-second deadlines so the deadline path runs fast.
+    pub(in crate::features::wgpu) fn render_fenced_with_deadline<T, F>(
+        &self,
+        deadline: Duration,
+        work: F,
+    ) -> Result<T>
+    where
+        F: FnOnce() -> Result<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        self.fence
+            .run(deadline, work)
+            .map_err(FenceError::into_anyhow)
+    }
+
+    /// True once a fenced render missed its deadline; a poisoned engine
+    /// refuses all fenced work until the caller builds a replacement.
+    pub fn poisoned(&self) -> bool {
+        self.fence.poisoned()
     }
 
     /// Reads a COPY_SRC RGBA8 2D texture as tightly packed rows (width*4

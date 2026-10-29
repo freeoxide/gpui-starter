@@ -9,6 +9,7 @@ mod demo;
 mod dialog;
 mod floating;
 mod floating_canvas;
+mod floating_widgets;
 mod hover_card;
 mod notch_floater;
 mod notification;
@@ -29,6 +30,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     dialog::register(sections, window, cx);
     floating::register(sections, window, cx);
     floating_canvas::register(sections, window, cx);
+    floating_widgets::register(sections, window, cx);
     hover_card::register(sections, window, cx);
     notch_floater::register(sections, window, cx);
     notification::register(sections, window, cx);

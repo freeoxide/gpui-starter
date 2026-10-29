@@ -14,20 +14,72 @@ use super::registry::{
 use super::shell::FloatingShell;
 use super::shims;
 use super::spec::{
-    FloatAnchor, FloatLevel, FloatingSpec, FloatingWindowId, anchor_rect, resolve_bounds,
+    AnchorResolution, FloatAnchor, FloatLevel, FloatingSpec, FloatingWindowId, resolve_anchor,
+    resolve_bounds, window_is_open,
 };
 
 /// Spawn a float for `spec`. Native errors: the anchor cannot be resolved or
-/// window creation failed. On wasm the only error is that no main window has
-/// been recorded yet.
+/// window creation failed. A Window anchor whose window is mid-dispatch
+/// defers the open to the end of the cycle and returns an inert registry
+/// handle; the real entry lands moments later with exact anchor bounds.
 #[cfg(not(target_family = "wasm"))]
 pub fn spawn_floating(
     spec: FloatingSpec,
     build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     cx: &mut App,
 ) -> anyhow::Result<FloatingHandle> {
+    let interim_id = spec.id().clone();
+    let bounds = match resolve_float_bounds_outcome(&spec, cx) {
+        BoundsOutcome::Resolved(bounds) => bounds,
+        BoundsOutcome::Blocked => {
+            defer_past_dispatch(spec, build, cx);
+            return Ok(FloatingHandle::Overlay(interim_id));
+        }
+        BoundsOutcome::Failed(err) => return Err(err),
+    };
+    open_floating_window(spec, build, bounds, cx)
+}
+
+/// Resolve-then-open with no deferral: the retry path after a dispatch
+/// lease unwinds, where resolution must succeed or fail on its own merits.
+#[cfg(not(target_family = "wasm"))]
+fn spawn_floating_settled(
+    spec: FloatingSpec,
+    build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    cx: &mut App,
+) -> anyhow::Result<FloatingHandle> {
+    let bounds = match resolve_float_bounds_outcome(&spec, cx) {
+        BoundsOutcome::Resolved(bounds) => bounds,
+        // Retries run un-leased, so a still-blocked anchor is a real failure.
+        BoundsOutcome::Blocked => return Err(anyhow!("floating anchor unavailable")),
+        BoundsOutcome::Failed(err) => return Err(err),
+    };
+    open_floating_window(spec, build, bounds, cx)
+}
+
+/// Effects flush after the anchor window's dispatch unwinds and releases its
+/// update lease; the retry then resolves real anchor bounds.
+#[cfg(not(target_family = "wasm"))]
+fn defer_past_dispatch(
+    spec: FloatingSpec,
+    build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    cx: &mut App,
+) {
+    cx.defer(move |cx| {
+        if let Err(err) = spawn_floating_settled(spec, build, cx) {
+            tracing::warn!(target: shims::LOG, error = %err, "deferred float spawn failed");
+        }
+    });
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn open_floating_window(
+    spec: FloatingSpec,
+    build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    bounds: Bounds<Pixels>,
+    cx: &mut App,
+) -> anyhow::Result<FloatingHandle> {
     let factory: ViewFactory = Rc::new(build);
-    let bounds = resolve_float_bounds(&spec, cx)?;
     #[cfg(target_os = "linux")]
     let plan = super::layer_shell::wayland::plan(&spec, cx);
     #[cfg(target_os = "linux")]
@@ -38,7 +90,11 @@ pub fn spawn_floating(
         super::layer_shell::note_ignored_once();
     }
     let make_options = |_use_layer: bool| -> WindowOptions {
+        // Only the linux layer-shell branch mutates the options.
+        #[cfg(target_os = "linux")]
         let mut options = float_window_options(&spec, bounds);
+        #[cfg(not(target_os = "linux"))]
+        let options = float_window_options(&spec, bounds);
         #[cfg(target_os = "linux")]
         if _use_layer && let Some(layer) = plan.layer_options.clone() {
             // Option set from crates/gpui/examples/layer_shell.rs at
@@ -52,11 +108,12 @@ pub fn spawn_floating(
     let opened = {
         let id = spec.id().clone();
         let title = spec.window_title();
+        let chromeless = spec.is_chromeless();
         let build_view = factory.clone();
         gpui_kit::open_window(make_options(use_layer), cx, move |window, cx| {
             window.set_window_title(&title);
             let view = build_view(window, cx);
-            cx.new(|cx| FloatingShell::new(id, title, view, cx))
+            cx.new(|cx| FloatingShell::new(id, title, view, chromeless, cx))
         })
     };
     let (window, surface) = match opened {
@@ -84,12 +141,13 @@ pub fn spawn_floating(
                     super::layer_shell::state::record_unsupported(&err, cx);
                     let id = spec.id().clone();
                     let title = spec.window_title();
+                    let chromeless = spec.is_chromeless();
                     let build_view = factory.clone();
                     let (window, _) =
                         gpui_kit::open_window(make_options(false), cx, move |window, cx| {
                             window.set_window_title(&title);
                             let view = build_view(window, cx);
-                            cx.new(|cx| FloatingShell::new(id, title, view, cx))
+                            cx.new(|cx| FloatingShell::new(id, title, view, chromeless, cx))
                         })?;
                     (window, super::layer_shell::FloatSurface::Window)
                 } else {
@@ -139,13 +197,70 @@ pub fn spawn_floating(
     }
     let root = crate::app::window::root_window(cx)
         .ok_or_else(|| anyhow!("no main window to host overlay float"))?;
+    let interim_id = spec.id().clone();
+    let bounds = match resolve_overlay_bounds(&root, spec.float_anchor(), spec.size(), cx) {
+        OverlayOutcome::Bounds(bounds) => bounds,
+        OverlayOutcome::Blocked => {
+            cx.defer(move |cx| {
+                if let Err(err) = spawn_floating_settled(spec, build, cx) {
+                    tracing::warn!(
+                        target: "gpui_starter::ui::floating",
+                        error = %err,
+                        "deferred overlay float spawn failed"
+                    );
+                }
+            });
+            return Ok(FloatingHandle::Overlay(interim_id));
+        }
+        OverlayOutcome::Failed(err) => return Err(err),
+    };
     let factory: ViewFactory = Rc::new(build);
+    register_overlay(spec, factory, bounds, &root, cx)
+}
+
+/// Resolve-then-register with no deferral: the retry path after the main
+/// window's dispatch lease unwinds.
+#[cfg(target_family = "wasm")]
+fn spawn_floating_settled(
+    spec: FloatingSpec,
+    build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    cx: &mut App,
+) -> anyhow::Result<FloatingHandle> {
+    let root = crate::app::window::root_window(cx)
+        .ok_or_else(|| anyhow!("no main window to host overlay float"))?;
     let bounds = overlay_bounds(&root, spec.float_anchor(), spec.size(), cx)?;
+    let factory: ViewFactory = Rc::new(build);
+    register_overlay(spec, factory, bounds, &root, cx)
+}
+
+/// Spawn a Screen-anchored float that survives the main window closing:
+/// native never reads the root window; wasm hosts it as a root overlay.
+pub fn spawn_screen_floating(
+    spec: FloatingSpec,
+    build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    cx: &mut App,
+) -> anyhow::Result<FloatingHandle> {
+    if !matches!(spec.float_anchor(), FloatAnchor::Screen { .. }) {
+        return Err(anyhow!("independent floats require a Screen anchor"));
+    }
+    spawn_floating(spec, build, cx)
+}
+
+#[cfg(target_family = "wasm")]
+fn register_overlay(
+    spec: FloatingSpec,
+    factory: ViewFactory,
+    bounds: Bounds<Pixels>,
+    root: &AnyWindowHandle,
+    cx: &mut App,
+) -> anyhow::Result<FloatingHandle> {
     let build_view = factory.clone();
     let view = root
         .update(cx, |_, window, cx| build_view(window, cx))
         .map_err(|_| anyhow!("no main window to host overlay float"))?;
-    let handle = FloatingHandle::Overlay(spec.id().clone());
+    let id = spec.id().clone();
+    let chromeless = spec.is_chromeless();
+    let handle = FloatingHandle::Overlay(id.clone());
     set_entry(
         RegistryEntry {
             spec,
@@ -157,6 +272,7 @@ pub fn spawn_floating(
         },
         cx,
     );
+    super::overlay_host::set_pane_chromeless(&id, chromeless, cx);
     Ok(handle)
 }
 
@@ -270,17 +386,80 @@ fn float_window_options(spec: &FloatingSpec, bounds: Bounds<Pixels>) -> WindowOp
 }
 
 #[cfg(not(target_family = "wasm"))]
-fn resolve_float_bounds(spec: &FloatingSpec, cx: &mut App) -> anyhow::Result<Bounds<Pixels>> {
+enum BoundsOutcome {
+    Resolved(Bounds<Pixels>),
+    /// A live anchor window's dispatch holds the update lease; the same
+    /// resolution succeeds once the cycle settles.
+    Blocked,
+    Failed(anyhow::Error),
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn resolve_float_bounds_outcome(spec: &FloatingSpec, cx: &mut App) -> BoundsOutcome {
     let anchor = spec.float_anchor();
-    let (anchor_bounds, clamp_bounds) =
-        anchor_rect(anchor, cx).ok_or_else(|| anyhow!("floating anchor unavailable"))?;
-    Ok(resolve_bounds(
+    match resolve_anchor(anchor, cx) {
+        AnchorResolution::Resolved((anchor_bounds, clamp_bounds)) => {
+            BoundsOutcome::Resolved(resolve_bounds(
+                anchor_bounds,
+                clamp_bounds,
+                spec.size(),
+                anchor.placement(),
+                anchor.offset(),
+            ))
+        }
+        AnchorResolution::DispatchBlocked => BoundsOutcome::Blocked,
+        AnchorResolution::Unavailable => {
+            BoundsOutcome::Failed(anyhow!("floating anchor unavailable"))
+        }
+    }
+}
+
+enum OverlayOutcome {
+    Bounds(Bounds<Pixels>),
+    /// The main window's own dispatch holds its update lease; either the
+    /// anchor window or the root blocks the bounds read.
+    Blocked,
+    Failed(anyhow::Error),
+}
+
+fn resolve_overlay_bounds(
+    root: &AnyWindowHandle,
+    anchor: &FloatAnchor,
+    size: Size<Pixels>,
+    cx: &mut App,
+) -> OverlayOutcome {
+    let (anchor_bounds, clamp_bounds) = match resolve_anchor(anchor, cx) {
+        AnchorResolution::Resolved(bounds) => bounds,
+        AnchorResolution::DispatchBlocked => return OverlayOutcome::Blocked,
+        AnchorResolution::Unavailable => {
+            return OverlayOutcome::Failed(anyhow!("floating anchor unavailable"));
+        }
+    };
+    let screen = resolve_bounds(
         anchor_bounds,
         clamp_bounds,
-        spec.size(),
+        size,
         anchor.placement(),
         anchor.offset(),
-    ))
+    );
+    let Some(root_bounds) = root
+        .update(cx, |_, window, _| window.window_bounds().get_bounds())
+        .ok()
+    else {
+        // Open + un-updatable is the dispatch lease; closed is a real failure.
+        return if window_is_open(root, cx) {
+            OverlayOutcome::Blocked
+        } else {
+            OverlayOutcome::Failed(anyhow!("no main window to host overlay float"))
+        };
+    };
+    OverlayOutcome::Bounds(Bounds {
+        origin: point(
+            screen.origin.x - root_bounds.origin.x,
+            screen.origin.y - root_bounds.origin.y,
+        ),
+        size: screen.size,
+    })
 }
 
 fn overlay_bounds(
@@ -289,25 +468,11 @@ fn overlay_bounds(
     size: Size<Pixels>,
     cx: &mut App,
 ) -> anyhow::Result<Bounds<Pixels>> {
-    let (anchor_bounds, clamp_bounds) =
-        anchor_rect(anchor, cx).ok_or_else(|| anyhow!("floating anchor unavailable"))?;
-    let screen = resolve_bounds(
-        anchor_bounds,
-        clamp_bounds,
-        size,
-        anchor.placement(),
-        anchor.offset(),
-    );
-    let root_bounds = root
-        .update(cx, |_, window, _| window.window_bounds().get_bounds())
-        .map_err(|_| anyhow!("no main window to host overlay float"))?;
-    Ok(Bounds {
-        origin: point(
-            screen.origin.x - root_bounds.origin.x,
-            screen.origin.y - root_bounds.origin.y,
-        ),
-        size: screen.size,
-    })
+    match resolve_overlay_bounds(root, anchor, size, cx) {
+        OverlayOutcome::Bounds(bounds) => Ok(bounds),
+        OverlayOutcome::Blocked => Err(anyhow!("floating anchor unavailable")),
+        OverlayOutcome::Failed(err) => Err(err),
+    }
 }
 
 #[cfg(test)]

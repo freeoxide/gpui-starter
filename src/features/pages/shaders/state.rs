@@ -220,6 +220,12 @@ impl ShaderState {
     pub(in crate::features::pages::shaders) fn take_fit(&mut self) -> bool {
         std::mem::take(&mut self.fit_pending)
     }
+
+    /// Queues a zoom-to-fit on the next ticker paint.
+    pub(in crate::features::pages::shaders) fn request_fit(&mut self, cx: &mut Context<Self>) {
+        self.fit_pending = true;
+        cx.notify();
+    }
 }
 
 #[cfg(test)]

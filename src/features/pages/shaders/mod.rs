@@ -48,19 +48,27 @@ use crate::platform::clock::{self, Duration, Instant};
 use demos::{DEMOS, DemoSpec};
 #[cfg(not(target_family = "wasm"))]
 use std::sync::Arc;
+#[cfg(not(target_family = "wasm"))]
+use std::sync::atomic::Ordering;
 
 /// Capability-registry name registered at startup ("canvas_shaders").
 pub const CAPABILITY_SHADERS: &str = "canvas_shaders";
 
-/// Upper bound on adapter/device init before the page surfaces a timeout
-/// error instead of parking on "waiting" forever (a hung init never errors).
+#[cfg(not(target_family = "wasm"))]
+const LOG: &str = "gpui_starter::shader_page";
+
+#[cfg(not(target_family = "wasm"))]
+static FRAME_MISS_LOG: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Backstop deadline for a lost init: the fenced engine init and runtime
+/// build bound the attempt; this watchdog catches a result that never lands.
 #[cfg(not(target_family = "wasm"))]
 const INIT_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[cfg(test)]
 thread_local! {
-    /// Test seam for the init task: park it forever, or delay it past the
-    /// watchdog deadline before running the real init.
+    /// Test seam for the init task: park it forever, delay it past the
+    /// watchdog deadline, or wedge the fenced runtime build.
     static INIT_SEAM: std::cell::Cell<InitSeam> =
         const { std::cell::Cell::new(InitSeam::Real) };
 }
@@ -71,11 +79,32 @@ enum InitSeam {
     Real,
     Park,
     Delay(Duration),
+    WedgeBuild,
 }
 
 #[cfg(test)]
 fn set_init_seam(seam: InitSeam) {
     INIT_SEAM.with(|slot| slot.set(seam));
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Test seam for the fenced frame: Wedge parks the render work below
+    /// the fence deadline, tripping the real fence without a GPU wedge.
+    static FRAME_SEAM: std::cell::Cell<FrameSeam> =
+        const { std::cell::Cell::new(FrameSeam::Real) };
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy)]
+enum FrameSeam {
+    Real,
+    Wedge,
+}
+
+#[cfg(test)]
+fn set_frame_seam(seam: FrameSeam) {
+    FRAME_SEAM.with(|slot| slot.set(seam));
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -127,6 +156,9 @@ pub struct ShaderCanvasPage {
     slider: Entity<SliderState>,
     #[cfg(not(target_family = "wasm"))]
     runtime: Option<Arc<runtime::ShaderRuntime>>,
+    // The runtime holds its own engine Arc; this clone exists to fence frames.
+    #[cfg(not(target_family = "wasm"))]
+    engine: Option<Arc<WgpuEngine>>,
     #[cfg(not(target_family = "wasm"))]
     image_shape: Option<ShapeId>,
     #[cfg(not(target_family = "wasm"))]
@@ -157,6 +189,8 @@ impl ShaderCanvasPage {
             slider,
             #[cfg(not(target_family = "wasm"))]
             runtime: None,
+            #[cfg(not(target_family = "wasm"))]
+            engine: None,
             #[cfg(not(target_family = "wasm"))]
             image_shape: None,
             #[cfg(not(target_family = "wasm"))]
@@ -189,11 +223,12 @@ impl ShaderCanvasPage {
 
     #[cfg(not(target_family = "wasm"))]
     fn start_runtime(&mut self, cx: &mut Context<Self>) {
-        // Dropping the previous attempt's tasks cancels its hung init and
-        // its watchdog; stored handles double as the cancellation switch.
+        // Engine init and the runtime build both run behind the fence (a
+        // wedged thread detaches); the drops stop the watchdog and free the engine.
         self.init_task = None;
         self.init_watchdog = None;
         self.runtime = None;
+        self.engine = None;
         self.shader.update(cx, |s, cx| s.clear_error(cx));
         #[cfg(test)]
         let seam = INIT_SEAM.with(std::cell::Cell::get);
@@ -202,19 +237,33 @@ impl ShaderCanvasPage {
             if let InitSeam::Delay(delay) = seam {
                 cx.background_executor().timer(delay).await;
             }
-            let runtime = cx
+            let built = cx
                 .background_executor()
                 .spawn(async move {
                     #[cfg(test)]
                     if matches!(seam, InitSeam::Park) {
                         std::future::pending::<()>().await;
                     }
-                    let engine = Arc::new(WgpuEngine::new().await?);
-                    anyhow::Ok(Arc::new(runtime::ShaderRuntime::new(engine)))
+                    let engine = Arc::new(WgpuEngine::new_fenced()?);
+                    let builder = engine.clone();
+                    // The pipeline compiles run inside the driver; the fence
+                    // bounds them so a wedge cannot pin this executor thread.
+                    let runtime = builder.render_fenced(move || {
+                        #[cfg(test)]
+                        if matches!(seam, InitSeam::WedgeBuild) {
+                            // Stand-in for a pipeline compile wedged inside
+                            // the driver; the fence trips while this parks.
+                            let (_tx, rx) = std::sync::mpsc::channel::<()>();
+                            let _ = rx.recv();
+                        }
+                        anyhow::Ok(Arc::new(runtime::ShaderRuntime::new(engine)))
+                    })?;
+                    anyhow::Ok((builder, runtime))
                 })
                 .await;
-            let _ = this.update(cx, |page, cx| match runtime {
-                Ok(runtime) => {
+            let _ = this.update(cx, |page, cx| match built {
+                Ok((engine, runtime)) => {
+                    page.engine = Some(engine);
                     page.runtime = Some(runtime);
                     // A slow success landing after the watchdog must dismiss
                     // the timeout panel, not stack a runtime under it.
@@ -303,9 +352,11 @@ impl ShaderCanvasPage {
                 let layer = d.add_layer();
                 d.add_shape(layer, CanvasShape::image(doc_bounds(spec), blank_image()))
             });
-            s.reset_view(cx);
             shape
         });
+        // reset_view would land after the initial fit consumed it; a fresh
+        // fit request re-centers on the next ticker paint instead.
+        self.shader.update(cx, |s, cx| s.request_fit(cx));
         let slider_spec = spec.slider;
         self.slider = cx.new(|_| {
             SliderState::new()
@@ -482,7 +533,7 @@ impl ShaderCanvasPage {
         };
 
         v_flex()
-            .min_h_full()
+            .size_full()
             .p_6()
             .gap_4()
             .child(header)
@@ -528,9 +579,11 @@ impl ShaderCanvasPage {
                         return;
                     };
                     let page_view = page.read(cx);
-                    let (Some(runtime), Some(shape_id)) =
-                        (page_view.runtime.clone(), page_view.image_shape)
-                    else {
+                    let (Some(engine), Some(runtime), Some(shape_id)) = (
+                        page_view.engine.clone(),
+                        page_view.runtime.clone(),
+                        page_view.image_shape,
+                    ) else {
                         return;
                     };
                     let still_eligible = {
@@ -545,7 +598,8 @@ impl ShaderCanvasPage {
                     let now = clock::Instant::now();
                     shader.update(cx, |s, cx| s.mark_frame_started(now, cx));
                     cx.spawn(async move |cx| {
-                        frame_task(shader, canvas_entity, runtime, shape_id, spec, cx).await;
+                        frame_task(shader, canvas_entity, engine, runtime, shape_id, spec, cx)
+                            .await;
                     })
                     .detach();
                 });
@@ -562,6 +616,7 @@ impl ShaderCanvasPage {
 async fn frame_task(
     shader: Entity<ShaderState>,
     canvas: Entity<CanvasState>,
+    engine: Arc<WgpuEngine>,
     runtime: Arc<runtime::ShaderRuntime>,
     shape_id: ShapeId,
     spec: &'static DemoSpec,
@@ -575,9 +630,24 @@ async fn frame_task(
         return;
     }
     let params = shader.read_with(cx, |s, _| s.params_snapshot(spec));
+    // Read on the caller thread before the spawn so the worker never
+    // touches the thread-local seam.
+    #[cfg(test)]
+    let frame_seam = FRAME_SEAM.with(std::cell::Cell::get);
     let frame = cx
         .background_executor()
-        .spawn(async move { runtime.render_frame(spec, params) })
+        .spawn(async move {
+            engine.render_fenced(move || {
+                #[cfg(test)]
+                if matches!(frame_seam, FrameSeam::Wedge) {
+                    // Stand-in for a readback wedged inside the driver; the
+                    // fence trips while this parks.
+                    let (_tx, rx) = std::sync::mpsc::channel::<()>();
+                    let _ = rx.recv();
+                }
+                runtime.render_frame(spec, params)
+            })
+        })
         .await;
 
     match frame {
@@ -588,13 +658,28 @@ async fn frame_task(
                 return;
             }
             let _ = canvas.update(cx, |s, cx| {
-                s.edit_document(cx, |d| {
-                    d.update_shape(shape_id, |shape| {
-                        if let CanvasShape::Image { image: slot, .. } = shape {
+                let landed = s.edit_document(cx, |d| {
+                    d.update_shape(shape_id, |shape| match shape {
+                        CanvasShape::Image { image: slot, .. } => {
                             *slot = image.clone();
+                            true
                         }
+                        _ => false,
                     })
-                })
+                    .is_some_and(|patched| patched)
+                });
+                if !landed {
+                    // Throttled: a render that never reaches the shape slot
+                    // would otherwise log once per frame.
+                    let misses = FRAME_MISS_LOG.fetch_add(1, Ordering::Relaxed);
+                    if misses < 3 || misses.is_multiple_of(100) {
+                        tracing::warn!(
+                            target: LOG,
+                            count = misses + 1,
+                            "rendered frame did not land in the canvas image slot"
+                        );
+                    }
+                }
             });
             shader.update(cx, |s, cx| s.frame_done(Instant::now(), image, cx));
         }

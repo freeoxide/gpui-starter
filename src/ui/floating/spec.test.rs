@@ -131,6 +131,7 @@ fn spec_defaults_center_on_the_primary_display() {
     assert!(!spec.is_focus());
     assert!(!spec.is_resizable());
     assert!(spec.is_movable());
+    assert!(!spec.is_chromeless());
     assert!(!spec.is_click_through());
     assert_eq!(spec.min_window_size(), None);
 }
@@ -149,6 +150,16 @@ fn movable_defaults_true_and_round_trips() {
         "drag-to-move is the widget drag affordance"
     );
     assert!(!spec.movable(false).is_movable());
+}
+
+#[test]
+fn chromeless_builder_round_trips() {
+    let spec = FloatingSpec::new(FloatingWindowId("demo".into()), float_size());
+    assert!(!spec.is_chromeless());
+    let spec = spec.chromeless(true);
+    assert!(spec.is_chromeless());
+    let spec = spec.chromeless(false);
+    assert!(!spec.is_chromeless());
 }
 
 #[test]
@@ -181,7 +192,7 @@ fn set_level_rewrites_the_stored_level() {
 }
 
 #[gpui_kit::test]
-async fn anchor_rect_resolves_window_anchor_against_its_display(cx: &mut TestAppContext) {
+async fn resolve_anchor_resolves_window_anchor_against_its_display(cx: &mut TestAppContext) {
     struct Blank;
     impl Render for Blank {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -191,7 +202,7 @@ async fn anchor_rect_resolves_window_anchor_against_its_display(cx: &mut TestApp
 
     let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
     let resolved = cx.update(|cx| {
-        anchor_rect(
+        resolve_anchor(
             &FloatAnchor::Window {
                 window: window.into(),
                 placement: Placement9::TopRight,
@@ -200,7 +211,9 @@ async fn anchor_rect_resolves_window_anchor_against_its_display(cx: &mut TestApp
             cx,
         )
     });
-    let (anchor_bounds, clamp_bounds) = resolved.expect("window anchor resolves");
+    let AnchorResolution::Resolved((anchor_bounds, clamp_bounds)) = resolved else {
+        panic!("window anchor resolves");
+    };
     assert_eq!(
         anchor_bounds,
         Bounds {
@@ -218,9 +231,9 @@ async fn anchor_rect_resolves_window_anchor_against_its_display(cx: &mut TestApp
 }
 
 #[gpui_kit::test]
-async fn anchor_rect_uses_display_visible_bounds_for_screen_anchor(cx: &TestAppContext) {
+async fn resolve_anchor_uses_display_visible_bounds_for_screen_anchor(cx: &TestAppContext) {
     let resolved = cx.update(|cx| {
-        anchor_rect(
+        resolve_anchor(
             &FloatAnchor::Screen {
                 display: None,
                 placement: Placement9::Center,
@@ -229,14 +242,69 @@ async fn anchor_rect_uses_display_visible_bounds_for_screen_anchor(cx: &TestAppC
             cx,
         )
     });
-    let (anchor_bounds, clamp_bounds) = resolved.expect("screen anchor resolves");
+    let AnchorResolution::Resolved((anchor_bounds, clamp_bounds)) = resolved else {
+        panic!("screen anchor resolves");
+    };
     assert_eq!(anchor_bounds, clamp_bounds);
 }
 
 #[gpui_kit::test]
-async fn anchor_rect_returns_none_for_an_unknown_display(cx: &TestAppContext) {
-    let resolved = cx.update(|cx| {
-        anchor_rect(
+async fn window_is_open_stays_true_while_dispatching_and_false_after_close(
+    cx: &mut TestAppContext,
+) {
+    struct Blank;
+    impl Render for Blank {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+        }
+    }
+
+    let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
+    let handle: gpui_kit::AnyWindowHandle = window.into();
+    let mid_dispatch = cx.update(|cx| {
+        handle
+            .update(cx, |_, _, cx| window_is_open(&handle, cx))
+            .unwrap()
+    });
+    assert!(mid_dispatch, "the dispatch lease must not read as closed");
+    cx.update(|cx| {
+        handle
+            .update(cx, |_, window, _| window.remove_window())
+            .unwrap();
+    });
+    assert!(!cx.update(|cx| window_is_open(&handle, cx)));
+}
+
+#[gpui_kit::test]
+async fn resolve_anchor_separates_dispatch_block_from_real_failures(cx: &mut TestAppContext) {
+    struct Blank;
+    impl Render for Blank {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+        }
+    }
+
+    let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
+    let handle: gpui_kit::AnyWindowHandle = window.into();
+    let blocked = cx.update(|cx| {
+        handle.update(cx, |_, _, cx| {
+            resolve_anchor(
+                &FloatAnchor::Window {
+                    window: handle,
+                    placement: Placement9::Center,
+                    offset: Point::default(),
+                },
+                cx,
+            )
+        })
+    });
+    assert!(
+        matches!(blocked, Ok(AnchorResolution::DispatchBlocked)),
+        "an open window mid-dispatch is the one transient cause"
+    );
+
+    let stale_display = cx.update(|cx| {
+        resolve_anchor(
             &FloatAnchor::Screen {
                 display: Some(DisplayId::new(999)),
                 placement: Placement9::Center,
@@ -245,5 +313,28 @@ async fn anchor_rect_returns_none_for_an_unknown_display(cx: &TestAppContext) {
             cx,
         )
     });
-    assert!(resolved.is_none());
+    assert!(
+        matches!(stale_display, AnchorResolution::Unavailable),
+        "a Screen anchor failure is never a dispatch block"
+    );
+
+    cx.update(|cx| {
+        handle
+            .update(cx, |_, window, _| window.remove_window())
+            .unwrap();
+    });
+    let closed = cx.update(|cx| {
+        resolve_anchor(
+            &FloatAnchor::Window {
+                window: handle,
+                placement: Placement9::Center,
+                offset: Point::default(),
+            },
+            cx,
+        )
+    });
+    assert!(
+        matches!(closed, AnchorResolution::Unavailable),
+        "a closed anchor window is a real failure, not a deferral"
+    );
 }

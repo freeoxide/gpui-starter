@@ -59,6 +59,23 @@ impl Drop for SeamGuard {
     }
 }
 
+/// Pins the frame seam for the test's lifetime; resets to Real on drop,
+/// including on panic.
+struct FrameSeamGuard;
+
+impl FrameSeamGuard {
+    fn arm(seam: super::FrameSeam) -> Self {
+        super::set_frame_seam(seam);
+        Self
+    }
+}
+
+impl Drop for FrameSeamGuard {
+    fn drop(&mut self) {
+        super::set_frame_seam(super::FrameSeam::Real);
+    }
+}
+
 /// Mounts the page the way AppRoot does: constructed at window open, but
 /// rendered only once `visited` flips, so construction stays GPU-free.
 struct PageHost {
@@ -356,7 +373,192 @@ async fn the_page_loop_lands_sustained_frames_for_every_demo(cx: &mut TestAppCon
                 DevicePixels(spec.height as i32)
             ),
             "{:?} (demo {ix}) never replaced the placeholder with a rendered frame",
-            spec.id
+            spec.id,
         );
     }
+}
+
+#[gpui_kit::test]
+#[ignore = "needs a working wgpu adapter (GPU or lavapipe); run with --ignored locally"]
+async fn a_wedged_frame_poisons_the_engine_and_retry_builds_a_fresh_one(cx: &mut TestAppContext) {
+    let _seam = FrameSeamGuard::arm(super::FrameSeam::Wedge);
+    let (page, host, mut cx) = open_hosted_page(cx);
+    host.update(&mut cx, |host, cx| {
+        host.visited = true;
+        cx.notify();
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.run_until_parked();
+    let first_engine = cx.read(|cx| {
+        page.read(cx)
+            .engine
+            .clone()
+            .expect("adapter hosts must land an engine")
+    });
+    assert!(!first_engine.poisoned());
+
+    // One kicked frame parks inside the fence until the deadline trips.
+    cx.update(|window, cx| {
+        window.draw(cx).clear(cx);
+        window.simulate_next_frame(cx);
+    });
+    cx.executor().advance_clock(Duration::from_millis(40));
+    cx.run_until_parked();
+    let error = cx.read(|cx| {
+        page.read(cx)
+            .shader
+            .read(cx)
+            .runtime_error()
+            .map(str::to_string)
+            .expect("the fenced deadline must land in the error panel")
+    });
+    assert!(
+        error.starts_with("wgpu render missed its")
+            && error.ends_with("s deadline; engine poisoned (wedged render thread detached)"),
+        "unexpected deadline message: {error}"
+    );
+    assert!(
+        cx.read(|cx| page.read(cx).engine.as_ref().is_some_and(|e| e.poisoned())),
+        "the missed deadline must poison the engine"
+    );
+
+    // Retry must build a fresh engine; a poisoned one is never reused.
+    super::set_frame_seam(super::FrameSeam::Real);
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let mut retried = false;
+    for y in (240..560usize).step_by(8) {
+        cx.simulate_click(point(px(400.), px(y as f32)), Modifiers::none());
+        if cx.read(|cx| page.read(cx).shader.read(cx).runtime_error().is_none()) {
+            retried = true;
+            break;
+        }
+    }
+    assert!(
+        retried,
+        "the Retry click must re-enter init and clear the error"
+    );
+    cx.executor().advance_clock(Duration::from_millis(40));
+    cx.run_until_parked();
+
+    let fresh_engine = cx.read(|cx| {
+        page.read(cx)
+            .engine
+            .clone()
+            .expect("retry must land a fresh engine")
+    });
+    assert!(
+        !fresh_engine.poisoned(),
+        "retry must build an unpoisoned engine"
+    );
+    assert!(
+        !std::sync::Arc::ptr_eq(&first_engine, &fresh_engine),
+        "retry must build a new engine instance, not reuse the poisoned one"
+    );
+
+    let baseline = cx.read(|cx| page.read(cx).shader.read(cx).frames_rendered());
+    for _ in 0..8 {
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            window.simulate_next_frame(cx);
+        });
+        cx.executor().advance_clock(Duration::from_millis(40));
+        cx.run_until_parked();
+    }
+    let frames = cx.read(|cx| page.read(cx).shader.read(cx).frames_rendered());
+    assert!(
+        frames - baseline >= 1,
+        "playback must resume on the fresh engine"
+    );
+    assert!(
+        cx.read(|cx| page.read(cx).shader.read(cx).runtime_error().is_none()),
+        "resumed playback must stay out of the error panel"
+    );
+}
+
+#[gpui_kit::test]
+#[ignore = "needs a working wgpu adapter (GPU or lavapipe); run with --ignored locally"]
+async fn a_wedged_runtime_build_deadlines_into_the_error_panel_and_retry_rebuilds(
+    cx: &mut TestAppContext,
+) {
+    let _seam = SeamGuard::arm(super::InitSeam::WedgeBuild);
+    let (page, host, mut cx) = open_hosted_page(cx);
+    host.update(&mut cx, |host, cx| {
+        host.visited = true;
+        cx.notify();
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.run_until_parked();
+
+    // The engine init succeeds, then the fenced pipeline build parks until
+    // the deadline trips; the Err must land through the init error arm.
+    let error = cx.read(|cx| {
+        page.read(cx)
+            .shader
+            .read(cx)
+            .runtime_error()
+            .map(str::to_string)
+            .expect("the wedged build must land in the error panel")
+    });
+    assert!(
+        error.starts_with("wgpu render missed its")
+            && error.ends_with("s deadline; engine poisoned (wedged render thread detached)"),
+        "unexpected deadline message: {error}"
+    );
+    assert!(
+        cx.read(|cx| {
+            let page_view = page.read(cx);
+            page_view.engine.is_none() && page_view.runtime.is_none()
+        }),
+        "a failed build must not land an engine or runtime on the page"
+    );
+
+    // Retry must build a fresh engine and runtime; the wedged one is
+    // never reused.
+    super::set_init_seam(super::InitSeam::Real);
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let mut retried = false;
+    for y in (240..560usize).step_by(8) {
+        cx.simulate_click(point(px(400.), px(y as f32)), Modifiers::none());
+        if cx.read(|cx| page.read(cx).shader.read(cx).runtime_error().is_none()) {
+            retried = true;
+            break;
+        }
+    }
+    assert!(
+        retried,
+        "the Retry click must re-enter init and clear the error"
+    );
+    cx.executor().advance_clock(Duration::from_millis(40));
+    cx.run_until_parked();
+
+    assert!(
+        cx.read(|cx| {
+            let page_view = page.read(cx);
+            page_view.engine.is_some() && page_view.runtime.is_some()
+        }),
+        "retry must land a fresh engine and runtime"
+    );
+    assert!(
+        cx.read(|cx| page.read(cx).engine.as_ref().is_some_and(|e| !e.poisoned())),
+        "the rebuilt engine must be unpoisoned"
+    );
+
+    let baseline = cx.read(|cx| page.read(cx).shader.read(cx).frames_rendered());
+    for _ in 0..8 {
+        cx.update(|window, cx| {
+            window.draw(cx).clear(cx);
+            window.simulate_next_frame(cx);
+        });
+        cx.executor().advance_clock(Duration::from_millis(40));
+        cx.run_until_parked();
+    }
+    let frames = cx.read(|cx| page.read(cx).shader.read(cx).frames_rendered());
+    assert!(
+        frames - baseline >= 1,
+        "playback must resume on the rebuilt engine"
+    );
+    assert!(
+        cx.read(|cx| page.read(cx).shader.read(cx).runtime_error().is_none()),
+        "resumed playback must stay out of the error panel"
+    );
 }

@@ -1,10 +1,13 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use anyhow::{Context as _, Result};
 use gpui_kit::RenderImage;
 
 use super::demos::{DEMOS, DemoSpec, ShaderParams, WARP_SOURCE_SIZE, warp_source_bytes};
 use crate::features::wgpu::{WgpuEngine, bgra_to_render_image};
+
+const LOG: &str = "gpui_starter::shader_runtime";
 
 struct RenderTarget {
     texture: wgpu::Texture,
@@ -20,6 +23,7 @@ pub(in crate::features::pages::shaders) struct ShaderRuntime {
     pipelines: [wgpu::RenderPipeline; 4],
     bind_groups: [wgpu::BindGroup; 4],
     targets: [RenderTarget; 4],
+    frame_log: AtomicU32,
 }
 
 fn uniform_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
@@ -230,6 +234,7 @@ impl ShaderRuntime {
             pipelines,
             bind_groups,
             targets,
+            frame_log: AtomicU32::new(0),
         }
     }
 
@@ -277,6 +282,24 @@ impl ShaderRuntime {
             .engine
             .read_texture_bytes(&target.texture, spec.width, spec.height)
             .context("reading shader frame back")?;
+        // First three frames and every 60th: readback stats that separate
+        // a black-rendering GPU from a paint-side drop.
+        let n = self.frame_log.fetch_add(1, Ordering::Relaxed);
+        if n < 3 || n.is_multiple_of(60) {
+            let mean = bgra.iter().copied().map(u32::from).sum::<u32>() as f32 / bgra.len() as f32;
+            let pixel = |x: u32, y: u32| {
+                let at = ((y * spec.width + x) * 4) as usize;
+                (bgra[at], bgra[at + 1], bgra[at + 2], bgra[at + 3])
+            };
+            tracing::debug!(
+                target: LOG,
+                frame = n,
+                mean,
+                corner = ?pixel(4, 4),
+                center = ?pixel(spec.width / 2, spec.height / 2),
+                "shader frame readback"
+            );
+        }
         Ok(bgra_to_render_image(spec.width, spec.height, bgra))
     }
 }
