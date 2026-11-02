@@ -27,6 +27,7 @@ pub enum Page {
     DesktopWidgets,
     Wgpu,
     ShaderCanvas,
+    ModelViewer,
 }
 
 impl Page {
@@ -56,6 +57,7 @@ impl Page {
             Page::DesktopWidgets => "Desktop Widgets",
             Page::Wgpu => "WGPU",
             Page::ShaderCanvas => "Shader Canvas",
+            Page::ModelViewer => "Model Viewer",
         }
     }
 
@@ -87,6 +89,7 @@ impl Page {
             Page::DesktopWidgets => "nav_desktop_widgets",
             Page::Wgpu => "nav_wgpu",
             Page::ShaderCanvas => "nav_shader_canvas",
+            Page::ModelViewer => "nav_model_viewer",
         }
     }
 
@@ -122,6 +125,7 @@ impl Page {
             Page::DesktopWidgets => "desktop-widgets",
             Page::Wgpu => "wgpu",
             Page::ShaderCanvas => "shader-canvas",
+            Page::ModelViewer => "model-viewer",
         }
     }
 
@@ -164,6 +168,8 @@ impl Page {
             Page::DesktopWidgets => IconName::PanelBottom,
             Page::Wgpu => IconName::Cpu,
             Page::ShaderCanvas => IconName::Palette,
+            // The icon subset ships no box/cube; Globe is the 3D stand-in.
+            Page::ModelViewer => IconName::Globe,
         }
     }
 
@@ -193,6 +199,7 @@ impl Page {
             Page::DesktopWidgets,
             Page::Wgpu,
             Page::ShaderCanvas,
+            Page::ModelViewer,
         ]
     }
 }

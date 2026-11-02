@@ -43,6 +43,23 @@ fn mat4_rotates_match_hand_computed_axes() {
 }
 
 #[test]
+fn mat4_look_at_maps_the_center_to_minus_z_and_the_eye_to_origin() {
+    let view = mat4_look_at([0.0, 0.0, 5.0], [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    let near = |a: f32, b: f32| (a - b).abs() < 1e-6;
+
+    let center = transform_point(&view, [0.0, 0.0, 0.0]);
+    assert!(near(center[0], 0.0) && near(center[1], 0.0) && near(center[2], -5.0));
+
+    let eye = transform_point(&view, [0.0, 0.0, 5.0]);
+    assert!(near(eye[0], 0.0) && near(eye[1], 0.0) && near(eye[2], 0.0));
+
+    // Off-axis eye keeps +y up in screen space.
+    let tilted = mat4_look_at([3.0, 4.0, 5.0], [0.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+    let up_hint = transform_point(&tilted, [3.0, 5.0, 5.0]);
+    assert!(near(up_hint[0], 0.0) && up_hint[1] > 0.0);
+}
+
+#[test]
 fn perspective_maps_near_to_zero_and_far_to_one() {
     let proj = perspective(std::f32::consts::FRAC_PI_4, 16.0 / 9.0, 0.1, 100.0);
 
