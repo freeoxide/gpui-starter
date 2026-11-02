@@ -141,7 +141,7 @@ impl ShapeEditTool {
             );
             doc.add_shape(
                 content_layer,
-                CanvasShape::rect(
+                CanvasShape::triangle(
                     Bounds {
                         origin: point(px(140.), px(280.)),
                         size: size(px(160.), px(100.)),
@@ -314,7 +314,9 @@ impl CanvasTool for ShapeEditTool {
                 .and_then(|drag| drag.path_snapshot.clone());
             state.edit_document(cx, |doc| {
                 doc.update_shape(shape_id, |shape| match shape {
-                    CanvasShape::Rect { bounds, .. } | CanvasShape::Ellipse { bounds, .. } => {
+                    CanvasShape::Rect { bounds, .. }
+                    | CanvasShape::Ellipse { bounds, .. }
+                    | CanvasShape::Triangle { bounds, .. } => {
                         *bounds = geometry::resize_bounds(start_bounds, handle_ix, pointer);
                     }
                     CanvasShape::Path { points, .. } => {

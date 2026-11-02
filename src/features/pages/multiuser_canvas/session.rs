@@ -630,6 +630,9 @@ fn wire_shape_to_canvas(shape: &WireShape) -> CanvasShape {
         WireShape::Ellipse { bounds, style } => {
             CanvasShape::ellipse(wire_bounds_to_canvas(bounds), style_to_canvas(style))
         }
+        WireShape::Triangle { bounds, style } => {
+            CanvasShape::triangle(wire_bounds_to_canvas(bounds), style_to_canvas(style))
+        }
         WireShape::Path { points, stroke } => CanvasShape::path(
             points.iter().map(|p| point(px(p[0]), px(p[1]))).collect(),
             wire_stroke_to_canvas(stroke),
@@ -667,6 +670,13 @@ pub(crate) fn canvas_shape_to_wire(shape: &CanvasShape) -> Option<WireShape> {
             },
         },
         CanvasShape::Ellipse { bounds, style } => WireShape::Ellipse {
+            bounds: canvas_bounds_to_wire(bounds),
+            style: WireStyle {
+                fill: style.fill().map(hsla_to_wire),
+                stroke: style.stroke().map(stroke_from),
+            },
+        },
+        CanvasShape::Triangle { bounds, style } => WireShape::Triangle {
             bounds: canvas_bounds_to_wire(bounds),
             style: WireStyle {
                 fill: style.fill().map(hsla_to_wire),

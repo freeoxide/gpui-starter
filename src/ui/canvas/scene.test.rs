@@ -44,6 +44,10 @@ fn doc_bounds_returns_rect_ellipse_and_image_bounds_verbatim() {
         CanvasShape::ellipse(bounds, ShapeStyle::default()).doc_bounds(),
         bounds
     );
+    assert_eq!(
+        CanvasShape::triangle(bounds, ShapeStyle::default()).doc_bounds(),
+        bounds
+    );
 }
 
 #[test]
@@ -92,6 +96,19 @@ fn translate_moves_every_variant() {
         panic!("variant preserved");
     };
     assert_px_eq(bounds.origin.y, px(-3.));
+
+    let mut triangle = CanvasShape::triangle(
+        Bounds {
+            origin: point(px(0.), px(0.)),
+            size: size(px(10.), px(10.)),
+        },
+        ShapeStyle::default(),
+    );
+    triangle.translate(delta);
+    let CanvasShape::Triangle { bounds, .. } = &triangle else {
+        panic!("variant preserved");
+    };
+    assert_px_eq(bounds.origin.x, px(5.));
 
     let mut path = CanvasShape::path(
         vec![point(px(1.), px(2.)), point(px(3.), px(4.))],
@@ -166,6 +183,30 @@ fn ellipse_hit_test_uses_the_expanded_radii_formula() {
     assert!(!shape.hit_test(point(px(106.), px(25.)), tolerance));
     assert!(shape.hit_test(point(px(50.), px(-3.)), tolerance));
     assert!(!shape.hit_test(point(px(50.), px(-6.)), tolerance));
+}
+
+#[test]
+fn triangle_hit_test_accepts_interior_and_edges_but_rejects_notches() {
+    let shape = CanvasShape::triangle(
+        Bounds {
+            origin: point(px(0.), px(0.)),
+            size: size(px(100.), px(50.)),
+        },
+        ShapeStyle::default(),
+    );
+    let tolerance = px(4.);
+    // Interior and the apex region.
+    assert!(shape.hit_test(point(px(50.), px(25.)), tolerance));
+    assert!(shape.hit_test(point(px(50.), px(2.)), tolerance));
+    // Inside the bounds but in the empty top-left/top-right notches.
+    assert!(!shape.hit_test(point(px(5.), px(5.)), tolerance));
+    assert!(!shape.hit_test(point(px(95.), px(5.)), tolerance));
+    // Across the left slanted edge, within and beyond tolerance. The edge
+    // runs (50,0)-(0,50) with the notch toward the origin; the points sit
+    // on its perpendicular through (25,25).
+    assert!(shape.hit_test(point(px(23.6), px(23.6)), tolerance));
+    assert!(!shape.hit_test(point(px(20.8), px(20.8)), tolerance));
+    assert!(!shape.hit_test(point(px(50.), px(56.)), tolerance));
 }
 
 #[test]

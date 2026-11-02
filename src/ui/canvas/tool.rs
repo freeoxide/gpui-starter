@@ -1,7 +1,7 @@
 use gpui_kit::*;
 
 use super::geometry::CanvasTransform;
-use super::scene::{CanvasShape, ShapeId, StrokeStyle};
+use super::scene::{CanvasShape, ShapeId, ShapeStyle, StrokeStyle};
 use super::state::CanvasState;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -386,6 +386,7 @@ pub enum BuiltinTool {
     Pan,
     Select,
     Brush(BrushConfig),
+    Shape(ShapeConfig),
 }
 
 impl BuiltinTool {
@@ -394,7 +395,119 @@ impl BuiltinTool {
             Self::Pan => Box::new(PanTool::new()),
             Self::Select => Box::new(SelectTool::new()),
             Self::Brush(config) => Box::new(BrushTool::new(config)),
+            Self::Shape(config) => Box::new(ShapeTool::new(config)),
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ShapeKind {
+    Rect,
+    Ellipse,
+    Triangle,
+}
+
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct ShapeConfig {
+    pub kind: ShapeKind,
+    pub style: ShapeStyle,
+}
+
+/// Drag-to-draw tool: anchors on pointer-down, previews through the tool
+/// overlay, and commits the shape on pointer-up when the drag has extent.
+pub struct ShapeTool {
+    config: ShapeConfig,
+    anchor: Option<Point<Pixels>>,
+    dragging: bool,
+}
+
+impl ShapeTool {
+    pub fn new(config: ShapeConfig) -> Self {
+        Self {
+            config,
+            anchor: None,
+            dragging: false,
+        }
+    }
+
+    fn shape(&self, from: Point<Pixels>, to: Point<Pixels>) -> CanvasShape {
+        let bounds = Bounds::from_corners(
+            point(from.x.min(to.x), from.y.min(to.y)),
+            point(from.x.max(to.x), from.y.max(to.y)),
+        );
+        match self.config.kind {
+            ShapeKind::Rect => CanvasShape::rect(bounds, self.config.style.clone()),
+            ShapeKind::Ellipse => CanvasShape::ellipse(bounds, self.config.style.clone()),
+            ShapeKind::Triangle => CanvasShape::triangle(bounds, self.config.style.clone()),
+        }
+    }
+}
+
+impl CanvasTool for ShapeTool {
+    fn id(&self) -> &'static str {
+        "shape"
+    }
+
+    fn cursor(&self) -> CursorStyle {
+        CursorStyle::Crosshair
+    }
+
+    fn pointer_down(
+        &mut self,
+        event: &CanvasPointerEvent,
+        _: &ToolContext,
+        state: &mut CanvasState,
+        cx: &mut Context<CanvasState>,
+    ) {
+        if event.button != MouseButton::Left {
+            return;
+        }
+        self.anchor = Some(event.doc_position);
+        self.dragging = true;
+        state.set_tool_overlay(Some(self.shape(event.doc_position, event.doc_position)), cx);
+    }
+
+    fn pointer_move(
+        &mut self,
+        event: &CanvasPointerEvent,
+        _: &ToolContext,
+        state: &mut CanvasState,
+        cx: &mut Context<CanvasState>,
+    ) {
+        if !self.dragging {
+            return;
+        }
+        if let Some(anchor) = self.anchor {
+            let overlay = self.shape(anchor, event.doc_position);
+            state.set_tool_overlay(Some(overlay), cx);
+        }
+    }
+
+    fn pointer_up(
+        &mut self,
+        event: &CanvasPointerEvent,
+        _: &ToolContext,
+        state: &mut CanvasState,
+        cx: &mut Context<CanvasState>,
+    ) {
+        if !self.dragging {
+            return;
+        }
+        self.dragging = false;
+        if let Some(anchor) = self.anchor.take() {
+            let shape = self.shape(anchor, event.doc_position);
+            let bounds = shape.doc_bounds();
+            if bounds.size.width > px(0.) && bounds.size.height > px(0.) {
+                let layer = state
+                    .document()
+                    .top_layer()
+                    .unwrap_or_else(|| state.add_layer(cx));
+                state.add_shape(layer, shape, cx);
+            }
+        }
+        state.set_tool_overlay(None, cx);
     }
 }
 

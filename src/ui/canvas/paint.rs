@@ -123,6 +123,13 @@ fn rect_outline_into(builder: &mut PathBuilder, width: Pixels, height: Pixels) {
     builder.close();
 }
 
+fn triangle_outline_into(builder: &mut PathBuilder, width: Pixels, height: Pixels) {
+    builder.move_to(point(width * 0.5, px(0.)));
+    builder.line_to(point(px(0.), height));
+    builder.line_to(point(width, height));
+    builder.close();
+}
+
 fn ellipse_outline_into(builder: &mut PathBuilder, radius_x: Pixels, radius_y: Pixels) {
     let kappa = 0.552_284_8;
     let control_x = px(radius_x.as_f32() * kappa);
@@ -246,6 +253,42 @@ pub(crate) fn paint_shape(
                     || {
                         let mut builder = stroke_builder(stroke, zoom);
                         ellipse_outline_into(&mut builder, radius_x, radius_y);
+                        builder.build().ok()
+                    },
+                ) {
+                    window.paint_path(path, stroke.color);
+                }
+            }
+        }
+        CanvasShape::Triangle {
+            bounds: shape_bounds,
+            style,
+        } => {
+            let width = shape_bounds.size.width * zoom;
+            let height = shape_bounds.size.height * zoom;
+            let origin = bounds.origin + transform.to_screen(shape_bounds.origin);
+            if let Some(fill_color) = style.fill() {
+                if let Some(path) = caches.slot(fill_slot).get_path(
+                    generation,
+                    || shape_key(shape, zoom),
+                    origin,
+                    || {
+                        let mut builder = PathBuilder::fill();
+                        triangle_outline_into(&mut builder, width, height);
+                        builder.build().ok()
+                    },
+                ) {
+                    window.paint_path(path, fill_color);
+                }
+            }
+            if let Some(stroke) = style.stroke() {
+                if let Some(path) = caches.slot(stroke_slot).get_path(
+                    generation,
+                    || shape_key(shape, zoom),
+                    origin,
+                    || {
+                        let mut builder = stroke_builder(stroke, zoom);
+                        triangle_outline_into(&mut builder, width, height);
                         builder.build().ok()
                     },
                 ) {

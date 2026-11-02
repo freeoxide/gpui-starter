@@ -221,6 +221,36 @@ fn shape_key_is_stable_for_identical_input() {
 }
 
 #[test]
+fn triangle_shape_key_changes_with_bounds_stroke_and_zoom() {
+    let base = CanvasShape::triangle(
+        gpui_kit::Bounds {
+            origin: point(px(0.), px(0.)),
+            size: gpui_kit::size(px(10.), px(10.)),
+        },
+        ShapeStyle::stroked(StrokeStyle {
+            width: px(2.),
+            color: black(),
+            dash: None,
+        }),
+    );
+    let base_key = super::shape_key(&base, 1.);
+    assert_ne!(super::shape_key(&base, 2.), base_key);
+    let resized = CanvasShape::triangle(
+        gpui_kit::Bounds {
+            origin: point(px(0.), px(0.)),
+            size: gpui_kit::size(px(20.), px(10.)),
+        },
+        ShapeStyle::stroked(StrokeStyle {
+            width: px(2.),
+            color: black(),
+            dash: None,
+        }),
+    );
+    assert_ne!(super::shape_key(&resized, 1.), base_key);
+    assert_eq!(super::shape_key(&base, 1.), super::shape_key(&base, 1.));
+}
+
+#[test]
 fn slot_stays_pointer_sized_for_the_shaped_line() {
     // An inline ShapedLine (SmallVec<[DecorationRun; 32]> storage) measures
     // ~3 KB, which at 100k+ slots is OOM class; it must stay boxed.

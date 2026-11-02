@@ -507,6 +507,10 @@ fn rotate_shape(shape: &CanvasShape, old_height: f32) -> CanvasShape {
             bounds: rotate_bounds(*bounds, old_height),
             style: style.clone(),
         },
+        CanvasShape::Triangle { bounds, style } => CanvasShape::Triangle {
+            bounds: rotate_bounds(*bounds, old_height),
+            style: style.clone(),
+        },
         CanvasShape::Text { .. } | CanvasShape::Image { .. } => shape.clone(),
     }
 }
