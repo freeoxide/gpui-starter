@@ -138,6 +138,11 @@ websocket = ["dep:tokio-tungstenite"]
 # (services/streaming.rs needs it regardless), so this is an empty gate
 # that only controls the ai_chat feature-page module.
 ai-chat = []
+# Element-tree inspector (default OFF): cargo run --features devtools, then
+# ctrl-alt-i (cmd-alt-i on macOS). gpui-devtools 0.5 targets gpui-pre ^0.3.6,
+# so it resolves to the lock's single 0.3.10 copy; `gpui/inspector` turns on
+# the inspector support the release build would otherwise compile out.
+devtools = ["dep:gpui-devtools", "gpui/inspector"]
 # XDG Desktop Portal notification backend for Flatpak/Snap/sandboxed runs
 # (default OFF). When ON and running sandboxed, notifications route through
 # org.freedesktop.portal.Notification via ashpd (reuses the transitive 0.13.x
@@ -155,6 +160,8 @@ gpui.workspace = true
 # requirement. Move both together — tests/qa_migration.rs guards the rev.
 gpui-query = { version = "0.3", features = ["hook"] }
 gpui-kit.workspace = true
+# Dev-only element inspector behind the `devtools` feature; see [features].
+gpui-devtools = { version = "0.5.1", optional = true }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
