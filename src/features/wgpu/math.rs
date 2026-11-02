@@ -4,11 +4,11 @@
 
 use std::f32::consts::PI;
 
-pub(in crate::features::wgpu) type Mat4 = [f32; 16];
+pub(crate) type Mat4 = [f32; 16];
 
-pub(in crate::features::wgpu) const MESH_VERTEX_STRIDE: usize = 32;
+pub(crate) const MESH_VERTEX_STRIDE: usize = 32;
 
-pub(in crate::features::wgpu) fn mat4_identity() -> Mat4 {
+pub(crate) fn mat4_identity() -> Mat4 {
     let mut m = [0.0; 16];
     m[0] = 1.0;
     m[5] = 1.0;
@@ -18,7 +18,7 @@ pub(in crate::features::wgpu) fn mat4_identity() -> Mat4 {
 }
 
 /// Column-major product `a * b`: applies `b` first, then `a`.
-pub(in crate::features::wgpu) fn mat4_mul(a: &Mat4, b: &Mat4) -> Mat4 {
+pub(crate) fn mat4_mul(a: &Mat4, b: &Mat4) -> Mat4 {
     let mut out = [0.0; 16];
     for c in 0..4 {
         for r in 0..4 {
@@ -28,33 +28,55 @@ pub(in crate::features::wgpu) fn mat4_mul(a: &Mat4, b: &Mat4) -> Mat4 {
     out
 }
 
-pub(in crate::features::wgpu) fn mat4_rotate_y(rad: f32) -> Mat4 {
+pub(crate) fn mat4_rotate_y(rad: f32) -> Mat4 {
     let (s, c) = rad.sin_cos();
     [
         c, 0.0, s, 0.0, 0.0, 1.0, 0.0, 0.0, -s, 0.0, c, 0.0, 0.0, 0.0, 0.0, 1.0,
     ]
 }
 
-pub(in crate::features::wgpu) fn mat4_rotate_x(rad: f32) -> Mat4 {
+pub(crate) fn mat4_rotate_x(rad: f32) -> Mat4 {
     let (s, c) = rad.sin_cos();
     [
         1.0, 0.0, 0.0, 0.0, 0.0, c, -s, 0.0, 0.0, s, c, 0.0, 0.0, 0.0, 0.0, 1.0,
     ]
 }
 
-pub(in crate::features::wgpu) fn mat4_translate(x: f32, y: f32, z: f32) -> Mat4 {
+pub(crate) fn mat4_translate(x: f32, y: f32, z: f32) -> Mat4 {
     [
         1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, x, y, z, 1.0,
     ]
 }
 
+/// Right-handed view matrix (gluLookAt convention): maps `eye` to the
+/// origin looking down -z at `center`, `up` toward +y.
+pub(crate) fn mat4_look_at(eye: [f32; 3], center: [f32; 3], up: [f32; 3]) -> Mat4 {
+    let forward = normalize([center[0] - eye[0], center[1] - eye[1], center[2] - eye[2]]);
+    let side = normalize(cross(forward, up));
+    let true_up = cross(side, forward);
+    let dot = |a: [f32; 3], b: [f32; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    [
+        side[0],
+        true_up[0],
+        -forward[0],
+        0.0,
+        side[1],
+        true_up[1],
+        -forward[1],
+        0.0,
+        side[2],
+        true_up[2],
+        -forward[2],
+        0.0,
+        -dot(side, eye),
+        -dot(true_up, eye),
+        dot(forward, eye),
+        1.0,
+    ]
+}
+
 /// Right-handed perspective with the wgpu NDC depth range z in [0, 1].
-pub(in crate::features::wgpu) fn perspective(
-    fov_y_rad: f32,
-    aspect: f32,
-    near: f32,
-    far: f32,
-) -> Mat4 {
+pub(crate) fn perspective(fov_y_rad: f32, aspect: f32, near: f32, far: f32) -> Mat4 {
     let f = 1.0 / (fov_y_rad / 2.0).tan();
     let mut m = [0.0; 16];
     m[0] = f / aspect;
@@ -73,7 +95,7 @@ fn push_vertex(out: &mut Vec<f32>, pos: [f32; 3], normal: [f32; 3], uv: [f32; 2]
 
 /// UV sphere of radius 1: `(lat + 1) * lon + 2` vertices (unit normals equal
 /// to positions), triangle indices including the two pole fans.
-pub(in crate::features::wgpu) fn sphere_mesh(lat: usize, lon: usize) -> (Vec<u8>, Vec<u32>) {
+pub(crate) fn sphere_mesh(lat: usize, lon: usize) -> (Vec<u8>, Vec<u32>) {
     let mut vertices: Vec<f32> = Vec::with_capacity(((lat + 1) * lon + 2) * 8);
     push_vertex(&mut vertices, [0.0, 1.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0]);
     for i in 1..=(lat + 1) {
@@ -155,7 +177,7 @@ fn normalize(v: [f32; 3]) -> [f32; 3] {
     [v[0] / len, v[1] / len, v[2] / len]
 }
 
-pub(in crate::features::wgpu) fn encode_f32_rows(values: &[f32]) -> Vec<u8> {
+pub(crate) fn encode_f32_rows(values: &[f32]) -> Vec<u8> {
     let mut out = Vec::with_capacity(values.len() * 4);
     for value in values {
         out.extend_from_slice(&value.to_ne_bytes());

@@ -3216,6 +3216,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "gpui-devtools"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ba666f31df384a721502f61b4c23725fe2d2531a9b3eea94c240efff26e40a2"
+dependencies = [
+ "gpui-pre",
+]
+
+[[package]]
 name = "gpui-kit"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3780,6 +3789,7 @@ dependencies = [
  "fuzzy-matcher",
  "global-hotkey",
  "gpui-auth",
+ "gpui-devtools",
  "gpui-kit",
  "gpui-pre",
  "gpui-query",

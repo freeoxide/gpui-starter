@@ -7,9 +7,9 @@ use crate::title_bar::AppTitleBar;
 use crate::views::{
     AboutPage, AnalyticsPage, AudioPage, CanvasShowcasePage, DesktopWidgetsPage, DiagnosticsPage,
     ErrorPlaygroundPage, FloatingUiPage, FormPage, HomePage, ImageEditorPage, InfiniteCanvasPage,
-    MicrophonePage, MultiuserCanvasPage, MusicPage, NotificationsPage, QueryDevToolsV2Page,
-    QueryPlaygroundPage, RenderErrorPage, SettingsPage, ShaderCanvasPage, SignInPage,
-    SystemControlsPage,
+    MicrophonePage, ModelViewerPage, MultiuserCanvasPage, MusicPage, NotificationsPage,
+    QueryDevToolsV2Page, QueryPlaygroundPage, RenderErrorPage, SettingsPage, ShaderCanvasPage,
+    SignInPage, SystemControlsPage,
 };
 use crate::{
     events::{self, AppEventKind},
@@ -47,6 +47,7 @@ pub struct AppRoot {
     pub(crate) desktop_widgets_page: Entity<DesktopWidgetsPage>,
     pub(crate) now_playing_bar: Entity<crate::features::pages::music::NowPlayingBar>,
     pub(crate) wgpu_page: Entity<WgpuPage>,
+    pub(crate) model_viewer_page: Entity<ModelViewerPage>,
     pub(crate) shader_canvas_page: Entity<ShaderCanvasPage>,
     pub(crate) floating_host: Entity<crate::ui::floating::OverlayFloatHost>,
     pub(crate) floating_ui_session: Entity<crate::features::pages::floating_ui::PaletteSession>,
@@ -82,6 +83,7 @@ impl AppRoot {
         let infinite_canvas_page = cx.new(|cx| InfiniteCanvasPage::new(window, cx));
         let multiuser_canvas_page = cx.new(|cx| MultiuserCanvasPage::new(window, cx));
         let wgpu_page = cx.new(|cx| WgpuPage::new(window, cx));
+        let model_viewer_page = cx.new(|cx| ModelViewerPage::new(window, cx));
         let shader_canvas_page = cx.new(|cx| ShaderCanvasPage::new(window, cx));
         let floating_host = cx.new(|cx| crate::ui::floating::OverlayFloatHost::new(window, cx));
         let floating_ui_session = cx.new(crate::features::pages::floating_ui::PaletteSession::new);
@@ -250,6 +252,7 @@ impl AppRoot {
             infinite_canvas_page,
             multiuser_canvas_page,
             wgpu_page,
+            model_viewer_page,
             shader_canvas_page,
             floating_host,
             floating_ui_session,
@@ -317,6 +320,7 @@ impl AppRoot {
             Page::SignIn => self.sign_in_page.clone().into(),
             Page::DesktopWidgets => self.desktop_widgets_page.clone().into(),
             Page::Wgpu => self.wgpu_page.clone().into(),
+            Page::ModelViewer => self.model_viewer_page.clone().into(),
             Page::ShaderCanvas => self.shader_canvas_page.clone().into(),
         }
     }

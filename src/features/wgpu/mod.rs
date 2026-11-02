@@ -29,6 +29,12 @@ pub use page::WgpuPage;
 // Pure helpers, compile on every target, including wasm.
 pub use frame::{FpsTracker, padded_bytes_per_row, rgba_to_bgra};
 
+// Shared mesh math for the model viewer page (demos reaches the module
+// directly); still pure, so wasm compiles it too.
+pub(crate) use math::{
+    MESH_VERTEX_STRIDE, Mat4, encode_f32_rows, mat4_look_at, mat4_mul, mat4_rotate_y, perspective,
+};
+
 // RenderImage builders are native-only by contract: only the native render
 // loop produces frames to wrap.
 #[cfg(not(target_family = "wasm"))]

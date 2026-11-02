@@ -14,6 +14,13 @@ cargo build
 cargo run
 ```
 
+To inspect the running UI's element tree, build with the devtools feature
+and press ctrl-alt-i (cmd-alt-i on macOS):
+
+```sh
+cargo run --features devtools
+```
+
 On macOS you can also build a signed `.app` bundle for local use:
 
 ```sh

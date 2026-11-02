@@ -37,7 +37,7 @@ pub struct WireStroke {
     pub dash: Option<Vec<f32>>,
 }
 
-/// Fill and/or stroke for rect and ellipse shapes.
+/// Fill and/or stroke for rect, ellipse, and triangle shapes.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WireStyle {
     pub fill: Option<WireColor>,
@@ -53,6 +53,10 @@ pub enum WireShape {
         style: WireStyle,
     },
     Ellipse {
+        bounds: [f32; 4],
+        style: WireStyle,
+    },
+    Triangle {
         bounds: [f32; 4],
         style: WireStyle,
     },

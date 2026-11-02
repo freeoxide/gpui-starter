@@ -10,8 +10,8 @@ use gpui_kit::{
 
 use crate::ui::canvas::{
     BrushConfig, BuiltinTool, CanvasEvent, CanvasPointerEvent, CanvasScrollEvent, CanvasShape,
-    CanvasState, CanvasTool, CanvasTransform, PanTool, SelectTool, ShapeId, ShapeStyle,
-    ToolContext,
+    CanvasState, CanvasTool, CanvasTransform, PanTool, SelectTool, ShapeConfig, ShapeId, ShapeKind,
+    ShapeStyle, ToolContext,
 };
 use gpui_kit::Context;
 
@@ -138,6 +138,20 @@ fn builtin_tools_map_to_their_identifiers_and_cursors(cx: &mut TestAppContext) {
         s.set_builtin_tool(BuiltinTool::Brush(BrushConfig::default()), cx)
     });
     assert!(cx.read(|cx| state.read(cx).active_tool_id() == "brush"));
+    assert_eq!(
+        cx.read(|cx| state.read(cx).active_tool_cursor()),
+        CursorStyle::Crosshair
+    );
+    state.update(cx, |s, cx| {
+        s.set_builtin_tool(
+            BuiltinTool::Shape(ShapeConfig {
+                kind: ShapeKind::Triangle,
+                style: ShapeStyle::default(),
+            }),
+            cx,
+        )
+    });
+    assert!(cx.read(|cx| state.read(cx).active_tool_id() == "shape"));
     assert_eq!(
         cx.read(|cx| state.read(cx).active_tool_cursor()),
         CursorStyle::Crosshair
@@ -392,6 +406,94 @@ fn brush_commit_uses_the_configured_width_and_color(cx: &mut TestAppContext) {
     });
     assert_px_eq(width, px(5.));
     assert_eq!(color, config.color);
+}
+
+#[gpui_kit::test]
+fn shape_drag_commits_the_requested_kind_with_normalized_bounds(cx: &mut TestAppContext) {
+    let state = cx.new(|_| CanvasState::new());
+    state.update(cx, |s, cx| {
+        s.add_layer(cx);
+        s.set_builtin_tool(
+            BuiltinTool::Shape(ShapeConfig {
+                kind: ShapeKind::Triangle,
+                style: ShapeStyle::default(),
+            }),
+            cx,
+        );
+    });
+    let (events, _subscription) = collect_events(cx, &state);
+    let ctx = tool_ctx(CanvasTransform::IDENTITY, None);
+    // Drag bottom-right to top-left: the committed bounds must normalize.
+    dispatch_down(
+        &state,
+        cx,
+        &pointer((110., 70.), MouseButton::Left, Modifiers::none()),
+        &ctx,
+    );
+    dispatch_move(
+        &state,
+        cx,
+        &pointer((10., 20.), MouseButton::Left, Modifiers::none()),
+        &ctx,
+    );
+    assert!(cx.read(|cx| state.read(cx).tool_overlay().is_some()));
+    events.borrow_mut().clear();
+    dispatch_up(
+        &state,
+        cx,
+        &pointer((10., 20.), MouseButton::Left, Modifiers::none()),
+        &ctx,
+    );
+    assert!(cx.read(|cx| state.read(cx).tool_overlay().is_none()));
+    let bounds = cx.read(|cx| {
+        let committed = state
+            .read(cx)
+            .document()
+            .shapes()
+            .map(|(_, _, shape)| shape)
+            .next()
+            .expect("one committed shape");
+        let CanvasShape::Triangle { bounds, .. } = committed else {
+            panic!("triangle variant");
+        };
+        *bounds
+    });
+    assert_px_eq(bounds.origin.x, px(10.));
+    assert_px_eq(bounds.origin.y, px(20.));
+    assert_px_eq(bounds.size.width, px(100.));
+    assert_px_eq(bounds.size.height, px(50.));
+    assert_eq!(&*events.borrow(), &[CanvasEvent::DocumentChanged]);
+}
+
+#[gpui_kit::test]
+fn shape_click_without_drag_commits_nothing(cx: &mut TestAppContext) {
+    let state = cx.new(|_| CanvasState::new());
+    state.update(cx, |s, cx| {
+        s.add_layer(cx);
+        s.set_builtin_tool(
+            BuiltinTool::Shape(ShapeConfig {
+                kind: ShapeKind::Rect,
+                style: ShapeStyle::default(),
+            }),
+            cx,
+        );
+    });
+    let ctx = tool_ctx(CanvasTransform::IDENTITY, None);
+    dispatch_down(
+        &state,
+        cx,
+        &pointer((50., 50.), MouseButton::Left, Modifiers::none()),
+        &ctx,
+    );
+    dispatch_up(
+        &state,
+        cx,
+        &pointer((50., 50.), MouseButton::Left, Modifiers::none()),
+        &ctx,
+    );
+    assert!(cx.read(|cx| state.read(cx).tool_overlay().is_none()));
+    let count = cx.read(|cx| state.read(cx).document().shapes().count());
+    assert_eq!(count, 0);
 }
 
 #[gpui_kit::test]

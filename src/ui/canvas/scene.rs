@@ -80,6 +80,12 @@ pub enum CanvasShape {
         bounds: Bounds<Pixels>,
         style: ShapeStyle,
     },
+    /// Isoceles triangle inside `bounds`: one apex at top-center, two
+    /// corners at the bottom-left/bottom-right.
+    Triangle {
+        bounds: Bounds<Pixels>,
+        style: ShapeStyle,
+    },
     Path {
         points: Vec<Point<Pixels>>,
         style: StrokeStyle,
@@ -115,6 +121,19 @@ fn expanded(bounds: &Bounds<Pixels>, by: Pixels) -> Bounds<Pixels> {
     }
 }
 
+/// Document-space corners of a triangle: apex, bottom-left, bottom-right.
+pub(crate) fn triangle_vertices(bounds: &Bounds<Pixels>) -> [Point<Pixels>; 3] {
+    let left = bounds.origin.x;
+    let right = left + bounds.size.width;
+    let top = bounds.origin.y;
+    let bottom = top + bounds.size.height;
+    [
+        point(left + bounds.size.width / 2., top),
+        point(left, bottom),
+        point(right, bottom),
+    ]
+}
+
 impl CanvasShape {
     pub fn rect(bounds: Bounds<Pixels>, style: ShapeStyle) -> Self {
         Self::Rect { bounds, style }
@@ -122,6 +141,10 @@ impl CanvasShape {
 
     pub fn ellipse(bounds: Bounds<Pixels>, style: ShapeStyle) -> Self {
         Self::Ellipse { bounds, style }
+    }
+
+    pub fn triangle(bounds: Bounds<Pixels>, style: ShapeStyle) -> Self {
+        Self::Triangle { bounds, style }
     }
 
     pub fn path(points: Vec<Point<Pixels>>, style: StrokeStyle) -> Self {
@@ -153,6 +176,7 @@ impl CanvasShape {
         match self {
             Self::Rect { bounds, .. }
             | Self::Ellipse { bounds, .. }
+            | Self::Triangle { bounds, .. }
             | Self::Image { bounds, .. } => *bounds,
             Self::Path { points, style } => {
                 let half_width = style.width * 0.5;
@@ -180,6 +204,7 @@ impl CanvasShape {
         match self {
             Self::Rect { bounds, .. }
             | Self::Ellipse { bounds, .. }
+            | Self::Triangle { bounds, .. }
             | Self::Image { bounds, .. } => bounds.origin += delta,
             Self::Path { points, .. } => {
                 for p in points {
@@ -202,6 +227,25 @@ impl CanvasShape {
                 let dx = (doc_point.x - center.x).as_f32() / rx;
                 let dy = (doc_point.y - center.y).as_f32() / ry;
                 dx * dx + dy * dy <= 1.
+            }
+            Self::Triangle { bounds, .. } => {
+                if !expanded(bounds, tolerance).contains(&doc_point) {
+                    return false;
+                }
+                let [a, b, c] = triangle_vertices(bounds);
+                let cross = |o: Point<Pixels>, m: Point<Pixels>, n: Point<Pixels>| {
+                    (m.x - o.x).as_f32() * (n.y - o.y).as_f32()
+                        - (m.y - o.y).as_f32() * (n.x - o.x).as_f32()
+                };
+                let d1 = cross(doc_point, a, b);
+                let d2 = cross(doc_point, b, c);
+                let d3 = cross(doc_point, c, a);
+                let has_neg = d1 < 0. || d2 < 0. || d3 < 0.;
+                let has_pos = d1 > 0. || d2 > 0. || d3 > 0.;
+                !(has_neg && has_pos)
+                    || segment_distance(doc_point, a, b) <= tolerance
+                    || segment_distance(doc_point, b, c) <= tolerance
+                    || segment_distance(doc_point, c, a) <= tolerance
             }
             Self::Path { points, style } => {
                 if !expanded(&self.doc_bounds(), tolerance).contains(&doc_point) {

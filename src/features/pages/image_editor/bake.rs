@@ -167,6 +167,21 @@ pub(crate) fn rasterize_shape(
                 rgba,
             );
         }
+        CanvasShape::Triangle { bounds, style } => {
+            let (rgba, width) = match style.stroke() {
+                Some(stroke) => (hsla_to_rgba(stroke.color), stroke.width.as_f32().max(1.)),
+                None => (fallback_rgba, fallback_width),
+            };
+            let (x0, y0) = (bounds.origin.x.as_f32(), bounds.origin.y.as_f32());
+            let (x1, y1) = (
+                x0 + bounds.size.width.as_f32(),
+                y0 + bounds.size.height.as_f32(),
+            );
+            let apex = (x0 + bounds.size.width.as_f32() / 2., y0);
+            for (a, b) in [(apex, (x0, y1)), ((x0, y1), (x1, y1)), ((x1, y1), apex)] {
+                stamp_line(buf, a, b, width / 2., rgba);
+            }
+        }
         CanvasShape::Text { .. } | CanvasShape::Image { .. } => {}
     }
 }

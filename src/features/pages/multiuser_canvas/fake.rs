@@ -166,7 +166,9 @@ fn emit_delete(peer: &mut FakePeer, rng_state: &mut u64, events: &mut Vec<PeerEv
 
 fn translate_wire(shape: &mut WireShape, dx: f32, dy: f32) {
     match shape {
-        WireShape::Rect { bounds, .. } | WireShape::Ellipse { bounds, .. } => {
+        WireShape::Rect { bounds, .. }
+        | WireShape::Ellipse { bounds, .. }
+        | WireShape::Triangle { bounds, .. } => {
             bounds[0] += dx;
             bounds[1] += dy;
         }

@@ -36,7 +36,7 @@ pub use scene::{
 pub use state::{CanvasEvent, CanvasGrid, CanvasState, HIT_TOLERANCE, MAX_ZOOM, MIN_ZOOM};
 pub use tool::{
     BrushConfig, BrushTool, BuiltinTool, CanvasPointerEvent, CanvasScrollEvent, CanvasTool,
-    PanTool, SelectTool, ToolContext,
+    PanTool, SelectTool, ShapeConfig, ShapeKind, ShapeTool, ToolContext,
 };
 
 /// Thread-local work counters for perf tests: paints driven by one test

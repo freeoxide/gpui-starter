@@ -144,7 +144,9 @@ pub(crate) fn shape_key(shape: &CanvasShape, zoom: f32) -> u64 {
     std::mem::discriminant(shape).hash(&mut hasher);
     hash_f32(&mut hasher, zoom);
     match shape {
-        CanvasShape::Rect { bounds, style } | CanvasShape::Ellipse { bounds, style } => {
+        CanvasShape::Rect { bounds, style }
+        | CanvasShape::Ellipse { bounds, style }
+        | CanvasShape::Triangle { bounds, style } => {
             hash_bounds(&mut hasher, bounds);
             hash_style(&mut hasher, style);
         }

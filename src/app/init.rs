@@ -53,6 +53,14 @@ pub fn init(cx: &mut App) {
         gpui_kit::init(cx);
     });
 
+    // After gpui_kit::init: devtools registers its inspector renderer last
+    // so kit-provided renderers stay available. No-op unless the feature is
+    // compiled in; toggle with ctrl-alt-i (cmd-alt-i on macOS).
+    #[cfg(feature = "devtools")]
+    startup_step!(cx, "devtools_init", {
+        gpui_devtools::init(cx);
+    });
+
     crate::lifecycle::set_stage(crate::lifecycle::LifecycleStage::Starting, cx);
     startup_step!(cx, "app_state_init", {
         crate::app_state::initialize(cx);

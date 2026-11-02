@@ -300,3 +300,29 @@ async fn demo_loop_draws_and_stops_on_live(cx: &TestAppContext) {
     run_demo_ticks(cx, 13);
     assert_eq!(shape_count(&canvas, cx), frozen);
 }
+
+#[gpui_kit::test]
+fn triangle_round_trips_through_the_wire_format(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+        let canvas_shape = crate::ui::canvas::CanvasShape::triangle(
+            gpui_kit::Bounds {
+                origin: point(px(4.), px(7.)),
+                size: size(px(30.), px(20.)),
+            },
+            ShapeStyle::both(
+                gpui_kit::black(),
+                crate::ui::canvas::StrokeStyle {
+                    width: px(2.),
+                    color: gpui_kit::black(),
+                    dash: None,
+                },
+            ),
+        );
+        let wire = super::canvas_shape_to_wire(&canvas_shape).expect("triangle maps to wire");
+        let WireShape::Triangle { .. } = &wire else {
+            panic!("wire triangle variant");
+        };
+        let round_tripped = super::wire_shape_to_canvas(&wire);
+        assert_eq!(round_tripped.doc_bounds(), canvas_shape.doc_bounds());
+    });
+}

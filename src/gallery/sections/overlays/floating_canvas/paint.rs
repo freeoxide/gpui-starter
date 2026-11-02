@@ -5,11 +5,20 @@ use gpui_kit::component::{
 };
 use gpui_kit::{prelude::*, *};
 
-use crate::ui::canvas::{BrushConfig, BuiltinTool, Canvas, CanvasState};
+use crate::ui::canvas::{
+    BrushConfig, BuiltinTool, Canvas, CanvasState, ShapeConfig, ShapeKind, ShapeStyle, StrokeStyle,
+};
 
 pub(crate) const MINI_PAINT_ID: &str = "canvas-mini-paint";
 
 const BRUSH_WIDTHS: [Pixels; 3] = [px(2.), px(4.), px(10.)];
+const FILL_OPACITY: f32 = 0.35;
+
+#[derive(Clone, Copy, PartialEq)]
+enum PaintTool {
+    Brush,
+    Shape(ShapeKind),
+}
 
 fn default_brush() -> BrushConfig {
     BrushConfig {
@@ -40,6 +49,8 @@ pub(crate) fn new_paint_canvas(cx: &mut App) -> Entity<CanvasState> {
 
 pub(crate) struct MiniPaintPanel {
     canvas: Entity<CanvasState>,
+    tool: PaintTool,
+    filled: bool,
     brush: BrushConfig,
     _subscriptions: Vec<Subscription>,
 }
@@ -57,17 +68,36 @@ impl MiniPaintPanel {
         let subscription = cx.observe(&canvas, |_, _, cx| cx.notify());
         Self {
             canvas,
+            tool: PaintTool::Brush,
+            filled: true,
             brush: default_brush(),
             _subscriptions: vec![subscription],
         }
     }
 
-    pub(crate) fn set_brush(&mut self, config: BrushConfig, cx: &mut Context<Self>) {
-        self.brush = config;
-        self.canvas.update(cx, |state, cx| {
-            state.set_builtin_tool(BuiltinTool::Brush(config), cx);
+    fn install_tool(&mut self, cx: &mut Context<Self>) {
+        self.canvas.update(cx, |state, cx| match self.tool {
+            PaintTool::Brush => state.set_builtin_tool(BuiltinTool::Brush(self.brush), cx),
+            PaintTool::Shape(kind) => {
+                let stroke = StrokeStyle {
+                    width: self.brush.width,
+                    color: self.brush.color,
+                    dash: None,
+                };
+                let style = if self.filled {
+                    ShapeStyle::both(self.brush.color.opacity(FILL_OPACITY), stroke)
+                } else {
+                    ShapeStyle::stroked(stroke)
+                };
+                state.set_builtin_tool(BuiltinTool::Shape(ShapeConfig { kind, style }), cx);
+            }
         });
         cx.notify();
+    }
+
+    pub(crate) fn set_brush(&mut self, config: BrushConfig, cx: &mut Context<Self>) {
+        self.brush = config;
+        self.install_tool(cx);
     }
 
     fn toolbar(&self, cx: &mut Context<Self>) -> Div {
@@ -78,6 +108,45 @@ impl MiniPaintPanel {
             .flex_wrap()
             .border_b_1()
             .border_color(cx.theme().border)
+            .child(
+                ToggleGroup::new("paint-tool")
+                    .small()
+                    .segmented()
+                    .child(
+                        Toggle::new("paint-tool-brush")
+                            .label("Brush")
+                            .checked(self.tool == PaintTool::Brush),
+                    )
+                    .child(
+                        Toggle::new("paint-tool-rect")
+                            .label("Rect")
+                            .checked(self.tool == PaintTool::Shape(ShapeKind::Rect)),
+                    )
+                    .child(
+                        Toggle::new("paint-tool-ellipse")
+                            .label("Ellipse")
+                            .checked(self.tool == PaintTool::Shape(ShapeKind::Ellipse)),
+                    )
+                    .child(
+                        Toggle::new("paint-tool-triangle")
+                            .label("Triangle")
+                            .checked(self.tool == PaintTool::Shape(ShapeKind::Triangle)),
+                    )
+                    .on_click(cx.listener(|this, values: &Vec<bool>, _, cx| {
+                        if let Some(ix) = values.iter().position(|b| *b)
+                            && let Some(tool) = [
+                                PaintTool::Brush,
+                                PaintTool::Shape(ShapeKind::Rect),
+                                PaintTool::Shape(ShapeKind::Ellipse),
+                                PaintTool::Shape(ShapeKind::Triangle),
+                            ]
+                            .get(ix)
+                        {
+                            this.tool = *tool;
+                            this.install_tool(cx);
+                        }
+                    })),
+            )
             .child(
                 ToggleGroup::new("paint-color")
                     .small()
@@ -147,6 +216,20 @@ impl MiniPaintPanel {
                                 cx,
                             );
                         }
+                    })),
+            )
+            .child(
+                ToggleGroup::new("paint-fill")
+                    .small()
+                    .segmented()
+                    .child(
+                        Toggle::new("paint-fill-toggle")
+                            .label("Filled")
+                            .checked(self.filled),
+                    )
+                    .on_click(cx.listener(|this, values: &Vec<bool>, _, cx| {
+                        this.filled = values.first().copied().unwrap_or(false);
+                        this.install_tool(cx);
                     })),
             )
             .child(
