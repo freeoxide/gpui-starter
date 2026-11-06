@@ -58,7 +58,6 @@ fn test_sidebar_pages_exist() {
         );
     }
 
-    // Each page must return a non-empty title.
     for page in all {
         assert!(
             !page.title().is_empty(),
@@ -171,7 +170,6 @@ fn test_route_parsing() {
 /// needs GPUI globals this test deliberately avoids.
 #[test]
 fn test_settings_page_route_and_constructor() {
-    // Verify the route parses correctly.
     let route = AppRoute::parse_deep_link("gpui-starter://settings").unwrap();
     assert_eq!(route, AppRoute::Page(Page::Settings));
     assert_eq!(route.page_for_render(), Page::Settings);

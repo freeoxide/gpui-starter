@@ -6,7 +6,7 @@ mod common;
 
 use std::collections::HashSet;
 
-use common::manifest_path;
+use common::{manifest_path, read_file};
 use gpui_starter::app_state::{AppConfig, PersistedWindowBounds, PersistedWindowState};
 use gpui_starter::page::Page;
 use gpui_starter::routes::AppRoute;
@@ -196,7 +196,7 @@ fn test_window_bounds_old_schema_deserializes_with_defaults() {
 #[test]
 fn test_theme_structure() {
     let theme_path = manifest_path("themes/gruvbox.json");
-    let raw = common::read_file(&theme_path);
+    let raw = read_file(&theme_path);
     let value: serde_json::Value =
         serde_json::from_str(&raw).expect("theme file must be valid JSON");
 
@@ -369,7 +369,7 @@ fn test_update_status_serialization() {
 }
 
 // ---------------------------------------------------------------------------
-// 8. UpdateSnapshot serialization
+// 6. UpdateSnapshot serialization
 // ---------------------------------------------------------------------------
 
 #[test]

@@ -1,9 +1,5 @@
 #[cfg(test)]
 mod tests {
-    // -----------------------------------------------------------------------
-    // test_app_initializes
-    // -----------------------------------------------------------------------
-
     /// Smoke test for the init sequence minus the GPUI event loop.
     #[test]
     fn test_app_initializes() {
@@ -26,10 +22,6 @@ mod tests {
             "crash marker should be gone after removal"
         );
     }
-
-    // -----------------------------------------------------------------------
-    // test_single_instance_enforcement
-    // -----------------------------------------------------------------------
 
     /// First preflight allows startup; a second preflight against its live
     /// lock does not.
@@ -70,10 +62,6 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // test_preflight_argv_accepts_quoted_command_line
-    // -----------------------------------------------------------------------
-
     /// Explorer launches protocol URLs via the registry command
     /// `"...gpui-starter.exe" "gpui-starter://settings"`; the preflight argv
     /// scan must pick the URL out of that quoted shape and never mistake
@@ -98,10 +86,6 @@ mod tests {
         );
     }
 
-    // -----------------------------------------------------------------------
-    // test_config_loads
-    // -----------------------------------------------------------------------
-
     /// `normalized()` preserves valid defaults; the defaults themselves are
     /// pinned field-by-field by snapshot_tests::test_config_default_serialization.
     #[test]
@@ -116,10 +100,6 @@ mod tests {
         assert_eq!(config, normalized);
     }
 
-    // -----------------------------------------------------------------------
-    // test_storage_initializes
-    // -----------------------------------------------------------------------
-
     /// SQLite opens, migrates, and answers queries outside the GPUI runtime.
     #[test]
     fn test_storage_initializes() {
@@ -130,13 +110,11 @@ mod tests {
         let version = gpui_starter::db_migrations::run_migrations(&conn).expect("run migrations");
         assert_eq!(version, 3, "migrations should bring schema to version 3");
 
-        // Health check.
         let one: i64 = conn
             .query_row("SELECT 1", [], |row| row.get(0))
             .expect("health check query");
         assert_eq!(one, 1);
 
-        // Schema version is readable.
         let stored: i64 = conn
             .query_row(
                 "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",

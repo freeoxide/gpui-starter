@@ -408,10 +408,8 @@ fn names_path(code: &str, token: &str) -> bool {
     })
 }
 
-// The `gpui` crate stays only for gpui-form's derives; hand-written
-// imports go through the kit, and the compiler now rejects the layer
-// crates. Every direct spelling is policed per line, not just the plain
-// `use gpui::` form.
+// The `gpui` crate exists only for gpui-form's derives; the layer crates
+// are reachable only through gpui_kit, and every spelling is policed per line.
 #[test]
 fn sources_reach_kit_layers_only_through_the_facade() {
     let layer_bans = [
