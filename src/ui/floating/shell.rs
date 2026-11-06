@@ -23,14 +23,20 @@ impl FloatingShell {
         title: SharedString,
         content: AnyView,
         chromeless: bool,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let focus_handle = cx.focus_handle();
+        // The float owns its keyboard from birth; without this Esc needs a
+        // click first (the "floating" key context rides on this handle).
+        let deferred_focus = focus_handle.clone();
+        window.defer(cx, move |window, cx| deferred_focus.focus(window, cx));
         Self {
             id,
             title,
             content,
             chromeless,
-            focus_handle: cx.focus_handle(),
+            focus_handle,
         }
     }
 }

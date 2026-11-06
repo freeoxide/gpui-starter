@@ -1,11 +1,14 @@
 use gpui_kit::layer_shell::{
     Anchor, KeyboardInteractivity, Layer, LayerShellNotSupportedError, LayerShellOptions,
 };
-use gpui_kit::{App, DisplayId, Edges, Pixels, Point, px};
+use gpui_kit::{App, DisplayId, Pixels, Point, px};
 
 use super::LOG;
-use super::spec::{Edge4, WidgetKeyboardInteractivity, WidgetLayer};
+use super::spec::WidgetLayer;
 use crate::ui::floating::spec::{FloatAnchor, FloatingSpec, Placement9};
+
+/// Compositor rule key for widget surfaces (the layer-shell namespace).
+const NAMESPACE: &str = "gpui-starter.widgets";
 
 pub(crate) fn anchor_bits(placement: Placement9) -> Anchor {
     use Placement9::*;
@@ -20,10 +23,6 @@ pub(crate) fn anchor_bits(placement: Placement9) -> Anchor {
         Bottom => Anchor::BOTTOM,
         BottomRight => Anchor::BOTTOM | Anchor::RIGHT,
     }
-}
-
-pub(crate) fn margin_tuple(margin: Edges<Pixels>) -> (Pixels, Pixels, Pixels, Pixels) {
-    (margin.top, margin.right, margin.bottom, margin.left)
 }
 
 fn margin_from_anchor(
@@ -60,26 +59,27 @@ fn layer_of(layer: WidgetLayer) -> Layer {
     }
 }
 
-fn keyboard_of(mode: WidgetKeyboardInteractivity) -> KeyboardInteractivity {
-    match mode {
-        WidgetKeyboardInteractivity::None => KeyboardInteractivity::None,
-        WidgetKeyboardInteractivity::Exclusive => KeyboardInteractivity::Exclusive,
-        WidgetKeyboardInteractivity::OnDemand => KeyboardInteractivity::OnDemand,
-    }
-}
-
-fn edge_bits(edge: Edge4) -> Anchor {
-    match edge {
-        Edge4::Top => Anchor::TOP,
-        Edge4::Right => Anchor::RIGHT,
-        Edge4::Bottom => Anchor::BOTTOM,
-        Edge4::Left => Anchor::LEFT,
-    }
-}
-
 pub(crate) struct LayerSpawnPlan {
     pub(crate) layer_options: Option<LayerShellOptions>,
     pub(crate) display_id: Option<DisplayId>,
+}
+
+/// The layer-surface options for a widget float: namespace, z-order band,
+/// anchor and margins from the placement. Pure: testable off a live session.
+pub(crate) fn layer_surface_options(
+    layer: WidgetLayer,
+    placement: Placement9,
+    offset: Point<Pixels>,
+) -> LayerShellOptions {
+    LayerShellOptions {
+        namespace: NAMESPACE.to_string(),
+        layer: layer_of(layer),
+        anchor: anchor_bits(placement),
+        exclusive_zone: None,
+        exclusive_edge: None,
+        margin: Some(margin_from_anchor(placement, offset)),
+        keyboard_interactivity: KeyboardInteractivity::None,
+    }
 }
 
 pub(crate) fn plan(spec: &FloatingSpec, cx: &App) -> LayerSpawnPlan {
@@ -103,25 +103,7 @@ pub(crate) fn plan(spec: &FloatingSpec, cx: &App) -> LayerSpawnPlan {
         );
         return empty;
     };
-    let placement = layer_spec
-        .requested_anchor()
-        .unwrap_or_else(|| spec.float_anchor().placement());
-    let anchor = anchor_bits(placement);
-    let margin = layer_spec
-        .requested_margin()
-        .map(margin_tuple)
-        .unwrap_or_else(|| margin_from_anchor(placement, *offset));
-    let exclusive_edge = layer_spec.requested_exclusive_edge().filter(|edge| {
-        let bits = edge_bits(*edge);
-        let valid = bits.bits().count_ones() == 1 && anchor.contains(bits);
-        if !valid {
-            tracing::warn!(
-                target: LOG,
-                "ignoring exclusive edge {edge:?}: must be a single edge of the surface anchor {anchor:?}"
-            );
-        }
-        valid
-    });
+    let placement = spec.float_anchor().placement();
     let display_id = match display {
         Some(id) => cx.find_display(*id).map(|found| found.id()),
         None => cx.primary_display().map(|found| found.id()),
@@ -133,15 +115,11 @@ pub(crate) fn plan(spec: &FloatingSpec, cx: &App) -> LayerSpawnPlan {
         );
     }
     LayerSpawnPlan {
-        layer_options: Some(LayerShellOptions {
-            namespace: layer_spec.requested_namespace().to_string(),
-            layer: layer_of(layer_spec.requested_layer()),
-            anchor,
-            exclusive_zone: layer_spec.requested_exclusive_zone(),
-            exclusive_edge: exclusive_edge.map(edge_bits),
-            margin: Some(margin),
-            keyboard_interactivity: keyboard_of(layer_spec.requested_keyboard()),
-        }),
+        layer_options: Some(layer_surface_options(
+            layer_spec.requested_layer(),
+            placement,
+            *offset,
+        )),
         display_id,
     }
 }

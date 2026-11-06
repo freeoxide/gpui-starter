@@ -1,61 +1,61 @@
 use gpui_kit::TestAppContext;
 
 use super::*;
-use crate::ui::floating::{
-    CAPABILITY_ALWAYS_ON_TOP, CAPABILITY_FLOATING_CLICK_THROUGH, CAPABILITY_FLOATING_WINDOWS,
-    CAPABILITY_NOTCH_GEOMETRY, init,
-};
+use crate::ui::floating::init;
 
 #[gpui_kit::test]
-async fn probe_reports_native_windows_only_off_wasm(cx: &TestAppContext) {
+async fn probe_facts_agree_with_the_capability_rows(cx: &TestAppContext) {
     cx.update(init);
-    let info = cx.read(|cx| probe(cx));
-    if cfg!(target_family = "wasm") {
-        assert!(!info.native_windows);
-        assert!(!info.always_on_top);
-        assert!(!info.non_focus_stealing);
-        assert_eq!(info.menu_bar, None);
-    } else {
-        assert!(info.native_windows);
-        assert!(info.always_on_top);
-        assert!(info.menu_bar.is_some());
+    let (info, snapshot) = cx.read(|cx| {
+        let snapshot = crate::capabilities::snapshot(cx);
+        (probe(cx), snapshot)
+    });
+    assert_eq!(
+        info.native_windows,
+        snapshot[&Capability::FLOATING_WINDOWS].supported,
+        "probe and the capability row must not drift apart"
+    );
+    assert_eq!(
+        info.always_on_top,
+        snapshot[&Capability::FLOATING_ALWAYS_ON_TOP].supported,
+        "probe and the capability row must not drift apart"
+    );
+    if info.notch.is_some() {
+        assert!(
+            snapshot[&Capability::NOTCH_GEOMETRY].supported,
+            "live notch data implies the capability row is supported"
+        );
     }
 }
 
 #[gpui_kit::test]
-async fn probe_never_panics_and_reports_no_notch_off_macos(cx: &TestAppContext) {
-    let info = cx.read(|cx| probe(cx));
-    #[cfg(not(target_os = "macos"))]
-    assert!(info.notch.is_none());
-    #[cfg(target_os = "macos")]
-    let _ = info.notch;
+async fn probe_fills_the_cache_once_init_ran(cx: &TestAppContext) {
+    cx.update(init);
+    let first = cx.read(|cx| probe(cx));
+    let filled = cx.read(|cx| {
+        cx.try_global::<PlatformInfoCache>()
+            .is_some_and(|cache| cache.0.borrow().is_some())
+    });
+    assert!(filled, "first probe() after init must populate the cache");
+    assert_eq!(cx.read(|cx| probe(cx)), first);
 }
 
 #[gpui_kit::test]
 async fn init_registers_the_four_capability_rows(cx: &TestAppContext) {
     cx.update(init);
     let snapshot = cx.read(|cx| crate::capabilities::snapshot(cx));
-    for key in [
-        CAPABILITY_FLOATING_WINDOWS,
-        CAPABILITY_ALWAYS_ON_TOP,
-        CAPABILITY_FLOATING_CLICK_THROUGH,
-        CAPABILITY_NOTCH_GEOMETRY,
+    for capability in [
+        Capability::FLOATING_WINDOWS,
+        Capability::FLOATING_ALWAYS_ON_TOP,
+        Capability::FLOATING_CLICK_THROUGH,
+        Capability::NOTCH_GEOMETRY,
     ] {
-        assert!(snapshot.contains_key(key), "missing capability {key}");
+        assert!(
+            snapshot.contains_key(&capability),
+            "missing capability {capability}"
+        );
     }
-    if cfg!(target_family = "wasm") {
-        let floating = &snapshot[CAPABILITY_FLOATING_WINDOWS];
-        assert!(!floating.supported);
-        assert!(floating.enabled);
-        assert!(floating.degraded);
-        assert!(floating.reason.is_some());
-        let click_through = &snapshot[CAPABILITY_FLOATING_CLICK_THROUGH];
-        assert!(!click_through.supported);
-        assert!(!click_through.enabled);
-        assert!(click_through.reason.is_some());
-    } else {
-        assert!(snapshot[CAPABILITY_FLOATING_WINDOWS].supported);
-        assert!(snapshot[CAPABILITY_ALWAYS_ON_TOP].supported);
-        assert!(snapshot[CAPABILITY_FLOATING_CLICK_THROUGH].supported);
-    }
+    assert!(snapshot[&Capability::FLOATING_WINDOWS].supported);
+    assert!(snapshot[&Capability::FLOATING_ALWAYS_ON_TOP].supported);
+    assert!(snapshot[&Capability::FLOATING_CLICK_THROUGH].supported);
 }

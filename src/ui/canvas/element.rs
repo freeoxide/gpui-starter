@@ -2,6 +2,7 @@ use gpui_kit::*;
 
 use super::cache::CanvasCaches;
 use super::paint::{paint_grid, paint_selection, paint_shape};
+use super::scene::ShapeId;
 use super::state::{CanvasState, HIT_TOLERANCE};
 use super::tool::{CanvasPointerEvent, CanvasScrollEvent, ToolContext};
 
@@ -62,14 +63,14 @@ fn pointer_event(
     }
 }
 
-fn tool_ctx(bounds: Bounds<Pixels>, s: &CanvasState, doc: Point<Pixels>) -> ToolContext {
+fn tool_ctx(bounds: Bounds<Pixels>, s: &CanvasState, hit: Option<ShapeId>) -> ToolContext {
     ToolContext {
         viewport: Bounds {
             origin: Point::default(),
             size: bounds.size,
         },
         transform: s.transform(),
-        hit: s.hit_test(doc, px(HIT_TOLERANCE.as_f32() / s.zoom())),
+        hit,
     }
 }
 
@@ -165,12 +166,16 @@ impl Element for CanvasElement {
                             window,
                             cx,
                         );
+                        shape_ix += 1;
                     }
                     paint_selection(
                         s.document(),
                         s.selected_shape_ids(),
+                        doc_gen,
                         s.transform(),
                         bounds,
+                        caches,
+                        2 * shape_ix,
                         window,
                         cx,
                     );
@@ -198,8 +203,16 @@ impl Element for CanvasElement {
                         let doc = s.transform().to_doc(position);
                         let event =
                             pointer_event(position, e.button, e.click_count, e.modifiers, doc);
-                        let ctx = tool_ctx(bounds, s, doc);
-                        s.pointer_active = true;
+                        let ctx = tool_ctx(
+                            bounds,
+                            s,
+                            s.hit_test(doc, px(HIT_TOLERANCE.as_f32() / s.zoom())),
+                        );
+                        // Tools only start gestures on the left button; a
+                        // chorded click must not arm one.
+                        if e.button == MouseButton::Left {
+                            s.pointer_active = true;
+                        }
                         s.dispatch_tool_event(cx, |tool, s, cx| {
                             tool.pointer_down(&event, &ctx, s, cx)
                         });
@@ -228,6 +241,20 @@ impl Element for CanvasElement {
                 }
                 if hitbox.is_hovered(window) || state.read(cx).is_pointer_active() {
                     state.update(cx, |s, cx| {
+                        // The up that ended the gesture was consumed above the
+                        // canvas; end it here instead of dragging with no
+                        // button held.
+                        if s.pointer_active && e.pressed_button.is_none() {
+                            let doc = s.transform().to_doc(position);
+                            let event =
+                                pointer_event(position, MouseButton::Left, 0, e.modifiers, doc);
+                            let ctx = tool_ctx(bounds, s, None);
+                            s.dispatch_tool_event(cx, |tool, s, cx| {
+                                tool.pointer_up(&event, &ctx, s, cx)
+                            });
+                            s.pointer_active = false;
+                            return;
+                        }
                         let doc = s.transform().to_doc(position);
                         let event = pointer_event(
                             position,
@@ -236,7 +263,7 @@ impl Element for CanvasElement {
                             e.modifiers,
                             doc,
                         );
-                        let ctx = tool_ctx(bounds, s, doc);
+                        let ctx = tool_ctx(bounds, s, None);
                         s.dispatch_tool_event(cx, |tool, s, cx| {
                             tool.pointer_move(&event, &ctx, s, cx)
                         });
@@ -249,7 +276,9 @@ impl Element for CanvasElement {
         window.on_mouse_event({
             let state = state.clone();
             move |e: &MouseUpEvent, phase, _, cx| {
-                if !phase.bubble() {
+                // Capture phase: an element above the canvas must not swallow
+                // the up that ends an in-flight gesture.
+                if !phase.capture() {
                     return;
                 }
                 let position = e.position - bounds.origin;
@@ -261,12 +290,19 @@ impl Element for CanvasElement {
                     }
                     return;
                 }
+                // Only a left-down can arm a gesture, so an armed pointer plus
+                // a non-left up is a chorded release mid-gesture: not the up
+                // that ends it. Dispatching it would let any tool commit at
+                // the wrong position.
+                if e.button != MouseButton::Left {
+                    return;
+                }
                 if state.read(cx).is_pointer_active() {
                     state.update(cx, |s, cx| {
                         let doc = s.transform().to_doc(position);
                         let event =
                             pointer_event(position, e.button, e.click_count, e.modifiers, doc);
-                        let ctx = tool_ctx(bounds, s, doc);
+                        let ctx = tool_ctx(bounds, s, None);
                         s.dispatch_tool_event(cx, |tool, s, cx| {
                             tool.pointer_up(&event, &ctx, s, cx)
                         });
@@ -294,7 +330,7 @@ impl Element for CanvasElement {
                         delta: e.delta,
                         modifiers: e.modifiers,
                     };
-                    let ctx = tool_ctx(bounds, s, doc);
+                    let ctx = tool_ctx(bounds, s, None);
                     let consumed =
                         s.dispatch_tool_event(cx, |tool, s, cx| tool.scroll(&event, &ctx, s, cx));
                     if consumed {

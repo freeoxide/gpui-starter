@@ -79,7 +79,7 @@ async fn a_spawned_float_still_carries_a_window_title_without_chrome(cx: &mut Te
 }
 
 #[gpui_kit::test]
-async fn escape_dismisses_a_spawned_float_after_a_click_focuses_it(cx: &mut TestAppContext) {
+async fn escape_dismisses_a_spawned_float_with_no_click_first(cx: &mut TestAppContext) {
     cx.update(gpui_kit::init);
     cx.update(init);
     let handle = cx
@@ -95,13 +95,10 @@ async fn escape_dismisses_a_spawned_float_after_a_click_focuses_it(cx: &mut Test
         panic!("expected a native handle");
     };
     let mut cx = VisualTestContext::from_window(window, cx);
-    // Click below the header: the header is the drag surface, whose
-    // start_window_move is unimplemented on the test platform.
-    cx.simulate_click(point(px(100.), px(60.)), Modifiers::none());
     cx.simulate_keystrokes("escape");
     assert!(
         cx.read(|cx| floating_snapshot(cx)).is_empty(),
-        "Esc must still dismiss now that no close button exists"
+        "Esc must dismiss straight from open: the float owns its keyboard from birth"
     );
 }
 
@@ -409,6 +406,39 @@ async fn respawn_floating_reopens_a_known_id_and_rejects_unknown_ones(cx: &mut T
     assert_eq!(snapshot[0].id.0, "respawn");
     let unknown = cx.update(|cx| respawn_floating(&FloatingWindowId("missing".into()), cx));
     assert!(!unknown);
+}
+
+#[gpui_kit::test]
+async fn spawning_an_already_open_id_replaces_the_old_window(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::init);
+    cx.update(init);
+    let spawn = |cx: &mut App| {
+        spawn_floating(
+            FloatingSpec::new(
+                FloatingWindowId("top-right".into()),
+                size(px(120.), px(90.)),
+            ),
+            blank_view,
+            cx,
+        )
+        .unwrap()
+    };
+    let first = cx.update(spawn);
+    let second = cx.update(spawn);
+    let FloatingHandle::Native(first_window) = first else {
+        panic!("expected a native handle");
+    };
+    let FloatingHandle::Native(second_window) = second else {
+        panic!("expected a native handle");
+    };
+    let snapshot = cx.read(|cx| floating_snapshot(cx));
+    assert_eq!(snapshot.len(), 1, "one id must mean one registry entry");
+    let windows = cx.read(|cx| cx.windows());
+    assert!(
+        !windows.contains(&first_window),
+        "the replaced window must close, not linger off the registry"
+    );
+    assert!(windows.contains(&second_window));
 }
 
 #[gpui_kit::test]

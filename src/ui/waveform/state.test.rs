@@ -4,7 +4,10 @@ use std::time::Duration;
 
 use gpui_kit::{AppContext, Entity, TestAppContext};
 
-use crate::ui::waveform::{DEFAULT_RETENTION, SampleProducer, WaveformMode, WaveformState};
+use super::WaveformSamples;
+use crate::ui::waveform::{
+    DEFAULT_RETENTION, MIN_WINDOW, SampleProducer, WaveformMode, WaveformState,
+};
 
 const SAMPLE_RATE: u32 = 48_000;
 
@@ -162,4 +165,62 @@ fn set_mode_round_trips(cx: &mut TestAppContext) {
     );
     state.update(cx, |s, cx| s.set_mode(WaveformMode::Spectrum, cx));
     assert_eq!(cx.read(|cx| state.read(cx).mode()), WaveformMode::Spectrum);
+}
+
+#[gpui_kit::test]
+fn short_window_channel_view_dispatches_line_samples(cx: &mut TestAppContext) {
+    let state = cx.new(|_| WaveformState::new());
+    let mut producer = attach_stereo(cx, &state);
+    producer.push_interleaved(&sine_interleaved(2048, 440., 1.));
+    refresh(cx, &state);
+    state.update(cx, |s, cx| s.set_window(MIN_WINDOW, cx));
+    let window_samples = cx.read(|cx| state.read(cx).window_samples());
+    assert_eq!(window_samples, 2400, "50 ms at 48 kHz");
+    state.update(cx, |s, _| {
+        let WaveformSamples::Line(samples) = s.channel_view(0, 4096) else {
+            panic!("window_samples <= columns must dispatch to Line");
+        };
+        assert!(
+            samples.len() <= window_samples,
+            "line holds at most one sample per window sample"
+        );
+        assert_eq!(samples.len(), 2048, "the raw ring holds every pushed frame");
+    });
+}
+
+#[gpui_kit::test]
+fn long_window_channel_view_dispatches_envelope_columns(cx: &mut TestAppContext) {
+    let state = cx.new(|_| WaveformState::new());
+    let mut producer = attach_stereo(cx, &state);
+    producer.push_interleaved(&sine_interleaved(2048, 440., 1.));
+    refresh(cx, &state);
+    assert_eq!(
+        cx.read(|cx| state.read(cx).window_samples()),
+        240_000,
+        "default 5 s at 48 kHz"
+    );
+    state.update(cx, |s, _| {
+        let WaveformSamples::Envelope(cols) = s.channel_view(0, 100) else {
+            panic!("window_samples > columns must dispatch to Envelope");
+        };
+        assert_eq!(cols.len(), 100, "one agg per column");
+        assert!(
+            cols.iter().all(|col| col.populated),
+            "every column aggregates pushed data"
+        );
+    });
+}
+
+#[gpui_kit::test]
+fn out_of_range_channel_view_returns_empty_line(cx: &mut TestAppContext) {
+    let state = cx.new(|_| WaveformState::new());
+    let mut producer = attach_stereo(cx, &state);
+    producer.push_interleaved(&sine_interleaved(480, 440., 1.));
+    refresh(cx, &state);
+    state.update(cx, |s, _| {
+        let WaveformSamples::Line(samples) = s.channel_view(2, 64) else {
+            panic!("a missing channel must return Line, not panic");
+        };
+        assert!(samples.is_empty());
+    });
 }

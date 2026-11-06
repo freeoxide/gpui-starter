@@ -22,9 +22,9 @@ pub enum WaveformMode {
     Spectrum,
 }
 
-pub(crate) enum WaveformSamples {
-    Line(Vec<f32>),
-    Envelope(Vec<ColumnAgg>),
+pub(crate) enum WaveformSamples<'a> {
+    Line(&'a [f32]),
+    Envelope(&'a [ColumnAgg]),
 }
 
 struct SourceAttachment {
@@ -48,6 +48,8 @@ pub struct WaveformState {
     tick: Option<Task<()>>,
     drain_buf: Vec<f32>,
     mixdown: Vec<f32>,
+    lane_line: Vec<f32>,
+    lane_env: Vec<ColumnAgg>,
 }
 
 impl Default for WaveformState {
@@ -70,6 +72,8 @@ impl WaveformState {
             tick: None,
             drain_buf: Vec::new(),
             mixdown: Vec::new(),
+            lane_line: Vec::new(),
+            lane_env: Vec::new(),
         }
     }
 
@@ -235,17 +239,19 @@ impl WaveformState {
         (self.window.as_secs_f32() * source.sample_rate as f32) as usize
     }
 
-    pub(crate) fn channel_view(&self, ch: usize, columns: usize) -> WaveformSamples {
+    /// Fills per-lane scratch reused across paints; the borrow ends at the
+    /// next call, so consume the view before querying the next lane.
+    pub(crate) fn channel_view(&mut self, ch: usize, columns: usize) -> WaveformSamples<'_> {
         let Some(history) = self.channels.get(ch) else {
-            return WaveformSamples::Line(Vec::new());
+            return WaveformSamples::Line(&[]);
         };
         let window_samples = self.window_samples().max(1);
         if window_samples <= columns {
-            let mut samples = Vec::new();
-            history.last_samples(window_samples, &mut samples);
-            WaveformSamples::Line(samples)
+            history.last_samples(window_samples, &mut self.lane_line);
+            WaveformSamples::Line(&self.lane_line)
         } else {
-            WaveformSamples::Envelope(history.query(window_samples, columns))
+            history.query(window_samples, columns, &mut self.lane_env);
+            WaveformSamples::Envelope(&self.lane_env)
         }
     }
 }

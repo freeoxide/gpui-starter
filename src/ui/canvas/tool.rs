@@ -24,7 +24,8 @@ pub struct CanvasScrollEvent {
 }
 
 /// Router-computed snapshot handed to tools each event. `viewport` is viewport
-/// space: origin (0,0), element size.
+/// space: origin (0,0), element size. `hit` is populated for pointer_down
+/// only; moves and scrolls never pay the document-wide hit-test.
 #[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub struct ToolContext {
@@ -148,44 +149,27 @@ impl CanvasTool for PanTool {
 
     fn pointer_up(
         &mut self,
-        _: &CanvasPointerEvent,
+        event: &CanvasPointerEvent,
         _: &ToolContext,
         _: &mut CanvasState,
         _: &mut Context<CanvasState>,
     ) {
+        if event.button != MouseButton::Left {
+            return;
+        }
         self.dragging = false;
         self.last_screen = None;
-    }
-
-    fn scroll(
-        &mut self,
-        event: &CanvasScrollEvent,
-        _: &ToolContext,
-        state: &mut CanvasState,
-        cx: &mut Context<CanvasState>,
-    ) -> bool {
-        if event.modifiers.control || event.modifiers.platform {
-            return false;
-        }
-        let delta = match event.delta {
-            ScrollDelta::Lines(delta) => point(px(-delta.x * 40.), px(-delta.y * 40.)),
-            ScrollDelta::Pixels(delta) => point(-delta.x, -delta.y),
-        };
-        state.pan_by(delta, cx);
-        true
     }
 }
 
 pub struct SelectTool {
-    move_origin: Option<Point<Pixels>>,
-    snapshot: Vec<(ShapeId, CanvasShape)>,
+    last_doc_position: Option<Point<Pixels>>,
 }
 
 impl SelectTool {
     pub fn new() -> Self {
         Self {
-            move_origin: None,
-            snapshot: Vec::new(),
+            last_doc_position: None,
         }
     }
 }
@@ -215,17 +199,7 @@ impl CanvasTool for SelectTool {
             if !state.selected_shape_ids().contains(&hit) {
                 state.select_shape(hit, event.modifiers.shift, cx);
             }
-            self.snapshot = state
-                .selected_shape_ids()
-                .iter()
-                .filter_map(|id| {
-                    state
-                        .document()
-                        .shape(*id)
-                        .map(|shape| (*id, shape.clone()))
-                })
-                .collect();
-            self.move_origin = Some(event.doc_position);
+            self.last_doc_position = Some(event.doc_position);
         } else if !event.modifiers.shift {
             state.clear_selection(cx);
         }
@@ -238,30 +212,30 @@ impl CanvasTool for SelectTool {
         state: &mut CanvasState,
         cx: &mut Context<CanvasState>,
     ) {
-        let Some(origin) = self.move_origin else {
+        let Some(last) = self.last_doc_position else {
             return;
         };
-        let delta = event.doc_position - origin;
-        let snapshot = &self.snapshot;
+        let delta = event.doc_position - last;
+        self.last_doc_position = Some(event.doc_position);
+        let selected = state.selected_shape_ids().to_vec();
         state.edit_document(cx, |doc| {
-            for (id, snapshot_shape) in snapshot {
-                doc.update_shape(*id, |shape| {
-                    *shape = snapshot_shape.clone();
-                    shape.translate(delta);
-                });
+            for id in selected {
+                doc.update_shape(id, |shape| shape.translate(delta));
             }
         });
     }
 
     fn pointer_up(
         &mut self,
-        _: &CanvasPointerEvent,
+        event: &CanvasPointerEvent,
         _: &ToolContext,
         _: &mut CanvasState,
         _: &mut Context<CanvasState>,
     ) {
-        self.move_origin = None;
-        self.snapshot.clear();
+        if event.button != MouseButton::Left {
+            return;
+        }
+        self.last_doc_position = None;
     }
 }
 
@@ -324,9 +298,10 @@ impl CanvasTool for BrushTool {
         if event.button != MouseButton::Left {
             return;
         }
-        self.points = vec![event.doc_position];
+        self.points.clear();
+        self.points.push(event.doc_position);
         self.stroking = true;
-        let overlay = CanvasShape::path(self.points.clone(), self.stroke_style());
+        let overlay = CanvasShape::path(vec![event.doc_position], self.stroke_style());
         state.set_tool_overlay(Some(overlay), cx);
     }
 
@@ -357,12 +332,12 @@ impl CanvasTool for BrushTool {
 
     fn pointer_up(
         &mut self,
-        _: &CanvasPointerEvent,
+        event: &CanvasPointerEvent,
         _: &ToolContext,
         state: &mut CanvasState,
         cx: &mut Context<CanvasState>,
     ) {
-        if !self.stroking {
+        if !self.stroking || event.button != MouseButton::Left {
             return;
         }
         let layer = state
@@ -371,12 +346,11 @@ impl CanvasTool for BrushTool {
             .unwrap_or_else(|| state.add_layer(cx));
         state.add_shape(
             layer,
-            CanvasShape::path(self.points.clone(), self.stroke_style()),
+            CanvasShape::path(std::mem::take(&mut self.points), self.stroke_style()),
             cx,
         );
         state.set_tool_overlay(None, cx);
         self.stroking = false;
-        self.points.clear();
     }
 }
 
@@ -492,7 +466,7 @@ impl CanvasTool for ShapeTool {
         state: &mut CanvasState,
         cx: &mut Context<CanvasState>,
     ) {
-        if !self.dragging {
+        if !self.dragging || event.button != MouseButton::Left {
             return;
         }
         self.dragging = false;

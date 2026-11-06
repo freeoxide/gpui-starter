@@ -41,6 +41,8 @@ pub(crate) struct OverlayPane {
     pub(crate) id: FloatingWindowId,
     pub(crate) title: SharedString,
     pub(crate) bounds: Bounds<Pixels>,
+    pub(crate) chromeless: bool,
+    pub(crate) focus: bool,
     pub(crate) view: AnyView,
 }
 
@@ -93,6 +95,8 @@ pub(crate) fn overlay_panes(cx: &App) -> Vec<OverlayPane> {
                         id: entry.spec.id().clone(),
                         title: entry.spec.window_title(),
                         bounds: entry.bounds,
+                        chromeless: entry.spec.is_chromeless(),
+                        focus: entry.spec.is_focus(),
                         view: entry.view.clone()?,
                     }),
                     FloatingHandle::Native(_) => None,
@@ -119,6 +123,12 @@ pub fn floating_snapshot(cx: &App) -> Vec<FloatingWindowEntry> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Whether a float with this id is currently registered.
+pub fn is_open(id: &FloatingWindowId, cx: &App) -> bool {
+    cx.try_global::<FloatingWindowRegistry>()
+        .is_some_and(|registry| registry.entries.contains_key(id))
 }
 
 pub(crate) fn install_close_tracker(cx: &mut App) {

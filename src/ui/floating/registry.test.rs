@@ -2,8 +2,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui_kit::{
-    AnyView, App, AppContext as _, Bounds, Context, IntoElement, Render, TestAppContext, Window,
-    div, point, px, size,
+    AnyView, AnyWindowHandle, App, AppContext as _, Bounds, Context, IntoElement, Render,
+    TestAppContext, Window, div, point, px, size,
 };
 
 use super::*;
@@ -73,5 +73,105 @@ async fn registry_mutation_notifies_global_observers(cx: &TestAppContext) {
     assert!(
         notified.get(),
         "default_global mutation must fire observe_global observers"
+    );
+}
+
+#[gpui_kit::test]
+async fn set_entry_level_rewrites_only_the_entry_matching_the_handle(cx: &mut TestAppContext) {
+    let window_a: AnyWindowHandle = cx.open_window(size(px(100.), px(80.)), |_, _| Blank).into();
+    let window_b: AnyWindowHandle = cx.open_window(size(px(100.), px(80.)), |_, _| Blank).into();
+    let native_id = FloatingWindowId("level-native".into());
+    let overlay_id = FloatingWindowId("level-overlay".into());
+    cx.update(|cx| {
+        set_entry(
+            RegistryEntry {
+                spec: FloatingSpec::new(native_id.clone(), size(px(120.), px(80.))),
+                bounds: Bounds {
+                    origin: point(px(0.), px(0.)),
+                    size: size(px(120.), px(80.)),
+                },
+                handle: FloatingHandle::Native(window_a.clone()),
+                build: factory(),
+                view: None,
+                surface: FloatSurface::Window,
+            },
+            cx,
+        );
+        set_entry(
+            RegistryEntry {
+                spec: FloatingSpec::new(overlay_id.clone(), size(px(120.), px(80.))),
+                bounds: Bounds {
+                    origin: point(px(0.), px(0.)),
+                    size: size(px(120.), px(80.)),
+                },
+                handle: FloatingHandle::Overlay(overlay_id.clone()),
+                build: factory(),
+                view: None,
+                surface: FloatSurface::Window,
+            },
+            cx,
+        );
+    });
+
+    cx.update(|cx| {
+        set_entry_level(
+            &FloatingHandle::Native(window_b),
+            FloatLevel::AlwaysOnTop,
+            cx,
+        );
+        set_entry_level(
+            &FloatingHandle::Overlay(FloatingWindowId("other".into())),
+            FloatLevel::AlwaysOnTop,
+            cx,
+        );
+    });
+    assert!(
+        cx.read(|cx| floating_snapshot(cx))
+            .iter()
+            .all(|entry| entry.level == FloatLevel::Floating),
+        "mismatched native and overlay handles must rewrite nothing"
+    );
+
+    cx.update(|cx| {
+        set_entry_level(
+            &FloatingHandle::Native(window_a),
+            FloatLevel::AlwaysOnTop,
+            cx,
+        )
+    });
+    let snapshot = cx.read(|cx| floating_snapshot(cx));
+    assert_eq!(
+        snapshot
+            .iter()
+            .find(|entry| entry.id == native_id)
+            .unwrap()
+            .level,
+        FloatLevel::AlwaysOnTop
+    );
+    assert_eq!(
+        snapshot
+            .iter()
+            .find(|entry| entry.id == overlay_id)
+            .unwrap()
+            .level,
+        FloatLevel::Floating,
+        "a native match must not touch overlay entries"
+    );
+
+    cx.update(|cx| {
+        set_entry_level(
+            &FloatingHandle::Overlay(overlay_id.clone()),
+            FloatLevel::AlwaysOnTop,
+            cx,
+        )
+    });
+    let snapshot = cx.read(|cx| floating_snapshot(cx));
+    assert_eq!(
+        snapshot
+            .iter()
+            .find(|entry| entry.id == overlay_id)
+            .unwrap()
+            .level,
+        FloatLevel::AlwaysOnTop
     );
 }

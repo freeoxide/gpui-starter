@@ -2,8 +2,10 @@
 // recurse infinitely. Import only what we need.
 use gpui_kit::{Pixels, point, px};
 
+use super::MAX_STROKE_BUILD_POINTS;
 use super::grid_step;
 use super::smoothed_segments;
+use super::stroke_chunk_ranges;
 
 fn assert_px_eq(actual: Pixels, expected: Pixels) {
     assert!(
@@ -60,4 +62,29 @@ fn smoothed_segments_skip_short_paths() {
     assert!(smoothed_segments(&[point(px(1.), px(1.))]).is_empty());
     let two = smoothed_segments(&[point(px(1.), px(1.)), point(px(5.), px(5.))]);
     assert!(two.is_empty());
+}
+
+#[test]
+fn stroke_chunks_cover_every_point_and_share_endpoints() {
+    for len in [
+        MAX_STROKE_BUILD_POINTS + 1,
+        2 * MAX_STROKE_BUILD_POINTS,
+        2 * MAX_STROKE_BUILD_POINTS + 5,
+    ] {
+        let mut covered = 0usize;
+        for (ix, range) in stroke_chunk_ranges(len).enumerate() {
+            assert!(
+                range.len() <= MAX_STROKE_BUILD_POINTS,
+                "len {len} chunk {ix} holds {} points",
+                range.len()
+            );
+            assert!(range.len() >= 2, "len {len} chunk {ix} is degenerate");
+            assert_eq!(
+                range.start, covered,
+                "len {len} chunk {ix} leaves a gap or overlaps beyond one point"
+            );
+            covered = range.end - 1;
+        }
+        assert_eq!(covered, len - 1, "len {len} ends one point short at most");
+    }
 }

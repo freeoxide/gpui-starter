@@ -64,13 +64,39 @@ fn doc_bounds_expands_path_by_half_stroke_width() {
 }
 
 #[test]
-fn doc_bounds_uses_the_documented_text_approximation() {
-    let shape = CanvasShape::text(point(px(5.), px(7.)), "hello", px(10.), black());
+fn doc_bounds_pads_stroked_rect_ellipse_and_triangle_by_half_stroke() {
+    let bounds = Bounds {
+        origin: point(px(10.), px(20.)),
+        size: size(px(30.), px(40.)),
+    };
+    let style = ShapeStyle::stroked(stroke(px(2.)));
+    for shape in [
+        CanvasShape::rect(bounds, style.clone()),
+        CanvasShape::ellipse(bounds, style.clone()),
+        CanvasShape::triangle(bounds, style),
+    ] {
+        let padded = shape.doc_bounds();
+        assert_px_eq(padded.origin.x, px(9.));
+        assert_px_eq(padded.origin.y, px(19.));
+        assert_px_eq(padded.size.width, px(32.));
+        assert_px_eq(padded.size.height, px(42.));
+    }
+}
+
+#[test]
+fn doc_bounds_uses_the_measured_text_size() {
+    let shape = CanvasShape::text(
+        point(px(5.), px(7.)),
+        "hello",
+        px(10.),
+        black(),
+        size(px(28.5), px(12.)),
+    );
     let bounds = shape.doc_bounds();
     assert_px_eq(bounds.origin.x, px(5.));
     assert_px_eq(bounds.origin.y, px(7.));
-    assert_px_eq(bounds.size.width, px(30.));
-    assert_px_eq(bounds.size.height, px(12.5));
+    assert_px_eq(bounds.size.width, px(28.5));
+    assert_px_eq(bounds.size.height, px(12.));
 }
 
 #[test]
@@ -121,7 +147,13 @@ fn translate_moves_every_variant() {
     assert_px_eq(points[1].x, px(8.));
     assert_px_eq(points[1].y, px(1.));
 
-    let mut text = CanvasShape::text(point(px(0.), px(0.)), "x", px(12.), black());
+    let mut text = CanvasShape::text(
+        point(px(0.), px(0.)),
+        "x",
+        px(12.),
+        black(),
+        size(px(6.), px(14.)),
+    );
     text.translate(delta);
     let CanvasShape::Text { position, .. } = &text else {
         panic!("variant preserved");
@@ -242,10 +274,44 @@ fn single_point_path_hits_as_a_dot_of_the_stroke_width() {
 }
 
 #[test]
-fn text_hit_test_uses_the_approximate_bounds() {
-    let shape = CanvasShape::text(point(px(0.), px(0.)), "hello", px(10.), black());
-    assert!(shape.hit_test(point(px(29.), px(10.)), px(0.)));
-    assert!(!shape.hit_test(point(px(31.), px(10.)), px(0.)));
+fn path_hit_test_covers_the_painted_stroke_width() {
+    let shape = CanvasShape::path(
+        vec![point(px(0.), px(0.)), point(px(100.), px(0.))],
+        stroke(px(6.)),
+    );
+    let tolerance = px(4.);
+    // 6px off the centerline is inside the painted ink (half width 3) plus
+    // tolerance; the old centerline-only test rejected it.
+    assert!(shape.hit_test(point(px(50.), px(6.)), tolerance));
+    assert!(!shape.hit_test(point(px(50.), px(7.5)), tolerance));
+}
+
+#[test]
+fn text_hit_test_uses_the_measured_bounds() {
+    let shape = CanvasShape::text(
+        point(px(0.), px(0.)),
+        "hello",
+        px(10.),
+        black(),
+        size(px(28.5), px(12.)),
+    );
+    assert!(shape.hit_test(point(px(28.), px(10.)), px(0.)));
+    assert!(!shape.hit_test(point(px(29.), px(10.)), px(0.)));
+}
+
+#[test]
+fn text_hit_test_honors_tolerance_like_every_other_variant() {
+    let shape = CanvasShape::text(
+        point(px(0.), px(0.)),
+        "hello",
+        px(10.),
+        black(),
+        size(px(28.5), px(12.)),
+    );
+    // Production passes 4/zoom; a click 3px past the measured box must
+    // still grab, one 5px past must not.
+    assert!(shape.hit_test(point(px(31.5), px(10.)), px(4.)));
+    assert!(!shape.hit_test(point(px(33.5), px(10.)), px(4.)));
 }
 
 #[test]

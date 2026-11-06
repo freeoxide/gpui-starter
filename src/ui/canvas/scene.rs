@@ -95,6 +95,9 @@ pub enum CanvasShape {
         text: SharedString,
         font_size: Pixels,
         color: Hsla,
+        /// Doc-space size measured by [`measure_text`] at creation; bounds
+        /// and hit tests derive from it.
+        measured: Size<Pixels>,
     },
     Image {
         bounds: Bounds<Pixels>,
@@ -102,16 +105,34 @@ pub enum CanvasShape {
     },
 }
 
-pub(crate) fn text_bounds(
-    position: Point<Pixels>,
-    text: &str,
-    font_size: Pixels,
-) -> Bounds<Pixels> {
-    let char_count = text.chars().count() as f32;
-    Bounds {
-        origin: position,
-        size: size(font_size * (0.6 * char_count), font_size * 1.25),
-    }
+/// Measures `text` with the same default-font run text shapes paint with, so
+/// stored bounds match the painted glyphs.
+///
+/// `shape_line` lives on `WindowTextSystem`; a fresh one over the app's
+/// `TextSystem` shapes identically to the per-window instance paint uses.
+pub fn measure_text(text_system: &WindowTextSystem, text: &str, font_size: Pixels) -> Size<Pixels> {
+    let run = TextRun {
+        len: text.len(),
+        font: TextStyle::default().font(),
+        color: black(),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    };
+    let shaped = text_system.shape_line(text.into(), font_size, &[run], None);
+    size(shaped.width, shaped.ascent + shaped.descent)
+}
+
+/// Wraps RGBA pixels for [`CanvasShape::Image`]. RenderImage data is BGRA,
+/// so the swizzle happens here and nowhere else.
+pub fn rgba_to_render(img: image::RgbaImage) -> Arc<RenderImage> {
+    let (width, height) = img.dimensions();
+    let bgra = img.into_raw_bgra();
+    // into_raw_bgra swaps channels in place, so the container length is a
+    // from_raw invariant that cannot fail here.
+    let buffer = image::RgbaImage::from_raw(width, height, bgra)
+        .expect("into_raw_bgra preserves the container length");
+    Arc::new(RenderImage::new(vec![image::Frame::new(buffer)]))
 }
 
 fn expanded(bounds: &Bounds<Pixels>, by: Pixels) -> Bounds<Pixels> {
@@ -151,17 +172,21 @@ impl CanvasShape {
         Self::Path { points, style }
     }
 
+    /// `measured` is the doc-space size from [`measure_text`] with this text
+    /// and font size; doc_bounds and hit_test read it.
     pub fn text(
         position: Point<Pixels>,
         text: impl Into<SharedString>,
         font_size: Pixels,
         color: Hsla,
+        measured: Size<Pixels>,
     ) -> Self {
         Self::Text {
             position,
             text: text.into(),
             font_size,
             color,
+            measured,
         }
     }
 
@@ -169,15 +194,21 @@ impl CanvasShape {
         Self::Image { bounds, image }
     }
 
-    /// Conservative document-space bounds. Text uses an explicit
-    /// approximation: height = `font_size * 1.25`, width =
-    /// `font_size * 0.6 * char count`.
+    /// Conservative document-space bounds; stroked shapes include the
+    /// centered stroke's width/2 overhang. Text bounds are the size
+    /// measured at creation.
     pub fn doc_bounds(&self) -> Bounds<Pixels> {
         match self {
-            Self::Rect { bounds, .. }
-            | Self::Ellipse { bounds, .. }
-            | Self::Triangle { bounds, .. }
-            | Self::Image { bounds, .. } => *bounds,
+            Self::Rect { bounds, style }
+            | Self::Ellipse { bounds, style }
+            | Self::Triangle { bounds, style } => {
+                let pad = style
+                    .stroke()
+                    .map(|stroke| stroke.width * 0.5)
+                    .unwrap_or(px(0.));
+                expanded(bounds, pad)
+            }
+            Self::Image { bounds, .. } => *bounds,
             Self::Path { points, style } => {
                 let half_width = style.width * 0.5;
                 let mut min = points.first().copied().unwrap_or_default();
@@ -192,11 +223,11 @@ impl CanvasShape {
                 )
             }
             Self::Text {
-                position,
-                text,
-                font_size,
-                ..
-            } => text_bounds(*position, text, *font_size),
+                position, measured, ..
+            } => Bounds {
+                origin: *position,
+                size: *measured,
+            },
         }
     }
 
@@ -258,17 +289,24 @@ impl CanvasShape {
                     let dy = delta.y.as_f32() / radius;
                     dx * dx + dy * dy <= 1.
                 } else {
+                    // The hit corridor must cover the painted stroke, not
+                    // just its centerline, like the single-point branch above.
+                    let corridor = tolerance + style.width * 0.5;
                     points
                         .windows(2)
-                        .any(|w| segment_distance(doc_point, w[0], w[1]) <= tolerance)
+                        .any(|w| segment_distance(doc_point, w[0], w[1]) <= corridor)
                 }
             }
             Self::Text {
-                position,
-                text,
-                font_size,
-                ..
-            } => text_bounds(*position, text, *font_size).contains(&doc_point),
+                position, measured, ..
+            } => expanded(
+                &Bounds {
+                    origin: *position,
+                    size: *measured,
+                },
+                tolerance,
+            )
+            .contains(&doc_point),
         }
     }
 }

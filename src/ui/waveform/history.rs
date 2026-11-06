@@ -145,25 +145,25 @@ impl ChannelHistory {
         Some(acc.finish())
     }
 
-    pub(crate) fn query(&self, window_samples: usize, columns: usize) -> Vec<ColumnAgg> {
-        if columns == 0 {
-            return Vec::new();
-        }
-        let mut out = vec![
+    pub(crate) fn query(&self, window_samples: usize, columns: usize, out: &mut Vec<ColumnAgg>) {
+        out.clear();
+        out.resize(
+            columns,
             ColumnAgg {
                 min: 0.,
                 max: 0.,
                 rms: 0.,
                 populated: false,
-            };
-            columns
-        ];
-        if window_samples <= self.raw.len() {
-            self.query_raw(window_samples, columns, &mut out);
-        } else {
-            self.query_levels(window_samples, columns, &mut out);
+            },
+        );
+        if columns == 0 {
+            return;
         }
-        out
+        if window_samples <= self.raw.len() {
+            self.query_raw(window_samples, columns, out);
+        } else {
+            self.query_levels(window_samples, columns, out);
+        }
     }
 
     fn query_raw(&self, window_samples: usize, columns: usize, out: &mut [ColumnAgg]) {

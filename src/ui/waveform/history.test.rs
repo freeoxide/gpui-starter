@@ -15,6 +15,12 @@ fn sum_of_squares(n: usize) -> f32 {
     (0..n).map(|i| (i * i) as f32).sum()
 }
 
+fn query(history: &ChannelHistory, window_samples: usize, columns: usize) -> Vec<ColumnAgg> {
+    let mut cols = Vec::new();
+    history.query(window_samples, columns, &mut cols);
+    cols
+}
+
 #[test]
 fn pyramid_append_feeds_level_0_in_strides() {
     let mut history = ChannelHistory::new(RAW_RING_SAMPLES);
@@ -73,7 +79,7 @@ fn provisional_tracks_the_incomplete_group() {
 fn query_raw_path_maps_newest_suffix_to_columns() {
     let mut history = ChannelHistory::new(RAW_RING_SAMPLES);
     push_ramp(&mut history, 100);
-    let cols = history.query(100, 10);
+    let cols = query(&history, 100, 10);
     assert!(cols.iter().all(|c| c.populated));
     approx(cols[0].min, 0.);
     approx(cols[0].max, 9.);
@@ -85,7 +91,7 @@ fn query_raw_path_maps_newest_suffix_to_columns() {
 fn query_raw_path_marks_empty_ranges_unpopulated() {
     let mut history = ChannelHistory::new(RAW_RING_SAMPLES);
     push_ramp(&mut history, 100);
-    let cols = history.query(100, 200);
+    let cols = query(&history, 100, 200);
     for (c, col) in cols.iter().enumerate() {
         assert_eq!(col.populated, c % 2 == 1, "column {c}");
     }
@@ -96,7 +102,7 @@ fn query_level_path_appends_provisional_entry() {
     let mut history = ChannelHistory::new(RAW_RING_SAMPLES + 800);
     assert_eq!(history.levels.len(), 4);
     push_ramp(&mut history, 17_184);
-    let cols = history.query(17_184, 10);
+    let cols = query(&history, 17_184, 10);
     assert!(cols.iter().all(|c| c.populated));
     approx(cols[0].min, 0.);
     approx(cols[0].max, 4095.);
@@ -108,7 +114,7 @@ fn query_level_path_appends_provisional_entry() {
 fn query_level0_boundary_includes_provisional() {
     let mut history = ChannelHistory::new(RAW_RING_SAMPLES + 8);
     push_ramp(&mut history, RAW_RING_SAMPLES + 4);
-    let cols = history.query(RAW_RING_SAMPLES + 4, 2049);
+    let cols = query(&history, RAW_RING_SAMPLES + 4, 2049);
     assert_eq!(cols.len(), 2049);
     approx(cols[0].max, 7.);
     approx(cols[2047].max, 16383.);

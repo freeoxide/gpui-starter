@@ -18,26 +18,17 @@ mod shims;
 pub mod spawn;
 pub mod spec;
 
-pub use layer_shell::{
-    CAPABILITY_LAYER_SHELL_INPUT_PASSTHROUGH, CAPABILITY_LAYER_SHELL_WIDGETS, Edge4, FloatSurface,
-    LayerShellSpec, WidgetKeyboardInteractivity, WidgetLayer, set_input_passthrough,
-    spawn_floating_after_displays,
-};
+pub use layer_shell::{FloatSurface, LayerShellSpec, WidgetLayer, spawn_floating_after_displays};
 pub use overlay_host::OverlayFloatHost;
 pub use probe::{FloatingPlatformInfo, NotchGeometry, probe};
 pub use registry::{
-    FloatingHandle, FloatingWindowEntry, FloatingWindowRegistry, floating_snapshot,
+    FloatingHandle, FloatingWindowEntry, FloatingWindowRegistry, floating_snapshot, is_open,
 };
 pub use spawn::{
     close_all_floating, close_floating, respawn_floating, set_floating_always_on_top,
     set_floating_click_through, spawn_floating, spawn_screen_floating,
 };
 pub use spec::{FloatAnchor, FloatLevel, FloatingSpec, FloatingWindowId, Placement9};
-
-pub const CAPABILITY_FLOATING_WINDOWS: &str = "floating_windows";
-pub const CAPABILITY_ALWAYS_ON_TOP: &str = "floating_always_on_top";
-pub const CAPABILITY_FLOATING_CLICK_THROUGH: &str = "floating_click_through";
-pub const CAPABILITY_NOTCH_GEOMETRY: &str = "notch_geometry";
 
 /// Esc action inside a floating shell or overlay pane; bound by `init`.
 #[derive(Action, Clone, PartialEq, Eq, serde::Deserialize)]
@@ -50,5 +41,6 @@ pub fn init(cx: &mut App) {
     registry::install_close_tracker(cx);
     cx.bind_keys([KeyBinding::new("escape", DismissFloating, Some("floating"))]);
     probe::register_capabilities(cx);
+    probe::init(cx);
     layer_shell::init(cx);
 }

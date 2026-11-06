@@ -16,10 +16,9 @@ use super::LOG;
 #[path = "x11.test.rs"]
 mod x11_test;
 
-const STATE_ATOM_NAMES: [&str; 5] = [
+const STATE_ATOM_NAMES: [&str; 4] = [
     "_NET_WM_STATE",
     "_NET_WM_STATE_ABOVE",
-    "_NET_WM_STATE_BELOW",
     "_NET_WM_STATE_SKIP_TASKBAR",
     "_NET_WM_STATE_STICKY",
 ];
@@ -27,13 +26,23 @@ const STATE_ATOM_NAMES: [&str; 5] = [
 struct StateAtoms {
     net_wm_state: Atom,
     above: Atom,
-    below: Atom,
     skip_taskbar: Atom,
     sticky: Atom,
 }
 
 const STATE_ADD: u32 = 1;
 const STATE_REMOVE: u32 = 0;
+
+/// ABOVE alone is not the contract: a pinned float also leaves the taskbar
+/// and sticks to every workspace. Pinned here so the bundle cannot drift.
+fn always_on_top_states(atoms: &StateAtoms) -> [Atom; 3] {
+    [atoms.above, atoms.skip_taskbar, atoms.sticky]
+}
+
+/// The _NET_WM_STATE message action for an enable/disable toggle.
+fn state_action(enabled: bool) -> u32 {
+    if enabled { STATE_ADD } else { STATE_REMOVE }
+}
 
 fn state_messages(
     atoms: &StateAtoms,
@@ -70,18 +79,16 @@ fn intern_state_atoms(conn: &XCBConnection) -> Option<StateAtoms> {
         .into_iter()
         .map(|cookie| cookie.ok()?.reply().ok().map(|reply| reply.atom))
         .collect();
-    let [net_wm_state, above, below, skip_taskbar, sticky] = atoms?.try_into().ok()?;
+    let [net_wm_state, above, skip_taskbar, sticky] = atoms?.try_into().ok()?;
     let atoms = StateAtoms {
         net_wm_state,
         above,
-        below,
         skip_taskbar,
         sticky,
     };
     if [
         atoms.net_wm_state,
         atoms.above,
-        atoms.below,
         atoms.skip_taskbar,
         atoms.sticky,
     ]
@@ -154,12 +161,7 @@ pub(crate) fn set_always_on_top(
         tracing::debug!(target: LOG, "screen {} has no X11 root window", screen);
         return false;
     };
-    let action = if enabled { STATE_ADD } else { STATE_REMOVE };
-    let messages = state_messages(
-        &atoms,
-        action,
-        window_id,
-        &[atoms.above, atoms.skip_taskbar, atoms.sticky],
-    );
+    let action = state_action(enabled);
+    let messages = state_messages(&atoms, action, window_id, &always_on_top_states(&atoms));
     send_state_messages(&conn, root.root, &messages)
 }

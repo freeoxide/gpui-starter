@@ -14,6 +14,10 @@ mod scene;
 mod state;
 mod tool;
 
+#[cfg(all(test, target_os = "linux"))]
+#[path = "raster.test.rs"]
+pub(crate) mod raster_test;
+
 #[cfg(test)]
 static LAST_PAINT_US: AtomicU64 = AtomicU64::new(0);
 
@@ -32,6 +36,7 @@ pub use element::{Canvas, CanvasElement};
 pub use geometry::{CanvasTransform, segment_distance};
 pub use scene::{
     CanvasDocument, CanvasLayer, CanvasShape, LayerId, ShapeId, ShapeStyle, StrokeStyle,
+    measure_text, rgba_to_render,
 };
 pub use state::{CanvasEvent, CanvasGrid, CanvasState, HIT_TOLERANCE, MAX_ZOOM, MIN_ZOOM};
 pub use tool::{
@@ -49,6 +54,7 @@ pub(crate) mod perf_probe {
         pub(crate) static PATH_BUILDS: Cell<u64> = const { Cell::new(0) };
         pub(crate) static KEY_HASHES: Cell<u64> = const { Cell::new(0) };
         pub(crate) static TEXT_SHAPINGS: Cell<u64> = const { Cell::new(0) };
+        pub(crate) static DOT_PAINTS: Cell<u64> = const { Cell::new(0) };
     }
 
     pub(crate) fn add_path_build() {
@@ -63,17 +69,23 @@ pub(crate) mod perf_probe {
         TEXT_SHAPINGS.with(|c| c.set(c.get() + 1));
     }
 
+    pub(crate) fn add_dot_paint() {
+        DOT_PAINTS.with(|c| c.set(c.get() + 1));
+    }
+
     pub(crate) fn reset() {
         PATH_BUILDS.with(|c| c.set(0));
         KEY_HASHES.with(|c| c.set(0));
         TEXT_SHAPINGS.with(|c| c.set(0));
+        DOT_PAINTS.with(|c| c.set(0));
     }
 
-    pub(crate) fn snapshot() -> [u64; 3] {
+    pub(crate) fn snapshot() -> [u64; 4] {
         [
             PATH_BUILDS.with(Cell::get),
             KEY_HASHES.with(Cell::get),
             TEXT_SHAPINGS.with(Cell::get),
+            DOT_PAINTS.with(Cell::get),
         ]
     }
 }

@@ -3,7 +3,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use gpui_kit::{Path, PathBuilder, Pixels, Point, black, point, px};
+use gpui_kit::{Path, PathBuilder, Pixels, Point, black, point, px, size};
 
 use super::ShapeCache;
 use crate::ui::canvas::{CanvasShape, ShapeStyle, StrokeStyle};
@@ -146,26 +146,50 @@ fn returned_vertices_differ_by_exactly_the_origin_delta() {
 
 #[test]
 fn text_key_changes_with_content_and_color() {
-    let base = CanvasShape::text(point(px(1.), px(2.)), "alpha", px(12.), black());
+    let base = CanvasShape::text(
+        point(px(1.), px(2.)),
+        "alpha",
+        px(12.),
+        black(),
+        size(px(20.), px(14.)),
+    );
     let base_key = super::shape_key(&base, 1.);
     assert_ne!(super::shape_key(&base, 2.), base_key);
     assert_ne!(
         super::shape_key(
-            &CanvasShape::text(point(px(1.), px(2.)), "beta", px(12.), black()),
+            &CanvasShape::text(
+                point(px(1.), px(2.)),
+                "beta",
+                px(12.),
+                black(),
+                size(px(20.), px(14.)),
+            ),
             1.
         ),
         base_key
     );
     assert_ne!(
         super::shape_key(
-            &CanvasShape::text(point(px(1.), px(2.)), "alpha", px(12.), gpui_kit::white()),
+            &CanvasShape::text(
+                point(px(1.), px(2.)),
+                "alpha",
+                px(12.),
+                gpui_kit::white(),
+                size(px(20.), px(14.)),
+            ),
             1.
         ),
         base_key
     );
     assert_eq!(
         super::shape_key(
-            &CanvasShape::text(point(px(1.), px(2.)), "alpha", px(12.), black()),
+            &CanvasShape::text(
+                point(px(1.), px(2.)),
+                "alpha",
+                px(12.),
+                black(),
+                size(px(20.), px(14.)),
+            ),
             1.
         ),
         base_key
