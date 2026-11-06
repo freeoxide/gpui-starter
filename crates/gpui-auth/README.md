@@ -94,7 +94,7 @@ documented test/mock-only convention.
 ## Extraction checklist
 
 - Own manifest: yes (`publish = false`).
-- Zero app imports: `grep -rn "gpui_starter\|crate::" src/` returns nothing.
+- Zero app imports: `grep -rn "gpui_starter" src/` returns nothing.
 - Feature flags: `mock-provider` gates the scripted provider; delete one word
   in the host manifest to ship without it.
 - README: this file.

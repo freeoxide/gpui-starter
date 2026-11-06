@@ -4,7 +4,7 @@ use zeroize::ZeroizeOnDrop;
 /// A string that never prints: `Debug` renders `[redacted]` and the value is
 /// wiped on drop. Serde is transparent because the store's backing (an OS
 /// keyring row) is itself access-controlled.
-#[derive(Eq, ZeroizeOnDrop)]
+#[derive(Clone, Eq, ZeroizeOnDrop)]
 pub struct SecretString(String);
 
 impl SecretString {
@@ -16,12 +16,6 @@ impl SecretString {
     /// Read the secret; call only at the wire/store boundary.
     pub fn expose(&self) -> &str {
         &self.0
-    }
-}
-
-impl Clone for SecretString {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
     }
 }
 

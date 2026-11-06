@@ -97,9 +97,8 @@ impl AuthController {
         self.refreshing = false;
     }
 
-    /// Cache-first read so steady state never touches the store; a cache
-    /// miss loads in a spawned task (an OS keyring round trip must stay off
-    /// the UI thread) and continues with `then`.
+    /// Cache-first read so steady state never touches the store; misses
+    /// load in a spawned task (keyring I/O must stay off the UI thread).
     fn with_stored_tokens(
         &mut self,
         cx: &mut Context<Self>,
@@ -332,7 +331,7 @@ impl AuthController {
             };
             let provider = Arc::clone(&controller.provider);
             let http = controller.io.http.clone();
-            let secret = tokens.access_token.clone();
+            let secret = tokens.access_token;
             let future = Box::pin(async move { provider.revoke(http, secret.expose()).await });
             controller.launch(cx, future, |controller, result, cx| {
                 if let Err(error) = result {

@@ -59,7 +59,7 @@ impl TestBackend {
         TokenSet {
             provider_id: EMAIL_PROVIDER_ID.to_string(),
             access_token: SecretString::new(format!("test-access-{seq}")),
-            refresh_token: refresh_token.map(|token| SecretString::new(token)),
+            refresh_token: refresh_token.map(SecretString::new),
             id_token: None,
             token_type: "Bearer".to_string(),
             expires_at: Some(now_unix + TEST_TTL_SECS),
@@ -194,13 +194,13 @@ async fn browser_flow_methods_report_no_browser_flow() {
         Err(other) => panic!("expected NoBrowserFlow, got {other}"),
         Ok(_) => panic!("expected NoBrowserFlow, got Ok"),
     }
-    let launch = crate::provider::FlowLaunch {
+    let launch = FlowLaunch {
         authorize_url: String::new(),
         state: SecretString::new("state"),
         pkce: None,
         redirect_uri: String::new(),
     };
-    let redirect = crate::provider::RedirectParams {
+    let redirect = RedirectParams {
         code: None,
         state: None,
         error: None,

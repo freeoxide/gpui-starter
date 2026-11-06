@@ -2,12 +2,14 @@
 // local gate runs them via --all-features.
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicI64, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use gpui::{AppContext as _, Entity, Subscription, TestAppContext};
 
 use super::*;
+use crate::email::email_test::{TEST_TTL_SECS, TestBackend, fixed_clock};
+use crate::email::{AuthBackend, EmailPasswordProvider, PasswordAuth};
 use crate::mock::MockProvider;
 use crate::store::InMemoryStore;
 
@@ -176,8 +178,8 @@ async fn restore_signs_in_from_a_preseeded_store(cx: &mut TestAppContext) {
     let (controller, store) = new_controller(cx);
     let tokens = TokenSet {
         provider_id: "mock".to_string(),
-        access_token: crate::SecretString::new("stored-access"),
-        refresh_token: Some(crate::SecretString::new("stored-refresh")),
+        access_token: SecretString::new("stored-access"),
+        refresh_token: Some(SecretString::new("stored-refresh")),
         id_token: None,
         token_type: "Bearer".to_string(),
         expires_at: None,
@@ -257,11 +259,6 @@ async fn sign_out_revokes_deletes_and_emits(cx: &mut TestAppContext) {
 
 const EMAIL_IAT: i64 = 10_000;
 
-use std::sync::atomic::AtomicI64;
-
-use crate::email::email_test::{TEST_TTL_SECS, TestBackend, fixed_clock};
-use crate::email::{AuthBackend, EmailPasswordProvider, PasswordAuth};
-
 struct EmailFixture {
     controller: Entity<AuthController>,
     store: Arc<InMemoryStore>,
@@ -334,7 +331,7 @@ async fn password_readers_start_none_and_enable_password_survives_replacement(
         controller.enable_password(provider as Arc<dyn PasswordAuth>);
         controller.sign_up_with_password(
             "user@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         );
     });
@@ -351,14 +348,14 @@ async fn password_sign_up_then_sign_in_persists_and_completes(cx: &mut TestAppCo
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
             "user@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
     drive(&fixture, cx, |controller, cx| {
         controller.sign_in_with_password(
             "user@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
@@ -392,14 +389,14 @@ async fn duplicate_sign_up_and_bad_credentials_error_out(cx: &mut TestAppContext
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
             "dup@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
             "dup@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
@@ -413,7 +410,7 @@ async fn duplicate_sign_up_and_bad_credentials_error_out(cx: &mut TestAppContext
     drive(&fixture, cx, |controller, cx| {
         controller.sign_in_with_password(
             "dup@example.test".to_string(),
-            crate::token::SecretString::new("wrong-password"),
+            SecretString::new("wrong-password"),
             cx,
         )
     });
@@ -431,21 +428,21 @@ async fn sign_up_while_signed_in_is_a_noop(cx: &mut TestAppContext) {
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
             "user@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
     drive(&fixture, cx, |controller, cx| {
         controller.sign_in_with_password(
             "user@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
             "other@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
@@ -471,20 +468,12 @@ async fn a_second_sign_in_overwrites_the_single_store_row(cx: &mut TestAppContex
     let fixture = email_controller(cx, true);
     for email in ["a@example.test", "b@example.test"] {
         drive(&fixture, cx, |controller, cx| {
-            controller.sign_up_with_password(
-                email.to_string(),
-                crate::token::SecretString::new("password-8"),
-                cx,
-            )
+            controller.sign_up_with_password(email.to_string(), SecretString::new("password-8"), cx)
         });
     }
     for email in ["a@example.test", "b@example.test"] {
         drive(&fixture, cx, |controller, cx| {
-            controller.sign_in_with_password(
-                email.to_string(),
-                crate::token::SecretString::new("password-8"),
-                cx,
-            )
+            controller.sign_in_with_password(email.to_string(), SecretString::new("password-8"), cx)
         });
     }
     assert_eq!(
@@ -506,14 +495,14 @@ async fn sign_out_clears_the_email_state_slots(cx: &mut TestAppContext) {
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
             "t@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
     drive(&fixture, cx, |controller, cx| {
         controller.sign_in_with_password(
             "t@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
@@ -531,14 +520,14 @@ async fn refresh_if_needed_respects_the_margin_and_the_clock(cx: &mut TestAppCon
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
             "r@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
     drive(&fixture, cx, |controller, cx| {
         controller.sign_in_with_password(
             "r@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
@@ -570,7 +559,7 @@ async fn refresh_if_needed_without_a_clock_or_a_row_is_a_noop(cx: &mut TestAppCo
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
             "r@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
@@ -587,14 +576,14 @@ async fn refresh_if_needed_with_a_dead_refresh_token_errors(cx: &mut TestAppCont
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
             "r@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
     drive(&fixture, cx, |controller, cx| {
         controller.sign_in_with_password(
             "r@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
@@ -618,14 +607,14 @@ async fn refresh_response_without_a_refresh_token_keeps_the_stored_one(cx: &mut 
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
             "r@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
     drive(&fixture, cx, |controller, cx| {
         controller.sign_in_with_password(
             "r@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
@@ -642,14 +631,14 @@ async fn sign_out_contacts_revoke_and_survives_a_revoke_failure(cx: &mut TestApp
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
             "s@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
     drive(&fixture, cx, |controller, cx| {
         controller.sign_in_with_password(
             "s@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
@@ -664,7 +653,7 @@ async fn sign_out_contacts_revoke_and_survives_a_revoke_failure(cx: &mut TestApp
     drive(&fixture, cx, |controller, cx| {
         controller.sign_in_with_password(
             "s@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
+            SecretString::new("password-8"),
             cx,
         )
     });
@@ -684,9 +673,6 @@ async fn sign_out_contacts_revoke_and_survives_a_revoke_failure(cx: &mut TestApp
         AuthEvent::SignedOut
     )));
 }
-
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, AtomicUsize};
 
 /// Provider whose `start_flow`/`refresh` futures park on a channel gate so
 /// tests can act while a provider call is in flight.
@@ -722,8 +708,8 @@ impl GatedProvider {
         let seq = self.counter.fetch_add(1, Ordering::SeqCst);
         TokenSet {
             provider_id: "gate".to_string(),
-            access_token: crate::SecretString::new(format!("gate-access-{seq}")),
-            refresh_token: Some(crate::SecretString::new(refresh_token)),
+            access_token: SecretString::new(format!("gate-access-{seq}")),
+            refresh_token: Some(SecretString::new(refresh_token)),
             id_token: None,
             token_type: "Bearer".to_string(),
             expires_at: None,
@@ -757,7 +743,7 @@ impl AuthProvider for GatedProvider {
         Self::wait_for(&self.start_gate).await;
         Ok(FlowLaunch {
             authorize_url: "urn:gpui-auth:gate".to_string(),
-            state: crate::SecretString::new("gate-state"),
+            state: SecretString::new("gate-state"),
             pkce: None,
             redirect_uri: "urn:gpui-auth:gate:redirect".to_string(),
         })
@@ -915,7 +901,7 @@ impl AuthProvider for ForeignProvider {
     async fn start_flow(&self, _http: reqwest::Client) -> Result<FlowLaunch, AuthError> {
         Ok(FlowLaunch {
             authorize_url: "urn:gpui-auth:foreign".to_string(),
-            state: crate::SecretString::new("foreign-state"),
+            state: SecretString::new("foreign-state"),
             pkce: None,
             redirect_uri: "urn:gpui-auth:foreign:redirect".to_string(),
         })
@@ -954,8 +940,8 @@ impl ForeignProvider {
     fn minted(access: &str, refresh: &str) -> TokenSet {
         TokenSet {
             provider_id: "other".to_string(),
-            access_token: crate::SecretString::new(access),
-            refresh_token: Some(crate::SecretString::new(refresh)),
+            access_token: SecretString::new(access),
+            refresh_token: Some(SecretString::new(refresh)),
             id_token: None,
             token_type: "Bearer".to_string(),
             expires_at: None,
@@ -999,8 +985,8 @@ async fn foreign_provider_tokens_error_out_and_never_persist(cx: &mut TestAppCon
 
     let stored = TokenSet {
         provider_id: "foreign".to_string(),
-        access_token: crate::SecretString::new("seed-access"),
-        refresh_token: Some(crate::SecretString::new("seed-refresh")),
+        access_token: SecretString::new("seed-access"),
+        refresh_token: Some(SecretString::new("seed-refresh")),
         id_token: None,
         token_type: "Bearer".to_string(),
         expires_at: None,
