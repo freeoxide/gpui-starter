@@ -3,12 +3,11 @@
 //! this directory and revert its seam touches: the `pub mod audio;` line in
 //! services/mod.rs, the `audio` name in lib.rs's services re-export, the
 //! AudioPage module/pub use in features/pages/mod.rs, the Page::Audio arms
-//! and all() entry in shell/page.rs, the VALID_HOSTS entry in
-//! shell/route.rs, the AppRoot wiring in shell/root/app_root/state.rs, the
-//! page count in tests/e2e_navigation.rs, the audio_* and nav_audio keys in
-//! both locale files, the initialize call in app/init.rs, and the
-//! hound/symphonia/cpal entries in Cargo.toml plus regenerated Cargo.lock.
-//! Consumers of the Interface Contract (plans 13/18) must be ported first.
+//! and all() entry in shell/page.rs, the AppRoot wiring in
+//! shell/root/app_root/state.rs, the page count in tests/e2e_navigation.rs,
+//! the audio_* and nav_audio keys in both locale files, the initialize call
+//! in app/init.rs, and the hound/symphonia/cpal entries in Cargo.toml plus
+//! regenerated Cargo.lock.
 
 use gpui_kit::{App, AppContext as _};
 

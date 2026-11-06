@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::AtomicI32;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use cpal::SizedSample;
 use cpal::traits::{DeviceTrait as _, HostTrait as _, StreamTrait as _};
@@ -126,7 +126,7 @@ fn convert_chunk<T: ToF32>(
     dev_channels: usize,
     channels: usize,
 ) {
-    let gain = gain_multiplier(gain_q8.load(std::sync::atomic::Ordering::Relaxed));
+    let gain = gain_multiplier(gain_q8.load(Ordering::Relaxed));
     let mut buf = [0f32; 1024];
     let mut len = 0;
     let mut peak = 0f32;

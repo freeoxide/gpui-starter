@@ -820,22 +820,20 @@ impl AudioEngine {
         }
         match result {
             Ok(session) => {
-                self.session = Some(session);
                 transport.set_playing(false);
                 if self.pending_play {
                     self.pending_play = false;
-                    let played = self.session.as_ref().map(|session| session.play());
-                    match played {
-                        Some(Ok(())) => {
+                    match session.play() {
+                        Ok(()) => {
                             transport.set_playing(true);
                             self.status = Some(PlaybackStatus::Playing);
                             self.last_error = None;
                             self.wake_tick(cx);
                         }
-                        Some(Err(err)) => self.last_error = Some(err),
-                        None => {}
+                        Err(err) => self.last_error = Some(err),
                     }
                 }
+                self.session = Some(session);
             }
             Err(err) => {
                 // The queued play cannot happen on this build; do not leave

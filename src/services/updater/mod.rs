@@ -159,7 +159,7 @@ fn dispatch_background_notification(title: &str, body: &str, cx: &mut gpui_kit::
     );
 
     let state = match cx.try_global::<crate::notifications::NativeNotificationState>() {
-        Some(s) => s.clone(),
+        Some(state) => state,
         None => return,
     };
     let enabled_by_user = state.snapshot.enabled_by_user

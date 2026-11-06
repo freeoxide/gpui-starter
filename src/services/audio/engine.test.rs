@@ -194,7 +194,7 @@ fn refresh_devices_and_unknown_select_are_safe(cx: &mut TestAppContext) {
 }
 
 // The cpal host scan is synchronous and slow: it must never run on the
-// caller's turn, only inside the task that delivers the result (RCA 5.2.3).
+// caller's turn, only inside the task that delivers the result (RCA §5.2.3).
 #[cfg(not(target_family = "wasm"))]
 #[gpui_kit::test]
 fn refresh_devices_scans_off_the_caller_and_commits_from_a_task(cx: &mut TestAppContext) {

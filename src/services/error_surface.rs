@@ -99,7 +99,7 @@ pub fn report(
     id
 }
 
-/// Returns the number of error records without cloning the records Vec.
+/// Returns the number of stored error records.
 pub fn record_count(cx: &App) -> usize {
     cx.try_global::<ErrorSurfaceState>()
         .map(|state| state.records.len())

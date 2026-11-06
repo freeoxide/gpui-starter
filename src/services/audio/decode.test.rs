@@ -168,8 +168,8 @@ fn truncated_wav_fails_to_decode() {
 
 #[test]
 fn symphonia_path_decodes_wav_like_hound() {
-    let decoded = super::decode_symphonia(demo::sweep_wav(1), Some("wav".to_string())).unwrap();
-    let (samples, rate, channels) = decoded;
+    let (samples, rate, channels) =
+        super::decode_symphonia(demo::sweep_wav(1), Some("wav".to_string())).unwrap();
     assert_eq!(rate, 44_100);
     assert_eq!(channels, 2);
     assert_eq!(samples.len(), 88_200);

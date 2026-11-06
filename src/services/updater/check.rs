@@ -50,12 +50,12 @@ pub fn check_for_updates(cx: &mut App) {
         return;
     };
     #[cfg(not(target_family = "wasm"))]
-    let current_version = current.current_version.clone();
+    let current_version = current.current_version;
 
     // A cached manifest is fresh for one periodic check interval (matching the
     // re-check cadence in mod.rs); within that window skip the network fetch.
     #[cfg(not(target_family = "wasm"))]
-    let cached_manifest = current.cached_manifest.clone();
+    let cached_manifest = current.cached_manifest;
     #[cfg(not(target_family = "wasm"))]
     let cache_fresh = cached_manifest.is_some()
         && current
@@ -73,7 +73,7 @@ pub fn check_for_updates(cx: &mut App) {
     cx.spawn(async move |cx| {
         let manifest_result: Result<UpdateManifest, String> = match cached_manifest {
             Some(manifest) if cache_fresh => Ok(manifest),
-            _ => fetch_manifest(rt.clone(), client.clone()).await,
+            _ => fetch_manifest(rt, client).await,
         };
 
         cx.update(move |cx| match manifest_result {
@@ -147,23 +147,13 @@ pub fn check_for_updates(cx: &mut App) {
     .detach();
 }
 
-pub(super) fn check_retry_field(snap: &mut UpdateSnapshot) -> &mut u32 {
-    &mut snap.check_retry_count
-}
-
 /// Returns false when retries are exhausted — the caller owns the terminal
 /// error path and the interim status.
-pub(super) fn schedule_retry<F, R>(
-    cx: &mut App,
-    retry_field: F,
-    retry_kind: &'static str,
-    rearm: R,
-) -> bool
+pub(super) fn schedule_retry<R>(cx: &mut App, retry_kind: &'static str, rearm: R) -> bool
 where
-    F: Fn(&mut UpdateSnapshot) -> &mut u32,
     R: FnOnce(&mut App) + Send + 'static,
 {
-    let retry_count = *retry_field(cx.global_mut::<UpdateSnapshot>());
+    let retry_count = cx.global_mut::<UpdateSnapshot>().check_retry_count;
     if retry_count >= MAX_UPDATE_RETRIES {
         return false;
     }
@@ -178,7 +168,7 @@ where
         "update operation failed — scheduling retry"
     );
     UpdateSnapshot::update_global(cx, |snap, _cx| {
-        *retry_field(snap) = new_count;
+        snap.check_retry_count = new_count;
     });
 
     cx.spawn(async move |cx| {
@@ -200,7 +190,7 @@ where
 }
 
 fn handle_check_failure(error: String, cx: &mut App) {
-    let scheduled = schedule_retry(cx, check_retry_field, "check", check_for_updates);
+    let scheduled = schedule_retry(cx, "check", check_for_updates);
     super::set_status(UpdateStatus::Error(error.clone()), cx);
     if !scheduled {
         tracing::error!(

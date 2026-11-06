@@ -69,11 +69,11 @@ fn persist_and_load_roundtrip() {
 
     // persist_error/load_error_history are async (the wasm backend answers
     // via worker round-trips); the native body resolves on first poll.
-    let runtime = || tokio::runtime::Runtime::new().expect("tokio runtime for test");
-    runtime()
+    let runtime = tokio::runtime::Runtime::new().expect("tokio runtime for test");
+    runtime
         .block_on(persist_error(&backend, &record))
         .expect("persist");
-    let loaded = runtime()
+    let loaded = runtime
         .block_on(backend.load_error_history(10))
         .expect("load");
     assert_eq!(loaded.len(), 1);

@@ -154,13 +154,12 @@ pub fn initialize(cx: &mut App) {
         ..CrashReportSnapshot::default()
     };
 
-    cx.set_global(snapshot.clone());
-
     tracing::info!(
         target: "gpui_starter::crash_report",
         endpoint = %snapshot.upload_endpoint,
         "crash report service initialized"
     );
+    cx.set_global(snapshot);
 }
 
 pub fn snapshot(cx: &App) -> CrashReportSnapshot {

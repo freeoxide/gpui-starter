@@ -228,13 +228,9 @@ pub fn snapshot(cx: &App) -> StorageSnapshot {
         .unwrap_or_default()
 }
 
-/// Run a health check against the storage backend without blocking the main
-/// GPUI render loop.
-///
-/// The result is written back to the global [`StorageSnapshot`] via an
-/// `cx.update` callback once the check completes. Native runs the check on
-/// a background thread (synchronous SQLite I/O); wasm awaits the worker
-/// reply on the foreground executor (message-passing, non-blocking).
+/// Health check off the UI thread; the outcome lands in [`StorageSnapshot`]
+/// when it completes. Native uses a background thread (synchronous sqlite
+/// I/O); wasm awaits the worker reply on the foreground executor.
 pub fn run_health_check(cx: &mut App) {
     let Some(runtime) = cx.try_global::<StorageRuntime>().cloned() else {
         return;
@@ -280,13 +276,9 @@ pub fn run_health_check(cx: &mut App) {
     .detach();
 }
 
-/// Run storage maintenance (e.g. `PRAGMA optimize`) without blocking the
-/// main GPUI render loop.
-///
-/// The result is written back to the global [`StorageSnapshot`] via an
-/// `cx.update` callback once maintenance completes. Native runs it on a
-/// background thread; wasm awaits the worker reply (see
-/// [`run_health_check`]).
+/// Maintenance (e.g. `PRAGMA optimize`) off the UI thread; the outcome lands
+/// in [`StorageSnapshot`] when it completes. Threading matches
+/// [`run_health_check`].
 pub fn run_maintenance(cx: &mut App) {
     let Some(runtime) = cx.try_global::<StorageRuntime>().cloned() else {
         return;

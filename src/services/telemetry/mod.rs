@@ -132,7 +132,7 @@ pub fn set_mode(mode: TelemetryMode, consented: bool, endpoint: Option<&str>, cx
         compiled,
         consented,
         enabled,
-        mode: mode.clone(),
+        mode,
         endpoint_redacted,
         events_recorded: snapshot(cx).events_recorded,
         last_error: install_error,

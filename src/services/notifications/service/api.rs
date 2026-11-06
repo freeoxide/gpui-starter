@@ -99,9 +99,8 @@ pub fn refresh_permission_state(cx: &mut App) {
     let runtime = native_runtime(cx);
     tracing::debug!(target: LOG, "scheduling async permission refresh");
     cx.spawn(async move |cx| {
-        // Apple may never invoke the settings completion handler; bound the
-        // oneshot so the probe cannot park (the interactive request prompt is
-        // left unbounded — the user answers in their own time).
+        // Apple may never invoke the settings handler, so bound the probe; the
+        // interactive request prompt stays unbounded by design.
         let probe = async move { service.refresh_permission_state().await };
         let permission = match bounded(runtime.as_ref(), probe).await {
             Ok(permission) => permission,

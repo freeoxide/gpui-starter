@@ -21,7 +21,7 @@ const NONE_CONFIGURED: &str =
 struct ActiveFlow {
     kind: ProviderKind,
     _task: Option<gpui_kit::Task<()>>,
-    _abort: Option<tokio::task::AbortHandle>,
+    abort: Option<tokio::task::AbortHandle>,
 }
 
 pub(crate) struct SocialFlows {
@@ -179,7 +179,7 @@ impl SocialFlows {
             // cancel() cannot stop the detached start_flow task; kill the
             // listener it may already have bound.
             self.abort_pending_redirect(active.kind);
-            if let Some(abort) = active._abort {
+            if let Some(abort) = active.abort {
                 abort.abort();
             }
         }
@@ -187,7 +187,7 @@ impl SocialFlows {
         self.active_flow = Some(ActiveFlow {
             kind,
             _task: None,
-            _abort: None,
+            abort: None,
         });
         controller.update(cx, |controller, cx| controller.start_sign_in(cx));
     }
@@ -323,7 +323,7 @@ impl SocialFlows {
 
     fn clear_active_flow(&mut self) {
         if let Some(active) = self.active_flow.take()
-            && let Some(abort) = active._abort
+            && let Some(abort) = active.abort
         {
             abort.abort();
         }
@@ -364,14 +364,14 @@ impl SocialFlows {
         // A second arm for the same kind replaces the first drain; its
         // listener must not outlive it.
         if let Some(previous) = self.active_flow.take()
-            && let Some(abort) = previous._abort
+            && let Some(abort) = previous.abort
         {
             abort.abort();
         }
         self.active_flow = Some(ActiveFlow {
             kind,
             _task: Some(task),
-            _abort: Some(abort),
+            abort: Some(abort),
         });
     }
 
