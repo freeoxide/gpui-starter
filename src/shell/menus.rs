@@ -1,12 +1,20 @@
 use gpui_kit::component::{
     ActiveTheme as _, GlobalState, Theme, ThemeMode, ThemeRegistry, menu::AppMenuBar,
 };
-use gpui_kit::{App, Entity, Menu, MenuItem, SharedString};
+use gpui_kit::{
+    Action, App, Entity, Menu, MenuItem, OwnedMenu, OwnedMenuItem, OwnedOsMenu, SharedString,
+};
+
+#[cfg(target_os = "macos")]
+use gpui_kit::{SystemMenuType, actions};
 
 use crate::{
     app::{About, ExecuteCommand, LocaleState, Quit, SelectLocale, SwitchTheme, SwitchThemeMode},
     commands::{self, CommandId},
 };
+
+#[cfg(target_os = "macos")]
+actions!(menus, [Hide, HideOthers, ShowAll]);
 
 pub fn init(title: impl Into<SharedString>, cx: &mut App) -> Entity<AppMenuBar> {
     let app_menu_bar = AppMenuBar::new(cx);
@@ -20,6 +28,13 @@ pub fn init(title: impl Into<SharedString>, cx: &mut App) -> Entity<AppMenuBar> 
             update_app_menu(title.clone(), app_menu_bar.clone(), cx);
         }
     });
+
+    #[cfg(target_os = "macos")]
+    {
+        cx.on_action(|_: &Hide, cx| cx.hide());
+        cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
+        cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
+    }
 
     cx.observe_global::<Theme>({
         let title = title.clone();
@@ -52,45 +67,59 @@ pub fn init(title: impl Into<SharedString>, cx: &mut App) -> Entity<AppMenuBar> 
 fn update_app_menu(title: impl Into<SharedString>, app_menu_bar: Entity<AppMenuBar>, cx: &mut App) {
     let title: SharedString = title.into();
 
-    let menus = build_menus(title.clone(), cx);
+    let menus = build_menus(title, cx);
+    GlobalState::global_mut(cx).set_app_menus(owned_menus(&menus));
     cx.set_menus(menus);
-    let menus2 = build_menus(title, cx);
-    let owned_menus = menus2.into_iter().map(|menu| menu.owned()).collect();
-    GlobalState::global_mut(cx).set_app_menus(owned_menus);
 
     app_menu_bar.update(cx, |menu_bar, cx| {
         menu_bar.reload(cx);
     });
 }
 
+// Menu is not Clone (actions are boxed), so the second menu sink clones the
+// owned form of a single build instead of rebuilding the whole tree.
+fn owned_menus(menus: &[Menu]) -> Vec<OwnedMenu> {
+    menus.iter().map(owned_menu).collect()
+}
+
+fn owned_menu(menu: &Menu) -> OwnedMenu {
+    OwnedMenu {
+        name: menu.name.clone(),
+        items: menu.items.iter().map(owned_menu_item).collect(),
+        disabled: menu.disabled,
+    }
+}
+
+fn owned_menu_item(item: &MenuItem) -> OwnedMenuItem {
+    match item {
+        MenuItem::Separator => OwnedMenuItem::Separator,
+        MenuItem::Submenu(submenu) => OwnedMenuItem::Submenu(owned_menu(submenu)),
+        MenuItem::SystemMenu(os) => OwnedMenuItem::SystemMenu(OwnedOsMenu {
+            name: os.name.clone(),
+            menu_type: os.menu_type,
+        }),
+        MenuItem::Action {
+            name,
+            action,
+            os_action,
+            checked,
+            disabled,
+        } => OwnedMenuItem::Action {
+            name: name.to_string(),
+            action: action.boxed_clone(),
+            os_action: *os_action,
+            checked: *checked,
+            disabled: *disabled,
+        },
+    }
+}
+
 fn build_menus(title: impl Into<SharedString>, cx: &App) -> Vec<Menu> {
+    let title: SharedString = title.into();
     vec![
         Menu {
-            name: title.into(),
-            items: vec![
-                MenuItem::action(crate::i18n::localize("menu_about"), About),
-                MenuItem::Separator,
-                MenuItem::Submenu(Menu {
-                    name: crate::i18n::localize("menu_appearance").into(),
-                    items: vec![
-                        MenuItem::action(
-                            crate::i18n::localize("menu_appearance_light"),
-                            SwitchThemeMode(ThemeMode::Light),
-                        )
-                        .checked(!cx.theme().mode.is_dark()),
-                        MenuItem::action(
-                            crate::i18n::localize("menu_appearance_dark"),
-                            SwitchThemeMode(ThemeMode::Dark),
-                        )
-                        .checked(cx.theme().mode.is_dark()),
-                    ],
-                    disabled: false,
-                }),
-                theme_menu(cx),
-                language_menu(cx),
-                MenuItem::Separator,
-                MenuItem::action(crate::i18n::localize("menu_quit"), Quit),
-            ],
+            name: title.clone(),
+            items: app_menu_items(&title, cx),
             disabled: false,
         },
         Menu {
@@ -170,7 +199,46 @@ fn build_menus(title: impl Into<SharedString>, cx: &App) -> Vec<Menu> {
     ]
 }
 
-fn language_menu(_: &App) -> MenuItem {
+fn app_menu_items(title: &SharedString, cx: &App) -> Vec<MenuItem> {
+    let mut items = vec![
+        MenuItem::action(crate::i18n::localize("menu_about"), About),
+        MenuItem::Separator,
+        MenuItem::Submenu(Menu {
+            name: crate::i18n::localize("menu_appearance").into(),
+            items: vec![
+                MenuItem::action(
+                    crate::i18n::localize("menu_appearance_light"),
+                    SwitchThemeMode(ThemeMode::Light),
+                )
+                .checked(!cx.theme().mode.is_dark()),
+                MenuItem::action(
+                    crate::i18n::localize("menu_appearance_dark"),
+                    SwitchThemeMode(ThemeMode::Dark),
+                )
+                .checked(cx.theme().mode.is_dark()),
+            ],
+            disabled: false,
+        }),
+        theme_menu(cx),
+        language_menu(),
+    ];
+    // Windows' hide_other_apps() is unimplemented!(), so the NSApp
+    // conventions ship on macOS only.
+    #[cfg(target_os = "macos")]
+    items.extend([
+        MenuItem::Separator,
+        MenuItem::os_submenu("Services", SystemMenuType::Services),
+        MenuItem::Separator,
+        MenuItem::action(format!("Hide {title}"), Hide),
+        MenuItem::action("Hide Others", HideOthers),
+        MenuItem::action("Show All", ShowAll),
+    ]);
+    items.push(MenuItem::Separator);
+    items.push(MenuItem::action(crate::i18n::localize("menu_quit"), Quit));
+    items
+}
+
+fn language_menu() -> MenuItem {
     let locale = rust_i18n::locale().to_string();
     MenuItem::Submenu(Menu {
         name: crate::i18n::localize("menu_language").into(),
@@ -200,16 +268,15 @@ fn theme_menu(cx: &App) -> MenuItem {
 }
 
 fn command_menu_items(command_ids: &[CommandId], cx: &App) -> Vec<MenuItem> {
-    let specs = commands::registry();
     command_ids
         .iter()
         .filter_map(|id| {
-            specs.iter().find(|spec| spec.id == *id).map(|spec| {
+            commands::spec(*id).map(|spec| {
                 let availability = commands::availability(*id, cx);
-                let title = if let Some(reason) = availability.disabled_reason {
-                    format!("{} ({})", spec.title, reason)
-                } else {
-                    spec.title.to_string()
+                let title = crate::i18n::localize(spec.title_key);
+                let title = match availability.disabled_reason {
+                    Some(reason) => format!("{title} ({reason})"),
+                    None => title,
                 };
                 MenuItem::action(title, ExecuteCommand(*id)).disabled(!availability.enabled)
             })

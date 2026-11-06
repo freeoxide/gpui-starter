@@ -1,22 +1,19 @@
 //! Snapshot tests (insta, inline snapshots) for core serialisable structures.
 //! `cargo insta review` rewrites the inline bodies after intentional changes.
 
+#[allow(dead_code)]
+mod common;
+
 use std::collections::HashSet;
 
-use gpui_starter::app_state::{AppConfig, PersistedWindowBounds};
+use common::manifest_path;
+use gpui_starter::app_state::{AppConfig, PersistedWindowBounds, PersistedWindowState};
+use gpui_starter::page::Page;
 use gpui_starter::routes::AppRoute;
+use gpui_starter::services::telemetry::TelemetryMode;
 use gpui_starter::services::updater::{
     PlatformAsset, UpdateManifest, UpdateSnapshot, UpdateStatus,
 };
-use gpui_starter::sidebar::Page;
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-fn theme_dir() -> std::path::PathBuf {
-    std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("themes")
-}
 
 // ---------------------------------------------------------------------------
 // 1. Default AppConfig serialisation
@@ -31,7 +28,7 @@ fn test_config_default_serialization() {
         version: 1
         theme: Default Light
         scrollbar_show: ~
-        locale: en
+        locale: ~
         active_route:
           Page: Home
         sidebar_collapsed: false
@@ -51,6 +48,7 @@ fn test_config_default_serialization() {
         widgets_layout: []
         bluetooth_monitoring_enabled: false
         update_check_on_startup: false
+        telemetry_mode: Disabled
         "#
         );
 }
@@ -65,7 +63,7 @@ fn test_config_roundtrip() {
         version: 1,
         theme: "Gruvbox Dark".to_string(),
         scrollbar_show: None,
-        locale: "en".to_string(),
+        locale: Some("en".to_string()),
         active_route: AppRoute::page(Page::Settings),
         sidebar_collapsed: true,
         native_notifications_enabled: false,
@@ -77,6 +75,8 @@ fn test_config_roundtrip() {
             y: 200.0,
             width: 800.0,
             height: 600.0,
+            display_id: Some("ab12cd34-56ef-4c78-9abc-def012345678".to_string()),
+            state: PersistedWindowState::Maximized,
         }),
         granted_permissions: HashSet::from(["camera".to_string(), "microphone".to_string()]),
         denied_permissions: HashSet::new(),
@@ -89,6 +89,7 @@ fn test_config_roundtrip() {
         widgets_layout: Vec::new(),
         bluetooth_monitoring_enabled: false,
         update_check_on_startup: false,
+        telemetry_mode: TelemetryMode::LocalOnly,
     };
 
     let json = serde_json::to_string(&original).expect("serialize config");
@@ -120,6 +121,8 @@ fn test_config_roundtrip() {
           y: 200
           width: 800
           height: 600
+          display_id: ab12cd34-56ef-4c78-9abc-def012345678
+          state: maximized
         granted_permissions:
           - camera
           - microphone
@@ -133,116 +136,67 @@ fn test_config_roundtrip() {
         widgets_layout: []
         bluetooth_monitoring_enabled: false
         update_check_on_startup: false
+        telemetry_mode: LocalOnly
         "#
         );
 }
 
 // ---------------------------------------------------------------------------
-// 3. Parse valid deep links
+// 2a. Minimal v1 config (fields predating the serde(default) additions) loads
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_route_parse_valid() {
-    let valid_links = &[
-        ("gpui-starter://home", "home"),
-        ("gpui-starter://form", "form"),
-        ("gpui-starter://settings", "settings"),
-        ("gpui-starter://notifications", "notifications"),
-        ("gpui-starter://diagnostics", "diagnostics"),
-        ("gpui-starter://about", "about"),
-        (
-            "gpui-starter://settings/notifications",
-            "settings_notifications",
-        ),
-        (
-            "gpui-starter://home?ref=test&source=menu",
-            "home_with_query",
-        ),
-    ];
-
-    let results: Vec<(&str, String)> = valid_links
-        .iter()
-        .map(|(url, _label)| {
-            let route = AppRoute::parse_deep_link(url)
-                .unwrap_or_else(|e| panic!("expected `{url}` to parse successfully: {e}"));
-            (*url, format!("{route:?}"))
-        })
-        .collect();
-
-    insta::assert_yaml_snapshot!(
-            &results,
-    @r#"
-        - - "gpui-starter://home"
-          - Page(Home)
-        - - "gpui-starter://form"
-          - Page(Form)
-        - - "gpui-starter://settings"
-          - Page(Settings)
-        - - "gpui-starter://notifications"
-          - Page(Notifications)
-        - - "gpui-starter://diagnostics"
-          - Page(Diagnostics)
-        - - "gpui-starter://about"
-          - Page(About)
-        - - "gpui-starter://settings/notifications"
-          - SettingsNotifications
-        - - "gpui-starter://home?ref=test&source=menu"
-          - Page(Home)
-        "#
-        );
+fn test_config_minimal_v1_json_deserializes_with_defaults() {
+    // A v1 file written before any serde(default) field existed; later fields
+    // must fill from their serde defaults instead of quarantining the file.
+    let json = r#"{
+        "version": 1,
+        "theme": "Gruvbox Dark",
+        "scrollbar_show": null,
+        "locale": "en",
+        "active_route": { "Page": "Settings" },
+        "sidebar_collapsed": true,
+        "native_notifications_enabled": false,
+        "first_run_completed": true,
+        "notification_inbox": [],
+        "window_bounds": null
+    }"#;
+    let config: AppConfig = serde_json::from_str(json).expect("minimal v1 config must deserialize");
+    let expected = AppConfig {
+        theme: "Gruvbox Dark".to_string(),
+        locale: Some("en".to_string()),
+        active_route: AppRoute::page(Page::Settings),
+        sidebar_collapsed: true,
+        native_notifications_enabled: false,
+        first_run_completed: true,
+        ..AppConfig::default()
+    };
+    assert_eq!(
+        config, expected,
+        "later fields must load their documented defaults"
+    );
 }
 
 // ---------------------------------------------------------------------------
-// 4. Parse invalid deep links
+// 2b. PersistedWindowBounds loads from the pre-display_id schema unchanged
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_route_parse_invalid() {
-    let invalid_links = &[
-        ("https://example.com", "wrong_scheme"),
-        ("gpui-starter://unknown-host", "unknown_host"),
-        ("gpui-starter://home/extra", "extra_segment"),
-        ("not-a-url-at-all", "garbage"),
-        ("gpui-starter://settings/..%2Fetc", "path_traversal"),
-        ("", "empty_string"),
-    ];
-
-    let results: Vec<(&str, String)> = invalid_links
-        .iter()
-        .map(|(url, _label)| {
-            let err = AppRoute::parse_deep_link(url).unwrap_err();
-            (*url, err.to_string())
-        })
-        .collect();
-
-    insta::assert_yaml_snapshot!(
-            &results,
-    @r#"
-        - - "https://example.com"
-          - "invalid deep link `https://example.com`: unsupported scheme `https`, expected `gpui-starter`"
-        - - "gpui-starter://unknown-host"
-          - "invalid deep link `gpui-starter://unknown-host`: unexpected host `unknown-host`"
-        - - "gpui-starter://home/extra"
-          - "invalid deep link `gpui-starter://home/extra`: unknown route"
-        - - not-a-url-at-all
-          - "invalid deep link `not-a-url-at-all`: relative URL without a base"
-        - - "gpui-starter://settings/..%2Fetc"
-          - "invalid deep link `..%2Fetc`: path traversal detected in URL segment"
-        - - ""
-          - "invalid deep link ``: relative URL without a base"
-        "#
-        );
+fn test_window_bounds_old_schema_deserializes_with_defaults() {
+    let json = r#"{"x":100.0,"y":200.0,"width":800.0,"height":600.0}"#;
+    let bounds: PersistedWindowBounds = serde_json::from_str(json).expect("old-schema bounds");
+    assert_eq!(bounds.display_id, None);
+    assert_eq!(bounds.state, PersistedWindowState::Windowed);
 }
 
 // ---------------------------------------------------------------------------
-// 5. Theme file structure (keys / values)
+// 3. Theme file structure (keys / values)
 // ---------------------------------------------------------------------------
 
 #[test]
 fn test_theme_structure() {
-    let theme_path = theme_dir().join("gruvbox.json");
-    let raw = std::fs::read_to_string(&theme_path)
-        .unwrap_or_else(|e| panic!("failed to read {}: {e}", theme_path.display()));
+    let theme_path = manifest_path("themes/gruvbox.json");
+    let raw = common::read_file(&theme_path);
     let value: serde_json::Value =
         serde_json::from_str(&raw).expect("theme file must be valid JSON");
 
@@ -322,7 +276,7 @@ fn test_theme_structure() {
 }
 
 // ---------------------------------------------------------------------------
-// 6. UpdateManifest serialization
+// 4. UpdateManifest serialization
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -336,28 +290,44 @@ fn test_update_manifest_serialization() {
             size: 42_000_000,
         },
     );
+    platforms.insert(
+        "linux-x86_64".to_string(),
+        PlatformAsset {
+            url: "https://releases.example.com/app-2.0.0-linux.tar.gz".to_string(),
+            signature: "cafebabe".to_string(),
+            size: 39_000_000,
+        },
+    );
     let manifest = UpdateManifest {
         version: "2.0.0".to_string(),
         release_notes: "Major release with new features.".to_string(),
         platforms,
     };
 
-    insta::assert_yaml_snapshot!(
-            &manifest,
-    @r#"
+    // HashMap iteration order varies per process; sorted maps keep the
+    // snapshot stable no matter how many platforms the manifest carries.
+    insta::with_settings!({sort_maps => true}, {
+        insta::assert_yaml_snapshot!(
+                &manifest,
+        @r#"
         version: 2.0.0
         release_notes: Major release with new features.
         platforms:
+          linux-x86_64:
+            url: "https://releases.example.com/app-2.0.0-linux.tar.gz"
+            signature: cafebabe
+            size: 39000000
           macos-aarch64:
             url: "https://releases.example.com/app-2.0.0.tar.gz"
             signature: deadbeef
             size: 42000000
         "#
         );
+    });
 }
 
 // ---------------------------------------------------------------------------
-// 7. UpdateStatus serialization
+// 5. UpdateStatus serialization
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -368,9 +338,6 @@ fn test_update_status_serialization() {
         checking: UpdateStatus,
         up_to_date: UpdateStatus,
         available: UpdateStatus,
-        downloading: UpdateStatus,
-        downloaded: UpdateStatus,
-        ready_to_install: UpdateStatus,
         error: UpdateStatus,
     }
 
@@ -382,12 +349,6 @@ fn test_update_status_serialization() {
             version: "2.0.0".to_string(),
             notes: "Bug fixes".to_string(),
         },
-        downloading: UpdateStatus::Downloading { progress: 42 },
-        downloaded: UpdateStatus::Downloaded {
-            version: "2.0.0".to_string(),
-            path: "/tmp/update.tar.gz".to_string(),
-        },
-        ready_to_install: UpdateStatus::ReadyToInstall,
         error: UpdateStatus::Error("network timeout".to_string()),
     };
 
@@ -401,14 +362,6 @@ fn test_update_status_serialization() {
           Available:
             version: 2.0.0
             notes: Bug fixes
-        downloading:
-          Downloading:
-            progress: 42
-        downloaded:
-          Downloaded:
-            version: 2.0.0
-            path: /tmp/update.tar.gz
-        ready_to_install: ReadyToInstall
         error:
           Error: network timeout
         "#
@@ -430,9 +383,7 @@ fn test_update_snapshot_serialization() {
         last_check: Some("2026-06-04T12:00:00Z".to_string()),
         update_channel: "stable".to_string(),
         check_retry_count: 0,
-        download_retry_count: 0,
         cached_manifest: None,
-        cached_asset: None,
     };
 
     insta::assert_yaml_snapshot!(
@@ -446,7 +397,6 @@ fn test_update_snapshot_serialization() {
         last_check: "2026-06-04T12:00:00Z"
         update_channel: stable
         check_retry_count: 0
-        download_retry_count: 0
         "#
         );
 }

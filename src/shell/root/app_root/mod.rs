@@ -12,7 +12,7 @@ impl Focusable for AppRoot {
 }
 
 /// Persist current window bounds immediately, bypassing the debounce; no-op
-/// without an open window. Called from the `Quit` handler.
+/// without an open window. Called from the app-quit observer in `app::init`.
 pub fn flush_window_bounds(cx: &mut App) {
     // Quit can fire while the palette is the active window; persist the
     // recorded root window's bounds, not whichever window is active
@@ -23,7 +23,7 @@ pub fn flush_window_bounds(cx: &mut App) {
     };
     window_handle
         .update(cx, |_, window, cx| {
-            let persisted = persisted_bounds(window.window_bounds().get_bounds());
+            let persisted = persisted_bounds(&window.window_bounds(), display_uuid(window, cx));
             crate::app_state::update_config(cx, |config| {
                 config.window_bounds = Some(persisted);
             });
@@ -33,13 +33,31 @@ pub fn flush_window_bounds(cx: &mut App) {
 
 /// The config shape for a window's bounds; shared by the debounced observer
 /// in `state`.
-fn persisted_bounds(bounds: Bounds<Pixels>) -> crate::app_state::PersistedWindowBounds {
+fn persisted_bounds(
+    bounds: &WindowBounds,
+    display_id: Option<String>,
+) -> crate::app_state::PersistedWindowBounds {
+    let geometry = bounds.get_bounds();
     crate::app_state::PersistedWindowBounds {
-        x: bounds.origin.x.into(),
-        y: bounds.origin.y.into(),
-        width: bounds.size.width.into(),
-        height: bounds.size.height.into(),
+        x: geometry.origin.x.into(),
+        y: geometry.origin.y.into(),
+        width: geometry.size.width.into(),
+        height: geometry.size.height.into(),
+        display_id,
+        state: match bounds {
+            WindowBounds::Windowed(_) => crate::app_state::PersistedWindowState::Windowed,
+            WindowBounds::Maximized(_) => crate::app_state::PersistedWindowState::Maximized,
+            WindowBounds::Fullscreen(_) => crate::app_state::PersistedWindowState::Fullscreen,
+        },
     }
+}
+
+/// Stable per-monitor identity for the saved bounds; `None` where the
+/// platform cannot name the display.
+fn display_uuid(window: &Window, cx: &App) -> Option<String> {
+    window
+        .display(cx)
+        .and_then(|display| display.uuid().ok().map(|uuid| uuid.to_string()))
 }
 
 #[cfg(test)]

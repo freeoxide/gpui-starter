@@ -3,16 +3,14 @@
 //! today (Bluetooth, microphone). A missing key makes tccd kill the app on
 //! first access instead of showing the permission prompt (RCA §2).
 
-use std::path::PathBuf;
+#[allow(dead_code)]
+mod common;
+
+use common::{manifest_path, read_file, repo_file};
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-fn repo_file(name: &str) -> String {
-    let path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join(name);
-    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
-}
 
 /// Returns the `<<PLIST` heredoc body a script cats into Info.plist, so
 /// assertions target the emitted plist rather than incidental mentions.
@@ -63,13 +61,13 @@ fn assert_usage_description(plist: &str, script: &str, key: &str, subject: &str)
 /// Returns every scripts/*.sh that writes an Info.plist — the complete set of
 /// macOS bundle producers, so a new script cannot ship an unstamped plist.
 fn infoplist_writers() -> Vec<String> {
-    let dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("scripts");
+    let dir = manifest_path("scripts");
     let mut writers: Vec<String> = std::fs::read_dir(&dir)
         .unwrap_or_else(|e| panic!("read dir {}: {e}", dir.display()))
         .map(|e| e.unwrap().path())
         .filter(|p| p.extension().is_some_and(|ext| ext == "sh"))
         .filter(|p| {
-            repo_file(&p.display().to_string())
+            read_file(p)
                 .lines()
                 .any(|l| l.contains("Info.plist") && l.contains("cat >"))
         })

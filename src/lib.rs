@@ -37,13 +37,9 @@ pub mod services;
 pub mod shell;
 pub mod state;
 pub mod ui;
-// Entry points: shared cfg-neutral `bootstrap` (used by src/main.rs) plus the
-// wasm-only `#[wasm_bindgen(start)]` entry. See src/web.rs.
 pub mod web;
 
 pub use app::lifecycle;
-pub use features::command_palette as launcher;
-pub use features::pages as views;
 pub use foundation::{errors, ids, time};
 // SQLite migrations are native-only (no rusqlite on wasm).
 #[cfg(not(target_family = "wasm"))]
@@ -63,6 +59,5 @@ pub use services::{
     storage, system_controls, tasks, telemetry, undo_stack, updater,
 };
 pub use shell::route as routes;
-pub use shell::{menus, root, sidebar, status_bar, title_bar};
+pub use shell::{menus, page, root, status_bar, title_bar};
 pub use state::config_store as app_state;
-pub use state::migrations as config_migrations;

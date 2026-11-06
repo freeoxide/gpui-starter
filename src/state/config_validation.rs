@@ -76,7 +76,9 @@ pub fn validate_config(cfg: &AppConfig) -> Vec<ConfigLint> {
 
     lints.extend(validate_window_bounds(cfg.window_bounds.as_ref()));
     lints.extend(validate_update_channel(&cfg.update_channel));
-    lints.extend(validate_locale(&cfg.locale));
+    if let Some(locale) = cfg.locale.as_deref() {
+        lints.extend(validate_locale(locale));
+    }
     lints.extend(validate_theme(&cfg.theme));
     lints.extend(validate_granted_permissions(&cfg.granted_permissions));
 

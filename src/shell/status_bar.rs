@@ -39,17 +39,6 @@ pub fn render(route: &AppRoute, cx: &App) -> impl IntoElement {
             "{version} {}",
             crate::i18n::localize("status_update_available")
         )),
-        Some(updater::UpdateStatus::Downloading { progress }) => Some(format!(
-            "{} {progress}%",
-            crate::i18n::localize("status_update_downloading")
-        )),
-        Some(updater::UpdateStatus::Downloaded { version, .. }) => Some(format!(
-            "{version} {}",
-            crate::i18n::localize("status_update_ready")
-        )),
-        Some(updater::UpdateStatus::ReadyToInstall) => {
-            Some(crate::i18n::localize("status_update_restart"))
-        }
         Some(updater::UpdateStatus::Error(err)) => Some(format!(
             "{} ({})",
             crate::i18n::localize("status_update_error"),

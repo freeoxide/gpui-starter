@@ -1,7 +1,5 @@
-//! Removable title-bar account menu. Removal = delete this file and
-//! account_menu.test.rs, drop the `pub mod account_menu;` line in
-//! shell/mod.rs, and revert the account field/construct/child in
-//! shell/title_bar.rs plus the titlebar_account* locale keys.
+//! Removable title-bar account menu; removal steps live in
+//! docs/plans/24-auth-ui.md.
 
 use gpui_auth::AuthState;
 use gpui_kit::component::{
@@ -31,7 +29,7 @@ pub struct AccountMenu {
 }
 
 impl AccountMenu {
-    pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         let _subscriptions =
             vec![
                 cx.observe_global::<crate::services::auth_ui::AuthUiState>(|_, cx| {
@@ -57,7 +55,7 @@ impl Render for AccountMenu {
                 .on_action(cx.listener(|_, _: &AccountSignIn, _, cx| {
                     crate::events::emit(
                         crate::events::AppEventKind::Navigate(crate::routes::AppRoute::page(
-                            crate::sidebar::Page::SignIn,
+                            crate::page::Page::SignIn,
                         )),
                         cx,
                     );
@@ -77,16 +75,14 @@ fn render_trigger(snapshot: &AuthUiSnapshot) -> AnyElement {
         AuthState::SignedIn { account_label } => {
             signed_in_trigger(account_label, snapshot).into_any_element()
         }
-        AuthState::SigningIn | AuthState::SigningUp | AuthState::AwaitingChallenge { .. } => {
-            Button::new("account-btn")
-                .small()
-                .ghost()
-                .compact()
-                .icon(IconName::LoaderCircle)
-                .disabled(true)
-                .accessibility_label(crate::i18n::localize("titlebar_account_signing_in"))
-                .into_any_element()
-        }
+        AuthState::SigningIn | AuthState::SigningUp => Button::new("account-btn")
+            .small()
+            .ghost()
+            .compact()
+            .icon(IconName::LoaderCircle)
+            .disabled(true)
+            .accessibility_label(crate::i18n::localize("titlebar_account_signing_in"))
+            .into_any_element(),
         state @ (AuthState::SignedOut | AuthState::Error(_)) => {
             signed_out_trigger(matches!(state, AuthState::Error(_))).into_any_element()
         }

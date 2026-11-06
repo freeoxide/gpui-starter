@@ -5,9 +5,18 @@ use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AppErrorSeverity {
-    Info,
     Warning,
     Error,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ErrorCategory {
+    Network,
+    Storage,
+    Rendering,
+    Config,
+    System,
 }
 
 #[derive(Debug, Error)]
@@ -42,6 +51,16 @@ impl AppError {
             | Self::StateRead { .. }
             | Self::StateWrite { .. }
             | Self::Io(_) => AppErrorSeverity::Error,
+        }
+    }
+
+    pub fn category(&self) -> ErrorCategory {
+        match self {
+            Self::StateRead { .. } | Self::StateWrite { .. } => ErrorCategory::Storage,
+            Self::StateParse { .. } => ErrorCategory::Config,
+            Self::PathInitialization | Self::InvalidDeepLink { .. } | Self::Io(_) => {
+                ErrorCategory::System
+            }
         }
     }
 }

@@ -31,21 +31,42 @@ mod tests {
     // test_single_instance_enforcement
     // -----------------------------------------------------------------------
 
-    /// First preflight allows startup; a same-named second instance does not.
+    /// First preflight allows startup; a second preflight against its live
+    /// lock does not.
     #[test]
     fn test_single_instance_enforcement() {
+        // Mirrors pub(crate) RUNTIME_DIR_ENV (src/platform/process/single_instance.rs),
+        // which integration tests cannot import.
+        const SEAM_ENV: &str = "GPUI_STARTER_SINGLE_INSTANCE_DIR";
+
+        // Removes the var on drop so a panic cannot leak the seam into other tests.
+        struct SeamGuard;
+        impl Drop for SeamGuard {
+            fn drop(&mut self) {
+                unsafe { std::env::remove_var(SEAM_ENV) };
+            }
+        }
+
+        let sandbox = tempfile::tempdir().expect("tempdir");
+        unsafe { std::env::set_var(SEAM_ENV, sandbox.path()) };
+        let _seam = SeamGuard;
+
         let first = gpui_starter::single_instance::preflight();
         assert!(
             first.should_start,
             "first preflight should allow the app to start"
         );
-
-        // Mutual exclusion: a same-named handle must not be the sole instance.
-        let second_instance = single_instance::SingleInstance::new("com.gpui-starter.app.instance");
-        let second = second_instance.unwrap();
         assert!(
-            !second.is_single(),
-            "second instance with the same name should not be considered single"
+            first.runtime.is_some(),
+            "the first instance must hold the lock, or the second is not refused"
+        );
+
+        // Mutual exclusion: while the first runtime holds the lock, a second
+        // preflight must take the Busy path and refuse to start.
+        let second = gpui_starter::single_instance::preflight();
+        assert!(
+            !second.should_start,
+            "second preflight against a live holder must refuse to start"
         );
     }
 
@@ -81,23 +102,17 @@ mod tests {
     // test_config_loads
     // -----------------------------------------------------------------------
 
-    /// `AppConfig::default()` is sensible and `normalized()` preserves it.
+    /// `normalized()` preserves valid defaults; the defaults themselves are
+    /// pinned field-by-field by snapshot_tests::test_config_default_serialization.
     #[test]
     fn test_config_loads() {
         use gpui_starter::app_state::AppConfig;
 
         let config = AppConfig::default();
 
-        assert_eq!(config.version, 1, "default config version should be 1");
-        assert_eq!(config.theme, "Default Light");
-        assert_eq!(config.locale, "en");
-        assert!(!config.sidebar_collapsed);
-        assert!(config.global_shortcut_enabled);
-        assert!(!config.first_run_completed);
-        assert!(config.window_bounds.is_none());
-
         // normalized() must not mutate valid defaults.
-        let normalized = config.clone().normalized();
+        let mut normalized = config.clone();
+        normalized.normalized();
         assert_eq!(config, normalized);
     }
 

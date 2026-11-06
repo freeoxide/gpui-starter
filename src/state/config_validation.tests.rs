@@ -4,7 +4,7 @@
 use std::collections::HashSet;
 
 use super::*;
-use crate::state::config_store::{AppConfig, PersistedWindowBounds};
+use crate::state::config_store::{AppConfig, PersistedWindowBounds, PersistedWindowState};
 
 fn has_lint_for(lints: &[ConfigLint], field: &str) -> bool {
     lints.iter().any(|l| l.field == field)
@@ -46,7 +46,7 @@ fn blank_theme_fires_a_theme_lint() {
 #[test]
 fn unknown_locale_fires_a_locale_lint() {
     let cfg = AppConfig {
-        locale: "klingon".to_string(),
+        locale: Some("klingon".to_string()),
         ..AppConfig::default()
     };
     let lints = validate_config(&cfg);
@@ -61,7 +61,7 @@ fn unknown_locale_fires_a_locale_lint() {
 #[test]
 fn empty_locale_fires_a_locale_lint() {
     let cfg = AppConfig {
-        locale: String::new(),
+        locale: Some(String::new()),
         ..AppConfig::default()
     };
     let lints = validate_config(&cfg);
@@ -69,9 +69,17 @@ fn empty_locale_fires_a_locale_lint() {
 }
 
 #[test]
+fn system_locale_sentinel_is_clean() {
+    // None means "follow the OS locale"; it is a valid state, not a gap.
+    let cfg = AppConfig::default();
+    let lints = validate_config(&cfg);
+    assert!(!has_lint_for(&lints, "locale"));
+}
+
+#[test]
 fn known_locale_en_is_clean() {
     let cfg = AppConfig {
-        locale: "en".to_string(),
+        locale: Some("en".to_string()),
         ..AppConfig::default()
     };
     let lints = validate_config(&cfg);
@@ -81,7 +89,7 @@ fn known_locale_en_is_clean() {
 #[test]
 fn known_locale_zh_cn_is_clean() {
     let cfg = AppConfig {
-        locale: "zh-CN".to_string(),
+        locale: Some("zh-CN".to_string()),
         ..AppConfig::default()
     };
     let lints = validate_config(&cfg);
@@ -141,6 +149,8 @@ fn negative_width_fires_an_error_lint() {
             y: 10.0,
             width: -50.0,
             height: 400.0,
+            display_id: None,
+            state: PersistedWindowState::Windowed,
         }),
         ..AppConfig::default()
     };
@@ -160,6 +170,8 @@ fn negative_height_fires_an_error_lint() {
             y: 10.0,
             width: 400.0,
             height: -1.0,
+            display_id: None,
+            state: PersistedWindowState::Windowed,
         }),
         ..AppConfig::default()
     };
@@ -179,6 +191,8 @@ fn negative_origin_is_a_warning_not_error() {
             y: 200.0,
             width: 800.0,
             height: 600.0,
+            display_id: None,
+            state: PersistedWindowState::Windowed,
         }),
         ..AppConfig::default()
     };
@@ -199,6 +213,8 @@ fn tiny_window_fires_a_width_and_height_lint() {
             y: 0.0,
             width: 10.0,
             height: 10.0,
+            display_id: None,
+            state: PersistedWindowState::Windowed,
         }),
         ..AppConfig::default()
     };
@@ -215,6 +231,8 @@ fn huge_window_fires_a_lint() {
             y: 0.0,
             width: 50_000.0,
             height: 600.0,
+            display_id: None,
+            state: PersistedWindowState::Windowed,
         }),
         ..AppConfig::default()
     };
@@ -230,6 +248,8 @@ fn nan_dimension_fires_an_error_lint() {
             y: 0.0,
             width: f32::NAN,
             height: 600.0,
+            display_id: None,
+            state: PersistedWindowState::Windowed,
         }),
         ..AppConfig::default()
     };
@@ -288,7 +308,7 @@ fn known_granted_permissions_are_clean() {
 fn multiple_bad_fields_stack_into_one_vec() {
     let cfg = AppConfig {
         theme: String::new(),
-        locale: "klingon".to_string(),
+        locale: Some("klingon".to_string()),
         update_channel: "weird".to_string(),
         ..AppConfig::default()
     };

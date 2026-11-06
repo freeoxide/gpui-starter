@@ -13,9 +13,3 @@ impl AppTimestamp {
         self.0.to_rfc3339()
     }
 }
-
-impl Default for AppTimestamp {
-    fn default() -> Self {
-        Self::now()
-    }
-}
