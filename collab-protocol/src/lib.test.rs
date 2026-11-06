@@ -38,7 +38,7 @@ fn rect_shape_json() -> serde_json::Value {
         "kind": "rect",
         "bounds": [10.0, 20.0, 30.0, 40.0],
         "style": {
-            "fill": [[210.0, 0.6, 0.5, 1.0]],
+            "fill": [210.0, 0.6, 0.5, 1.0],
             "stroke": {
                 "width": 2.0,
                 "color": [0.0, 0.0, 0.0, 1.0],
@@ -142,7 +142,7 @@ fn wire_shapes_decode_from_literal_json() {
             serde_json::json!({
                 "kind": "triangle",
                 "bounds": [5.0, 6.0, 7.0, 8.0],
-                "style": {"fill": [[120.0, 0.7, 0.6, 1.0]], "stroke": null}
+                "style": {"fill": [120.0, 0.7, 0.6, 1.0], "stroke": null}
             }),
             WireShape::Triangle {
                 bounds: [5.0, 6.0, 7.0, 8.0],
