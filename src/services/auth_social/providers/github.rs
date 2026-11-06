@@ -182,7 +182,7 @@ impl GitHubProvider {
         Some(AccountInfo {
             id: Some(user.login.clone()),
             email,
-            display_name: user.name.clone().or(Some(user.login.clone())),
+            display_name: user.name.or(Some(user.login.clone())),
             avatar_url: user.avatar_url,
         })
     }

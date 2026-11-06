@@ -44,8 +44,7 @@ struct WorkerState {
     /// Set once the worker errors out; later requests fail fast with it.
     dead: Option<String>,
     // The message/error closures must live exactly as long as the worker;
-    // storing them here (instead of `.forget()`-leaking) ties their
-    // lifetime to the state they guard.
+    // storing them here (not `.forget()`-leaking) ties their lifetime to it.
     _on_message: Closure<dyn FnMut(JsValue)>,
     _on_error: Closure<dyn FnMut(JsValue)>,
 }

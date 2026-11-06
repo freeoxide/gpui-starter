@@ -134,8 +134,7 @@ pub fn initialize(cx: &mut App) {
     if let Some(backend) = runtime {
         cx.spawn(async move |cx| {
             // The worker queues requests until its engine is ready, so the
-            // first health/version round-trip doubles as the readiness
-            // probe: errors here mean engine/OPFS init failed.
+            // first health/version round-trip doubles as the readiness probe.
             let health = backend.health_check().await;
             let version = backend.schema_version().await;
 

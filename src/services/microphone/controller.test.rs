@@ -29,9 +29,8 @@ fn setup(cx: &mut TestAppContext) -> MicConfigGuard {
     capture_guard(cx)
 }
 
-// SAVE_SCHEDULED is process-global while tests run in parallel; restoring the
-// pre-test values then force_save completes the cycle with no disk write.
-// Call it inside the same closure that armed the debounce, before any park.
+// SAVE_SCHEDULED is shared by parallel tests: call this in the closure that armed the
+// debounce, before any park, so restoring then force_save ends without a disk write.
 fn complete_config_cycle(cx: &mut App, guard: &MicConfigGuard) {
     crate::app_state::update_config(cx, |c| {
         c.mic_device_id = guard.device_id.clone();

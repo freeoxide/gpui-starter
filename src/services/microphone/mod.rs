@@ -9,7 +9,7 @@
 //! tests/e2e_navigation.rs, the mic_* fields in state/config_store.rs and both
 //! snapshot_tests.rs snapshots, the microphone_* + nav_microphone keys in
 //! locales/en.yml and locales/zh-CN.yml, the cpal/objc2-av-foundation lines
-//! and regenerated Cargo.lock in Cargo.toml (keep the cpal line if the audio
+//! in Cargo.toml and regenerated Cargo.lock (keep the cpal line if the audio
 //! playback feature still uses it), libasound2-dev in
 //! scripts/install-linux-deps.sh, and NSMicrophoneUsageDescription in
 //! scripts/macos-dev-app.sh (the release plist's copy belongs to the release

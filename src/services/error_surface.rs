@@ -99,22 +99,6 @@ pub fn report(
     id
 }
 
-/// Report a typed `AppError`; severity and category derive from the error
-/// itself, so callers only pick the offered actions.
-pub fn report_app_error(
-    error: &crate::errors::AppError,
-    actions: Vec<ErrorAction>,
-    cx: &mut App,
-) -> EventId {
-    report(
-        error.to_string(),
-        error.severity(),
-        error.category(),
-        actions,
-        cx,
-    )
-}
-
 /// Returns the number of error records without cloning the records Vec.
 pub fn record_count(cx: &App) -> usize {
     cx.try_global::<ErrorSurfaceState>()

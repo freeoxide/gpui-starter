@@ -108,9 +108,8 @@ pub(super) fn run_pending_swap(marker_path: PathBuf) -> Option<UpdateStatus> {
         return None;
     }
 
-    // Fail closed: the file is re-verified against the manifest signature at
-    // swap time, so a tampered temp file can never replace the executable.
-    // Markers without a signature (pre-dating this check) are refused.
+    // Fail closed: the swap re-verifies the manifest signature, so a tampered
+    // file can never replace the executable; unsigned markers are refused.
     let signature = pending
         .get("signature")
         .and_then(|v| v.as_str())

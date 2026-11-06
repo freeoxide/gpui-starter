@@ -8,7 +8,7 @@ use super::demo::DemoSignal;
 use super::meter::LevelMeter;
 use super::permission;
 use super::types::{CaptureStatus, InputDeviceInfo, MicrophonePermissionState};
-use crate::runtime::capabilities::{Capability, CapabilityStatus};
+use crate::capabilities::{Capability, CapabilityStatus};
 use crate::ui::waveform::{DEFAULT_RETENTION, WaveformState};
 
 const LOG: &str = "gpui_starter::microphone";
@@ -20,9 +20,8 @@ pub(crate) fn gain_multiplier(q8: i32) -> f32 {
     10f32.powf(q8 as f32 / 256. / 20.)
 }
 
-/// Plain-value view of the microphone feature; the `waveform` entity is the
-/// 30 Hz redraw driver while capturing. One instance lives in the
-/// [`MicrophoneState`] global.
+/// Plain-value view of the [`MicrophoneState`] global; while capturing, the
+/// `waveform` entity drives the 30 Hz redraw.
 #[derive(Clone)]
 pub struct MicrophoneSnapshot {
     pub devices: Vec<InputDeviceInfo>,
@@ -56,9 +55,8 @@ pub struct MicrophoneState {
 
 impl Global for MicrophoneState {}
 
-/// Installs the global, loads device and gain from AppConfig, registers the
-/// `microphone_input` capability, and kicks off enumeration (native). On wasm
-/// the snapshot runs demo-only with a synthetic signal.
+/// Installs the global with device and gain from AppConfig and registers the
+/// `microphone_input` capability; native kicks off enumeration, wasm runs demo-only.
 pub fn initialize(cx: &mut App) {
     let waveform = cx.new(|_| WaveformState::new());
     let (selected_device, gain_db) = crate::app_state::with_config(cx, |config| {
@@ -178,8 +176,9 @@ pub fn set_gain_db_live(db: f32, cx: &mut App) {
     if cx.global::<MicrophoneState>().snapshot.gain_db == db {
         return;
     }
-    let gain_q8 = cx.global::<MicrophoneState>().gain_q8.clone();
-    gain_q8.store((db * 256.) as i32, Ordering::Relaxed);
+    cx.global::<MicrophoneState>()
+        .gain_q8
+        .store((db * 256.) as i32, Ordering::Relaxed);
     mutate(cx, |state| state.snapshot.gain_db = db);
 }
 
@@ -188,8 +187,9 @@ pub fn set_gain_db_live(db: f32, cx: &mut App) {
 pub fn set_gain_db(db: f32, cx: &mut App) {
     let db = db.clamp(GAIN_MIN_DB, GAIN_MAX_DB);
     crate::app_state::update_config(cx, |config| config.mic_gain_db = db);
-    let gain_q8 = cx.global::<MicrophoneState>().gain_q8.clone();
-    gain_q8.store((db * 256.) as i32, Ordering::Relaxed);
+    cx.global::<MicrophoneState>()
+        .gain_q8
+        .store((db * 256.) as i32, Ordering::Relaxed);
     mutate(cx, |state| state.snapshot.gain_db = db);
 }
 
@@ -380,8 +380,8 @@ fn spawn_session(cx: &mut App) {
         });
         return;
     };
-    let device_id = info.id.clone();
-    let device_name = info.name.clone();
+    let device_id = info.id;
+    let device_name = info.name;
     let channels = (info.channels as usize).clamp(1, 2);
     let sample_rate = info.sample_rate;
     let meter = state.meter.clone();
@@ -410,12 +410,7 @@ fn spawn_session(cx: &mut App) {
     mutate(cx, |state| state.snapshot.status = CaptureStatus::Starting);
     let task = cx.spawn(async move |cx| {
         let runner = cx.background_spawn(capture::run_session(
-            device_id,
-            producer,
-            meter.clone(),
-            gain_q8,
-            cmd_rx,
-            ev_tx,
+            device_id, producer, meter, gain_q8, cmd_rx, ev_tx,
         ));
         while let Ok(event) = ev_rx.recv_async().await {
             match event {

@@ -35,7 +35,7 @@ pub(crate) fn open_microphone_settings() -> Result<(), String> {
             .map(|_| ())
             .map_err(|err| err.to_string())
     }
-    #[cfg(all(not(target_os = "macos"), target_os = "windows"))]
+    #[cfg(target_os = "windows")]
     {
         open::that_detached("ms-settings:privacy-microphone").map_err(|err| err.to_string())
     }

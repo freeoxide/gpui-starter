@@ -13,11 +13,13 @@ use gpui_kit::{AppContext as _, BorrowAppContext as _};
 #[cfg(not(target_family = "wasm"))]
 use std::sync::Arc;
 
-#[cfg(test)]
+// Gates mirror the consumers: the wasm snapshot builder and the platform
+// twins in src/platform/system_controls/, plus the test suites.
+#[cfg(any(test, target_family = "wasm"))]
 pub(crate) const REASON_WEB: &str = "system_controls_reason_web";
-#[cfg(test)]
+#[cfg(any(test, target_os = "macos"))]
 pub(crate) const REASON_MACOS_BRIGHTNESS: &str = "system_controls_reason_macos_brightness";
-#[cfg(test)]
+#[cfg(any(test, target_os = "windows"))]
 pub(crate) const REASON_WINDOWS_BLUETOOTH: &str = "system_controls_reason_windows_bluetooth";
 pub(crate) const REASON_MACOS_BLUETOOTH_POWER: &str =
     "system_controls_reason_macos_bluetooth_power";

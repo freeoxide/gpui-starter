@@ -83,10 +83,8 @@ impl StorageError {
     }
 }
 
-// async_trait's generated wrapper fns carry #[must_use] and return boxed
-// futures (already #[must_use]) — new nightly clippy flags the generated
-// code as double_must_use. The attribute is macro-emitted, so the allow
-// lives here at the macro use site (same as NotificationBackend).
+// Nightly clippy flags async_trait's macro-emitted wrapper fns as
+// double_must_use; the allow must live at the macro use site.
 #[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait StorageBackend: Send + Sync {

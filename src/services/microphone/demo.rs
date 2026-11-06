@@ -21,9 +21,8 @@ impl DemoSignal {
         }
     }
 
-    /// Appends `frames` stereo interleaved f32 frames at 48 kHz to `out` and
-    /// returns (rms, peak) of the chunk. Identical channels keep the display
-    /// honest about mono content.
+    /// Appends `frames` interleaved 48 kHz stereo frames to `out`, returning the chunk's
+    /// (rms, peak). Both channels are identical so the display stays honest about mono.
     pub fn fill_chunk(&mut self, out: &mut Vec<f32>, frames: usize) -> (f32, f32) {
         out.reserve(frames * 2);
         let mut peak = 0f32;

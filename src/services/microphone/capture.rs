@@ -54,12 +54,12 @@ pub(crate) enum SessionEvent {
 
 /// Resolution order wanted-id, then default, then first.
 pub(crate) fn pick_device<'a>(
-    mut devices: impl Iterator<Item = &'a InputDeviceInfo>,
+    devices: impl Iterator<Item = &'a InputDeviceInfo>,
     wanted: Option<&str>,
 ) -> Option<InputDeviceInfo> {
     let mut first = None;
     let mut default = None;
-    for device in &mut devices {
+    for device in devices {
         if wanted == Some(device.id.as_str()) {
             return Some(device.clone());
         }
@@ -174,7 +174,7 @@ fn build_and_play(
     let device = host
         .input_devices()
         .map_err(|err| err.to_string())?
-        .find(|candidate| candidate.id().map(|id| id.to_string()) == Ok(info.id.clone()))
+        .find(|candidate| candidate.id().is_ok_and(|id| id.to_string() == info.id))
         .ok_or_else(|| "device disappeared".to_string())?;
     let config = device
         .default_input_config()

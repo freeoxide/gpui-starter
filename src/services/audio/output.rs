@@ -149,9 +149,8 @@ impl SessionSink for OutputSession {
     }
 }
 
-/// Resolve the device for `wanted` (a stable device id from `enumerate`),
-/// falling back to the host default. Runs the host's device scan; call from
-/// a background task.
+/// Resolves the device for `wanted` (a stable id from `enumerate`), else the host
+/// default. Runs the host's device scan; call from a background task.
 pub(crate) fn find_output_device(wanted: Option<&str>) -> Result<cpal::Device, AudioError> {
     let host = cpal::default_host();
     let device = wanted

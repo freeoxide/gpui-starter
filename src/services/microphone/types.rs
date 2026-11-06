@@ -63,7 +63,7 @@ impl SelectItem for DeviceOption {
     }
 }
 
-/// "-12.3 dB" / "-∞ dB" for a 0..=1 amplitude. Pure, testable.
+/// "-12.3 dB" / "-∞ dB" for a 0..=1 amplitude.
 pub fn dbfs(amplitude: f32) -> String {
     if amplitude <= 1e-5 {
         "-∞ dB".to_string()

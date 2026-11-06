@@ -1,3 +1,5 @@
+#[cfg(not(target_family = "wasm"))]
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,8 +12,6 @@ use super::output;
 use super::peaks::WaveformPeaks;
 use super::transport::SharedTransport;
 use crate::ui::waveform::{DEFAULT_RETENTION, SampleProducer, WaveformState};
-#[cfg(not(target_family = "wasm"))]
-use std::borrow::Cow;
 
 const TICK_INTERVAL: Duration = Duration::from_millis(33);
 
@@ -113,7 +113,6 @@ pub struct AudioEngine {
     selected_device: Option<String>,
     meter: Option<Entity<WaveformState>>,
     load_generation: u64,
-    loading: Option<String>,
     last_error: Option<AudioError>,
     cached_position_ms: u64,
     tick: Option<Task<()>>,
@@ -137,7 +136,6 @@ impl AudioEngine {
             selected_device: None,
             meter: None,
             load_generation: 0,
-            loading: None,
             last_error: None,
             cached_position_ms: 0,
             tick: Some(Self::spawn_tick(cx)),
@@ -173,38 +171,35 @@ impl AudioEngine {
         }
     }
 
-    /// Async load: sets Loading, decodes and builds peaks off-thread, then
-    /// prepares the render buffer. Replaces any previous load; decode
-    /// failures land in `last_error` and leave the previous load intact.
+    /// Sets Loading, decodes and builds peaks off-thread, then prepares the render.
+    /// Success replaces the current load; a decode failure keeps it and sets `last_error`.
     pub fn load_bytes(&mut self, name: &str, bytes: Vec<u8>, cx: &mut Context<Self>) {
         let owned_name = name.to_string();
         let task =
             cx.background_spawn(async move { decode_bytes(&owned_name, bytes).map(with_peaks) });
-        self.start_load(cx, name.to_string(), task);
+        self.start_load(cx, task);
         cx.notify();
     }
 
-    /// Native only; wasm callers get `last_error()` = Unavailable.
+    /// Native only: reads the file off-thread, then loads it like [`Self::load_bytes`].
     #[cfg(not(target_family = "wasm"))]
     pub fn load_path(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         let name = path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
-        let owned_name = name.clone();
         let task = cx.background_spawn(async move {
             std::fs::read(&path)
                 .map_err(|err| AudioError::Decode(err.to_string()))
-                .and_then(|bytes| decode_bytes(&owned_name, bytes))
+                .and_then(|bytes| decode_bytes(&name, bytes))
                 .map(with_peaks)
         });
-        self.start_load(cx, name, task);
+        self.start_load(cx, task);
         cx.notify();
     }
 
     pub fn unload(&mut self, cx: &mut Context<Self>) {
         self.load_generation += 1;
-        self.loading = None;
         self.last_error = None;
         #[cfg(not(target_family = "wasm"))]
         {
@@ -383,9 +378,8 @@ impl AudioEngine {
         }
     }
 
-    /// Rebuilds the session on the device named `name` (the Select UI's
-    /// display string) at the saved position. The device query, channel
-    /// adapt, and resample all run off-thread.
+    /// Rebuilds the session on the device whose display name is `name`, keeping
+    /// the position; the device query, channel adapt, and resample run off-thread.
     pub fn select_device(&mut self, name: &str, cx: &mut Context<Self>) {
         #[cfg(not(target_family = "wasm"))]
         {
@@ -486,12 +480,10 @@ impl AudioEngine {
     fn start_load(
         &mut self,
         cx: &mut Context<Self>,
-        name: String,
         task: Task<Result<(Arc<DecodedAudio>, Arc<WaveformPeaks>), AudioError>>,
     ) {
         self.load_generation += 1;
         let generation = self.load_generation;
-        self.loading = Some(name);
         self.last_error = None;
         self.status = Some(PlaybackStatus::Loading);
         #[cfg(not(target_family = "wasm"))]
@@ -517,7 +509,6 @@ impl AudioEngine {
         if generation != self.load_generation {
             return;
         }
-        self.loading = None;
         match result {
             Err(err) => {
                 self.last_error = Some(err);
@@ -651,8 +642,7 @@ impl AudioEngine {
     fn spawn_prepare(
         &mut self,
         decoded: &Arc<DecodedAudio>,
-        #[cfg(not(target_family = "wasm"))] wanted: Option<String>,
-        #[cfg(target_family = "wasm")] wanted: Option<String>,
+        wanted: Option<String>,
         cx: &mut Context<Self>,
     ) -> Task<PreparedRender> {
         let decoded = decoded.clone();

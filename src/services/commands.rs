@@ -60,12 +60,10 @@ pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
         | CommandId::ThemeLight
         | CommandId::ThemeDark
         | CommandId::StartDemoTask
+        | CommandId::CheckConnectivity
         | CommandId::StartTour
+        | CommandId::SignIn
         | CommandId::OpenDesktopWidgets => CommandAvailability {
-            enabled: true,
-            disabled_reason: None,
-        },
-        CommandId::CheckConnectivity => CommandAvailability {
             enabled: true,
             disabled_reason: None,
         },
@@ -116,10 +114,6 @@ pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
                 "command_reason_menubar_charts_unavailable",
                 cfg!(target_family = "wasm"),
             ),
-        },
-        CommandId::SignIn => CommandAvailability {
-            enabled: true,
-            disabled_reason: None,
         },
         CommandId::SignOut => {
             let signed_in = matches!(
