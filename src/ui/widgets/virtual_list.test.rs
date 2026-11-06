@@ -6,8 +6,8 @@ use std::rc::Rc;
 
 use gpui_kit::component::VirtualListScrollHandle;
 use gpui_kit::{
-    Context, IntoElement, ParentElement, Pixels, Render, Size, Styled, TestAppContext, Window, div,
-    px, size,
+    AnyWindowHandle, Context, IntoElement, ParentElement, Pixels, Render, Size, Styled,
+    TestAppContext, Window, div, px, size,
 };
 
 use super::{
@@ -174,17 +174,21 @@ fn draw_list(
 ) -> Rc<RefCell<Vec<Range<usize>>>> {
     let requested = Rc::new(RefCell::new(Vec::new()));
     let scroll_handle = VirtualListScrollHandle::new();
-    let window = cx.open_window(size(px(300.), px(300.)), {
-        let requested = requested.clone();
-        move |_, _| ListHarness {
-            scroll_handle,
-            item_sizes,
-            list_height,
-            gap,
-            show_scrollbar,
-            requested,
-        }
-    });
+    let window: AnyWindowHandle = cx
+        .open_window(size(px(300.), px(300.)), {
+            let requested = requested.clone();
+            move |_, _| ListHarness {
+                scroll_handle,
+                item_sizes,
+                list_height,
+                gap,
+                show_scrollbar,
+                requested,
+            }
+        })
+        .into();
+    // An untyped handle: a typed one would lease ListHarness for the whole
+    // closure, and the list's prepaint re-enters that entity to request rows.
     cx.update(|cx| {
         window
             .update(cx, |_, window, cx| window.draw(cx).clear(cx))

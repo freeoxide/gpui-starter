@@ -328,7 +328,7 @@ fn crop_drag_sets_crop_rect_without_history(cx: &mut TestAppContext) {
         Box::new(DragTool::crop(doc, layer, black()))
     });
 
-    dispatch(&canvas, cx, phase_down, (9., 9.));
+    dispatch(&canvas, cx, phase_down, (12., 9.));
     dispatch(&canvas, cx, phase_move, (3., 1.));
     dispatch(&canvas, cx, phase_up, (3., 1.));
 
@@ -338,7 +338,7 @@ fn crop_drag_sets_crop_rect_without_history(cx: &mut TestAppContext) {
         .expect("crop rect stored");
     assert_px_eq(rect.origin.x, 3.);
     assert_px_eq(rect.origin.y, 1.);
-    assert_px_eq(rect.size.width, 6.);
+    assert_px_eq(rect.size.width, 9.);
     assert_px_eq(rect.size.height, 8.);
     assert_eq!(cx.read(|cx| doc.read(cx).history_len()), 0);
 }

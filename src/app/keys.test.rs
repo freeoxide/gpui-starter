@@ -22,7 +22,11 @@ fn secondary_constants_resolve_per_os() {
         assert_eq!(linux.key.as_str(), key);
     }
 
+    // Kbd::format renders the platform modifier for the host OS (compile-time
+    // cfg), so each label assertion only holds on the host it names.
+    #[cfg(target_os = "macos")]
     assert_eq!(label(TOGGLE_SEARCH, OperatingSystem::Mac), "⌘K");
+    #[cfg(not(target_os = "macos"))]
     assert_eq!(label(TOGGLE_SEARCH, OperatingSystem::Linux), "Ctrl+K");
 }
 

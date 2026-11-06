@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-const GLOBAL_IMPL_BUDGET: usize = 44;
+const GLOBAL_IMPL_BUDGET: usize = 45;
 
 // Text scan: cfg-gated variants (native/wasm, feature-gated) must count the
 // same on every target.

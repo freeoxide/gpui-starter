@@ -195,9 +195,10 @@ fn dragging_a_node_moves_its_shapes_and_resamples_its_edges(cx: &mut TestAppCont
         &tool_ctx(Some(input_rect)),
     );
     // Two stops: the ratchet must accumulate to the total +60/+40 delta.
+    // shape_bounds reads doc_bounds, which pads the node rect's 1px stroke by 0.5.
     let input_bounds = shape_bounds(cx, &state, input_rect);
-    assert_px_eq(input_bounds.origin.x, px(SEED_NODES[0].0 + 60.));
-    assert_px_eq(input_bounds.origin.y, px(SEED_NODES[0].1 + 40.));
+    assert_px_eq(input_bounds.origin.x, px(SEED_NODES[0].0 + 60. - 0.5));
+    assert_px_eq(input_bounds.origin.y, px(SEED_NODES[0].1 + 40. - 0.5));
     let label_position = cx.read(|cx| match state.read(cx).document().shape(input_label) {
         Some(CanvasShape::Text { position, .. }) => *position,
         _ => panic!("label stays text"),
@@ -205,8 +206,8 @@ fn dragging_a_node_moves_its_shapes_and_resamples_its_edges(cx: &mut TestAppCont
     assert_px_eq(label_position.x, px(SEED_NODES[0].0 + 60. + 8.));
     assert_px_eq(label_position.y, px(SEED_NODES[0].1 + 40. + 8.));
     let filter_bounds = shape_bounds(cx, &state, filter_rect);
-    assert_px_eq(filter_bounds.origin.x, px(SEED_NODES[1].0));
-    assert_px_eq(filter_bounds.origin.y, px(SEED_NODES[1].1));
+    assert_px_eq(filter_bounds.origin.x, px(SEED_NODES[1].0 - 0.5));
+    assert_px_eq(filter_bounds.origin.y, px(SEED_NODES[1].1 - 0.5));
     let first_edge = path_points_of(cx, &state, edge_zero);
     assert_px_eq(first_edge[0].x, px(SEED_NODES[0].0 + 60. + NODE_W));
     assert_px_eq(first_edge[0].y, px(SEED_NODES[0].1 + 40. + NODE_H / 2.));

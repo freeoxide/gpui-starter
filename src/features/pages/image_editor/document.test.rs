@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::io::Cursor;
 use std::rc::Rc;
 
-use gpui_kit::{AppContext, Bounds, Entity, Subscription, TestAppContext, point, px, size};
+use gpui_kit::{AppContext, Bounds, Entity, Pixels, Subscription, TestAppContext, point, px, size};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 
 use super::{FilterSettings, ImageEditorDocument, ImageEditorEvent};
@@ -28,6 +28,15 @@ fn rect(x: f32, y: f32, w: f32, h: f32) -> CanvasShape {
         },
         ShapeStyle::stroked(StrokeStyle::default()),
     )
+}
+
+/// Raw geometry of a seeded rect; doc_bounds pads by half the stroke width,
+/// which the translate/rotate/clamp assertions must not see.
+fn rect_bounds(shape: &CanvasShape) -> Bounds<Pixels> {
+    match shape {
+        CanvasShape::Rect { bounds, .. } => *bounds,
+        other => panic!("expected a rect shape, got {other:?}"),
+    }
 }
 
 fn opened_doc(cx: &mut TestAppContext) -> (Entity<CanvasState>, Entity<ImageEditorDocument>) {
@@ -253,7 +262,7 @@ fn rotate90_swaps_dimensions_and_rotates_annotations(cx: &mut TestAppContext) {
     assert_eq!(cx.read(|cx| doc.read(cx).base_size()), Some((8, 16)));
     let shapes = layer_shapes(&canvas, layer, cx);
     assert_eq!(shapes.len(), 1);
-    let Bounds { origin, size } = shapes[0].doc_bounds();
+    let Bounds { origin, size } = rect_bounds(&shapes[0]);
     assert!((origin.x.as_f32() - 7.).abs() < 0.01, "{origin:?}");
     assert!((origin.y.as_f32() - 0.).abs() < 0.01, "{origin:?}");
     assert!((size.width.as_f32() - 1.).abs() < 0.01, "{size:?}");
@@ -281,7 +290,7 @@ fn apply_crop_cuts_pixels_and_translates_annotations(cx: &mut TestAppContext) {
 
     let shapes = layer_shapes(&canvas, layer, cx);
     assert_eq!(shapes.len(), 1);
-    let bounds = shapes[0].doc_bounds();
+    let bounds = rect_bounds(&shapes[0]);
     assert!((bounds.origin.x.as_f32() - 2.).abs() < 0.01, "{bounds:?}");
     assert!((bounds.origin.y.as_f32() - 3.).abs() < 0.01, "{bounds:?}");
 }
@@ -340,7 +349,7 @@ fn apply_crop_clamps_survivors_to_the_cropped_image(cx: &mut TestAppContext) {
 
     let shapes = layer_shapes(&canvas, layer, cx);
     assert_eq!(shapes.len(), 1);
-    let bounds = shapes[0].doc_bounds();
+    let bounds = rect_bounds(&shapes[0]);
     assert!((bounds.origin.x.as_f32() - 6.).abs() < 0.01, "{bounds:?}");
     assert!((bounds.origin.y.as_f32() - 2.).abs() < 0.01, "{bounds:?}");
     assert!((bounds.size.width.as_f32() - 2.).abs() < 0.01, "{bounds:?}");

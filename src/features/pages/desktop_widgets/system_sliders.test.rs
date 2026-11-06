@@ -81,18 +81,17 @@ async fn an_external_snapshot_cannot_stomp_a_drag_in_progress(cx: &mut TestAppCo
         assert_eq!(widget.brightness.read(cx).value().start(), 40.);
     });
 
+    // WindowHandle::update already leases the widget; use its root directly.
     handle
-        .update(cx, |_, window, cx| {
-            widget.update(cx, |widget, cx| {
-                widget
-                    .volume
-                    .update(cx, |state, cx| state.set_value(30., window, cx));
-                widget.on_event(
-                    SliderTarget::Volume,
-                    &SliderEvent::Change(SliderValue::Single(30.)),
-                    cx,
-                );
-            });
+        .update(cx, |widget, window, cx| {
+            widget
+                .volume
+                .update(cx, |state, cx| state.set_value(30., window, cx));
+            widget.on_event(
+                SliderTarget::Volume,
+                &SliderEvent::Change(SliderValue::Single(30.)),
+                cx,
+            );
         })
         .unwrap();
 

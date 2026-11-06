@@ -44,17 +44,31 @@ pub use tool::{
 /// thread are deterministic; global atomics would race sibling tests.
 #[cfg(test)]
 pub(crate) mod perf_probe {
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
+
+    use gpui_kit::{Path, Pixels};
 
     thread_local! {
         pub(crate) static PATH_BUILDS: Cell<u64> = const { Cell::new(0) };
         pub(crate) static KEY_HASHES: Cell<u64> = const { Cell::new(0) };
         pub(crate) static TEXT_SHAPINGS: Cell<u64> = const { Cell::new(0) };
         pub(crate) static DOT_PAINTS: Cell<u64> = const { Cell::new(0) };
+        // Element state is only reachable mid-paint, so the newest built
+        // path is mirrored here for tests to inspect afterwards.
+        pub(crate) static LAST_PATH_BUILD: RefCell<Option<Path<Pixels>>> =
+            const { RefCell::new(None) };
     }
 
     pub(crate) fn add_path_build() {
         PATH_BUILDS.with(|c| c.set(c.get() + 1));
+    }
+
+    pub(crate) fn set_last_path_build(path: Option<&Path<Pixels>>) {
+        LAST_PATH_BUILD.with(|p| *p.borrow_mut() = path.cloned());
+    }
+
+    pub(crate) fn last_path_build() -> Option<Path<Pixels>> {
+        LAST_PATH_BUILD.with(|p| p.borrow().clone())
     }
 
     pub(crate) fn add_key_hash() {
@@ -74,6 +88,7 @@ pub(crate) mod perf_probe {
         KEY_HASHES.with(|c| c.set(0));
         TEXT_SHAPINGS.with(|c| c.set(0));
         DOT_PAINTS.with(|c| c.set(0));
+        LAST_PATH_BUILD.with(|p| *p.borrow_mut() = None);
     }
 
     pub(crate) fn snapshot() -> [u64; 4] {

@@ -415,7 +415,7 @@ fn save_captures_edits_made_while_the_dialog_is_open(cx: &mut TestAppContext) {
     cx.run_until_parked();
 
     let picked = file.clone();
-    cx.simulate_path_prompt_response(move |_options| Some(vec![picked]));
+    cx.simulate_new_path_selection(move |_| Some(picked));
     cx.run_until_parked();
 
     let saved = ImageReader::open(&file)
@@ -464,7 +464,7 @@ fn save_to_an_unwritable_path_reports_failed(cx: &mut TestAppContext) {
     ));
     let _ = std::fs::remove_dir_all(&dir);
     let missing = dir.join("saved.png");
-    cx.simulate_path_prompt_response(move |_options| Some(vec![missing]));
+    cx.simulate_new_path_selection(move |_| Some(missing));
     cx.run_until_parked();
 
     cx.read(|cx| match &page.read(cx).save_state {

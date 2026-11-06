@@ -10,7 +10,7 @@
 //! command arms, the locale keys, and the page count in
 //! tests/e2e_navigation.rs.
 
-use gpui_auth::{AuthError, AuthState, MOCK_PROVIDER_ID, SecretString};
+use gpui_auth::{AuthError, AuthState, EMAIL_PROVIDER_ID, MOCK_PROVIDER_ID, SecretString};
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Sizable as _, Size,
     avatar::Avatar,
@@ -181,9 +181,6 @@ impl SignInPage {
         if matches!(crate::auth_ui::snapshot(cx).state, AuthState::SigningIn) {
             return;
         }
-        if self.mode != Mode::Email {
-            return;
-        }
         self.touched = true;
         self.recompute_validation();
         let valid = self.cached_errors.iter().all(|errors| errors.is_none());
@@ -191,14 +188,19 @@ impl SignInPage {
             cx.notify();
             return;
         }
-        // The chosen mode owns the dispatch: a provider without PasswordAuth
-        // surfaces the controller's hard error, never a browser-flow swap.
+        // The installed provider owns the flow: the email provider takes the
+        // password path; every other provider starts its own (browser/demo).
         let email = self.current_data.email.clone().unwrap_or_default();
         let password = self.current_data.password.clone().unwrap_or_default();
         match crate::services::auth::controller(cx) {
             Some(entity) => {
+                let provider_id = crate::auth_ui::snapshot(cx).provider_id;
                 entity.update(cx, |controller, cx| {
-                    controller.sign_in_with_password(email, SecretString::new(password), cx);
+                    if provider_id == EMAIL_PROVIDER_ID {
+                        controller.sign_in_with_password(email, SecretString::new(password), cx);
+                    } else {
+                        controller.start_sign_in(cx);
+                    }
                 });
                 cx.notify();
             }

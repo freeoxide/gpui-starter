@@ -157,7 +157,7 @@ impl ErrorPlaygroundPage {
                         crate::i18n::localize("error_playground_fs_unexpected_success")
                     )),
                     Err(e) => ResultMsg::error(format!(
-                        "{}: {e}",
+                        "{} {FS_CHECK_PATH}: {e}",
                         crate::i18n::localize("error_playground_fs_error_prefix")
                     )),
                 });

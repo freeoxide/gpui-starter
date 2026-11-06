@@ -156,7 +156,11 @@ fn paired_devices(objects: &ManagedObjects) -> Vec<PairedDevice> {
                 .iter()
                 .find(|(interface, _)| interface.as_str() == DEVICE_INTERFACE)
                 .map(|(_, properties)| properties)?;
-            property_bool(properties, "Paired")?;
+            // `?` alone drops only a missing Paired; bluez always sends it,
+            // so an unpaired device needs the value checked too.
+            if !property_bool(properties, "Paired")? {
+                return None;
+            }
             Some(PairedDevice {
                 address: property_string(properties, "Address").unwrap_or_default(),
                 alias: property_string(properties, "Alias").unwrap_or_default(),

@@ -44,6 +44,8 @@ impl ShapeCache {
             self.path = None;
             self.line = None;
             self.path = build();
+            #[cfg(test)]
+            super::perf_probe::set_last_path_build(self.path.as_ref());
         }
         self.path.as_ref().map(|path| translated(path, origin))
     }
@@ -62,11 +64,6 @@ impl ShapeCache {
             self.line = Some(Box::new(build()));
         }
         self.line.as_deref().expect("line built above")
-    }
-
-    #[cfg(test)]
-    pub(crate) fn stored_path(&self) -> Option<&Path<Pixels>> {
-        self.path.as_ref()
     }
 }
 

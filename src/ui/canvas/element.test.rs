@@ -2,11 +2,10 @@
 // shadow this file's `#[gpui_kit::test]` attribute.
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    Bounds, ElementId, Entity, Modifiers, MouseButton, Pixels, ScrollDelta, ScrollEvent,
-    TestAppContext, VisualTestContext, Window, black, point, px, size,
+    Bounds, Entity, Modifiers, MouseButton, Pixels, ScrollDelta, ScrollEvent, TestAppContext,
+    VisualTestContext, Window, black, point, px, size,
 };
 
-use super::super::cache::CanvasCaches;
 use crate::ui::canvas::{BuiltinTool, Canvas, CanvasShape, CanvasState, ShapeId, ShapeStyle};
 
 struct CanvasHost {
@@ -64,13 +63,10 @@ fn assert_px_eq(actual: Pixels, expected: Pixels) {
     );
 }
 
-/// Reads the path the element cached for slot `slot`, the same keyed state the
-/// canvas paints through.
-fn stored_stroke_path(cx: &mut VisualTestContext, slot: usize) -> Option<gpui_kit::Path<Pixels>> {
-    cx.update(|window, cx| {
-        let caches = CanvasCaches::for_paint((ElementId::from("canvas"), "caches"), window, cx);
-        caches.update(cx, |caches, _| caches.slot(slot).stored_path().cloned())
-    })
+/// Reads the newest stroke path the canvas cache built. Element state is only
+/// reachable mid-paint, so the perf probe mirrors the built path for tests.
+fn last_built_path() -> Option<gpui_kit::Path<Pixels>> {
+    crate::ui::canvas::perf_probe::last_path_build()
 }
 
 #[gpui_kit::test]
@@ -330,10 +326,17 @@ fn path_vertices_scale_by_zoom_around_the_doc_bounds_origin(cx: &mut TestAppCont
     });
     state.update(&mut cx, |s, cx| s.set_zoom(2., cx));
     cx.update(|window, cx| window.draw(cx).clear(cx));
-    let path = stored_stroke_path(&mut cx, 0).expect("scaled stroke cached");
+    let path = last_built_path().expect("scaled stroke built");
     // Doc points (10,10)-(60,60) minus the half-stroke origin (9,9), times zoom 2,
     // land at (2,2)-(102,102); the 4px stroke and its joins add a few px at most.
     let b = path.bounds;
+    // Butt caps end exactly on the centerline and contains() excludes the far
+    // edge, so the hull gets float-noise slack.
+    let slack = px(0.05);
+    let hull = Bounds {
+        origin: b.origin - point(slack, slack),
+        size: b.size + size(slack * 2., slack * 2.),
+    };
     for corner in [
         point(px(2.), px(2.)),
         point(px(102.), px(2.)),
@@ -341,7 +344,7 @@ fn path_vertices_scale_by_zoom_around_the_doc_bounds_origin(cx: &mut TestAppCont
         point(px(102.), px(102.)),
     ] {
         assert!(
-            b.contains(&corner),
+            hull.contains(&corner),
             "centerline corner {corner:?} outside {b:?}"
         );
     }
@@ -369,6 +372,8 @@ fn single_point_paths_paint_dots_and_cull_offscreen(cx: &mut TestAppContext) {
         )
         .unwrap();
     });
+    // The update above flushed its own paint; count from this draw on.
+    perf_probe::reset();
     cx.update(|window, cx| window.draw(cx).clear(cx));
     let [_, _, _, dots] = perf_probe::snapshot();
     assert_eq!(dots, 1, "a one-point path must paint its dot");

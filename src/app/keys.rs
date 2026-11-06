@@ -33,6 +33,7 @@ pub fn binding<A: Action>(
 }
 
 /// User-facing label for a keystroke source: Ctrl+K on Windows, ⌘K on macOS.
+/// `os` only selects parsing; Kbd::format renders modifiers for the host OS.
 /// Panics on malformed constants, same contract as `binding`.
 pub fn label(keystroke: &str, os: OperatingSystem) -> String {
     Kbd::format(&Keystroke::parse_with_os(keystroke, os).expect("invalid keystroke constant"))

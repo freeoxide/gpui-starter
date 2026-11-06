@@ -318,8 +318,8 @@ fn normalized_keeps_plausible_and_multimonitor_bounds() {
 
 #[test]
 fn load_config_repairs_values_the_validation_tier_only_lints() {
-    // Pins the repair tier: validate_config is log-only on the raw file, so
-    // an unknown locale and NaN bounds must come back fixed, not just warned.
+    // Repair tier: an unknown locale and negative bounds come back fixed, not
+    // just linted. NaN cannot stand in here: serde_json writes it as null.
     let dir = tempdir().unwrap();
     let state_file = dir.path().join("state.json");
     let config = AppConfig {
@@ -327,7 +327,7 @@ fn load_config_repairs_values_the_validation_tier_only_lints() {
         window_bounds: Some(PersistedWindowBounds {
             x: 0.0,
             y: 0.0,
-            width: f32::NAN,
+            width: -800.0,
             height: 600.0,
             display_id: None,
             state: PersistedWindowState::Windowed,

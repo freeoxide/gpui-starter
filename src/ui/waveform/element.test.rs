@@ -51,53 +51,54 @@ fn mounted_host(
     cx
 }
 
-fn draw_quads(cx: &mut VisualTestContext) -> Vec<Quad> {
+/// Logical-pixel `(x, y, w, h)` of one painted quad.
+type QuadGeom = (f32, f32, f32, f32);
+
+/// The scene holds device pixels (the test platform paints at 2x); dividing by
+/// the scale lets the helpers below reason in the window's logical size.
+fn draw_quads(cx: &mut VisualTestContext) -> Vec<QuadGeom> {
     cx.update(|window, cx| {
         let clear = window.draw(cx);
-        let quads = window.painted_quads();
+        let scale = window.scale_factor();
+        let quads = window
+            .painted_quads()
+            .iter()
+            .map(|quad| quad_geom(quad, scale))
+            .collect();
         clear.clear(cx);
         quads
     })
 }
 
-fn quad_geom(quad: &Quad) -> (f32, f32, f32, f32) {
+fn quad_geom(quad: &Quad, scale: f32) -> QuadGeom {
     let b = quad.bounds;
     (
-        b.origin.x.as_f32(),
-        b.origin.y.as_f32(),
-        b.size.width.as_f32(),
-        b.size.height.as_f32(),
+        b.origin.x.as_f32() / scale,
+        b.origin.y.as_f32() / scale,
+        b.size.width.as_f32() / scale,
+        b.size.height.as_f32() / scale,
     )
 }
 
 /// Y centers of full-width horizontal hairlines (grid centers, dividers).
-fn hairline_mids(quads: &[Quad]) -> Vec<f32> {
+fn hairline_mids(quads: &[QuadGeom]) -> Vec<f32> {
     quads
         .iter()
-        .filter(|q| {
-            let (_, _, w, h) = quad_geom(q);
-            h <= 1.01 && w >= 590.
-        })
-        .map(|q| quad_geom(q).1 + 0.5)
+        .filter(|(_, _, w, h)| *h <= 1.01 && *w >= 590.)
+        .map(|(_, y, _, h)| y + h / 2.)
         .collect()
 }
 
-fn has_vertical_gridlines(quads: &[Quad]) -> bool {
-    quads.iter().any(|q| {
-        let (_, _, w, h) = quad_geom(q);
-        w <= 1.01 && h >= 100.
-    })
+fn has_vertical_gridlines(quads: &[QuadGeom]) -> bool {
+    quads.iter().any(|(_, _, w, h)| *w <= 1.01 && *h >= 100.)
 }
 
 /// Spectrum bar heights: narrow data quads between the hairlines.
-fn bar_heights(quads: &[Quad]) -> Vec<f32> {
+fn bar_heights(quads: &[QuadGeom]) -> Vec<f32> {
     quads
         .iter()
-        .filter(|q| {
-            let (_, _, w, h) = quad_geom(q);
-            (4. ..=12.).contains(&w) && h > 2.
-        })
-        .map(|q| quad_geom(q).3)
+        .filter(|(_, _, w, h)| (4. ..=12.).contains(w) && *h > 2.)
+        .map(|(_, _, _, h)| *h)
         .collect()
 }
 
@@ -198,17 +199,16 @@ fn paused_display_freezes_across_draws(cx: &mut TestAppContext) {
         s.set_mode(WaveformMode::Spectrum, cx);
     });
     let mut cx = mounted_host(cx, 600., &state);
-    let before_quads = draw_quads(&mut cx);
+    let before = draw_quads(&mut cx);
     assert!(
-        !bar_heights(&before_quads).is_empty(),
+        !bar_heights(&before).is_empty(),
         "the unpaused frame paints bars to freeze"
     );
-    let before: Vec<_> = before_quads.iter().map(quad_geom).collect();
 
     state.update(&mut cx, |s, cx| s.set_paused(true, cx));
     producer.push_interleaved(&sine_interleaved(2048, 60.));
     state.update(&mut cx, |s, cx| s.refresh(cx));
-    let after: Vec<_> = draw_quads(&mut cx).iter().map(quad_geom).collect();
+    let after = draw_quads(&mut cx);
     assert_eq!(
         before, after,
         "a paused display must keep painting the frozen frame"

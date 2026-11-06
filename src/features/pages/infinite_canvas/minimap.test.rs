@@ -145,8 +145,9 @@ fn regenerate_re_rasterizes_the_minimap_dots(cx: &mut TestAppContext) {
         "an unchanged field must reuse the cached dots"
     );
 
-    page.update(&mut cx, |page, cx| page.regenerate(5_000, cx));
+    // The update itself flushes a paint, so the miss lands there: reset first.
     minimap_probe::reset();
+    page.update(&mut cx, |page, cx| page.regenerate(5_000, cx));
     cx.update(|window, cx| window.draw(cx).clear(cx));
     assert!(
         minimap_probe::dot_anchor_passes() > 0,

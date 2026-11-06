@@ -285,23 +285,30 @@ impl PaletteSession {
             let session = cx.entity();
             // A drag moves the window every frame; the config store
             // debounces, so hand it the latest origin each time.
-            let watch = window.update(cx, |_, window, app| {
-                session.update(app, |_, cx| {
-                    cx.observe_window_bounds(window, move |this, window, cx| {
-                        let origin = window.window_bounds().get_bounds().origin;
-                        if let Some(slot) = this.slots.get_mut(&id) {
-                            slot.window_origin = Some(origin);
-                        }
-                        persistence::update_slot(id, cx, |entry| {
-                            entry.x = f32::from(origin.x);
-                            entry.y = f32::from(origin.y);
-                        });
+            // The registry observer holds the session lease here; a task
+            // runs after it releases, making the nested update legal.
+            cx.spawn(async move |_, cx| {
+                let Ok(subscription) = window.update(cx, |_, window, app| {
+                    session.update(app, |_, cx| {
+                        cx.observe_window_bounds(window, move |this, window, cx| {
+                            let origin = window.window_bounds().get_bounds().origin;
+                            if let Some(slot) = this.slots.get_mut(&id) {
+                                slot.window_origin = Some(origin);
+                            }
+                            persistence::update_slot(id, cx, |entry| {
+                                entry.x = f32::from(origin.x);
+                                entry.y = f32::from(origin.y);
+                            });
+                        })
                     })
-                })
-            });
-            if let Ok(subscription) = watch {
-                self.origin_watches.insert(id, subscription);
-            }
+                }) else {
+                    return;
+                };
+                let _ = session.update(cx, |session, _| {
+                    session.origin_watches.insert(id, subscription)
+                });
+            })
+            .detach();
         }
     }
 }

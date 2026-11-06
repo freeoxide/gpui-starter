@@ -114,6 +114,8 @@ async fn hover_expands_the_demo_and_its_close_button_dismisses_it(cx: &TestAppCo
     // header and widget stack, so a hit there proves it rendered on-screen.
     for x in [330., 316., 300.] {
         vcx.simulate_click(point(px(x), px(162.)), Modifiers::none());
+        // close() defers past the dispatch lease; pump before checking.
+        cx.run_until_parked();
         if cx
             .read(|cx| crate::ui::floating::floating_snapshot(cx))
             .is_empty()

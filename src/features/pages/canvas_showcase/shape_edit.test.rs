@@ -151,15 +151,17 @@ fn clicking_a_shape_selects_it_and_makes_eight_handles(cx: &mut TestAppContext) 
     assert!(cx.read(|cx| state.read(cx).selected_shape_ids() == &[rect_id]));
     let handles = handle_shapes(cx, &state);
     assert_eq!(handles.len(), 8);
+    // Handles sit on the doc_bounds corners, which pad the 1px stroke by 0.5;
+    // mid handles average the corners, so their axis keeps the raw midpoint.
     let expected_origins = [
-        (76., 76.),
-        (166., 76.),
-        (256., 76.),
-        (256., 126.),
-        (256., 176.),
-        (166., 176.),
-        (76., 176.),
-        (76., 126.),
+        (75.5, 75.5),
+        (166., 75.5),
+        (256.5, 75.5),
+        (256.5, 126.),
+        (256.5, 176.5),
+        (166., 176.5),
+        (75.5, 176.5),
+        (75.5, 126.),
     ];
     for ((_, shape), (x, y)) in handles.iter().zip(expected_origins) {
         let CanvasShape::Rect { bounds, .. } = shape else {
@@ -221,8 +223,9 @@ fn move_drag_translates_the_selection_by_the_delta(cx: &mut TestAppContext) {
         &tool_ctx(Some(rect_id)),
     );
     let origin = shape_bounds(cx, &state, rect_id).origin;
-    assert_px_eq(origin.x, SEED_RECT.origin.x + px(45.));
-    assert_px_eq(origin.y, SEED_RECT.origin.y + px(25.));
+    // shape_bounds reads doc_bounds, which pads the seeded rect's 1px stroke by 0.5.
+    assert_px_eq(origin.x, SEED_RECT.origin.x + px(45.) - px(0.5));
+    assert_px_eq(origin.y, SEED_RECT.origin.y + px(25.) - px(0.5));
     dispatch_up(
         &state,
         cx,
@@ -255,8 +258,9 @@ fn move_drag_translates_every_shape_in_a_multi_selection(cx: &mut TestAppContext
         &tool_ctx(Some(ellipse_id)),
     );
     let rect_origin = shape_bounds(cx, &state, rect_id).origin;
-    assert_px_eq(rect_origin.x, SEED_RECT.origin.x + px(20.));
-    assert_px_eq(rect_origin.y, SEED_RECT.origin.y + px(10.));
+    assert_px_eq(rect_origin.x, SEED_RECT.origin.x + px(20.) - px(0.5));
+    assert_px_eq(rect_origin.y, SEED_RECT.origin.y + px(10.) - px(0.5));
+    // The seeded ellipse is filled, so its doc_bounds carries no stroke pad.
     let ellipse_bounds = shape_bounds(cx, &state, ellipse_id);
     assert_px_eq(ellipse_bounds.origin.x, px(320. + 20.));
     assert_px_eq(ellipse_bounds.origin.y, px(100. + 10.));
@@ -390,10 +394,12 @@ fn resize_drag_through_the_top_left_handle_clamps_at_the_minimum(cx: &mut TestAp
         &tool_ctx(Some(handle_id)),
     );
     let bounds = shape_bounds(cx, &state, rect_id);
-    assert_px_eq(bounds.origin.x, px(60.));
-    assert_px_eq(bounds.origin.y, px(60.));
-    assert_px_eq(bounds.size.width, px(200.));
-    assert_px_eq(bounds.size.height, px(120.));
+    // The drag resizes the doc_bounds frame, so the read pads the 1px stroke
+    // again: the raw bounds land at (60,60) 200.5x120.5.
+    assert_px_eq(bounds.origin.x, px(59.5));
+    assert_px_eq(bounds.origin.y, px(59.5));
+    assert_px_eq(bounds.size.width, px(201.5));
+    assert_px_eq(bounds.size.height, px(121.5));
     dispatch_move(
         &state,
         cx,
@@ -403,8 +409,8 @@ fn resize_drag_through_the_top_left_handle_clamps_at_the_minimum(cx: &mut TestAp
     let bounds = shape_bounds(cx, &state, rect_id);
     assert_px_eq(bounds.origin.x, px(252.));
     assert_px_eq(bounds.origin.y, px(172.));
-    assert_px_eq(bounds.size.width, px(8.));
-    assert_px_eq(bounds.size.height, px(8.));
+    assert_px_eq(bounds.size.width, px(9.));
+    assert_px_eq(bounds.size.height, px(9.));
     dispatch_up(
         &state,
         cx,

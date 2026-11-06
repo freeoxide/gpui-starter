@@ -168,6 +168,9 @@ async fn open_windows_carry_a_bounds_watch_that_persists_the_origin(cx: &mut Tes
     let _guard = debounce_test_lock();
     cx.update(gpui_kit::init);
     cx.update(init_floating);
+    // slot()/update_slot() need an installed AppState; the default config
+    // seeds nothing, so every entry the test reads is one it wrote.
+    cx.update(|cx| install_for_tests(AppConfig::default(), cx));
     let session = cx.new(PaletteSession::new);
     session
         .update(cx, |session, cx| {
