@@ -139,16 +139,34 @@ function onEngineReady(sqlite3) {
   db = database;
   try {
     db.exec(SCHEMA_MIGRATIONS_TABLE);
+    // Mirrors run_migrations in db_migrations.rs (skip applied, one tx
+    // per migration); OR IGNORE, unlike native, tolerates a two-tab race.
+    let currentVersion =
+      db.selectValue("SELECT COALESCE(MAX(version), 0) FROM schema_migrations");
     for (const migration of MIGRATIONS) {
-      db.exec({ sql: migration.sql });
-      db.exec({
-        sql: "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))",
-        bind: [migration.version],
-      });
+      if (migration.version <= currentVersion) {
+        continue;
+      }
+      db.exec("BEGIN");
+      try {
+        db.exec({ sql: migration.sql });
+        db.exec({
+          sql: "INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))",
+          bind: [migration.version],
+        });
+        db.exec("COMMIT");
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch {
+          // Best-effort rollback; the migration error is what propagates.
+        }
+        throw err;
+      }
+      currentVersion = migration.version;
     }
     ready = true;
-    const schemaVersion =
-      db.selectValue("SELECT COALESCE(MAX(version), 0) FROM schema_migrations");
+    const schemaVersion = currentVersion;
     console.log(
       "[storage-worker] ready: sqlite",
       sqlite3.version.libVersion,

@@ -79,6 +79,10 @@ jobs:
           # collapse to "0.2.0" — otherwise we push a "vv0.2.0" tag and a
           # manifest whose version fails semver parsing client-side.
           VALUE="$(./scripts/normalize-version.sh "$RAW")"
+          # Asset filenames embed the Cargo.toml version; fail in seconds, not
+          # an hour later when SHA256SUMS misses a differently-named asset.
+          CARGO_VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          [ "$CARGO_VERSION" = "$VALUE" ] || { echo "Error: releasing $VALUE but Cargo.toml says $CARGO_VERSION" >&2; exit 1; }
           echo "value=$VALUE" >> "$GITHUB_OUTPUT"
 
       - name: Build universal release binaries (arm64 + x86_64)
@@ -254,13 +258,16 @@ jobs:
             target: aarch64-unknown-linux-gnu
     runs-on: ${{ matrix.runner }}
     env:
-      # Same discipline as build-macos / ci.yml.
+      # Same discipline as build-macos / ci.yml. No job-wide
+      # GPUI_UPDATE_MANIFEST_URL: the tarball binary below builds with the
+      # updater compiled out (the manifest carries no linux- entry, so a
+      # baked URL would offer updates that can never download — the deb/rpm
+      # precedent). Only the AppImage step opts back in.
       CARGO_BUILD_JOBS: "2"
       CARGO_INCREMENTAL: "0"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "256"
       RUST_BACKTRACE: "1"
       RUSTC_WRAPPER: kache
-      GPUI_UPDATE_MANIFEST_URL: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/manifest.json"
 
     steps:
       - uses: actions/checkout@v7
@@ -297,6 +304,10 @@ jobs:
             RAW="${GITHUB_REF_NAME}"
           fi
           VALUE="$(./scripts/normalize-version.sh "$RAW")"
+          # Asset filenames embed the Cargo.toml version; fail in seconds, not
+          # an hour later when SHA256SUMS misses a differently-named asset.
+          CARGO_VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          [ "$CARGO_VERSION" = "$VALUE" ] || { echo "Error: releasing $VALUE but Cargo.toml says $CARGO_VERSION" >&2; exit 1; }
           echo "value=$VALUE" >> "$GITHUB_OUTPUT"
 
       - name: Build release binary
@@ -391,12 +402,6 @@ jobs:
           cargo install cargo-deb --version 3.8.0 --locked
           cargo install cargo-generate-rpm --version 0.21.0 --locked
 
-      - name: Build AppImage
-        # Must run before deb/rpm: option_env!(GPUI_UPDATE_MANIFEST_URL) is
-        # dep-info tracked, so each URL flip forces a relink. This order
-        # needs exactly one flip (URL-out for deb), not three.
-        run: ./scripts/build-appimage.sh "${{ steps.version.outputs.value }}"
-
       - name: Build deb
         # The filename embeds the Cargo.toml version (cargo-deb has no
         # version override), so dispatch inputs must match it, same
@@ -405,6 +410,15 @@ jobs:
 
       - name: Build rpm
         run: env -u GPUI_UPDATE_MANIFEST_URL ./scripts/build-rpm.sh
+
+      - name: Build AppImage
+        # option_env!(GPUI_UPDATE_MANIFEST_URL) is dep-info tracked, so each
+        # URL flip forces a relink. Deb/rpm reuse the URL-out build above
+        # (the scripts also refuse a set URL); this step opts back in for the
+        # one build that keeps the in-app updater — exactly one flip.
+        env:
+          GPUI_UPDATE_MANIFEST_URL: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/manifest.json"
+        run: ./scripts/build-appimage.sh "${{ steps.version.outputs.value }}"
 
       - name: Upload AppImage artifacts
         uses: actions/upload-artifact@v7
@@ -476,6 +490,10 @@ jobs:
             RAW="${GITHUB_REF_NAME}"
           fi
           VALUE="$(./scripts/normalize-version.sh "$RAW")"
+          # Asset filenames embed the Cargo.toml version; fail in seconds, not
+          # an hour later when SHA256SUMS misses a differently-named asset.
+          CARGO_VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          [ "$CARGO_VERSION" = "$VALUE" ] || { echo "Error: releasing $VALUE but Cargo.toml says $CARGO_VERSION" >&2; exit 1; }
           echo "value=$VALUE" >> "$GITHUB_OUTPUT"
 
       # Default pwsh shell, never `shell: bash`, for any step that links:
@@ -573,6 +591,10 @@ jobs:
             RAW="${GITHUB_REF_NAME}"
           fi
           VALUE="$(./scripts/normalize-version.sh "$RAW")"
+          # Asset filenames embed the Cargo.toml version; fail in seconds, not
+          # an hour later when SHA256SUMS misses a differently-named asset.
+          CARGO_VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          [ "$CARGO_VERSION" = "$VALUE" ] || { echo "Error: releasing $VALUE but Cargo.toml says $CARGO_VERSION" >&2; exit 1; }
           echo "value=$VALUE" >> "$GITHUB_OUTPUT"
 
       - name: Build flatpak bundle
@@ -588,11 +610,42 @@ jobs:
           if-no-files-found: error
 
   # -----------------------------------------------------------------------
+  # Gate on ci.yml for the tagged commit: without it the builds above can
+  # publish a release whose clippy/tests are red. Dispatch runs skip the
+  # gate (no tag to match a ci run to); they still fail fast on the
+  # version check.
+  # -----------------------------------------------------------------------
+  ci-passed:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    # ci.yml's test lane alone can need 60-100+ min after a Cargo.lock change.
+    timeout-minutes: 120
+    permissions:
+      actions: read
+    steps:
+      - name: Wait for ci on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          while :; do
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&per_page=1" \
+              --jq '.workflow_runs[0] | "\(.status) \(.conclusion) \(.id)"') || run="api error"
+            echo "ci for $GITHUB_SHA: $run"
+            # No event filter: a tag can point at a branch tip whose only ci
+            # run is the pull_request one for that same head SHA.
+            case "$run" in
+              "completed success "*) exit 0 ;;
+              completed*) echo "ci did not pass for $GITHUB_SHA — rerun it and re-tag" >&2; exit 1 ;;
+            esac
+            sleep 30
+          done
+
+  # -----------------------------------------------------------------------
   # Create GitHub Release and publish the update manifest to gh-pages.
   # -----------------------------------------------------------------------
   publish-release:
     name: Publish Release
-    needs: [build-macos, build-linux, build-windows, build-flatpak]
+    needs: [build-macos, build-linux, build-windows, build-flatpak, ci-passed]
     runs-on: ubuntu-24.04
 
     steps:
@@ -610,6 +663,10 @@ jobs:
           # the build-macos / build-linux steps so every job agrees on the
           # version without duplicating the strip+validate logic.
           VALUE="$(./scripts/normalize-version.sh "$RAW")"
+          # Asset filenames embed the Cargo.toml version; fail in seconds, not
+          # an hour later when SHA256SUMS misses a differently-named asset.
+          CARGO_VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          [ "$CARGO_VERSION" = "$VALUE" ] || { echo "Error: releasing $VALUE but Cargo.toml says $CARGO_VERSION" >&2; exit 1; }
           echo "value=$VALUE" >> "$GITHUB_OUTPUT"
 
       - name: Download DMG artifacts

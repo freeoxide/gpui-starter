@@ -44,8 +44,20 @@ wasm-serve:
 test:
     cargo test --workspace --all-features
 
+# Opt-in wall-clock perf lane: the pan-frame budget test is #[ignore]d in the
+# default gates because loaded runners fail it on timing, not on code bugs.
+perf:
+    cargo test -p gpui-starter --lib infinite_canvas::perf -- --ignored --nocapture
+
 test-publish:
     cargo publish --workspace --dry-run --allow-dirty
+
+# Regenerate THIRD-PARTY-NOTICES: crate licenses via cargo-about over
+# Cargo.lock plus the assets/ license texts, every input SHA-256-stamped
+# so a review shows which licenses ship. Requires cargo-about 0.9.3
+# (cargo install cargo-about --version 0.9.3 --locked).
+notices:
+    ./scripts/notices.sh
 
 # Use local path checkout for gpui-query (for active development of gpui-query;
 # branch gpui-pre-0.6 there mirrors the default git rev).
