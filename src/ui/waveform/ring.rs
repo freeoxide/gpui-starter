@@ -5,9 +5,8 @@ use rtrb::{Consumer, Producer, RingBuffer};
 
 pub(crate) const SOURCE_RING_FRAMES: usize = 1 << 14;
 
-/// Producer half of the sample channel: `Send`, single-owner, not `Sync`.
-/// Move it onto the audio thread. Samples are interleaved f32 frames
-/// normalized to ±1.0; pushing never blocks, overflow is counted.
+/// Audio-thread half of the sample channel: `Send`, single-owner, not `Sync`.
+/// Takes interleaved f32 frames normalized to ±1.0; never blocks, counts overflow.
 pub struct SampleProducer {
     producer: Producer<f32>,
     dropped: Arc<AtomicU64>,
@@ -16,9 +15,8 @@ pub struct SampleProducer {
 }
 
 impl SampleProducer {
-    /// Pushes whole interleaved frames; a trailing partial frame is rejected.
-    /// Returns whole frames copied; the uncopied remainder (partial frame
-    /// included) is counted in [`SampleProducer::dropped_samples`].
+    /// Pushes whole frames only, returning how many it copied. Uncopied samples, a
+    /// trailing partial frame included, add to [`SampleProducer::dropped_samples`].
     pub fn push_interleaved(&mut self, samples: &[f32]) -> usize {
         let usable = samples.len() - samples.len() % self.channels;
         // The push is frame-aligned so the ring never holds a partial frame;

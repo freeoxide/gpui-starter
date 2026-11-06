@@ -37,7 +37,7 @@ fn overlay_entry(id: &str, x: f32) -> RegistryEntry {
 #[gpui_kit::test]
 async fn set_entry_lands_in_the_snapshot(cx: &TestAppContext) {
     cx.update(|cx| set_entry(overlay_entry("alpha", 10.), cx));
-    let snapshot = cx.read(|cx| floating_snapshot(cx));
+    let snapshot = cx.read(floating_snapshot);
     assert_eq!(snapshot.len(), 1);
     assert_eq!(snapshot[0].id.0, "alpha");
     assert_eq!(snapshot[0].title, "alpha");
@@ -55,7 +55,7 @@ async fn remove_entry_empties_the_snapshot(cx: &TestAppContext) {
     cx.update(|cx| set_entry(overlay_entry("beta", 0.), cx));
     let removed = cx.update(|cx| remove_entry(&id, cx));
     assert!(removed.is_some());
-    assert!(cx.read(|cx| floating_snapshot(cx)).is_empty());
+    assert!(cx.read(floating_snapshot).is_empty());
     assert!(cx.update(|cx| remove_entry(&id, cx)).is_none());
 }
 
@@ -126,7 +126,7 @@ async fn set_entry_level_rewrites_only_the_entry_matching_the_handle(cx: &mut Te
         );
     });
     assert!(
-        cx.read(|cx| floating_snapshot(cx))
+        cx.read(floating_snapshot)
             .iter()
             .all(|entry| entry.level == FloatLevel::Floating),
         "mismatched native and overlay handles must rewrite nothing"
@@ -139,7 +139,7 @@ async fn set_entry_level_rewrites_only_the_entry_matching_the_handle(cx: &mut Te
             cx,
         )
     });
-    let snapshot = cx.read(|cx| floating_snapshot(cx));
+    let snapshot = cx.read(floating_snapshot);
     assert_eq!(
         snapshot
             .iter()
@@ -165,7 +165,7 @@ async fn set_entry_level_rewrites_only_the_entry_matching_the_handle(cx: &mut Te
             cx,
         )
     });
-    let snapshot = cx.read(|cx| floating_snapshot(cx));
+    let snapshot = cx.read(floating_snapshot);
     assert_eq!(
         snapshot
             .iter()

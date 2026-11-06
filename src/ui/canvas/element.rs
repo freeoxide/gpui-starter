@@ -6,9 +6,8 @@ use super::scene::ShapeId;
 use super::state::{CanvasState, HIT_TOLERANCE};
 use super::tool::{CanvasPointerEvent, CanvasScrollEvent, ToolContext};
 
-/// Mounts the canvas. `id` keys the element state (path caches) and must be
-/// unique among siblings. Fills its parent. The mounting view must
-/// `cx.observe(&state, |_, _, cx| cx.notify())` so mutations repaint.
+/// Fills its parent; `id` keys the path caches and must be unique among siblings.
+/// The mounting view must `cx.observe(&state, |_, _, cx| cx.notify())` to repaint.
 pub struct Canvas {
     id: ElementId,
     state: Entity<CanvasState>,
@@ -131,7 +130,7 @@ impl Element for CanvasElement {
         state.update(cx, |s, cx| {
             window.with_content_mask(Some(ContentMask { bounds }), |window| {
                 paint_grid(bounds, s.grid(), s.transform(), window, cx);
-                let caches = CanvasCaches::for_paint((id.clone(), "caches"), window, cx);
+                let caches = CanvasCaches::for_paint((id, "caches"), window, cx);
                 caches.update(cx, |caches, cx| {
                     let doc_gen = s.doc_paint_generation();
                     let mut shape_ix = 0usize;
@@ -241,9 +240,8 @@ impl Element for CanvasElement {
                 }
                 if hitbox.is_hovered(window) || state.read(cx).is_pointer_active() {
                     state.update(cx, |s, cx| {
-                        // The up that ended the gesture was consumed above the
-                        // canvas; end it here instead of dragging with no
-                        // button held.
+                        // The gesture's up was consumed above the canvas; end
+                        // it here rather than drag with no button held.
                         if s.pointer_active && e.pressed_button.is_none() {
                             let doc = s.transform().to_doc(position);
                             let event =
@@ -290,10 +288,8 @@ impl Element for CanvasElement {
                     }
                     return;
                 }
-                // Only a left-down can arm a gesture, so an armed pointer plus
-                // a non-left up is a chorded release mid-gesture: not the up
-                // that ends it. Dispatching it would let any tool commit at
-                // the wrong position.
+                // Only a left-down arms a gesture, so a non-left up while armed
+                // is a chorded release; dispatching it would commit mid-gesture.
                 if e.button != MouseButton::Left {
                     return;
                 }

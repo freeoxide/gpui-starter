@@ -33,8 +33,7 @@ struct SourceAttachment {
     channels: usize,
 }
 
-/// Retained waveform state. Mount with `cx.new(|_| WaveformState::new())`,
-/// render with `Waveform::new(id, entity)`, and observe
+/// Retained state rendered by `Waveform::new(id, entity)`; the mounting view must
 /// `cx.observe(&state, |_, _, cx| cx.notify())`. Mutators notify once.
 pub struct WaveformState {
     source: Option<SourceAttachment>,
@@ -77,9 +76,8 @@ impl WaveformState {
         }
     }
 
-    /// Creates the sample channel, starts the 33 ms refresh tick, returns the
-    /// producer for the audio thread. Panics unless `channels` is 1 or 2 and
-    /// `sample_rate` > 0; `retention` clamps; replaces any previous source.
+    /// Replaces any source, clamps `retention`, starts the 33 ms refresh tick, and
+    /// returns its producer. Panics unless `channels` is 1 or 2 and `sample_rate` > 0.
     pub fn attach_source(
         &mut self,
         sample_rate: u32,
@@ -180,9 +178,8 @@ impl WaveformState {
             .map_or(0, |source| source.consumer.dropped())
     }
 
-    /// Drains the ring, integrates history, recomputes the spectrum, notifies
-    /// once if unpaused data arrived. The internal tick calls this; tests and
-    /// embedders may call it directly to force a synchronous update.
+    /// Drains the ring, updates history and spectrum, and notifies once if unpaused
+    /// data arrived. The tick calls this; call it directly to force a synchronous update.
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
         if self.source.is_none() {
             return;

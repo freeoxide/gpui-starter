@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use gpui_kit::{
-    AppContext, Bounds, CursorStyle, Entity, Modifiers, MouseButton, Pixels, Subscription,
+    AppContext, Bounds, Context, CursorStyle, Entity, Modifiers, MouseButton, Pixels, Subscription,
     TestAppContext, point, px, size,
 };
 
@@ -13,7 +13,6 @@ use crate::ui::canvas::{
     CanvasTool, CanvasTransform, PanTool, SelectTool, ShapeConfig, ShapeId, ShapeKind, ShapeStyle,
     ToolContext,
 };
-use gpui_kit::Context;
 
 fn pointer(screen: (f32, f32), button: MouseButton, modifiers: Modifiers) -> CanvasPointerEvent {
     let screen_position = point(px(screen.0), px(screen.1));

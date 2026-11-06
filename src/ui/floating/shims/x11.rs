@@ -65,12 +65,9 @@ fn state_messages(
 }
 
 fn wrap_connection(ptr: NonNull<c_void>) -> Option<XCBConnection> {
-    // SAFETY: ptr is the live xcb_connection_t owned by gpui's X11 client
-    // (handed out through HasDisplayHandle); should_drop = false keeps the
-    // wrapper from disconnecting it, and the wrapper is dropped before the
-    // shim call returns.
-    let conn = unsafe { XCBConnection::from_raw_xcb_connection(ptr.as_ptr(), false) }.ok()?;
-    Some(conn)
+    // SAFETY: ptr is gpui's live xcb_connection_t from HasDisplayHandle; should_drop = false
+    // keeps the wrapper from disconnecting it, and the wrapper drops before the shim returns.
+    unsafe { XCBConnection::from_raw_xcb_connection(ptr.as_ptr(), false) }.ok()
 }
 
 fn intern_state_atoms(conn: &XCBConnection) -> Option<StateAtoms> {
@@ -117,7 +114,6 @@ fn send_state_messages(conn: &XCBConnection, root: X11Window, msgs: &[ClientMess
 pub(crate) fn set_click_through(
     window_id: u32,
     connection: NonNull<c_void>,
-    _screen: i32,
     enabled: bool,
 ) -> bool {
     let Some(conn) = wrap_connection(connection) else {

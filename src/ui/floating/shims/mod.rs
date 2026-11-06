@@ -1,6 +1,6 @@
 //! Platform shims over raw window handles: runtime click-through and
-//! always-on-top on live floats. Removal: delete this directory and drop
-//! `mod shims;` plus the re-exports from `src/ui/floating/mod.rs`.
+//! always-on-top on live floats. Removal: delete this directory, `mod shims;`
+//! in `src/ui/floating/mod.rs`, and the `shims::` uses in `spawn.rs`.
 
 use gpui_kit::Window;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -15,7 +15,6 @@ mod windows;
 #[cfg(target_os = "linux")]
 mod x11;
 
-#[cfg(not(target_family = "wasm"))]
 pub(crate) const LOG: &str = "gpui_starter::ui::floating";
 
 pub(crate) fn set_click_through(window: &mut Window, enabled: bool) -> bool {
@@ -29,9 +28,8 @@ pub(crate) fn set_click_through(window: &mut Window, enabled: bool) -> bool {
         #[cfg(target_os = "windows")]
         RawWindowHandle::Win32(h) => windows::set_click_through(&h, enabled),
         #[cfg(target_os = "linux")]
-        RawWindowHandle::Xcb(h) => xcb_display(window).is_some_and(|(conn, screen)| {
-            x11::set_click_through(h.window.get(), conn, screen, enabled)
-        }),
+        RawWindowHandle::Xcb(h) => xcb_display(window)
+            .is_some_and(|(conn, _)| x11::set_click_through(h.window.get(), conn, enabled)),
         RawWindowHandle::Wayland(_) => {
             window.set_input_region(if enabled { Some(&[]) } else { None });
             true

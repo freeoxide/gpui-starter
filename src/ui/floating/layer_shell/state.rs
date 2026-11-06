@@ -23,7 +23,7 @@ pub(crate) fn record_unsupported(err: &anyhow::Error, cx: &mut App) {
 /// Called once from `floating::init`. Writes the two capability rows for
 /// the current platform and session; idempotent.
 pub fn init(cx: &mut App) {
-    #[cfg(target_family = "wasm")]
+    #[cfg(not(target_os = "linux"))]
     {
         set_unsupported(
             Capability::LAYER_SHELL_WIDGETS,
@@ -36,10 +36,33 @@ pub fn init(cx: &mut App) {
             cx,
         );
     }
-    #[cfg(not(target_family = "wasm"))]
-    {
-        #[cfg(not(target_os = "linux"))]
-        {
+    #[cfg(target_os = "linux")]
+    match cx.compositor_name() {
+        "Wayland" => {
+            crate::capabilities::set(
+                Capability::LAYER_SHELL_WIDGETS,
+                crate::capabilities::CapabilityStatus::supported_enabled(),
+                cx,
+            );
+            crate::capabilities::set(
+                Capability::LAYER_SHELL_INPUT_PASSTHROUGH,
+                crate::capabilities::CapabilityStatus::supported_enabled(),
+                cx,
+            );
+        }
+        "X11" => {
+            set_unsupported(
+                Capability::LAYER_SHELL_WIDGETS,
+                "layer shell requires a Wayland session; X11 uses the floating toolkit",
+                cx,
+            );
+            set_unsupported(
+                Capability::LAYER_SHELL_INPUT_PASSTHROUGH,
+                "input regions are Wayland-only; X11 click-through is plan 25's XShape shim",
+                cx,
+            );
+        }
+        _ => {
             set_unsupported(
                 Capability::LAYER_SHELL_WIDGETS,
                 "Wayland layer-shell only",
@@ -50,45 +73,6 @@ pub fn init(cx: &mut App) {
                 "Wayland layer-shell only",
                 cx,
             );
-        }
-        #[cfg(target_os = "linux")]
-        match cx.compositor_name() {
-            "Wayland" => {
-                crate::capabilities::set(
-                    Capability::LAYER_SHELL_WIDGETS,
-                    crate::capabilities::CapabilityStatus::supported_enabled(),
-                    cx,
-                );
-                crate::capabilities::set(
-                    Capability::LAYER_SHELL_INPUT_PASSTHROUGH,
-                    crate::capabilities::CapabilityStatus::supported_enabled(),
-                    cx,
-                );
-            }
-            "X11" => {
-                set_unsupported(
-                    Capability::LAYER_SHELL_WIDGETS,
-                    "layer shell requires a Wayland session; X11 uses the floating toolkit",
-                    cx,
-                );
-                set_unsupported(
-                    Capability::LAYER_SHELL_INPUT_PASSTHROUGH,
-                    "input regions are Wayland-only; X11 click-through is plan 25's XShape shim",
-                    cx,
-                );
-            }
-            _ => {
-                set_unsupported(
-                    Capability::LAYER_SHELL_WIDGETS,
-                    "Wayland layer-shell only",
-                    cx,
-                );
-                set_unsupported(
-                    Capability::LAYER_SHELL_INPUT_PASSTHROUGH,
-                    "Wayland layer-shell only",
-                    cx,
-                );
-            }
         }
     }
 }

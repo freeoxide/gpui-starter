@@ -24,9 +24,8 @@ pub struct NotchGeometry {
     pub camera_housing: Option<Bounds<Pixels>>,
 }
 
-/// Platform facts are computed on first use, then cached: render-time callers
-/// must not pay per-frame native queries (NSScreen on macOS). Display changes
-/// drop the cache.
+/// Caches platform facts so render-time callers skip per-frame native queries
+/// (NSScreen on macOS); display changes drop the cache.
 #[derive(Default)]
 struct PlatformInfoCache(RefCell<Option<FloatingPlatformInfo>>);
 

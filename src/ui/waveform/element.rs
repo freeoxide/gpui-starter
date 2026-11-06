@@ -15,9 +15,8 @@ const GRID_TARGET_LINES: usize = 6;
 const PEAK_OPACITY: f32 = 0.45;
 const RMS_OPACITY: f32 = 0.9;
 
-/// Mounts the waveform. Fills its parent. Non-interactive: no hitbox, no
-/// pointer handling, no a11y node in v1. The mounting view must
-/// `cx.observe(&state, |_, _, cx| cx.notify())` so refreshes repaint.
+/// Fills its parent; no hitbox, pointer handling, or a11y node. The mounting view
+/// must `cx.observe(&state, |_, _, cx| cx.notify())` so refreshes repaint.
 pub struct Waveform {
     id: ElementId,
     state: Entity<WaveformState>,
@@ -33,9 +32,8 @@ impl Waveform {
         }
     }
 
-    /// Overrides the theme colorway for every lane and the spectrum bars.
-    /// Defaults: mono lane and bars `theme.primary`, stereo lanes
-    /// `theme.chart_1`/`theme.chart_2`.
+    /// Overrides the theme colorway for every lane and the spectrum bars. Defaults:
+    /// mono lane and bars `theme.primary`, stereo lanes `theme.chart_1`/`theme.chart_2`.
     pub fn accent(mut self, color: impl Into<Hsla>) -> Self {
         self.accent = Some(color.into());
         self
@@ -206,9 +204,8 @@ fn build_line_path(
     builder.build().ok()
 }
 
-/// Per-element paint scratch held in window keyed state so it outlives the
-/// element value: gridline xs and line paths rebuild only when their key
-/// changes, everything else reuses the allocations.
+/// Per-element paint scratch held in window keyed state so it outlives the element
+/// value; gridline xs and line paths rebuild only when their key changes.
 #[derive(Default)]
 struct PaintCaches {
     grid_key: Option<u64>,
@@ -320,14 +317,12 @@ impl Element for WaveformElement {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let id = self.id.clone();
-        let state = self.state.clone();
-        state.update(cx, |state, cx| {
+        self.state.update(cx, |state, cx| {
             window.with_content_mask(Some(ContentMask { bounds }), |window| {
                 let scale = window.scale_factor();
                 window.paint_quad(fill(bounds, cx.theme().background));
                 let columns = ((bounds.size.width.as_f32() * scale).round() as usize).max(1);
-                let caches = PaintCaches::for_paint((id.clone(), "caches"), window, cx);
+                let caches = PaintCaches::for_paint((self.id.clone(), "caches"), window, cx);
                 caches.update(cx, |caches, cx| {
                     let window_secs = state.window().as_secs_f32();
                     let theme = cx.theme();

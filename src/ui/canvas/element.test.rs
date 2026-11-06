@@ -38,7 +38,7 @@ fn mounted_host(cx: &mut TestAppContext) -> (Entity<CanvasState>, VisualTestCont
     (state, cx)
 }
 
-fn rect_doc_bounds() -> Bounds<gpui_kit::Pixels> {
+fn rect_doc_bounds() -> Bounds<Pixels> {
     Bounds {
         origin: point(px(100.), px(100.)),
         size: size(px(100.), px(100.)),
@@ -57,7 +57,7 @@ fn seed_rect(cx: &mut VisualTestContext, state: &Entity<CanvasState>) -> ShapeId
     })
 }
 
-fn assert_px_eq(actual: gpui_kit::Pixels, expected: gpui_kit::Pixels) {
+fn assert_px_eq(actual: Pixels, expected: Pixels) {
     assert!(
         (actual.as_f32() - expected.as_f32()).abs() < 0.01,
         "expected ~{expected:?}, got {actual:?}"
@@ -334,9 +334,8 @@ fn path_vertices_scale_by_zoom_around_the_doc_bounds_origin(cx: &mut TestAppCont
     state.update(&mut cx, |s, cx| s.set_zoom(2., cx));
     cx.update(|window, cx| window.draw(cx).clear(cx));
     let path = stored_stroke_path(&mut cx, 0).expect("scaled stroke cached");
-    // Doc points (10,10)-(60,60) with a half-stroke origin of (9,9) must land
-    // at ((p - origin) * 2) = (2,2)-(102,102); the 4px screen stroke and its
-    // joins may extend the bounds by only a few pixels either way.
+    // Doc points (10,10)-(60,60) minus the half-stroke origin (9,9), times zoom 2,
+    // land at (2,2)-(102,102); the 4px stroke and its joins add a few px at most.
     let b = path.bounds;
     for corner in [
         point(px(2.), px(2.)),

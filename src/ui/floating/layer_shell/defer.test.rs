@@ -47,13 +47,13 @@ async fn spawns_anyway_once_the_retry_budget_is_spent(cx: &mut TestAppContext) {
         cx.run_until_parked();
     }
     assert_eq!(
-        cx.read(|cx| floating_snapshot(cx)).len(),
+        cx.read(floating_snapshot).len(),
         0,
         "nine polls spent; the budget still holds one"
     );
     cx.executor().advance_clock(DISPLAY_POLL_INTERVAL);
     cx.run_until_parked();
-    let snapshot = cx.read(|cx| floating_snapshot(cx));
+    let snapshot = cx.read(floating_snapshot);
     assert_eq!(snapshot.len(), 1, "the exhausted budget must still spawn");
     assert_eq!(snapshot[0].id.0, "budget");
     assert!(matches!(snapshot[0].handle, FloatingHandle::Native(_)));

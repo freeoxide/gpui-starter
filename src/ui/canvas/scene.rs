@@ -80,7 +80,7 @@ pub enum CanvasShape {
         bounds: Bounds<Pixels>,
         style: ShapeStyle,
     },
-    /// Isoceles triangle inside `bounds`: one apex at top-center, two
+    /// Isosceles triangle inside `bounds`: one apex at top-center, two
     /// corners at the bottom-left/bottom-right.
     Triangle {
         bounds: Bounds<Pixels>,
@@ -105,11 +105,8 @@ pub enum CanvasShape {
     },
 }
 
-/// Measures `text` with the same default-font run text shapes paint with, so
-/// stored bounds match the painted glyphs.
-///
-/// `shape_line` lives on `WindowTextSystem`; a fresh one over the app's
-/// `TextSystem` shapes identically to the per-window instance paint uses.
+/// Measures `text` in the default-font run text shapes paint with, so bounds match
+/// the glyphs. Any `WindowTextSystem` over the app's `TextSystem` measures alike.
 pub fn measure_text(text_system: &WindowTextSystem, text: &str, font_size: Pixels) -> Size<Pixels> {
     let run = TextRun {
         len: text.len(),
@@ -194,9 +191,8 @@ impl CanvasShape {
         Self::Image { bounds, image }
     }
 
-    /// Conservative document-space bounds; stroked shapes include the
-    /// centered stroke's width/2 overhang. Text bounds are the size
-    /// measured at creation.
+    /// Conservative document-space bounds, including half the stroke width on
+    /// stroked shapes; text uses the size measured at creation.
     pub fn doc_bounds(&self) -> Bounds<Pixels> {
         match self {
             Self::Rect { bounds, style }

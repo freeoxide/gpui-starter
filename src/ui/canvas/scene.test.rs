@@ -161,9 +161,6 @@ fn translate_moves_every_variant() {
     assert_px_eq(position.x, px(5.));
 }
 
-// Image is the one variant needing a RenderImage, whose only constructor
-// takes image::Frame; `image` sits in the linux/windows Cargo tables only.
-#[cfg(any(target_os = "windows", target_os = "linux"))]
 #[test]
 fn translate_and_doc_bounds_cover_the_image_variant() {
     use std::sync::Arc;
@@ -233,9 +230,8 @@ fn triangle_hit_test_accepts_interior_and_edges_but_rejects_notches() {
     // Inside the bounds but in the empty top-left/top-right notches.
     assert!(!shape.hit_test(point(px(5.), px(5.)), tolerance));
     assert!(!shape.hit_test(point(px(95.), px(5.)), tolerance));
-    // Across the left slanted edge, within and beyond tolerance. The edge
-    // runs (50,0)-(0,50) with the notch toward the origin; the points sit
-    // on its perpendicular through (25,25).
+    // Across the left edge (50,0)-(0,50), within and beyond tolerance, on its
+    // perpendicular through (25,25) toward the origin-side notch.
     assert!(shape.hit_test(point(px(23.6), px(23.6)), tolerance));
     assert!(!shape.hit_test(point(px(20.8), px(20.8)), tolerance));
     assert!(!shape.hit_test(point(px(50.), px(56.)), tolerance));
@@ -280,8 +276,7 @@ fn path_hit_test_covers_the_painted_stroke_width() {
         stroke(px(6.)),
     );
     let tolerance = px(4.);
-    // 6px off the centerline is inside the painted ink (half width 3) plus
-    // tolerance; the old centerline-only test rejected it.
+    // 6px off the centerline is within half the stroke (3) plus tolerance (4).
     assert!(shape.hit_test(point(px(50.), px(6.)), tolerance));
     assert!(!shape.hit_test(point(px(50.), px(7.5)), tolerance));
 }

@@ -8,9 +8,8 @@ use crate::ui::floating::{FloatingSpec, spawn_floating};
 const DISPLAY_POLL_BUDGET: usize = 10;
 const DISPLAY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
-/// Spawn a float once `cx.displays()` is enumerable (zed#46378: the list
-/// stays empty until a first frame renders). Immediate when non-empty;
-/// else 100 ms retries, max 10, then spawns anyway. Never panics.
+/// Spawn a float once `cx.displays()` is non-empty (zed#46378: empty until a first frame
+/// renders); retries every 100 ms, at most 10 times, then spawns anyway. Never panics.
 pub fn spawn_floating_after_displays(
     spec: FloatingSpec,
     build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,

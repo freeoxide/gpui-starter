@@ -124,9 +124,8 @@ pub(crate) fn plan(spec: &FloatingSpec, cx: &App) -> LayerSpawnPlan {
     }
 }
 
-/// True when the error is the compositor's layer-shell rejection:
-/// downcasts to `LayerShellNotSupportedError`, or matches the Display
-/// text in case a future context wrap breaks the downcast chain.
+/// True when the error is the compositor's layer-shell rejection; the Display-text
+/// match backs up the downcast in case a future context wrap breaks the chain.
 pub fn is_layer_shell_unsupported(err: &anyhow::Error) -> bool {
     err.downcast_ref::<LayerShellNotSupportedError>().is_some()
         || err.to_string().contains("zwlr_layer_shell_v1")

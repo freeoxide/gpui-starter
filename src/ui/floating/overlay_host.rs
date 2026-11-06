@@ -83,11 +83,7 @@ impl OverlayFloatHost {
     fn render_pane(&self, pane: OverlayPane, viewport: Size<Pixels>, cx: &App) -> AnyElement {
         let id = pane.id.clone();
         let origin = clamped_origin(pane.bounds, viewport);
-        let body = div()
-            .flex_1()
-            .min_h_0()
-            .overflow_hidden()
-            .child(pane.view.clone());
+        let body = div().flex_1().min_h_0().overflow_hidden().child(pane.view);
         let mut pane_el = v_flex()
             .id(SharedString::from(format!("floating-pane-{}", pane.id.0)))
             .absolute()
@@ -112,9 +108,7 @@ impl OverlayFloatHost {
         if pane.chromeless {
             pane_el = pane_el.child(body);
         } else {
-            pane_el = pane_el
-                .child(float_header(&pane.id, &pane.title, cx))
-                .child(body);
+            pane_el = pane_el.child(float_header(&pane.title, cx)).child(body);
         }
         if let Some(handle) = self.pane_handles.get(&pane.id) {
             pane_el = pane_el.track_focus(handle);

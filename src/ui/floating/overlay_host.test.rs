@@ -9,10 +9,9 @@ use gpui_kit::{
     TestAppContext, VisualTestContext, Window, div, point, px, size,
 };
 
-use super::super::spec::FloatingSpec;
-use super::FloatingWindowId;
 use super::OverlayFloatHost;
 use super::registry::{self, FloatingHandle};
+use crate::ui::floating::{FloatSurface, FloatingSpec, FloatingWindowId};
 
 struct Blank;
 
@@ -44,7 +43,7 @@ fn overlay_entry(
         handle: FloatingHandle::Overlay(FloatingWindowId(id.into())),
         build: Rc::new(|_, cx: &mut App| -> AnyView { cx.new(|_| Blank).into() }),
         view: Some(view),
-        surface: super::super::FloatSurface::Window,
+        surface: FloatSurface::Window,
     }
 }
 
@@ -118,9 +117,8 @@ async fn panes_paint_at_the_same_absolute_bounds_alone_and_inside_the_app_column
     draw_window(cx, column_window.into());
     let column_bounds = *slot.borrow();
 
-    // One registry feeds both windows; the pane must paint at the same
-    // absolute bounds in each, so the app column cannot squash the host's
-    // absolute layer.
+    // One registry feeds both windows; equal absolute bounds in each prove the
+    // app column cannot squash the host's absolute layer.
     assert_eq!(
         alone_bounds,
         Some(Bounds {
@@ -282,7 +280,7 @@ async fn escape_dismisses_a_chromeless_overlay_pane(cx: &mut TestAppContext) {
     cx.simulate_click(point(px(72.), px(40.)), Modifiers::none());
     cx.simulate_keystrokes("escape");
     assert!(
-        cx.read(|cx| registry::overlay_panes(cx)).is_empty(),
+        cx.read(registry::overlay_panes).is_empty(),
         "Esc must dismiss the chromeless pane"
     );
 }
@@ -308,7 +306,7 @@ async fn a_focus_requested_pane_takes_the_keyboard_and_hands_it_back_on_close(
 
     cx.simulate_keystrokes("escape");
     assert!(
-        cx.read(|cx| registry::overlay_panes(cx)).is_empty(),
+        cx.read(registry::overlay_panes).is_empty(),
         "a focus-requested pane must take the keyboard without a click first"
     );
     cx.update(|window, cx| window.draw(cx).clear(cx));

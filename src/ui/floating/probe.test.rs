@@ -31,19 +31,19 @@ async fn probe_facts_agree_with_the_capability_rows(cx: &TestAppContext) {
 #[gpui_kit::test]
 async fn probe_fills_the_cache_once_init_ran(cx: &TestAppContext) {
     cx.update(init);
-    let first = cx.read(|cx| probe(cx));
+    let first = cx.read(probe);
     let filled = cx.read(|cx| {
         cx.try_global::<PlatformInfoCache>()
             .is_some_and(|cache| cache.0.borrow().is_some())
     });
     assert!(filled, "first probe() after init must populate the cache");
-    assert_eq!(cx.read(|cx| probe(cx)), first);
+    assert_eq!(cx.read(probe), first);
 }
 
 #[gpui_kit::test]
 async fn init_registers_the_four_capability_rows(cx: &TestAppContext) {
     cx.update(init);
-    let snapshot = cx.read(|cx| crate::capabilities::snapshot(cx));
+    let snapshot = cx.read(crate::capabilities::snapshot);
     for capability in [
         Capability::FLOATING_WINDOWS,
         Capability::FLOATING_ALWAYS_ON_TOP,

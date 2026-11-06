@@ -1,5 +1,5 @@
 // No glob `use gpui_kit::*` here: it would import gpui's `test` proc-macro and
-// shadow this file's `#[gpui_kit::test]` attribute.
+// shadow the built-in `#[test]` that `#[gpui_kit::test]` expands to.
 use gpui_kit::prelude::*;
 use gpui_kit::{AppContext, Entity, Quad, TestAppContext, VisualTestContext, Window, px, size};
 

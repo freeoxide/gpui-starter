@@ -69,8 +69,8 @@ pub(crate) fn remove_entry(id: &FloatingWindowId, cx: &mut App) -> Option<Regist
 pub(crate) fn set_entry_level(handle: &FloatingHandle, level: FloatLevel, cx: &mut App) {
     cx.default_global::<FloatingWindowRegistry>()
         .entries
-        .iter_mut()
-        .for_each(|(_, entry)| {
+        .values_mut()
+        .for_each(|entry| {
             let same = match (&entry.handle, handle) {
                 (FloatingHandle::Native(a), FloatingHandle::Native(b)) => {
                     a.window_id() == b.window_id()

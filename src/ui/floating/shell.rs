@@ -5,11 +5,9 @@ use gpui_kit::{prelude::*, *};
 
 #[cfg(not(target_family = "wasm"))]
 use super::DismissFloating;
-use super::spec::FloatingWindowId;
 
 #[cfg(not(target_family = "wasm"))]
 pub(crate) struct FloatingShell {
-    id: FloatingWindowId,
     title: SharedString,
     content: AnyView,
     chromeless: bool,
@@ -19,7 +17,6 @@ pub(crate) struct FloatingShell {
 #[cfg(not(target_family = "wasm"))]
 impl FloatingShell {
     pub(crate) fn new(
-        id: FloatingWindowId,
         title: SharedString,
         content: AnyView,
         chromeless: bool,
@@ -32,7 +29,6 @@ impl FloatingShell {
         let deferred_focus = focus_handle.clone();
         window.defer(cx, move |window, cx| deferred_focus.focus(window, cx));
         Self {
-            id,
             title,
             content,
             chromeless,
@@ -68,7 +64,7 @@ impl Render for FloatingShell {
                 .child(div().size_full().child(self.content.clone()))
         } else {
             shell
-                .child(float_header(&self.id, &self.title, cx))
+                .child(float_header(&self.title, cx))
                 .child(div().size_full().child(self.content.clone()))
         }
     }
@@ -83,7 +79,7 @@ impl Focusable for FloatingShell {
 
 /// The float header carries the title and the drag affordance only; no
 /// window-control button (widgets are chromeless; Esc dismisses).
-pub(crate) fn float_header(_id: &FloatingWindowId, title: &SharedString, cx: &App) -> Div {
+pub(crate) fn float_header(title: &SharedString, cx: &App) -> Div {
     let header = h_flex()
         .w_full()
         .h_8()

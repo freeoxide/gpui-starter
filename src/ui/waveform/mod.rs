@@ -2,7 +2,7 @@
 //! public surface; features mount it as a child element, nothing routes to
 //! it. Removal = delete this directory, remove the `pub mod waveform;` line
 //! from src/ui/mod.rs (sibling module lines stay), and remove the
-//! rtrb/rustfft entries plus regenerated Cargo.lock in Cargo.toml.
+//! rtrb/rustfft entries from Cargo.toml, then regenerate Cargo.lock.
 
 mod element;
 mod history;

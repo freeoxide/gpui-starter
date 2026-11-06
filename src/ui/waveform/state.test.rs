@@ -71,7 +71,7 @@ fn refresh_integrates_stereo_data_and_builds_spectrum(cx: &mut TestAppContext) {
         (frame.bars()[ix], frame.bar_band(ix).unwrap())
     });
     assert!(peak_height > 0., "spectrum has a nonzero peak");
-    assert!(band.0 <= 440. && 440. <= band.1, "band {:?}", band);
+    assert!(band.0 <= 440. && 440. <= band.1, "band {band:?}");
 }
 
 #[gpui_kit::test]

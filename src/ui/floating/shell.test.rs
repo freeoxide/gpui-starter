@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use gpui_kit::component::button::Button;
@@ -102,7 +102,7 @@ impl Render for Blank {
 }
 
 struct ClickBody {
-    clicks: Rc<std::cell::Cell<u32>>,
+    clicks: Rc<Cell<u32>>,
 }
 
 impl Render for ClickBody {
@@ -124,14 +124,7 @@ fn open_shell_window(
 ) -> VisualTestContext {
     let window = cx.open_window(size(px(200.), px(120.)), |window, cx| {
         let content: AnyView = cx.new(|_| ProbeView { slot }).into();
-        FloatingShell::new(
-            FloatingWindowId(id.into()),
-            id.into(),
-            content,
-            chromeless,
-            window,
-            cx,
-        )
+        FloatingShell::new(id.into(), content, chromeless, window, cx)
     });
     let mut cx = VisualTestContext::from_window(window.into(), cx);
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -166,18 +159,11 @@ async fn a_chromeless_shell_hands_the_whole_window_to_the_body(cx: &mut TestAppC
 #[gpui_kit::test]
 async fn clicks_inside_a_chromeless_body_reach_the_content(cx: &mut TestAppContext) {
     cx.update(gpui_kit::init);
-    let clicks = Rc::new(std::cell::Cell::new(0u32));
+    let clicks = Rc::new(Cell::new(0u32));
     let window = cx.open_window(size(px(200.), px(120.)), |window, cx| {
         let clicks = clicks.clone();
         let content: AnyView = cx.new(|_| ClickBody { clicks }).into();
-        FloatingShell::new(
-            FloatingWindowId("interactive".into()),
-            "interactive".into(),
-            content,
-            true,
-            window,
-            cx,
-        )
+        FloatingShell::new("interactive".into(), content, true, window, cx)
     });
     let mut cx = VisualTestContext::from_window(window.into(), cx);
     cx.simulate_click(point(px(30.), px(12.)), Modifiers::none());
@@ -211,7 +197,7 @@ async fn escape_dismisses_a_chromeless_float_spawned_with_the_flag(cx: &mut Test
     let mut cx = VisualTestContext::from_window(window, cx);
     cx.simulate_keystrokes("escape");
     assert!(
-        cx.read(|cx| floating_snapshot(cx)).is_empty(),
+        cx.read(floating_snapshot).is_empty(),
         "Esc must still dismiss with the shell chrome gone, with no click first"
     );
 }

@@ -104,9 +104,8 @@ pub(crate) fn paint_grid(
     }
 }
 
-/// Smallest dash length handed to gpui, in screen pixels. Its dash walker
-/// divides by the array length and never advances past non-positive lengths,
-/// so shorter patterns must not reach it (empty input means no dashing).
+/// Smallest dash handed to gpui, in screen px: its dash walker stalls on
+/// non-positive lengths and divides by the array length, so empty arrays skip it.
 const MIN_SCREEN_DASH: f32 = 1.;
 
 fn stroke_builder(stroke: &StrokeStyle, zoom: f32) -> PathBuilder {
@@ -140,9 +139,8 @@ fn build_path(builder: PathBuilder) -> Option<Path<Pixels>> {
     }
 }
 
-/// gpui tessellates each built path into a u16 index buffer, capping one
-/// build at u16::MAX vertices; strokes longer than this are painted as
-/// overlapping sub-stroke chunks so no single build can overflow.
+/// Per-build point cap: gpui tessellates into u16 index buffers, so longer
+/// strokes paint as overlapping chunks that cannot overflow one build.
 const MAX_STROKE_BUILD_POINTS: usize = 2048;
 
 /// Chunk ranges for an oversized stroke: each chunk starts at the previous
@@ -441,9 +439,8 @@ pub(crate) fn paint_shape(
     }
 }
 
-/// Selection slots share the slot vector with document and overlay shapes;
-/// mixing the id into the generation keeps a slot from satisfying a
-/// generation another domain stored there.
+/// Selection slots share the vector with document and overlay shapes; mixing in
+/// the id stops a slot matching a generation another domain stored there.
 fn selection_generation(doc_generation: u64, id: ShapeId) -> u64 {
     doc_generation ^ id.0.wrapping_mul(0x9E37_79B9_7F4A_7C15)
 }

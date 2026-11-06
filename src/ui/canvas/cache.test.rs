@@ -32,7 +32,7 @@ fn path_builds_once_per_generation_and_not_on_origin_change() {
         let content = CanvasShape::rect(
             gpui_kit::Bounds {
                 origin: point(px(0.), px(0.)),
-                size: gpui_kit::size(px(10.), px(10.)),
+                size: size(px(10.), px(10.)),
             },
             ShapeStyle::default(),
         );
@@ -72,14 +72,14 @@ fn path_rebuilds_when_generation_and_content_both_change() {
     let content = CanvasShape::rect(
         gpui_kit::Bounds {
             origin: point(px(0.), px(0.)),
-            size: gpui_kit::size(px(10.), px(10.)),
+            size: size(px(10.), px(10.)),
         },
         ShapeStyle::default(),
     );
     let moved = CanvasShape::rect(
         gpui_kit::Bounds {
             origin: point(px(4.), px(0.)),
-            size: gpui_kit::size(px(10.), px(10.)),
+            size: size(px(10.), px(10.)),
         },
         ShapeStyle::default(),
     );
@@ -111,7 +111,7 @@ fn returned_vertices_differ_by_exactly_the_origin_delta() {
     let content = CanvasShape::rect(
         gpui_kit::Bounds {
             origin: point(px(0.), px(0.)),
-            size: gpui_kit::size(px(10.), px(10.)),
+            size: size(px(10.), px(10.)),
         },
         ShapeStyle::default(),
     );
@@ -237,7 +237,7 @@ fn shape_key_is_stable_for_identical_input() {
     let shape = CanvasShape::rect(
         gpui_kit::Bounds {
             origin: point(px(1.), px(2.)),
-            size: gpui_kit::size(px(30.), px(40.)),
+            size: size(px(30.), px(40.)),
         },
         ShapeStyle::default(),
     );
@@ -249,7 +249,7 @@ fn triangle_shape_key_changes_with_bounds_stroke_and_zoom() {
     let base = CanvasShape::triangle(
         gpui_kit::Bounds {
             origin: point(px(0.), px(0.)),
-            size: gpui_kit::size(px(10.), px(10.)),
+            size: size(px(10.), px(10.)),
         },
         ShapeStyle::stroked(StrokeStyle {
             width: px(2.),
@@ -262,7 +262,7 @@ fn triangle_shape_key_changes_with_bounds_stroke_and_zoom() {
     let resized = CanvasShape::triangle(
         gpui_kit::Bounds {
             origin: point(px(0.), px(0.)),
-            size: gpui_kit::size(px(20.), px(10.)),
+            size: size(px(20.), px(10.)),
         },
         ShapeStyle::stroked(StrokeStyle {
             width: px(2.),

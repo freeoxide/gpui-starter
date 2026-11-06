@@ -2,8 +2,8 @@
 //! revert `pub mod floating;` in `src/ui/mod.rs`, the `floating::init(cx)`
 //! line in `src/app/init.rs`, the `floating_host` field/child in
 //! `src/shell/root/app_root/{state,render}.rs`, the gallery section hooks in
-//! `src/gallery/sections/overlays/`, the `floating_close` locale keys, and the
-//! macOS `NSScreen` feature in `Cargo.toml`.
+//! `src/gallery/sections/overlays/`, and the macOS `NSScreen` feature in
+//! `Cargo.toml`.
 
 use gpui_kit::{Action, App, KeyBinding};
 

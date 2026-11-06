@@ -23,9 +23,8 @@ pub struct CanvasScrollEvent {
     pub modifiers: Modifiers,
 }
 
-/// Router-computed snapshot handed to tools each event. `viewport` is viewport
-/// space: origin (0,0), element size. `hit` is populated for pointer_down
-/// only; moves and scrolls never pay the document-wide hit-test.
+/// Per-event tool snapshot. `viewport` is element-local at origin (0,0); `hit` is
+/// set on pointer_down only, sparing moves and scrolls the document hit-test.
 #[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub struct ToolContext {
@@ -34,9 +33,8 @@ pub struct ToolContext {
     pub hit: Option<ShapeId>,
 }
 
-/// Pluggable tool. `state` is the live canvas state: call the ordinary
-/// mutators on it (`state.pan_by(d, cx)`, ...); re-entering the entity via
-/// `cx.entity().update(cx, ..)` panics (`GPUI/app/entity_map.rs:160-165`).
+/// Pluggable tool, called inside the state's update: mutate `state` directly
+/// (`state.pan_by(d, cx)`); re-entering via `cx.entity().update(cx, ..)` panics.
 pub trait CanvasTool: 'static {
     /// Stable identifier ("pan", "select", "brush"); shown by diagnostics
     /// only, never UI copy.

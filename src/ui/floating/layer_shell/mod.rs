@@ -16,12 +16,9 @@ pub(crate) mod wayland;
 
 pub use defer::spawn_floating_after_displays;
 pub use spec::{FloatSurface, LayerShellSpec, WidgetLayer};
+pub use state::init;
 #[cfg(target_os = "linux")]
 pub use wayland::is_layer_shell_unsupported;
-
-/// Called once from `floating::init`. Registers the two capability rows
-/// for the current platform and session; idempotent.
-pub use state::init;
 
 pub(crate) const LOG: &str = "gpui_starter::ui::floating::layer_shell";
 

@@ -1,6 +1,6 @@
-use gpui_kit::*;
-
 use std::sync::atomic::{AtomicU64, Ordering};
+
+use gpui_kit::*;
 
 use super::geometry::CanvasTransform;
 use super::scene::{CanvasDocument, CanvasShape, LayerId, ShapeId};
@@ -53,9 +53,8 @@ pub enum CanvasEvent {
     ToolChanged,
 }
 
-/// Retained canvas state. Mount with `cx.new(|_| CanvasState::new())` and
-/// render with `Canvas::new(id, entity)`; mutations repaint only when the
-/// mounting view observes (`Canvas::new` documents the exact wiring).
+/// Retained canvas state, created with `cx.new(|_| CanvasState::new())` and
+/// mounted via `Canvas`, whose docs give the observe wiring repaints need.
 pub struct CanvasState {
     document: CanvasDocument,
     transform: CanvasTransform,
@@ -295,9 +294,8 @@ impl CanvasState {
         cx.notify();
     }
 
-    /// Transient shape painted above the document, below the selection
-    /// outline. Not hit-testable and not part of the document; `set_tool`
-    /// clears it.
+    /// Transient shape painted between the document and the selection outline;
+    /// never hit-tested or stored in the document. `set_tool` clears it.
     pub fn set_tool_overlay(&mut self, overlay: Option<CanvasShape>, cx: &mut Context<Self>) {
         self.overlay = overlay;
         self.overlay_revision += 1;

@@ -59,11 +59,8 @@ pub fn bounded_list_height(item_sizes: &[Size<Pixels>], gap: Pixels, max_height:
     px((content_h + gap_total).min(max_height.as_f32()))
 }
 
-/// Precondition: items pinned to declared heights.
-///
-/// An inner node carries `Role::List` because the scrollable list element has
-/// no role of its own; items get their `Role::ListItem` from
-/// [`virtual_list_item`]. The container stays a plain `Div` for callers.
+/// Precondition: items pinned to declared heights. `Role::List` sits on an inner
+/// node (the kit list has none); items get `Role::ListItem` from [`virtual_list_item`].
 pub fn render_virtual_list<R, V>(
     cx: &mut Context<V>,
     id: impl Into<ElementId>,
@@ -106,11 +103,8 @@ where
     v_flex().relative().w_full().h(list_height).child(region)
 }
 
-/// A virtualized-list row: `Role::ListItem` announcing "item N of M" — the
-/// position 0-based here, the setsize inherited from the nearest ancestor
-/// `Role::List`. The label is required because plain text children produce no
-/// accessibility nodes; render the visible content inside and pass the same
-/// text as `label`.
+/// A `Role::ListItem` row at 0-based `index`; its setsize comes from the nearest
+/// `Role::List` ancestor. Text children get no a11y node, so pass that text as `label`.
 pub fn virtual_list_item(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,

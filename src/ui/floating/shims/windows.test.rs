@@ -1,5 +1,6 @@
-use super::*;
 use windows::Win32::UI::WindowsAndMessaging::WS_EX_TOPMOST;
+
+use super::*;
 
 #[test]
 fn with_ex_bits_sets_both_bits_on_a_zero_word() {

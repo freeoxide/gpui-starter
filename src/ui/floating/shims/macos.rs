@@ -7,10 +7,8 @@ use raw_window_handle::AppKitWindowHandle;
 const NS_POPUP_WINDOW_LEVEL: NSWindowLevel = 101;
 
 fn ns_window(handle: &AppKitWindowHandle) -> Option<Retained<NSWindow>> {
-    // SAFETY: ns_view is the live GPUIView pointer gpui's own
-    // HasWindowHandle impl hands out; shims run on the main thread inside
-    // AnyWindowHandle::update, and gpui keeps the view alive for the
-    // window's lifetime.
+    // SAFETY: ns_view is the live GPUIView from gpui's HasWindowHandle impl, kept alive for
+    // the window's lifetime; shims run on the main thread inside AnyWindowHandle::update.
     let view: &NSView = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
     view.window()
 }

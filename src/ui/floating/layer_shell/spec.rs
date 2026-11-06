@@ -20,9 +20,8 @@ pub enum FloatSurface {
     LayerShell,
 }
 
-/// Caller's request for a Wayland layer-shell surface. Pure data; compiles
-/// on every platform and is inert (ignored, one info log per process) off
-/// Wayland sessions.
+/// Caller's request for a Wayland layer-shell surface. Compiles everywhere; off
+/// Wayland sessions it is ignored with one info log per process.
 #[derive(Clone, Debug, Default)]
 pub struct LayerShellSpec {
     layer: WidgetLayer,
