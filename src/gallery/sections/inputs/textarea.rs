@@ -336,12 +336,14 @@ impl Render for TextareaSection {
                                 Textarea::new(&self.composer)
                                     .with_size(size)
                                     .on_paste(move |item, _, cx| {
+                                        // Only the metadata is displayed, so the
+                                        // screenshot bytes are never cloned.
                                         let images: Vec<_> = item
                                             .entries()
                                             .iter()
                                             .filter_map(|entry| match entry {
                                                 ClipboardEntry::Image(image) => {
-                                                    Some(image.clone())
+                                                    Some((image.format, image.bytes.len()))
                                                 }
                                                 _ => None,
                                             })
@@ -350,16 +352,14 @@ impl Render for TextareaSection {
                                             return false;
                                         }
                                         view.update(cx, |this: &mut Self, cx| {
-                                            for image in images {
+                                            for (format, byte_len) in images {
                                                 let id = this.next_attachment_id;
                                                 this.next_attachment_id += 1;
                                                 this.attachments.push(ComposerAttachment {
                                                     id,
                                                     title: format!("pasted-image-{id}.png"),
                                                     detail: format!(
-                                                        "{:?} - {} bytes",
-                                                        image.format,
-                                                        image.bytes.len()
+                                                        "{format:?} - {byte_len} bytes"
                                                     ),
                                                 });
                                             }

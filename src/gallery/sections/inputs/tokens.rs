@@ -193,10 +193,12 @@ impl TokenComposer {
             let start = input.selected_range().start;
             let text = input.value();
             if text[..start].ends_with(|c: char| !c.is_whitespace()) {
-                input.replace(" ", window, cx);
+                // insert() touches only the active cursor; replace() would
+                // delete every extra cursor's selection in a multiline field.
+                input.insert(" ", window, cx);
             }
             input.replace_with_token(reference.sample(), window, cx)?;
-            input.replace(" ", window, cx);
+            input.insert(" ", window, cx);
             input.focus(window, cx);
             Ok::<_, InlineTokenError>(())
         }));

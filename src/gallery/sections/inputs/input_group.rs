@@ -2,7 +2,7 @@
 //! `examples` companion module (merged here; the story crate split the demo
 //! builders out only to keep its own file small).
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, time::Duration};
 
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _, Size,
@@ -189,18 +189,21 @@ impl InputGroupSection {
                     let state = cx.new(|cx| {
                         let state = TextareaState::new(window, cx)
                             .placeholder(placeholder)
-                            .default_value(value)
-                            .rows(3);
+                            .default_value(value);
+                        // auto_grow() replaces the layout mode, so the custom
+                        // key starts at 3 rows through it, not through rows().
                         if id == "custom" {
-                            state.auto_grow(1, 8)
+                            state.auto_grow(3, 8)
                         } else {
-                            state
+                            state.rows(3)
                         }
                     });
                     (id, state)
                 })
                 .collect();
-            let mut subscriptions = [&search, &url, &email]
+            // Only the fields whose values this section renders need Change
+            // to re-render it; the other demo inputs repaint on their own.
+            let mut subscriptions = [&search, &email]
                 .into_iter()
                 .map(|state| {
                     cx.subscribe(state, |_: &mut Self, _, event: &InputEvent, cx| {
@@ -215,6 +218,20 @@ impl InputGroupSection {
                     cx.notify();
                 }
             }));
+            let popover_url = &example_inputs["popover-url"];
+            subscriptions.push(cx.subscribe(popover_url, |_, _, event: &InputEvent, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            }));
+            for key in ["textarea-footer", "textarea-invalid", "comment", "custom"] {
+                let state = &example_textareas[key];
+                subscriptions.push(cx.subscribe(state, |_, _, event: &InputEvent, cx| {
+                    if matches!(event, InputEvent::Change) {
+                        cx.notify();
+                    }
+                }));
+            }
             subscriptions.push(
                 cx.subscribe(&shortcut, |this, state, event: &InputEvent, cx| {
                     if matches!(event, InputEvent::PressEnter { .. }) {
@@ -223,20 +240,6 @@ impl InputGroupSection {
                     }
                 }),
             );
-            for state in example_inputs.values() {
-                subscriptions.push(cx.subscribe(state, |_, _, event: &InputEvent, cx| {
-                    if matches!(event, InputEvent::Change) {
-                        cx.notify();
-                    }
-                }));
-            }
-            for state in example_textareas.values() {
-                subscriptions.push(cx.subscribe(state, |_, _, event: &InputEvent, cx| {
-                    if matches!(event, InputEvent::Change) {
-                        cx.notify();
-                    }
-                }));
-            }
             Self {
                 search,
                 url,
@@ -295,6 +298,15 @@ impl InputGroupSection {
             self.readonly.read(cx).value().to_string(),
         ));
         self.copied = true;
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(Duration::from_secs(2)).await;
+            this.update(cx, |this, cx| {
+                this.copied = false;
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
         cx.notify();
     }
 

@@ -4,7 +4,6 @@
 mod accordion;
 mod breadcrumb;
 mod collapsible;
-mod demo;
 mod group_box;
 mod separator;
 

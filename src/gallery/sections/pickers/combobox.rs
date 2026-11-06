@@ -625,7 +625,10 @@ impl Render for ComboboxSection {
                                             search_query.to_string(),
                                         ]);
 
-                                        drop(items.perform_search(&search_query, window, cx));
+                                        // SearchableVec completes synchronously; hold the Task
+                                        // to scope end so a future async delegate cannot cancel it.
+                                        let _search =
+                                            items.perform_search(&search_query, window, cx);
 
                                         state.update(cx, |state, cx| {
                                             state.set_items(items, window, cx);

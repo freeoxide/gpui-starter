@@ -661,3 +661,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
         InputSection::view(window, cx),
     ));
 }
+
+#[cfg(test)]
+#[path = "input.test.rs"]
+mod input_test;

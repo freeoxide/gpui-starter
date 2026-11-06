@@ -26,3 +26,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     stepper::register(sections, window, cx);
     textarea::register(sections, window, cx);
 }
+
+#[cfg(test)]
+#[path = "mod.test.rs"]
+mod mod_test;

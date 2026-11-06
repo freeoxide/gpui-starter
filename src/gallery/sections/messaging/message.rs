@@ -86,14 +86,14 @@ impl Render for MessageSection {
                             .avatar(
                                 Avatar::new()
                                     .name("Alice Chen")
-                                    .src("https://avatars.githubusercontent.com/u/5518?s=64")
+                                    .src(cover_source())
                                     .size_8(),
                             )
                             .header(MessageHeader::new().child("Alice Chen"))
                             .content(MessageContent::new().bubble(
                                 Bubble::new().with_variant(BubbleVariant::Secondary).child(
-                                    "The sender image falls back to initials when \
-                                             unavailable.",
+                                    "A photo avatar from an embedded source; initials \
+                                             only show when no image source is set.",
                                 ),
                             )),
                     )

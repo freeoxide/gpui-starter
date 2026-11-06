@@ -6,7 +6,6 @@ use gpui_kit::component::{
     button::{Button, DropdownButton},
     checkbox::Checkbox,
     h_flex,
-    menu::PopupMenu,
     switch::Switch,
     tag::Tag,
     v_flex,
@@ -14,9 +13,8 @@ use gpui_kit::component::{
 use gpui_kit::{prelude::FluentBuilder as _, *};
 use serde::Deserialize;
 
+use crate::gallery::demo::{self, SizeToggle, demo_toolbar, section};
 use crate::gallery::registry::GallerySection;
-
-use super::demo::section;
 
 /// Knobs of the upstream options toolbar plus the size switcher.
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -45,45 +43,19 @@ impl DemoToggle {
     }
 }
 
-fn size_label(size: Size) -> &'static str {
-    match size {
-        Size::XSmall => "XSmall",
-        Size::Small => "Small",
-        Size::Medium => "Medium",
-        Size::Large => "Large",
-        Size::Size(_) => "Custom",
+impl SizeToggle for DemoToggle {
+    fn xsmall() -> Self {
+        Self::SizeXSmall
     }
-}
-
-fn add_size_items(menu: PopupMenu, size: Size) -> PopupMenu {
-    menu.menu_with_check(
-        "XSmall",
-        size == Size::XSmall,
-        Box::new(DemoToggle::SizeXSmall),
-    )
-    .menu_with_check(
-        "Small",
-        size == Size::Small,
-        Box::new(DemoToggle::SizeSmall),
-    )
-    .menu_with_check(
-        "Medium",
-        size == Size::Medium,
-        Box::new(DemoToggle::SizeMedium),
-    )
-    .menu_with_check(
-        "Large",
-        size == Size::Large,
-        Box::new(DemoToggle::SizeLarge),
-    )
-}
-
-/// The size switcher the story toolbar carried, on the published split
-/// button instead of the story crate's custom Popover trigger.
-fn size_dropdown(size: Size) -> DropdownButton {
-    DropdownButton::new("accordion-size")
-        .button(Button::new("accordion-size-trigger").label(format!("Size: {}", size_label(size))))
-        .dropdown_menu(move |menu, _, _| add_size_items(menu, size))
+    fn small() -> Self {
+        Self::SizeSmall
+    }
+    fn medium() -> Self {
+        Self::SizeMedium
+    }
+    fn large() -> Self {
+        Self::SizeLarge
+    }
 }
 
 /// The theme-derived values a settings row draws with, read once so the row
@@ -207,36 +179,18 @@ impl Render for AccordionSection {
                 }
                 cx.notify();
             }))
-            .child(
-                h_flex()
-                    .w_full()
-                    .justify_end()
-                    .gap_1()
-                    .child(size_dropdown(size).into_any_element())
-                    .child(
-                        DropdownButton::new("accordion-options")
-                            .button(Button::new("accordion-options-trigger").label("Options"))
-                            .dropdown_menu(move |menu, _, _| {
-                                menu.menu_with_check(
-                                    "Multiple",
-                                    multiple,
-                                    Box::new(DemoToggle::Multiple),
-                                )
-                                .menu_with_check("Icons", show_icon, Box::new(DemoToggle::Icons))
-                                .menu_with_check(
-                                    "Disabled",
-                                    disabled,
-                                    Box::new(DemoToggle::Disabled),
-                                )
-                                .menu_with_check(
-                                    "Bordered",
-                                    bordered,
-                                    Box::new(DemoToggle::Bordered),
-                                )
-                            })
-                            .into_any_element(),
-                    ),
-            )
+            .child(demo_toolbar(vec![
+                demo::size_dropdown::<DemoToggle>("accordion-size", size).into_any_element(),
+                DropdownButton::new("accordion-options")
+                    .button(Button::new("accordion-options-trigger").label("Options"))
+                    .dropdown_menu(move |menu, _, _| {
+                        menu.menu_with_check("Multiple", multiple, Box::new(DemoToggle::Multiple))
+                            .menu_with_check("Icons", show_icon, Box::new(DemoToggle::Icons))
+                            .menu_with_check("Disabled", disabled, Box::new(DemoToggle::Disabled))
+                            .menu_with_check("Bordered", bordered, Box::new(DemoToggle::Bordered))
+                    })
+                    .into_any_element(),
+            ]))
             .child(
                 section("accordion-default", "Default")
                     .description("Expand one item at a time by default.")

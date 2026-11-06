@@ -2,11 +2,13 @@
 //! resizable split of a language-sample file tree and the editor, with the
 //! example's option row and go-to-line dialog.
 
+use std::{cell::Cell, rc::Rc};
+
 use gpui_kit::component::{
     ActiveTheme as _, IconName, Sizable as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
     h_flex,
-    input::{self, Editor, EditorState, Input, InputState, TabSize},
+    input::{Editor, EditorState, Input, InputState, TabSize},
     list::ListItem,
     resizable::{h_resizable, resizable_panel},
     status_bar::StatusBar,
@@ -15,9 +17,8 @@ use gpui_kit::component::{
 };
 use gpui_kit::{prelude::FluentBuilder as _, *};
 
+use super::parse_go_to_line;
 use crate::gallery::registry::GallerySection;
-
-const DEFAULT_SOURCE: &str = include_str!("fixtures/test.rs");
 
 /// One language sample the file tree can load, embedded at compile time.
 struct Sample {
@@ -93,6 +94,11 @@ const SAMPLES: &[Sample] = &[
         source: include_str!("fixtures/samples/test.rb"),
     },
     Sample {
+        file: "test.rs",
+        language: "rust",
+        source: include_str!("fixtures/samples/test.rs"),
+    },
+    Sample {
         file: "test.sql",
         language: "sql",
         source: include_str!("fixtures/samples/test.sql"),
@@ -126,6 +132,7 @@ pub struct EditorWorkspaceSection {
     readonly: bool,
     scroll_beyond_last_line: Option<usize>,
     cursor_surrounding_lines: Option<usize>,
+    _subscribe: Subscription,
 }
 
 impl EditorWorkspaceSection {
@@ -134,6 +141,14 @@ impl EditorWorkspaceSection {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        // 11 copies of the Rust sample, ~1K lines
+        let default_source = SAMPLES
+            .iter()
+            .find(|sample| sample.file == "test.rs")
+            .expect("rust sample registered")
+            .source
+            .repeat(11);
+
         let editor = cx.new(|cx| {
             EditorState::new(window, cx)
                 .language("rust")
@@ -144,11 +159,15 @@ impl EditorWorkspaceSection {
                     hard_tabs: false,
                 })
                 .soft_wrap(false)
-                .default_value(DEFAULT_SOURCE)
+                .default_value(default_source)
                 .placeholder("Enter your code here…")
         });
 
         let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
+
+        // Cursor moves emit no InputEvent; observing catches them so the
+        // status-bar readout tracks the caret.
+        let _subscribe = cx.observe(&editor, |_, _, cx| cx.notify());
 
         // The example walks the working directory; the gallery embeds its
         // samples, so the tree is one expanded folder of language files.
@@ -178,6 +197,7 @@ impl EditorWorkspaceSection {
             readonly: false,
             scroll_beyond_last_line: None,
             cursor_surrounding_lines: None,
+            _subscribe,
         }
     }
 
@@ -196,17 +216,25 @@ impl EditorWorkspaceSection {
     fn go_to_line(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
         let editor = self.editor.clone();
         let input_state = self.go_to_line_state.clone();
+        let first_run = Rc::new(Cell::new(true));
 
         window.open_alert_dialog(cx, move |dialog, window, cx| {
-            input_state.update(cx, |state, cx| {
-                let cursor_pos = editor.read(cx).cursor_position();
-                state.set_placeholder(
-                    format!("{}:{}", cursor_pos.line, cursor_pos.character),
-                    window,
-                    cx,
-                );
-                state.focus(window, cx);
-            });
+            // The builder re-runs when the dialog layer is rebuilt; only the
+            // first run may take focus or clear the previous query.
+            if first_run.replace(false) {
+                input_state.update(cx, |state, cx| {
+                    state.set_value("", window, cx);
+                    let cursor_pos = editor.read(cx).cursor_position();
+                    // 1-based like the parser and the status-bar button, so
+                    // typing the hint verbatim stays at the cursor.
+                    state.set_placeholder(
+                        format!("{}:{}", cursor_pos.line + 1, cursor_pos.character + 1),
+                        window,
+                        cx,
+                    );
+                    state.focus(window, cx);
+                });
+            }
 
             dialog
                 .title("Go to line")
@@ -216,19 +244,9 @@ impl EditorWorkspaceSection {
                     let input_state = input_state.clone();
                     move |_, window, cx| {
                         let query = input_state.read(cx).value();
-                        let mut parts = query
-                            .split(':')
-                            .map(|s| s.trim().parse::<usize>().ok())
-                            .collect::<Vec<_>>()
-                            .into_iter();
-                        let Some(line) = parts.next().and_then(|l| l) else {
+                        let Some(position) = parse_go_to_line(&query) else {
                             return false;
                         };
-                        let column = parts.next().and_then(|c| c).unwrap_or(1);
-                        let position = input::Position::new(
-                            line.saturating_sub(1) as u32,
-                            column.saturating_sub(1) as u32,
-                        );
 
                         editor.update(cx, |state, cx| {
                             state.set_cursor_position(position, window, cx);

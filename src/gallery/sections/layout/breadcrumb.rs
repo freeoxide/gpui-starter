@@ -8,7 +8,7 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 pub struct BreadcrumbSection {
     clicked_item: Option<String>,

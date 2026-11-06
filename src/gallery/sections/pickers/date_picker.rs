@@ -28,6 +28,8 @@ pub struct DatePickerSection {
     date_time_12h_picker: Entity<DatePickerState>,
     date_time_value: Option<String>,
     size: Size,
+    presets: Vec<DateRangePreset>,
+    range_presets: Vec<DateRangePreset>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -107,6 +109,45 @@ impl DatePickerSection {
                 .default_time(chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap())
         });
 
+        // Preset dates are fixed at construction; rebuilding them per render
+        // would drift the labels' dates across repaints.
+        let presets = vec![
+            DateRangePreset::single(
+                "Yesterday",
+                (Utc::now() - Duration::days(1)).naive_local().date(),
+            ),
+            DateRangePreset::single(
+                "Last Week",
+                (Utc::now() - Duration::weeks(1)).naive_local().date(),
+            ),
+            DateRangePreset::single(
+                "Last Month",
+                (Utc::now() - Duration::days(30)).naive_local().date(),
+            ),
+        ];
+        let range_presets = vec![
+            DateRangePreset::range(
+                "Last 7 Days",
+                (Utc::now() - Duration::days(7)).naive_local().date(),
+                Utc::now().naive_local().date(),
+            ),
+            DateRangePreset::range(
+                "Last 14 Days",
+                (Utc::now() - Duration::days(14)).naive_local().date(),
+                Utc::now().naive_local().date(),
+            ),
+            DateRangePreset::range(
+                "Last 30 Days",
+                (Utc::now() - Duration::days(30)).naive_local().date(),
+                Utc::now().naive_local().date(),
+            ),
+            DateRangePreset::range(
+                "Last 90 Days",
+                (Utc::now() - Duration::days(90)).naive_local().date(),
+                Utc::now().naive_local().date(),
+            ),
+        ];
+
         let _subscriptions = vec![
             cx.subscribe(&date_picker, |this, _, ev, cx| match ev {
                 DatePickerEvent::Change(date) => {
@@ -160,6 +201,8 @@ impl DatePickerSection {
             date_time_12h_picker,
             date_time_value: None,
             size: Size::Medium,
+            presets,
+            range_presets,
             date_picker_value: None,
             _subscriptions,
         }
@@ -169,42 +212,6 @@ impl DatePickerSection {
 impl Render for DatePickerSection {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let size = self.size;
-        let presets = vec![
-            DateRangePreset::single(
-                "Yesterday",
-                (Utc::now() - Duration::days(1)).naive_local().date(),
-            ),
-            DateRangePreset::single(
-                "Last Week",
-                (Utc::now() - Duration::weeks(1)).naive_local().date(),
-            ),
-            DateRangePreset::single(
-                "Last Month",
-                (Utc::now() - Duration::days(30)).naive_local().date(),
-            ),
-        ];
-        let range_presets = vec![
-            DateRangePreset::range(
-                "Last 7 Days",
-                (Utc::now() - Duration::days(7)).naive_local().date(),
-                Utc::now().naive_local().date(),
-            ),
-            DateRangePreset::range(
-                "Last 14 Days",
-                (Utc::now() - Duration::days(14)).naive_local().date(),
-                Utc::now().naive_local().date(),
-            ),
-            DateRangePreset::range(
-                "Last 30 Days",
-                (Utc::now() - Duration::days(30)).naive_local().date(),
-                Utc::now().naive_local().date(),
-            ),
-            DateRangePreset::range(
-                "Last 90 Days",
-                (Utc::now() - Duration::days(90)).naive_local().date(),
-                Utc::now().naive_local().date(),
-            ),
-        ];
 
         v_flex()
             .w_full()
@@ -233,7 +240,7 @@ impl Render for DatePickerSection {
                                     .with_size(size)
                                     .w(rems(17.5))
                                     .cleanable(true)
-                                    .presets(presets),
+                                    .presets(self.presets.clone()),
                             )
                             .child(
                                 div()
@@ -315,7 +322,7 @@ impl Render for DatePickerSection {
                             .w(rems(17.5))
                             .number_of_months(2)
                             .cleanable(true)
-                            .presets(range_presets.clone()),
+                            .presets(self.range_presets.clone()),
                     ),
             )
             .child(
@@ -328,7 +335,7 @@ impl Render for DatePickerSection {
                             .w(rems(17.5))
                             .placeholder("Range mode picker")
                             .cleanable(true)
-                            .presets(range_presets.clone()),
+                            .presets(self.range_presets.clone()),
                     ),
             )
             .child(

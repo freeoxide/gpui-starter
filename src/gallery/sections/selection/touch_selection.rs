@@ -5,7 +5,7 @@
 use std::{cell::Cell, rc::Rc};
 
 use gpui_kit::component::{
-    ActiveTheme as _,
+    ActiveTheme as _, ElementExt as _,
     button::Button,
     h_flex,
     input::{Input, InputState, Textarea, TextareaState},
@@ -52,11 +52,9 @@ impl TouchSelectionSection {
     /// Wraps a control so its painted bounds are known to the press button.
     fn measured(control: impl IntoElement, bounds: &Rc<Cell<Bounds<Pixels>>>) -> impl IntoElement {
         let bounds = bounds.clone();
-        div().relative().child(control).child(
-            canvas(move |painted, _, _| bounds.set(painted), |_, _, _, _| {})
-                .absolute()
-                .inset_0(),
-        )
+        div()
+            .on_prepaint(move |painted, _, _| bounds.set(painted))
+            .child(control)
     }
 
     /// A long press a finger's width into the control's first line of text.

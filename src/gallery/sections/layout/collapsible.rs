@@ -18,7 +18,7 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 /// Keys of the panels, each one tracks its own open state.
 const ORDER: &str = "collapsible-order";
@@ -94,6 +94,7 @@ fn file_row(name: &'static str, cx: &App) -> impl IntoElement {
     let accent = cx.theme().accent;
 
     h_flex()
+        .id(name)
         .h_7()
         .px_2()
         .gap_2()

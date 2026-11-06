@@ -1,7 +1,6 @@
 //! Text-display sections, ported from the upstream sources: TextView (the
 //! `text_max_lines` example), Marker, and DescriptionList stories.
 
-mod demo;
 mod description_list;
 mod marker;
 mod text_view;

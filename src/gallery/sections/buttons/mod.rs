@@ -30,3 +30,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     tag::register(sections, window, cx);
     toolbar::register(sections, window, cx);
 }
+
+#[cfg(test)]
+#[path = "mod.test.rs"]
+mod mod_test;

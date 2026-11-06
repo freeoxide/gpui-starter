@@ -57,7 +57,7 @@ impl OtpInputSection {
             otp_state_sized: cx.new(|cx| {
                 OtpState::new(4, window, cx)
                     .masked(true)
-                    .default_value("654321")
+                    .default_value("6543")
             }),
             otp_state_disabled: cx.new(|cx| {
                 OtpState::new(6, window, cx)
