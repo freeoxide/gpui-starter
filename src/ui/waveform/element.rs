@@ -332,15 +332,15 @@ impl Element for WaveformElement {
                     let mono_color = self.accent.unwrap_or(theme.primary);
                     let step = nice_time_step(window_secs, GRID_TARGET_LINES);
                     let grid_key = gridline_key(bounds, window_secs, scale);
+                    let xs = caches.gridline_xs(grid_key, || {
+                        time_gridline_xs(bounds, window_secs, step, scale)
+                    });
 
                     match state.mode() {
                         WaveformMode::Oscilloscope => {
                             let channels = state.channels();
                             let (top, bottom) = stereo_lane_bounds(bounds, channels, scale);
                             let lanes = [Some(top), bottom];
-                            let xs = caches.gridline_xs(grid_key, || {
-                                time_gridline_xs(bounds, window_secs, step, scale)
-                            });
                             for lane in lanes.into_iter().flatten() {
                                 lane_grid(lane, grid_color, xs, scale, window);
                             }
@@ -382,9 +382,6 @@ impl Element for WaveformElement {
                             }
                         }
                         WaveformMode::Spectrum => {
-                            let xs = caches.gridline_xs(grid_key, || {
-                                time_gridline_xs(bounds, window_secs, step, scale)
-                            });
                             lane_grid(bounds, grid_color, xs, scale, window);
                             let baseline = bounds.bottom() - px(1. / scale);
                             window.paint_quad(hairline(

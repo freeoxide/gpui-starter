@@ -78,7 +78,7 @@ fn compute(cx: &App) -> FloatingPlatformInfo {
 }
 
 #[cfg(not(target_family = "wasm"))]
-pub(crate) fn menu_bar_height(cx: &App) -> Option<Pixels> {
+fn menu_bar_height(cx: &App) -> Option<Pixels> {
     let display = cx.primary_display()?;
     let visible = display.visible_bounds();
     let full = display.bounds();

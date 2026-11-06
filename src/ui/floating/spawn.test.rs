@@ -21,7 +21,7 @@ fn blank_view(_: &mut Window, cx: &mut App) -> AnyView {
     cx.new(|_| Blank).into()
 }
 
-fn float_bounds() -> Bounds<gpui_kit::Pixels> {
+fn float_bounds() -> Bounds<Pixels> {
     Bounds {
         origin: point(px(0.), px(0.)),
         size: size(px(120.), px(90.)),
@@ -39,7 +39,7 @@ fn float_window_options_carry_no_native_chrome() {
     assert!(!options.is_minimizable);
     assert!(options.is_movable, "the header drag surface needs it");
     assert_eq!(options.kind, WindowKind::Floating);
-    assert!(options.is_resizable == spec.is_resizable());
+    assert_eq!(options.is_resizable, spec.is_resizable());
     #[cfg(target_os = "linux")]
     assert_eq!(
         options.window_decorations,
@@ -211,7 +211,7 @@ async fn a_mid_dispatch_window_anchor_defers_until_the_cycle_settles(cx: &mut Te
     cx.update(gpui_kit::init);
     cx.update(init);
     let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
-    let anchor: gpui_kit::AnyWindowHandle = window.into();
+    let anchor: AnyWindowHandle = window.into();
     let mid_dispatch_empty = std::cell::Cell::new(false);
     let interim = cx.update(|cx| {
         let probe = &mid_dispatch_empty;
@@ -256,7 +256,7 @@ async fn a_mid_dispatch_screen_anchor_spawn_does_not_defer(cx: &mut TestAppConte
     cx.update(gpui_kit::init);
     cx.update(init);
     let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
-    let anchor: gpui_kit::AnyWindowHandle = window.into();
+    let anchor: AnyWindowHandle = window.into();
     let handle = cx.update(|cx| {
         anchor.update(cx, |_, _, cx| {
             spawn_floating(
@@ -286,7 +286,7 @@ async fn a_stale_anchor_window_fails_the_spawn_without_opening_a_window(cx: &mut
     cx.update(gpui_kit::init);
     cx.update(init);
     let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
-    let anchor: gpui_kit::AnyWindowHandle = window.into();
+    let anchor: AnyWindowHandle = window.into();
     cx.update(|cx| {
         anchor
             .update(cx, |_, window, _| window.remove_window())

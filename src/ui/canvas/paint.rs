@@ -12,7 +12,7 @@ const GRID_MINOR_TARGET: f32 = 32.;
 const GRID_MAJOR_TARGET: f32 = 64.;
 const MAJOR_LINE_EVERY: i64 = 4;
 
-pub(crate) fn grid_step(spacing: Pixels, zoom: f32) -> Pixels {
+fn grid_step(spacing: Pixels, zoom: f32) -> Pixels {
     let mut step = spacing.max(px(1.));
     while step * zoom < px(GRID_MINOR_TARGET) {
         step *= 2.;
@@ -30,7 +30,7 @@ fn midpoint(a: Point<Pixels>, b: Point<Pixels>) -> Point<Pixels> {
     )
 }
 
-pub(crate) fn smoothed_segments(points: &[Point<Pixels>]) -> Vec<(Point<Pixels>, Point<Pixels>)> {
+fn smoothed_segments(points: &[Point<Pixels>]) -> Vec<(Point<Pixels>, Point<Pixels>)> {
     let mut segments = Vec::new();
     if points.len() < 3 {
         return segments;

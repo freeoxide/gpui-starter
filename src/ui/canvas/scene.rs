@@ -1,14 +1,13 @@
 use std::sync::Arc;
 
 use gpui_kit::*;
-use serde::{Deserialize, Serialize};
 
 use super::geometry::segment_distance;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct LayerId(pub u64);
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct ShapeId(pub u64);
 
 #[derive(Clone, Debug, PartialEq)]
@@ -140,7 +139,7 @@ fn expanded(bounds: &Bounds<Pixels>, by: Pixels) -> Bounds<Pixels> {
 }
 
 /// Document-space corners of a triangle: apex, bottom-left, bottom-right.
-pub(crate) fn triangle_vertices(bounds: &Bounds<Pixels>) -> [Point<Pixels>; 3] {
+fn triangle_vertices(bounds: &Bounds<Pixels>) -> [Point<Pixels>; 3] {
     let left = bounds.origin.x;
     let right = left + bounds.size.width;
     let top = bounds.origin.y;

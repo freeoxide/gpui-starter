@@ -224,10 +224,8 @@ fn triangle_hit_test_accepts_interior_and_edges_but_rejects_notches() {
         ShapeStyle::default(),
     );
     let tolerance = px(4.);
-    // Interior and the apex region.
     assert!(shape.hit_test(point(px(50.), px(25.)), tolerance));
     assert!(shape.hit_test(point(px(50.), px(2.)), tolerance));
-    // Inside the bounds but in the empty top-left/top-right notches.
     assert!(!shape.hit_test(point(px(5.), px(5.)), tolerance));
     assert!(!shape.hit_test(point(px(95.), px(5.)), tolerance));
     // Across the left edge (50,0)-(0,50), within and beyond tolerance, on its

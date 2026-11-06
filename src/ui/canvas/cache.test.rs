@@ -60,7 +60,6 @@ fn path_builds_once_per_generation_and_not_on_origin_change() {
     assert_eq!(builds.get(), 1);
     assert_eq!(hashes.get(), 1, "same generation never rehashes");
 
-    // New generation, unchanged content: revalidated without rebuilding.
     cache.get_path(2, &key, Point::default(), &build).unwrap();
     assert_eq!(builds.get(), 1);
     assert_eq!(hashes.get(), 2);

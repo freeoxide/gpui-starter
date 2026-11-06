@@ -21,10 +21,6 @@ impl Render for Blank {
     }
 }
 
-fn insert_overlay_for_test(entry: registry::RegistryEntry, cx: &mut App) {
-    registry::set_entry(entry, cx);
-}
-
 fn overlay_entry(
     id: &str,
     x: f32,
@@ -109,7 +105,7 @@ async fn panes_paint_at_the_same_absolute_bounds_alone_and_inside_the_app_column
     let slot: ProbeSlot = Default::default();
     cx.update(|cx| {
         let view: AnyView = cx.new(|_| ProbeView { slot: slot.clone() }).into();
-        insert_overlay_for_test(overlay_entry("pane", 12., view, false, false), cx);
+        registry::set_entry(overlay_entry("pane", 12., view, false, false), cx);
     });
 
     draw_window(cx, alone_window.into());
@@ -238,8 +234,8 @@ async fn a_chromeless_overlay_pane_hands_the_pane_to_the_body(cx: &mut TestAppCo
                 slot: headed_slot.clone(),
             })
             .into();
-        insert_overlay_for_test(overlay_entry("bare-pane", 0., bare_view, true, false), cx);
-        insert_overlay_for_test(
+        registry::set_entry(overlay_entry("bare-pane", 0., bare_view, true, false), cx);
+        registry::set_entry(
             overlay_entry("headed-pane", 140., headed_view, false, false),
             cx,
         );
@@ -274,7 +270,7 @@ async fn escape_dismisses_a_chromeless_overlay_pane(cx: &mut TestAppContext) {
     let mut cx = VisualTestContext::from_window(window.into(), cx);
     cx.update(|_, cx| {
         let view: AnyView = cx.new(|_| Blank).into();
-        insert_overlay_for_test(overlay_entry("bare-esc", 12., view, true, false), cx);
+        registry::set_entry(overlay_entry("bare-esc", 12., view, true, false), cx);
     });
     cx.update(|window, cx| window.draw(cx).clear(cx));
     cx.simulate_click(point(px(72.), px(40.)), Modifiers::none());
@@ -299,7 +295,7 @@ async fn a_focus_requested_pane_takes_the_keyboard_and_hands_it_back_on_close(
     let mut cx = VisualTestContext::from_window(window.into(), cx);
     cx.update(|_, cx| {
         let view: AnyView = cx.new(|_| Blank).into();
-        insert_overlay_for_test(overlay_entry("keyboard-pane", 12., view, false, true), cx);
+        registry::set_entry(overlay_entry("keyboard-pane", 12., view, false, true), cx);
     });
     cx.update(|window, cx| window.draw(cx).clear(cx));
     cx.run_until_parked();
@@ -328,7 +324,7 @@ async fn a_shrunk_window_pulls_stranded_panes_back_inside(cx: &mut TestAppContex
     let mut cx = VisualTestContext::from_window(window.into(), cx);
     cx.update(|_, cx| {
         let view: AnyView = cx.new(|_| ProbeView { slot: slot.clone() }).into();
-        insert_overlay_for_test(overlay_entry("stranded", 200., view, true, false), cx);
+        registry::set_entry(overlay_entry("stranded", 200., view, true, false), cx);
     });
     cx.update(|window, cx| window.draw(cx).clear(cx));
     assert_eq!(

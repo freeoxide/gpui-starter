@@ -181,13 +181,11 @@ impl WaveformState {
     /// Drains the ring, updates history and spectrum, and notifies once if unpaused
     /// data arrived. The tick calls this; call it directly to force a synchronous update.
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
-        if self.source.is_none() {
+        let Some(source) = self.source.as_mut() else {
             return;
-        }
+        };
         self.drain_buf.clear();
-        if let Some(source) = self.source.as_mut() {
-            source.consumer.drain_into(&mut self.drain_buf);
-        }
+        source.consumer.drain_into(&mut self.drain_buf);
         if self.drain_buf.is_empty() || self.paused {
             return;
         }

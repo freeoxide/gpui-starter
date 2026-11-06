@@ -147,7 +147,7 @@ fn overflow_reports_dropped_samples_on_both_sides(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn tick_timer_drives_refresh_without_manual_calls(cx: &mut TestAppContext) {
-    let state = cx.update(|cx| cx.new(|_| WaveformState::new()));
+    let state = cx.new(|_| WaveformState::new());
     let mut producer = attach_stereo(cx, &state);
     producer.push_interleaved(&sine_interleaved(480, 440., 1.));
     assert!(cx.read(|cx| state.read(cx).spectrum().is_none()));

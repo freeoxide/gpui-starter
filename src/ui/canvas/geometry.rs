@@ -42,10 +42,6 @@ impl CanvasTransform {
             self.to_doc(screen.bottom_right()),
         )
     }
-
-    pub fn scale_length(&self, doc_len: Pixels) -> Pixels {
-        doc_len * self.zoom
-    }
 }
 
 /// Distance from `point` to segment `a`..`b`, in the input units.

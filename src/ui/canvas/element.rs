@@ -309,47 +309,41 @@ impl Element for CanvasElement {
             }
         });
 
-        window.on_mouse_event({
-            let hitbox = hitbox.clone();
-            let state = state.clone();
-            move |e: &ScrollEvent, phase, window, cx| {
-                if !phase.bubble() || !hitbox.should_handle_scroll(window) {
+        window.on_mouse_event(move |e: &ScrollEvent, phase, window, cx| {
+            if !phase.bubble() || !hitbox.should_handle_scroll(window) {
+                return;
+            }
+            let position = e.position - bounds.origin;
+            cx.stop_propagation();
+            state.update(cx, |s, cx| {
+                let doc = s.transform().to_doc(position);
+                let event = CanvasScrollEvent {
+                    screen_position: position,
+                    doc_position: doc,
+                    delta: e.delta,
+                    modifiers: e.modifiers,
+                };
+                let ctx = tool_ctx(bounds, s, None);
+                let consumed =
+                    s.dispatch_tool_event(cx, |tool, s, cx| tool.scroll(&event, &ctx, s, cx));
+                if consumed {
                     return;
                 }
-                let position = e.position - bounds.origin;
-                cx.stop_propagation();
-                state.update(cx, |s, cx| {
-                    let doc = s.transform().to_doc(position);
-                    let event = CanvasScrollEvent {
-                        screen_position: position,
-                        doc_position: doc,
-                        delta: e.delta,
-                        modifiers: e.modifiers,
+                if e.modifiers.control || e.modifiers.platform {
+                    let delta_lines = match e.delta {
+                        ScrollDelta::Lines(delta) => delta.y,
+                        ScrollDelta::Pixels(delta) => delta.y.as_f32() / 40.,
                     };
-                    let ctx = tool_ctx(bounds, s, None);
-                    let consumed =
-                        s.dispatch_tool_event(cx, |tool, s, cx| tool.scroll(&event, &ctx, s, cx));
-                    if consumed {
-                        return;
-                    }
-                    if e.modifiers.control || e.modifiers.platform {
-                        let delta_lines = match e.delta {
-                            ScrollDelta::Lines(delta) => delta.y,
-                            ScrollDelta::Pixels(delta) => delta.y.as_f32() / 40.,
-                        };
-                        let factor = (-delta_lines * 0.1).exp();
-                        s.zoom_at(position, factor, cx);
-                    } else {
-                        let delta = match e.delta {
-                            ScrollDelta::Lines(delta) => {
-                                point(px(-delta.x * 40.), px(-delta.y * 40.))
-                            }
-                            ScrollDelta::Pixels(delta) => point(-delta.x, -delta.y),
-                        };
-                        s.pan_by(delta, cx);
-                    }
-                });
-            }
+                    let factor = (-delta_lines * 0.1).exp();
+                    s.zoom_at(position, factor, cx);
+                } else {
+                    let delta = match e.delta {
+                        ScrollDelta::Lines(delta) => point(px(-delta.x * 40.), px(-delta.y * 40.)),
+                        ScrollDelta::Pixels(delta) => point(-delta.x, -delta.y),
+                    };
+                    s.pan_by(delta, cx);
+                }
+            });
         });
     }
 }

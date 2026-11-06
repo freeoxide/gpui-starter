@@ -302,7 +302,7 @@ async fn window_is_open_stays_true_while_dispatching_and_false_after_close(
     }
 
     let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
-    let handle: gpui_kit::AnyWindowHandle = window.into();
+    let handle: AnyWindowHandle = window.into();
     let mid_dispatch = cx.update(|cx| {
         handle
             .update(cx, |_, _, cx| window_is_open(&handle, cx))
@@ -327,7 +327,7 @@ async fn resolve_anchor_separates_dispatch_block_from_real_failures(cx: &mut Tes
     }
 
     let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
-    let handle: gpui_kit::AnyWindowHandle = window.into();
+    let handle: AnyWindowHandle = window.into();
     let blocked = cx.update(|cx| {
         handle.update(cx, |_, _, cx| {
             resolve_anchor(

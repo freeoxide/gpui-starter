@@ -246,7 +246,6 @@ fn overlay_revalidates_slots_freed_by_a_removed_shape(cx: &mut TestAppContext) {
          only a rebuild can paint it: {path_builds} builds / {key_hashes} hashes"
     );
 
-    // Every later overlay mutation must still revalidate its own slot.
     for _ in 0..3 {
         perf_probe::reset();
         state.update(&mut cx, |s, cx| {
@@ -285,8 +284,7 @@ fn offscreen_shapes_cull_before_the_path_cache(cx: &mut TestAppContext) {
     });
     cx.update(|window, cx| window.draw(cx).clear(cx));
 
-    // Panned off-screen with changed content: the paint must cull before the
-    // cache, so neither a rebuild nor a key rehash may happen.
+    // Content changed while off-screen; only cull-before-cache keeps both counters at zero.
     perf_probe::reset();
     state.update(&mut cx, |s, cx| {
         s.pan_by(point(px(1000.), px(0.)), cx);
@@ -299,7 +297,6 @@ fn offscreen_shapes_cull_before_the_path_cache(cx: &mut TestAppContext) {
     assert_eq!(builds, 0, "off-screen paint must not build a path");
     assert_eq!(hashes, 0, "off-screen paint must not rehash the key");
 
-    // Revealed with that changed content: exactly one revalidation + rebuild.
     perf_probe::reset();
     state.update(&mut cx, |s, cx| s.pan_by(point(px(-1000.), px(0.)), cx));
     cx.update(|window, cx| window.draw(cx).clear(cx));

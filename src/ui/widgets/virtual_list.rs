@@ -69,7 +69,7 @@ pub fn render_virtual_list<R, V>(
     gap: Pixels,
     scroll_handle: &VirtualListScrollHandle,
     show_scrollbar: bool,
-    render_items: impl 'static + Fn(&mut V, Range<usize>, &mut Window, &mut Context<V>) -> Vec<R>,
+    render_items: impl Fn(&mut V, Range<usize>, &mut Window, &mut Context<V>) -> Vec<R> + 'static,
 ) -> Div
 where
     R: IntoElement + 'static,
