@@ -315,12 +315,10 @@ pub fn open_microphone_settings(cx: &mut App) {
         // notifies this process, so poll the re-query for a bounded window.
         for _ in 0..30 {
             cx.background_executor().timer(Duration::from_secs(2)).await;
-            let granted = cx
-                .update(|cx| {
-                    refresh_permission(cx);
-                    permission_state(cx) == &MicrophonePermissionState::Authorized
-                })
-                .unwrap_or(true);
+            let granted = cx.update(|cx| {
+                refresh_permission(cx);
+                permission_state(cx) == &MicrophonePermissionState::Authorized
+            });
             if granted {
                 break;
             }

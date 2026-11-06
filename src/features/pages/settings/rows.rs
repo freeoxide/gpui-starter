@@ -1,5 +1,5 @@
 use gpui_kit::component::{ActiveTheme as _, label::Label, v_flex};
-use gpui_kit::{Context, Div, Role, SharedString, Stateful, div, prelude::*};
+use gpui_kit::{Context, Div, ElementId, Role, SharedString, Stateful, div, prelude::*};
 
 use crate::accessibility::A11yExt as _;
 

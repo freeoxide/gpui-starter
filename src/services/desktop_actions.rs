@@ -73,6 +73,8 @@ struct DesktopActionsInner {
 
 struct WatcherEntry {
     id: u64,
+    // Held alive to keep notify watching; nothing reads it.
+    #[allow(dead_code)]
     watcher: RecommendedWatcher,
 }
 

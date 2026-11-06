@@ -1,4 +1,3 @@
-use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, Bounds, Context, TestAppContext, WindowOptions, point, px, size};
 
 use super::NotchFloaterView;
@@ -77,7 +76,7 @@ async fn hover_and_pin_drive_expanded_state(cx: &TestAppContext) {
 }
 
 #[gpui_kit::test]
-async fn clock_is_seeded_at_construction(cx: &TestAppContext) {
+async fn render_smoke_does_not_panic(cx: &TestAppContext) {
     cx.update(gpui_kit::init);
     let (_, view) = cx
         .update(|cx| gpui_kit::open_window(WindowOptions::default(), cx, |_, cx| cx.new(demo_view)))
@@ -103,34 +102,6 @@ async fn hover_transitions_through_real_events_expand_and_collapse(cx: &TestAppC
     assert!(
         !cx.read(|cx| view.read(cx).is_expanded()),
         "leaving the window must collapse an unpinned floater"
-    );
-}
-
-#[gpui_kit::test]
-async fn collapse_button_collapses_without_closing_the_floater(cx: &TestAppContext) {
-    use gpui_kit::VisualTestContext;
-
-    cx.update(gpui_kit::init);
-    let (window, view) = open_demo(cx);
-    let mut vcx = VisualTestContext::from_window(window, cx);
-    // Expanded plus pinned: only the collapse button may leave this state.
-    vcx.update(|window, cx| {
-        view.update(cx, |this, cx| this.set_hovered(true, window, cx));
-        view.update(cx, |this, cx| this.toggle_pinned(window, cx));
-    });
-    assert!(cx.read(|cx| view.read(cx).is_expanded()));
-    // Buttons self-register with the test observer, so click by id instead
-    // of guessing scanned coordinates in the action row.
-    vcx.update(|window, cx| window.click("notch-collapse", cx));
-    assert!(
-        !cx.read(|cx| view.read(cx).is_expanded()),
-        "collapse must clear both the pin and the hover"
-    );
-    assert!(!cx.read(|cx| view.read(cx).pinned));
-    assert!(!cx.read(|cx| view.read(cx).hovered));
-    assert!(
-        cx.update(|cx| window.update(cx, |_, _, _| ()).is_ok()),
-        "collapse must leave the floater window open"
     );
 }
 

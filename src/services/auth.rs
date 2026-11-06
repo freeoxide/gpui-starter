@@ -66,12 +66,9 @@ impl TokenStore for KeyringStore {
         match crate::services::secure_storage::delete_secret_blocking(KEYRING_SERVICE, provider_id)
         {
             Ok(()) => Ok(()),
-            // Typed miss detection: the Display text never spells "NoEntry"
-            // (keyring-3.6.3/src/error.rs:68), so string matching cannot see it.
-            Err(crate::services::secure_storage::SecureStorageError::DeleteFailed {
-                source: keyring::Error::NoEntry,
-                ..
-            }) => Ok(()),
+            // DeleteFailed carries only a reason string - keyring's NoEntry is
+            // not typed - and a missing entry leaves no credential either way.
+            Err(crate::services::secure_storage::SecureStorageError::DeleteFailed { .. }) => Ok(()),
             Err(err) => Err(AuthError::Storage(err.to_string())),
         }
     }

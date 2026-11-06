@@ -2,7 +2,7 @@ use gpui_kit::component::{
     ActiveTheme as _, GlobalState, Theme, ThemeMode, ThemeRegistry, menu::AppMenuBar,
 };
 use gpui_kit::{
-    Action, App, Entity, Menu, MenuItem, OwnedMenu, OwnedMenuItem, OwnedOsMenu, SharedString,
+    App, Entity, Menu, MenuItem, OwnedMenu, OwnedMenuItem, OwnedOsMenu, SharedString,
 };
 
 #[cfg(target_os = "macos")]
@@ -199,7 +199,7 @@ fn build_menus(title: impl Into<SharedString>, cx: &App) -> Vec<Menu> {
     ]
 }
 
-fn app_menu_items(title: &SharedString, cx: &App) -> Vec<MenuItem> {
+fn app_menu_items(_title: &SharedString, cx: &App) -> Vec<MenuItem> {
     let mut items = vec![
         MenuItem::action(crate::i18n::localize("menu_about"), About),
         MenuItem::Separator,

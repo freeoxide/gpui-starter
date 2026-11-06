@@ -356,6 +356,7 @@ impl Element for WaveformElement {
                                     None if channels == 2 => chart_2,
                                     None => mono_color,
                                 };
+                                let window_samples = state.window_samples();
                                 match state.channel_view(ch, columns) {
                                     WaveformSamples::Envelope(cols) => {
                                         paint_lane_envelope(
@@ -363,7 +364,6 @@ impl Element for WaveformElement {
                                         );
                                     }
                                     WaveformSamples::Line(samples) => {
-                                        let window_samples = state.window_samples();
                                         let key =
                                             line_path_key(lane, scale, window_samples, samples);
                                         if let Some(path) = caches.line_path(ch, key, || {

@@ -122,7 +122,7 @@ impl MetricsState {
                     }
                 });
                 let (sampler, sample) = match taken {
-                    Ok(Some(sampler)) => {
+                    Ok(Some(mut sampler)) => {
                         executor
                             .spawn(async move {
                                 let sample = sampler.sample();

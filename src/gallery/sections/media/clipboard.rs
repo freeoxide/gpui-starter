@@ -26,7 +26,7 @@ impl ClipboardSection {
 }
 
 impl Render for ClipboardSection {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .w_full()
             .items_center()
