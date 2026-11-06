@@ -20,7 +20,7 @@ fn canonical_keys_stay_accepted_by_theme_config_colors() {
     // ThemeConfigColors ignores unknown keys, so acceptance is observed by
     // populating every key and checking it survives a serialize round-trip.
     let config: gpui_kit::component::theme::ThemeConfigColors =
-        serde_json::from_value(serde_json::Value::Object(payload))
+        serde_json::from_value(serde_json::Value::Object(payload.clone()))
             .expect("populated config deserializes");
     let round_tripped = serde_json::to_value(&config).expect("config serializes");
     let accepted = round_tripped.as_object().expect("config is an object");

@@ -50,10 +50,13 @@ fn should_sync_blocks_before_the_deadline_and_passes_at_it() {
     ));
 }
 
-fn ready_snapshot(volume: f32, brightness: f32) -> SystemControlsSnapshot {
-    let pending = || ControlState::<crate::system_controls::BluetoothStatus>::Unavailable {
+fn pending<T>() -> ControlState<T> {
+    ControlState::Unavailable {
         error: "pending first read".into(),
-    };
+    }
+}
+
+fn ready_snapshot(volume: f32, brightness: f32) -> SystemControlsSnapshot {
     SystemControlsSnapshot {
         battery: pending(),
         bluetooth: pending(),
@@ -70,7 +73,7 @@ fn ready_snapshot(volume: f32, brightness: f32) -> SystemControlsSnapshot {
 async fn an_external_snapshot_cannot_stomp_a_drag_in_progress(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
     cx.update(|cx| cx.set_global(ready_snapshot(0.5, 0.4)));
-    let handle = cx.add_window(|window, cx| SystemSlidersWidget::new(window, cx));
+    let handle = cx.add_window(SystemSlidersWidget::new);
     let widget = handle.root(cx).expect("widget entity");
     cx.read(|cx| {
         let widget = widget.read(cx);

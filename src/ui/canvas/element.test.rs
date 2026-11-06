@@ -69,7 +69,7 @@ fn assert_px_eq(actual: gpui_kit::Pixels, expected: gpui_kit::Pixels) {
 fn stored_stroke_path(cx: &mut VisualTestContext, slot: usize) -> Option<gpui_kit::Path<Pixels>> {
     cx.update(|window, cx| {
         let caches = CanvasCaches::for_paint((ElementId::from("canvas"), "caches"), window, cx);
-        caches.read(cx).slot(slot).stored_path().cloned()
+        caches.update(cx, |caches, _| caches.slot(slot).stored_path().cloned())
     })
 }
 
@@ -103,7 +103,7 @@ fn select_and_move_through_real_window_events(cx: &mut TestAppContext) {
     let shape_id = seed_rect(&mut cx, &state);
     state.update(&mut cx, |s, cx| s.set_builtin_tool(BuiltinTool::Select, cx));
     cx.simulate_click(point(px(150.), px(150.)), Modifiers::none());
-    assert!(cx.read(|cx| state.read(cx).selected_shape_ids() == &[shape_id]));
+    assert!(cx.read(|cx| state.read(cx).selected_shape_ids() == [shape_id]));
     cx.simulate_mouse_down(
         point(px(150.), px(150.)),
         MouseButton::Left,

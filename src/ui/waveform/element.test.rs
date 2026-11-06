@@ -149,7 +149,9 @@ fn stereo_attached_paints_envelope_lanes_and_divider(cx: &mut TestAppContext) {
     );
     let mids = hairline_mids(&quads);
     assert_eq!(
-        mids.iter().filter(|y| (190..=210).contains(*y)).count(),
+        mids.iter()
+            .filter(|y| (190f32..=210f32).contains(*y))
+            .count(),
         1,
         "exactly the divider hairline sits at the lane split: {mids:?}"
     );

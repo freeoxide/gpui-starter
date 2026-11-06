@@ -10,7 +10,7 @@ use image::{DynamicImage, ImageFormat, ImageReader, RgbaImage};
 
 use super::{EditorTool, ImageEditorPage, SaveState};
 use crate::ui::canvas::{
-    CanvasPointerEvent, CanvasShape, CanvasTool, CanvasTransform, StrokeStyle, ToolContext,
+    CanvasPointerEvent, CanvasShape, CanvasTransform, StrokeStyle, ToolContext,
 };
 
 fn png_bytes(w: u32, h: u32) -> Vec<u8> {
@@ -110,7 +110,7 @@ fn on_open_cancel_keeps_the_document_empty(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn image_opened_mounts_the_default_brush_tool(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
-    let (page, cx) = cx.add_window_view(|window, cx| ImageEditorPage::new(window, cx));
+    let (page, cx) = cx.add_window_view(ImageEditorPage::new);
     let canvas = page.update(cx, |page, _| page.canvas.clone());
     page.update(cx, |page, cx| {
         page.doc
@@ -127,7 +127,7 @@ fn image_opened_mounts_the_default_brush_tool(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn select_tool_swaps_the_active_editor_tool(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
-    let (page, cx) = cx.add_window_view(|window, cx| ImageEditorPage::new(window, cx));
+    let (page, cx) = cx.add_window_view(ImageEditorPage::new);
     let canvas = page.update(cx, |page, _| page.canvas.clone());
     page.update(cx, |page, cx| {
         page.doc
@@ -200,7 +200,7 @@ fn committed_stroke(page: &gpui_kit::Entity<ImageEditorPage>, cx: &gpui_kit::App
 #[gpui_kit::test]
 fn brush_size_release_updates_tool_params(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
-    let (page, cx) = cx.add_window_view(|window, cx| ImageEditorPage::new(window, cx));
+    let (page, cx) = cx.add_window_view(ImageEditorPage::new);
     let canvas = page.update(cx, |page, _| page.canvas.clone());
     page.update(cx, |page, cx| {
         page.doc
@@ -234,7 +234,7 @@ fn brush_size_release_updates_tool_params(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn color_change_updates_tool_params(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
-    let (page, cx) = cx.add_window_view(|window, cx| ImageEditorPage::new(window, cx));
+    let (page, cx) = cx.add_window_view(ImageEditorPage::new);
     let canvas = page.update(cx, |page, _| page.canvas.clone());
     page.update(cx, |page, cx| {
         page.doc
@@ -265,7 +265,7 @@ fn color_change_updates_tool_params(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn undo_resyncs_filter_controls_with_the_document(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
-    let (page, cx) = cx.add_window_view(|window, cx| ImageEditorPage::new(window, cx));
+    let (page, cx) = cx.add_window_view(ImageEditorPage::new);
     let canvas = page.update(cx, |page, _| page.canvas.clone());
     page.update(cx, |page, cx| {
         page.doc
@@ -280,7 +280,6 @@ fn undo_resyncs_filter_controls_with_the_document(cx: &mut TestAppContext) {
                     grayscale: true,
                     blur_sigma: 4.,
                     brightness: 12,
-                    ..Default::default()
                 },
                 cx,
             )
@@ -314,7 +313,7 @@ fn undo_resyncs_filter_controls_with_the_document(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn leaving_the_crop_tool_clears_the_crop_rect(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
-    let (page, cx) = cx.add_window_view(|window, cx| ImageEditorPage::new(window, cx));
+    let (page, cx) = cx.add_window_view(ImageEditorPage::new);
     let canvas = page.update(cx, |page, _| page.canvas.clone());
     page.update(cx, |page, cx| {
         page.doc
@@ -345,7 +344,7 @@ fn leaving_the_crop_tool_clears_the_crop_rect(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn failed_apply_crop_drops_the_invalid_rect(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
-    let (page, cx) = cx.add_window_view(|window, cx| ImageEditorPage::new(window, cx));
+    let (page, cx) = cx.add_window_view(ImageEditorPage::new);
     let canvas = page.update(cx, |page, _| page.canvas.clone());
     page.update(cx, |page, cx| {
         page.doc
@@ -385,7 +384,7 @@ fn save_captures_edits_made_while_the_dialog_is_open(cx: &mut TestAppContext) {
         std::process::id()
     ));
     let _ = std::fs::remove_file(&file);
-    page.update(cx, |page, cx| {
+    page.update(&mut cx, |page, cx| {
         let canvas = page.canvas.clone();
         page.doc
             .update(cx, |doc, cx| doc.open(png_bytes(24, 12), &canvas, cx));
@@ -401,7 +400,7 @@ fn save_captures_edits_made_while_the_dialog_is_open(cx: &mut TestAppContext) {
         "the guard is raised before the dialog resolves"
     );
 
-    page.update(cx, |page, cx| {
+    page.update(&mut cx, |page, cx| {
         page.doc.update(cx, |doc, cx| {
             doc.set_filters(
                 crate::features::pages::image_editor::document::FilterSettings {
@@ -424,7 +423,7 @@ fn save_captures_edits_made_while_the_dialog_is_open(cx: &mut TestAppContext) {
         .unwrap()
         .to_rgba8();
     let _ = std::fs::remove_file(&file);
-    page.update(cx, |page, cx| {
+    page.update(&mut cx, |page, cx| {
         let doc = page.doc.read(cx);
         let expected = super::bake::compose_export(
             doc.base().unwrap(),
@@ -446,7 +445,7 @@ fn save_captures_edits_made_while_the_dialog_is_open(cx: &mut TestAppContext) {
 fn save_to_an_unwritable_path_reports_failed(cx: &mut TestAppContext) {
     let (page, mut cx) = open_page(cx);
     cx.run_until_parked();
-    page.update(cx, |page, cx| {
+    page.update(&mut cx, |page, cx| {
         let canvas = page.canvas.clone();
         page.doc
             .update(cx, |doc, cx| doc.open(png_bytes(24, 12), &canvas, cx));
@@ -480,7 +479,7 @@ fn reopening_an_image_resets_filter_controls(cx: &mut TestAppContext) {
     use gpui_kit::component::slider::SliderValue;
 
     cx.update(gpui_kit::component::theme::init);
-    let (page, cx) = cx.add_window_view(|window, cx| ImageEditorPage::new(window, cx));
+    let (page, cx) = cx.add_window_view(ImageEditorPage::new);
     let canvas = page.update(cx, |page, _| page.canvas.clone());
     for _ in 0..2 {
         page.update(cx, |page, cx| {
@@ -498,7 +497,6 @@ fn reopening_an_image_resets_filter_controls(cx: &mut TestAppContext) {
                     grayscale: true,
                     blur_sigma: 3.,
                     brightness: 20,
-                    ..Default::default()
                 },
                 cx,
             )

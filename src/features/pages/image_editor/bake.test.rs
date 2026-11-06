@@ -114,7 +114,6 @@ fn apply_filters_until_with_never_superseded_matches_apply_filters() {
         grayscale: true,
         brightness: 10,
         blur_sigma: 1.,
-        ..FilterSettings::default()
     };
     let expected = apply_filters(&base, &filters);
     let out = apply_filters_until(&base, &filters, &mut || false).unwrap();
@@ -184,7 +183,7 @@ fn fill_circle_blends_semi_transparent_src_over_the_background() {
     let mut buf = solid(9, 9, [200, 100, 50, 40]);
     fill_circle(&mut buf, (4., 4.), 0., [255, 0, 0, 128]);
     let px = buf.get_pixel(4, 4).0;
-    let sa = 128. / 255.;
+    let sa: f32 = 128. / 255.;
     for (channel, src, dst) in [(0, 255., 200.), (1, 0., 100.), (2, 0., 50.)] {
         let expected = (src * sa + dst * (1. - sa)).round() as u8;
         assert_eq!(px[channel], expected, "channel {channel}");

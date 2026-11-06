@@ -95,8 +95,8 @@ fn pixel_budget_drops_entries_until_within_budget() {
     for i in 0..4u32 {
         history.record_with_budget(
             op(
-                snapshot(shaded(8, 8, i as u8), i),
-                snapshot(shaded(8, 8, i as u8 + 1), i + 1),
+                snapshot(shaded(8, 8, i as u8), i as usize),
+                snapshot(shaded(8, 8, i as u8 + 1), i as usize + 1),
             ),
             HISTORY_ENTRY_LIMIT,
             8 * 8 * 4 * 2,

@@ -322,16 +322,18 @@ fn load_config_repairs_values_the_validation_tier_only_lints() {
     // an unknown locale and NaN bounds must come back fixed, not just warned.
     let dir = tempdir().unwrap();
     let state_file = dir.path().join("state.json");
-    let mut config = AppConfig::default();
-    config.locale = Some("klingon".to_string());
-    config.window_bounds = Some(PersistedWindowBounds {
-        x: 0.0,
-        y: 0.0,
-        width: f32::NAN,
-        height: 600.0,
-        display_id: None,
-        state: PersistedWindowState::Windowed,
-    });
+    let config = AppConfig {
+        locale: Some("klingon".to_string()),
+        window_bounds: Some(PersistedWindowBounds {
+            x: 0.0,
+            y: 0.0,
+            width: f32::NAN,
+            height: 600.0,
+            display_id: None,
+            state: PersistedWindowState::Windowed,
+        }),
+        ..AppConfig::default()
+    };
     std::fs::write(&state_file, serde_json::to_vec(&config).unwrap()).unwrap();
 
     let (loaded, err) = load_config(&state_file);
@@ -481,12 +483,9 @@ fn commit_flush_rearms_when_a_write_was_superseded() {
     let dir = tempdir().unwrap();
     let state_file = dir.path().join("state.json");
     let mut state = dirty_state(&state_file);
+    let bytes = serialize_config(&state.config).unwrap();
 
-    let needs_rearm = commit_flush(
-        &mut state,
-        serialize_config(&state.config).unwrap(),
-        Ok(false),
-    );
+    let needs_rearm = commit_flush(&mut state, bytes, Ok(false));
 
     assert!(needs_rearm, "an abandoned write must re-arm while dirty");
     assert!(state.dirty, "the mutation must stay pending");

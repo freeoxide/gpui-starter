@@ -361,8 +361,8 @@ fn crop_click_keeps_the_stored_crop_rect(cx: &mut TestAppContext) {
     let after_click = cx
         .read(|cx| doc.read(cx).crop_rect())
         .expect("a plain click leaves the stored rect alone");
-    assert_px_eq(after_click.origin.x, stored.origin.x);
-    assert_px_eq(after_click.size.width, stored.size.width);
+    assert_px_eq(after_click.origin.x, stored.origin.x.into());
+    assert_px_eq(after_click.size.width, stored.size.width.into());
 
     dispatch(&canvas, cx, phase_down, (2., 2.));
     dispatch(&canvas, cx, phase_move, (5., 9.));
@@ -370,7 +370,7 @@ fn crop_click_keeps_the_stored_crop_rect(cx: &mut TestAppContext) {
     let after_small = cx
         .read(|cx| doc.read(cx).crop_rect())
         .expect("a sub-minimum drag leaves the stored rect alone");
-    assert_px_eq(after_small.size.width, stored.size.width);
+    assert_px_eq(after_small.size.width, stored.size.width.into());
 }
 
 #[gpui_kit::test]
