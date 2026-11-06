@@ -6,16 +6,13 @@ use gpui_kit::{App, UpdateGlobal as _};
 
 pub fn check_for_updates(cx: &mut App) {
     let current = super::snapshot(cx);
-    match &current.status {
-        UpdateStatus::Checking | UpdateStatus::Downloading { .. } => {
-            tracing::debug!(
-                target: "gpui_starter::updater",
-                status = ?current.status,
-                "skipping check — update operation already in progress"
-            );
-            return;
-        }
-        _ => {}
+    if matches!(current.status, UpdateStatus::Checking) {
+        tracing::debug!(
+            target: "gpui_starter::updater",
+            status = ?current.status,
+            "skipping check — update operation already in progress"
+        );
+        return;
     }
 
     let connectivity = crate::connectivity::snapshot(cx);
@@ -45,9 +42,13 @@ pub fn check_for_updates(cx: &mut App) {
     #[cfg(not(target_family = "wasm"))]
     super::set_status(UpdateStatus::Checking, cx);
 
+    // The runtime global is documented as optional; degrade instead of
+    // panicking when init could not install it.
     #[cfg(not(target_family = "wasm"))]
-    let (rt, client) = crate::services::tokio_runtime::runtime_and_client(cx)
-        .expect("tokio runtime global must be installed before checking for updates");
+    let Some((rt, client)) = crate::services::tokio_runtime::runtime_and_client(cx) else {
+        handle_check_failure("tokio runtime unavailable".to_string(), cx);
+        return;
+    };
     #[cfg(not(target_family = "wasm"))]
     let current_version = current.current_version.clone();
 
@@ -85,15 +86,10 @@ pub fn check_for_updates(cx: &mut App) {
                     "fetched update manifest"
                 );
 
-                // Cache the manifest and platform asset so download_update can
-                // skip re-fetching; re-storing on a cache hit is idempotent.
-                let asset_for_cache = {
-                    let key = platform_key();
-                    manifest.platforms.get(&key).cloned()
-                };
+                // Cache the manifest so the next check inside one interval
+                // skips the fetch; re-storing on a cache hit is idempotent.
                 UpdateSnapshot::update_global(cx, |snap, _cx| {
                     snap.cached_manifest = Some(manifest.clone());
-                    snap.cached_asset = asset_for_cache;
                 });
 
                 // Stamp last_check only when the network was actually hit.
@@ -153,10 +149,6 @@ pub fn check_for_updates(cx: &mut App) {
 
 pub(super) fn check_retry_field(snap: &mut UpdateSnapshot) -> &mut u32 {
     &mut snap.check_retry_count
-}
-
-pub(super) fn download_retry_field(snap: &mut UpdateSnapshot) -> &mut u32 {
-    &mut snap.download_retry_count
 }
 
 /// Returns false when retries are exhausted — the caller owns the terminal
@@ -220,7 +212,6 @@ fn handle_check_failure(error: String, cx: &mut App) {
     }
 }
 
-/// Callers that also need a platform asset should use [`fetch_platform_asset`].
 #[cfg(not(target_family = "wasm"))]
 pub(crate) async fn fetch_manifest(
     rt: Arc<tokio::runtime::Runtime>,
@@ -249,18 +240,4 @@ pub(crate) async fn fetch_manifest(
 
     serde_json::from_slice::<UpdateManifest>(&body)
         .map_err(|e| format!("failed to parse manifest: {e}"))
-}
-
-#[cfg(not(target_family = "wasm"))]
-pub(crate) async fn fetch_platform_asset(
-    rt: Arc<tokio::runtime::Runtime>,
-    client: reqwest::Client,
-) -> Result<PlatformAsset, String> {
-    let manifest = fetch_manifest(rt, client).await?;
-    let key = platform_key();
-    manifest
-        .platforms
-        .get(&key)
-        .cloned()
-        .ok_or_else(|| format!("no asset for platform '{key}' in manifest"))
 }

@@ -69,7 +69,7 @@ fn initialize_loads_persisted_gain_and_registers_capability(cx: &mut TestAppCont
         initialize(cx);
         assert_eq!(snapshot(cx).gain_db, 6.0);
         assert_ne!(snapshot(cx).permission, MicrophonePermissionState::Unknown);
-        assert!(crate::capabilities::snapshot(cx).contains_key("microphone_input"));
+        assert!(crate::capabilities::snapshot(cx).contains_key(&Capability::MICROPHONE_INPUT));
         complete_config_cycle(cx, &guard);
     });
     cx.executor().run_until_parked();
@@ -127,6 +127,8 @@ fn demo_start_pushes_samples_and_stop_detaches(cx: &mut TestAppContext) {
     cx.executor().advance_clock(Duration::from_millis(100));
     cx.executor().run_until_parked();
     cx.update(|cx| {
+        waveform.update(cx, |state, cx| state.refresh(cx));
+        assert!(waveform.read(cx).spectrum().is_some());
         assert!(waveform.read(cx).has_source());
         assert_eq!(waveform.read(cx).dropped_samples(), 0);
     });

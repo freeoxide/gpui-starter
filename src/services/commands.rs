@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     events::{self, AppEventKind},
+    page::Page,
     routes::AppRoute,
-    sidebar::Page,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -43,13 +43,12 @@ pub struct CommandAvailability {
 #[derive(Clone)]
 pub struct CommandSpec {
     pub id: CommandId,
-    pub title: SharedString,
-    pub subtitle: SharedString,
+    pub title_key: &'static str,
+    pub subtitle_key: &'static str,
     pub icon: IconName,
 }
 
 pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
-    let desktop = crate::desktop_actions::snapshot(cx);
     match id {
         CommandId::OpenHome
         | CommandId::OpenForm
@@ -70,20 +69,26 @@ pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
             enabled: true,
             disabled_reason: None,
         },
-        CommandId::CopyDiagnostics => CommandAvailability {
-            enabled: desktop.clipboard_available,
-            disabled_reason: disabled_reason(
-                "command_reason_clipboard_unavailable",
-                !desktop.clipboard_available,
-            ),
-        },
-        CommandId::OpenLogsFolder | CommandId::OpenConfigFolder => CommandAvailability {
-            enabled: desktop.opener_available,
-            disabled_reason: disabled_reason(
-                "command_reason_opener_unavailable",
-                !desktop.opener_available,
-            ),
-        },
+        CommandId::CopyDiagnostics => {
+            let desktop = crate::desktop_actions::snapshot(cx);
+            CommandAvailability {
+                enabled: desktop.clipboard_available,
+                disabled_reason: disabled_reason(
+                    "command_reason_clipboard_unavailable",
+                    !desktop.clipboard_available,
+                ),
+            }
+        }
+        CommandId::OpenLogsFolder | CommandId::OpenConfigFolder => {
+            let desktop = crate::desktop_actions::snapshot(cx);
+            CommandAvailability {
+                enabled: desktop.opener_available,
+                disabled_reason: disabled_reason(
+                    "command_reason_opener_unavailable",
+                    !desktop.opener_available,
+                ),
+            }
+        }
         CommandId::Undo => {
             let undo = crate::undo_stack::can_undo(cx);
             CommandAvailability {
@@ -129,144 +134,162 @@ pub fn availability(id: CommandId, cx: &App) -> CommandAvailability {
     }
 }
 
-pub fn registry() -> Vec<CommandSpec> {
-    vec![
-        command(
-            CommandId::OpenHome,
-            "command_home",
-            "command_home_subtitle",
-            IconName::Inbox,
-        ),
-        command(
-            CommandId::OpenForm,
-            "command_form",
-            "command_form_subtitle",
-            IconName::File,
-        ),
-        command(
-            CommandId::OpenSettings,
-            "command_settings",
-            "command_settings_subtitle",
-            IconName::Settings2,
-        ),
-        command(
-            CommandId::OpenNotifications,
-            "command_notifications",
-            "command_notifications_subtitle",
-            IconName::Bell,
-        ),
-        command(
-            CommandId::OpenDiagnostics,
-            "command_diagnostics",
-            "command_diagnostics_subtitle",
-            IconName::Info,
-        ),
-        command(
-            CommandId::OpenAbout,
-            "command_about",
-            "command_about_subtitle",
-            IconName::Info,
-        ),
-        command(
-            CommandId::OpenSystemControls,
-            "command_system_controls",
-            "command_system_controls_subtitle",
-            IconName::Settings2,
-        ),
-        command(
-            CommandId::ThemeLight,
-            "command_light_mode",
-            "command_light_mode_subtitle",
-            IconName::Sun,
-        ),
-        command(
-            CommandId::ThemeDark,
-            "command_dark_mode",
-            "command_dark_mode_subtitle",
-            IconName::Moon,
-        ),
-        command(
-            CommandId::StartDemoTask,
-            "command_start_demo_task",
-            "command_start_demo_task_subtitle",
-            IconName::Play,
-        ),
-        command(
-            CommandId::CheckConnectivity,
-            "command_check_connectivity",
-            "command_check_connectivity_subtitle",
-            IconName::Globe,
-        ),
-        command(
-            CommandId::CopyDiagnostics,
-            "command_copy_diagnostics",
-            "command_copy_diagnostics_subtitle",
-            IconName::Info,
-        ),
-        command(
-            CommandId::OpenLogsFolder,
-            "command_open_logs_folder",
-            "command_open_logs_folder_subtitle",
-            IconName::Info,
-        ),
-        command(
-            CommandId::OpenConfigFolder,
-            "command_open_config_folder",
-            "command_open_config_folder_subtitle",
-            IconName::Info,
-        ),
-        command(
-            CommandId::Undo,
-            "command_undo",
-            "command_undo_subtitle",
-            IconName::Info,
-        ),
-        command(
-            CommandId::Redo,
-            "command_redo",
-            "command_redo_subtitle",
-            IconName::Info,
-        ),
-        command(
-            CommandId::Restart,
-            "command_restart",
-            "command_restart_subtitle",
-            IconName::Info,
-        ),
-        command(
-            CommandId::OpenMenubarCharts,
-            "command_menubar_charts",
-            "command_menubar_charts_subtitle",
-            IconName::ChartPie,
-        ),
-        command(
-            CommandId::StartTour,
-            "tutorial_command",
-            "tutorial_command_subtitle",
-            IconName::Map,
-        ),
-        command(
-            CommandId::SignIn,
-            "command_sign_in",
-            "command_sign_in_subtitle",
-            IconName::User,
-        ),
-        command(
-            CommandId::SignOut,
-            "command_sign_out",
-            "command_sign_out_subtitle",
-            IconName::CircleUser,
-        ),
-        command(
-            CommandId::OpenDesktopWidgets,
-            "command_desktop_widgets",
-            "command_desktop_widgets_subtitle",
-            IconName::PanelBottom,
-        ),
-    ]
+/// Static command table: ids, i18n keys and icons only, so callers localize
+/// at the rendering boundary and a locale switch needs no invalidation.
+pub const REGISTRY: &[CommandSpec] = &[
+    command(
+        CommandId::OpenHome,
+        "command_home",
+        "command_home_subtitle",
+        IconName::Inbox,
+    ),
+    command(
+        CommandId::OpenForm,
+        "command_form",
+        "command_form_subtitle",
+        IconName::File,
+    ),
+    command(
+        CommandId::OpenSettings,
+        "command_settings",
+        "command_settings_subtitle",
+        IconName::Settings2,
+    ),
+    command(
+        CommandId::OpenNotifications,
+        "command_notifications",
+        "command_notifications_subtitle",
+        IconName::Bell,
+    ),
+    command(
+        CommandId::OpenDiagnostics,
+        "command_diagnostics",
+        "command_diagnostics_subtitle",
+        IconName::Info,
+    ),
+    command(
+        CommandId::OpenAbout,
+        "command_about",
+        "command_about_subtitle",
+        IconName::Info,
+    ),
+    command(
+        CommandId::OpenSystemControls,
+        "command_system_controls",
+        "command_system_controls_subtitle",
+        IconName::Settings2,
+    ),
+    command(
+        CommandId::ThemeLight,
+        "command_light_mode",
+        "command_light_mode_subtitle",
+        IconName::Sun,
+    ),
+    command(
+        CommandId::ThemeDark,
+        "command_dark_mode",
+        "command_dark_mode_subtitle",
+        IconName::Moon,
+    ),
+    command(
+        CommandId::StartDemoTask,
+        "command_start_demo_task",
+        "command_start_demo_task_subtitle",
+        IconName::Play,
+    ),
+    command(
+        CommandId::CheckConnectivity,
+        "command_check_connectivity",
+        "command_check_connectivity_subtitle",
+        IconName::Globe,
+    ),
+    command(
+        CommandId::CopyDiagnostics,
+        "command_copy_diagnostics",
+        "command_copy_diagnostics_subtitle",
+        IconName::Info,
+    ),
+    command(
+        CommandId::OpenLogsFolder,
+        "command_open_logs_folder",
+        "command_open_logs_folder_subtitle",
+        IconName::Info,
+    ),
+    command(
+        CommandId::OpenConfigFolder,
+        "command_open_config_folder",
+        "command_open_config_folder_subtitle",
+        IconName::Info,
+    ),
+    command(
+        CommandId::Undo,
+        "command_undo",
+        "command_undo_subtitle",
+        IconName::Info,
+    ),
+    command(
+        CommandId::Redo,
+        "command_redo",
+        "command_redo_subtitle",
+        IconName::Info,
+    ),
+    command(
+        CommandId::Restart,
+        "command_restart",
+        "command_restart_subtitle",
+        IconName::Info,
+    ),
+    command(
+        CommandId::OpenMenubarCharts,
+        "command_menubar_charts",
+        "command_menubar_charts_subtitle",
+        IconName::ChartPie,
+    ),
+    command(
+        CommandId::StartTour,
+        "tutorial_command",
+        "tutorial_command_subtitle",
+        IconName::Map,
+    ),
+    command(
+        CommandId::SignIn,
+        "command_sign_in",
+        "command_sign_in_subtitle",
+        IconName::User,
+    ),
+    command(
+        CommandId::SignOut,
+        "command_sign_out",
+        "command_sign_out_subtitle",
+        IconName::CircleUser,
+    ),
+    command(
+        CommandId::OpenDesktopWidgets,
+        "command_desktop_widgets",
+        "command_desktop_widgets_subtitle",
+        IconName::PanelBottom,
+    ),
+];
+
+/// Borrowed single-command lookup for callers that need one row (menu
+/// rebuilds) without localizing the whole table.
+pub fn spec(id: CommandId) -> Option<&'static CommandSpec> {
+    REGISTRY.iter().find(|spec| spec.id == id)
 }
 
 pub fn execute(id: CommandId, cx: &mut App) {
+    // Dispatch surfaces render disabled state, but execute is the one choke
+    // point they all funnel through, so availability must hold here too.
+    let availability = availability(id, cx);
+    if !availability.enabled {
+        tracing::warn!(
+            target: "gpui_starter::commands",
+            command = ?id,
+            reason = ?availability.disabled_reason,
+            "command ignored"
+        );
+        return;
+    }
     match id {
         CommandId::OpenHome => navigate(Page::Home, cx),
         CommandId::OpenForm => navigate(Page::Form, cx),
@@ -281,53 +304,19 @@ pub fn execute(id: CommandId, cx: &mut App) {
         CommandId::CheckConnectivity => crate::connectivity::check_now(cx),
         CommandId::CopyDiagnostics => {
             if let Err(error) = crate::desktop_actions::copy_diagnostics(cx) {
+                // update_result inside desktop_actions already reports this
+                // failure; a second record would double every toast.
                 tracing::warn!(target: "gpui_starter::commands", %error, "copy diagnostics failed");
-                report_error(
-                    format!(
-                        "{}: {error}",
-                        crate::i18n::localize("command_copy_diagnostics_failed")
-                    ),
-                    crate::error_surface::ErrorCategory::System,
-                    vec![
-                        crate::error_surface::ErrorAction::Retry,
-                        crate::error_surface::ErrorAction::Dismiss,
-                    ],
-                    cx,
-                );
             }
         }
         CommandId::OpenLogsFolder => {
             if let Err(error) = crate::desktop_actions::open_logs_folder(cx) {
                 tracing::warn!(target: "gpui_starter::commands", %error, "open logs folder failed");
-                report_error(
-                    format!(
-                        "{}: {error}",
-                        crate::i18n::localize("command_open_logs_failed")
-                    ),
-                    crate::error_surface::ErrorCategory::Storage,
-                    vec![
-                        crate::error_surface::ErrorAction::OpenSettings,
-                        crate::error_surface::ErrorAction::Dismiss,
-                    ],
-                    cx,
-                );
             }
         }
         CommandId::OpenConfigFolder => {
             if let Err(error) = crate::desktop_actions::open_config_folder(cx) {
                 tracing::warn!(target: "gpui_starter::commands", %error, "open config folder failed");
-                report_error(
-                    format!(
-                        "{}: {error}",
-                        crate::i18n::localize("command_open_config_failed")
-                    ),
-                    crate::error_surface::ErrorCategory::Config,
-                    vec![
-                        crate::error_surface::ErrorAction::OpenSettings,
-                        crate::error_surface::ErrorAction::Dismiss,
-                    ],
-                    cx,
-                );
             }
         }
         CommandId::Undo => {
@@ -339,14 +328,6 @@ pub fn execute(id: CommandId, cx: &mut App) {
         CommandId::Restart => {
             #[cfg(any(unix, windows))]
             cx.dispatch_action(&crate::app::Restart);
-            #[cfg(not(any(unix, windows)))]
-            {
-                let _ = cx;
-                tracing::warn!(
-                    target: "gpui_starter::commands",
-                    "restart command unavailable on this platform"
-                );
-            }
         }
         CommandId::OpenMenubarCharts => {
             crate::features::menubar_charts::open_sheet(cx);
@@ -374,26 +355,16 @@ fn navigate(page: Page, cx: &mut App) {
     events::emit(AppEventKind::Navigate(AppRoute::page(page)), cx);
 }
 
-fn report_error(
-    message: impl Into<String>,
-    category: crate::error_surface::ErrorCategory,
-    actions: Vec<crate::error_surface::ErrorAction>,
-    cx: &mut App,
-) {
-    crate::error_surface::report(
-        message,
-        crate::errors::AppErrorSeverity::Error,
-        category,
-        actions,
-        cx,
-    );
-}
-
-fn command(id: CommandId, title_key: &str, subtitle_key: &str, icon: IconName) -> CommandSpec {
+const fn command(
+    id: CommandId,
+    title_key: &'static str,
+    subtitle_key: &'static str,
+    icon: IconName,
+) -> CommandSpec {
     CommandSpec {
         id,
-        title: crate::i18n::localize(title_key).into(),
-        subtitle: crate::i18n::localize(subtitle_key).into(),
+        title_key,
+        subtitle_key,
         icon,
     }
 }
@@ -401,3 +372,7 @@ fn command(id: CommandId, title_key: &str, subtitle_key: &str, icon: IconName) -
 fn disabled_reason(key: &str, disabled: bool) -> Option<SharedString> {
     disabled.then(|| crate::i18n::localize(key).into())
 }
+
+#[cfg(test)]
+#[path = "commands.test.rs"]
+mod commands_test;

@@ -1,5 +1,8 @@
+use std::borrow::Cow;
+use std::str::FromStr as _;
 use std::sync::Arc;
 
+use cpal::DeviceId;
 use cpal::SampleFormat;
 use cpal::traits::{DeviceTrait as _, HostTrait as _, StreamTrait as _};
 
@@ -10,19 +13,22 @@ use crate::ui::waveform::SampleProducer;
 
 pub(crate) fn enumerate() -> Vec<OutputDevice> {
     let host = cpal::default_host();
-    let default_name = host
+    let default_id = host
         .default_output_device()
-        .map(|device| device.to_string());
+        .and_then(|device| device.id().ok())
+        .map(|id| id.to_string());
     let Ok(devices) = host.output_devices() else {
         return Vec::new();
     };
     devices
-        .map(|device| {
+        .filter_map(|device| {
+            let id = device.id().ok()?.to_string();
             let name = device.to_string();
-            OutputDevice {
-                is_default: default_name.as_deref() == Some(name.as_str()),
+            Some(OutputDevice {
+                is_default: default_id.as_deref() == Some(id.as_str()),
+                id,
                 name,
-            }
+            })
         })
         .collect()
 }
@@ -118,47 +124,51 @@ pub(crate) fn fill_buffer(
     take < frames_out
 }
 
+/// Play/pause surface the engine holds; the native cpal stream is the
+/// production implementation and tests install their own.
+pub(crate) trait SessionSink: Send + Sync {
+    fn play(&self) -> Result<(), AudioError>;
+    fn pause(&self) -> Result<(), AudioError>;
+}
+
 pub(crate) struct OutputSession {
     stream: cpal::Stream,
 }
 
-impl OutputSession {
-    pub(crate) fn play(&self) -> Result<(), AudioError> {
+impl SessionSink for OutputSession {
+    fn play(&self) -> Result<(), AudioError> {
         self.stream
             .play()
             .map_err(|err| AudioError::Output(err.to_string()))
     }
 
-    pub(crate) fn pause(&self) -> Result<(), AudioError> {
+    fn pause(&self) -> Result<(), AudioError> {
         self.stream
             .pause()
             .map_err(|err| AudioError::Output(err.to_string()))
     }
 }
 
-/// Resolve the device for `wanted` (by name), falling back to the host
-/// default. Runs the host's device scan; call from a background task.
+/// Resolve the device for `wanted` (a stable device id from `enumerate`),
+/// falling back to the host default. Runs the host's device scan; call from
+/// a background task.
 pub(crate) fn find_output_device(wanted: Option<&str>) -> Result<cpal::Device, AudioError> {
     let host = cpal::default_host();
-    let device = match wanted {
-        Some(name) => host
-            .output_devices()
-            .map_err(|err| AudioError::UnsupportedDevice(err.to_string()))?
-            .find(|device| device.to_string() == name)
-            .or_else(|| host.default_output_device()),
-        None => host.default_output_device(),
-    };
+    let device = wanted
+        .and_then(|id| DeviceId::from_str(id).ok())
+        .and_then(|id| host.device_by_id(&id))
+        .or_else(|| host.default_output_device());
     device.ok_or(AudioError::NoOutputDevice)
 }
 
 pub(crate) fn build_session(
     device: &cpal::Device,
-    render: Arc<Vec<f32>>,
+    render: Arc<[f32]>,
     render_channels: usize,
     plan: StreamPlan,
     transport: Arc<SharedTransport>,
-    mut producer: SampleProducer,
-) -> Result<OutputSession, AudioError> {
+    mut producer: Option<SampleProducer>,
+) -> Result<Arc<dyn SessionSink>, AudioError> {
     let mut tap: Vec<f32> = Vec::new();
     let stream = device
         .build_output_stream::<f32, _, _>(
@@ -168,18 +178,22 @@ pub(crate) fn build_session(
                     transport.set_playing(false);
                     transport.set_eof();
                 }
-                producer.push_interleaved(&tap);
+                if let Some(producer) = producer.as_mut() {
+                    producer.push_interleaved(&tap);
+                }
             },
             |err| tracing::warn!(target: "gpui_starter::audio", error = %err, "cpal stream error"),
             None,
         )
         .map_err(|err| AudioError::Output(err.to_string()))?;
-    Ok(OutputSession { stream })
+    Ok(Arc::new(OutputSession { stream }))
 }
 
-pub(crate) fn resample_linear(src: &[f32], channels: usize, from: u32, to: u32) -> Vec<f32> {
+/// Borrows `src` unchanged when no resample is needed; the render pipeline
+/// relies on that to skip whole-track copies on rate-matched devices.
+pub(crate) fn resample_linear(src: &[f32], channels: usize, from: u32, to: u32) -> Cow<'_, [f32]> {
     if from == to || src.is_empty() {
-        return src.to_vec();
+        return Cow::Borrowed(src);
     }
     let channels = channels.max(1);
     let frames_in = src.len() / channels;
@@ -197,12 +211,17 @@ pub(crate) fn resample_linear(src: &[f32], channels: usize, from: u32, to: u32) 
             out.push(left + (right - left) * frac);
         }
     }
-    out
+    Cow::Owned(out)
 }
 
-pub(crate) fn adapt_to_channels(src: &[f32], channels: usize, out_channels: usize) -> Vec<f32> {
+/// Borrows `src` unchanged when the channel count already matches.
+pub(crate) fn adapt_to_channels(
+    src: &[f32],
+    channels: usize,
+    out_channels: usize,
+) -> Cow<'_, [f32]> {
     if channels == out_channels {
-        return src.to_vec();
+        return Cow::Borrowed(src);
     }
     let channels = channels.max(1);
     let frames = src.len() / channels;
@@ -218,7 +237,7 @@ pub(crate) fn adapt_to_channels(src: &[f32], channels: usize, out_channels: usiz
             _ => out.extend_from_slice(chunk),
         }
     }
-    out
+    Cow::Owned(out)
 }
 
 #[cfg(test)]

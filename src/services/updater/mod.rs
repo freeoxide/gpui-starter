@@ -1,12 +1,11 @@
 mod apply;
 mod check;
-mod download;
 mod types;
 
 use gpui_kit::UpdateGlobal as _;
 
 // Re-exported so external import paths stay stable.
-pub use types::{CheckForUpdates, PlatformAsset, UpdateManifest, UpdateSnapshot, UpdateStatus};
+pub use types::{PlatformAsset, UpdateManifest, UpdateSnapshot, UpdateStatus};
 
 // The loops only exist behind #[cfg(not(target_family = "wasm"))] in
 // initialize, so the pure decision helper is dead code on wasm.
@@ -27,16 +26,11 @@ pub fn initialize(cx: &mut gpui_kit::App) {
             channel
         },
         check_retry_count: 0,
-        download_retry_count: 0,
         ..Default::default()
     });
 
-    cx.on_action(|_: &CheckForUpdates, cx| {
-        check::check_for_updates(cx);
-    });
-
     // Self-update is desktop-only (binary swap on disk); wasm ships updates
-    // with the page reload. The action handler above still runs either way.
+    // with the page reload.
     #[cfg(not(target_family = "wasm"))]
     {
         // A placeholder build endpoint must never auto-poll (RCA §7.5); the
@@ -92,8 +86,7 @@ pub fn initialize(cx: &mut gpui_kit::App) {
         } else {
             tracing::info!(
                 target: "gpui_starter::updater",
-                "automatic update checks disabled (no opt-in or placeholder manifest url); \
-                 manual CheckForUpdates remains available"
+                "automatic update checks disabled (no opt-in or placeholder manifest url)"
             );
         }
     }
@@ -111,39 +104,8 @@ pub fn snapshot(cx: &gpui_kit::App) -> UpdateSnapshot {
         .unwrap_or_default()
 }
 
-pub fn check_for_updates(cx: &mut gpui_kit::App) {
-    check::check_for_updates(cx);
-}
-
-pub fn download_update(cx: &mut gpui_kit::App) {
-    download::download_update(cx);
-}
-
-pub fn apply_update(cx: &mut gpui_kit::App) {
-    apply::apply_update(cx);
-}
-
 pub fn check_pending_swap(cx: &mut gpui_kit::App) {
     apply::check_pending_swap(cx);
-}
-
-pub fn set_channel(channel: &str, cx: &mut gpui_kit::App) {
-    let ch = if channel.is_empty() {
-        "stable".to_string()
-    } else {
-        channel.to_string()
-    };
-    UpdateSnapshot::update_global(cx, |snap, _cx| {
-        snap.update_channel = ch.clone();
-    });
-    crate::app_state::update_config(cx, |config| {
-        config.update_channel = ch;
-    });
-    tracing::info!(
-        target: "gpui_starter::updater",
-        channel = %channel,
-        "update channel set"
-    );
 }
 
 fn set_status(status: UpdateStatus, cx: &mut gpui_kit::App) {
@@ -163,12 +125,6 @@ fn reset_check_retry(cx: &mut gpui_kit::App) {
     });
 }
 
-fn reset_download_retry(cx: &mut gpui_kit::App) {
-    UpdateSnapshot::update_global(cx, |snap, _cx| {
-        snap.download_retry_count = 0;
-    });
-}
-
 fn notify_update_available(version: &str, cx: &mut gpui_kit::App) {
     dispatch_background_notification(
         &format!(
@@ -177,18 +133,6 @@ fn notify_update_available(version: &str, cx: &mut gpui_kit::App) {
             crate::i18n::localize("updates_available_suffix")
         ),
         &crate::i18n::localize("updates_available_body"),
-        cx,
-    );
-}
-
-fn notify_update_downloaded(version: &str, cx: &mut gpui_kit::App) {
-    dispatch_background_notification(
-        &format!(
-            "{} v{version} {}",
-            crate::i18n::localize("updates_title_prefix"),
-            crate::i18n::localize("updates_ready_suffix")
-        ),
-        &crate::i18n::localize("updates_ready_body"),
         cx,
     );
 }
@@ -209,10 +153,7 @@ fn dispatch_background_notification(title: &str, body: &str, cx: &mut gpui_kit::
             title: title.to_string(),
             body: body.to_string(),
             backend: crate::notifications::NotificationBackendKind::UiOnly,
-            delivered_natively: false,
-            degraded: false,
             error_summary: None,
-            kind: crate::notifications::inbox::NotificationInboxKind::SettingsUpdate,
         },
         cx,
     );

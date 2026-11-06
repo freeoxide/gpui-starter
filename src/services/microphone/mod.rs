@@ -4,7 +4,7 @@
 //! touches: the pub mod + re-export lines in services/mod.rs and
 //! features/pages/mod.rs, the microphone entry in lib.rs's services re-export,
 //! the initialize call in app/init.rs, the Page::Microphone arms and all()
-//! entry in shell/sidebar.rs, the VALID_HOSTS entry in shell/route.rs, the
+//! entry in shell/page.rs, the VALID_HOSTS entry in shell/route.rs, the
 //! AppRoot wiring in shell/root/app_root/state.rs, the page count in
 //! tests/e2e_navigation.rs, the mic_* fields in state/config_store.rs and both
 //! snapshot_tests.rs snapshots, the microphone_* + nav_microphone keys in

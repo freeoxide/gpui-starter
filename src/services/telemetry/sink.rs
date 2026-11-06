@@ -1,16 +1,38 @@
 #[cfg(feature = "otlp")]
-use std::sync::OnceLock;
+use std::sync::Mutex;
 
 use super::TelemetryError;
 
-// Holds the installed pipeline; rebuilding on every set_mode(Remote) would
-// leak the previous batch exporter (background thread + connections).
+// Keyed by endpoint so an endpoint change rebuilds instead of
+// first-installed-wins; emptied at shutdown to force a fresh build later.
 #[cfg(feature = "otlp")]
-static INSTALLED_PIPELINE: OnceLock<opentelemetry_sdk::trace::TracerProvider> = OnceLock::new();
+static INSTALLED_PIPELINE: Mutex<Option<InstalledPipeline>> = Mutex::new(None);
 
-/// Install an OTLP HTTP tracer provider on the global pipeline. Returns a
-/// human-readable error when the exporter cannot be built; the returned
-/// provider is kept for `force_flush` without a global shutdown.
+#[cfg(feature = "otlp")]
+struct InstalledPipeline {
+    endpoint: String,
+    provider: opentelemetry_sdk::trace::TracerProvider,
+}
+
+#[cfg(feature = "otlp")]
+fn lock_pipeline() -> std::sync::MutexGuard<'static, Option<InstalledPipeline>> {
+    INSTALLED_PIPELINE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Drain a retired provider off-thread: shutdown blocks on the collector, and
+/// dropping the last clone would block whichever thread does it.
+#[cfg(feature = "otlp")]
+fn retire(provider: opentelemetry_sdk::trace::TracerProvider) {
+    std::thread::spawn(move || {
+        let _ = provider.shutdown();
+    });
+}
+
+/// Install an OTLP HTTP tracer provider on the global pipeline, reusing the
+/// live one only when the endpoint is unchanged; a change drains the old
+/// provider off-thread and builds a fresh export pipeline.
 #[cfg(feature = "otlp")]
 pub(super) fn install_otlp_tracer(
     endpoint: &str,
@@ -24,13 +46,14 @@ pub(super) fn install_otlp_tracer(
 
     use super::SERVICE_NAME;
 
-    if let Some(existing) = INSTALLED_PIPELINE.get() {
-        tracing::warn!(
-            target: "gpui_starter::telemetry",
-            requested_endpoint = %endpoint,
-            "OTLP pipeline already installed; reusing it (endpoint changes need an app restart)"
-        );
-        return Ok(existing.clone());
+    let mut installed = lock_pipeline();
+    if let Some(current) = installed.as_ref()
+        && current.endpoint == endpoint
+    {
+        return Ok(current.provider.clone());
+    }
+    if let Some(old) = installed.take() {
+        retire(old.provider);
     }
 
     let exporter = opentelemetry_otlp::new_exporter()
@@ -55,19 +78,20 @@ pub(super) fn install_otlp_tracer(
         endpoint = %endpoint,
         "OTLP tracer provider installed"
     );
-    let _ = INSTALLED_PIPELINE.set(provider.clone());
+    *installed = Some(InstalledPipeline {
+        endpoint: endpoint.to_owned(),
+        provider: provider.clone(),
+    });
     Ok(provider)
 }
 
-/// No-op fallback when the `otlp` feature is disabled — tracing-only export.
-#[cfg(not(feature = "otlp"))]
-pub(super) fn install_otlp_tracer(endpoint: &str) -> Result<(), TelemetryError> {
-    tracing::debug!(
-        target: "gpui_starter::telemetry",
-        endpoint = %endpoint,
-        "OTLP export skipped (otlp feature disabled); endpoint noted for future use"
-    );
-    Ok(())
+/// Retire the installed pipeline at app shutdown so a later install builds a
+/// fresh provider instead of reusing a drained one as if it were live.
+#[cfg(feature = "otlp")]
+pub(super) fn shutdown_pipeline() {
+    if let Some(current) = lock_pipeline().take() {
+        retire(current.provider);
+    }
 }
 
 #[derive(Default)]
@@ -116,12 +140,12 @@ impl super::TelemetrySink for LocalSink {
 }
 
 /// Remote sink exporting via OTLP over HTTP. Endpoint precedence matches
-/// [`super::resolve_otlp_endpoint`]; without the `otlp` feature it stays in a
-/// tracing-only mode that reports itself connected.
+/// [`super::resolve_otlp_endpoint`]; `provider_installed` says the SDK
+/// pipeline was built, never that the collector is reachable.
 #[derive(Clone)]
 pub(super) struct RemoteSink {
     endpoint: String,
-    pub(super) connected: bool,
+    pub(super) provider_installed: bool,
     /// Kept so flush can call force_flush without shutting down the global provider.
     #[cfg(feature = "otlp")]
     provider: Option<opentelemetry_sdk::trace::TracerProvider>,
@@ -130,17 +154,17 @@ pub(super) struct RemoteSink {
 impl RemoteSink {
     /// `runtime` must be the shared tokio runtime handle: the batch exporter
     /// spawns its batching task on the ambient runtime, and GPUI threads run
-    /// outside any tokio context. Without a handle the sink stays disconnected
+    /// outside any tokio context. Without a handle the sink stays uninstalled
     /// instead of panicking.
     pub(super) fn new(endpoint: &str, runtime: Option<tokio::runtime::Handle>) -> Self {
         #[cfg(feature = "otlp")]
-        let (connected, provider) = Self::install(endpoint, runtime);
+        let (provider_installed, provider) = Self::install(endpoint, runtime);
         // The () install payload only exists without the `otlp` feature.
         #[cfg(not(feature = "otlp"))]
-        let (connected, ()) = Self::install(endpoint, runtime);
+        let (provider_installed, ()) = Self::install(endpoint, runtime);
         Self {
             endpoint: endpoint.to_owned(),
-            connected,
+            provider_installed,
             #[cfg(feature = "otlp")]
             provider,
         }
@@ -175,19 +199,12 @@ impl RemoteSink {
 
     #[cfg(not(feature = "otlp"))]
     fn install(endpoint: &str, _runtime: Option<tokio::runtime::Handle>) -> (bool, ()) {
-        let connected = match install_otlp_tracer(endpoint) {
-            Ok(()) => true,
-            Err(err) => {
-                tracing::warn!(
-                    target: "gpui_starter::telemetry",
-                    endpoint = %endpoint,
-                    error = %err,
-                    "OTLP tracer provider installation failed; events will be logged locally"
-                );
-                false
-            }
-        };
-        (connected, ())
+        tracing::debug!(
+            target: "gpui_starter::telemetry",
+            endpoint = %endpoint,
+            "OTLP export not compiled in (rebuild with --features otlp); events stay local"
+        );
+        (false, ())
     }
 
     /// Push buffered spans to the collector without disabling the provider.
@@ -226,16 +243,16 @@ impl RemoteSink {
         Ok(())
     }
 
-    /// Gate for methods that need collector connectivity; `log_dropped` keeps
+    /// Gate for methods that need an installed provider; `log_dropped` keeps
     /// each call site's structured fields (event name, error text, key/value)
     /// in its own tracing macro.
-    fn require_connected(&self, log_dropped: impl FnOnce()) -> Result<(), TelemetryError> {
-        if self.connected {
+    fn require_installed(&self, log_dropped: impl FnOnce()) -> Result<(), TelemetryError> {
+        if self.provider_installed {
             return Ok(());
         }
         log_dropped();
         Err(TelemetryError::NotAvailable(format!(
-            "OTLP exporter not connected to {}",
+            "OTLP provider not installed for {} (collector reachability unverified)",
             self.endpoint
         )))
     }
@@ -243,40 +260,40 @@ impl RemoteSink {
 
 impl super::TelemetrySink for RemoteSink {
     fn record_event(&self, name: &str) -> Result<(), TelemetryError> {
-        self.require_connected(|| {
+        self.require_installed(|| {
             tracing::warn!(
                 target: "gpui_starter::telemetry",
                 endpoint = %self.endpoint,
                 event = %name,
-                "remote telemetry event dropped (not connected)"
-            );
+                "remote telemetry event dropped (provider not installed)"
+            )
         })?;
         tracing::debug!(target: "gpui_starter::telemetry", endpoint = %self.endpoint, event = %name, "remote telemetry event queued");
         Ok(())
     }
 
     fn record_error(&self, error: &str) -> Result<(), TelemetryError> {
-        self.require_connected(|| {
+        self.require_installed(|| {
             tracing::warn!(
                 target: "gpui_starter::telemetry",
                 endpoint = %self.endpoint,
                 error = %error,
-                "remote telemetry error dropped (not connected)"
-            );
+                "remote telemetry error dropped (provider not installed)"
+            )
         })?;
         tracing::warn!(target: "gpui_starter::telemetry", endpoint = %self.endpoint, error = %error, "remote telemetry error queued");
         Ok(())
     }
 
     fn set_user_properties(&self, key: &str, value: &str) -> Result<(), TelemetryError> {
-        self.require_connected(|| {
+        self.require_installed(|| {
             tracing::debug!(
                 target: "gpui_starter::telemetry",
                 endpoint = %self.endpoint,
                 key = %key,
                 value = %value,
-                "remote telemetry user property dropped (not connected)"
-            );
+                "remote telemetry user property dropped (provider not installed)"
+            )
         })?;
         tracing::debug!(target: "gpui_starter::telemetry", endpoint = %self.endpoint, key = %key, value = %value, "remote telemetry user property queued");
         Ok(())
@@ -285,12 +302,12 @@ impl super::TelemetrySink for RemoteSink {
     /// Flush is repeatable (Settings button) and leaves the provider active,
     /// unlike the one-way `shutdown_tracer_provider()`.
     fn flush(&self) -> Result<(), TelemetryError> {
-        self.require_connected(|| {
+        self.require_installed(|| {
             tracing::debug!(
                 target: "gpui_starter::telemetry",
                 endpoint = %self.endpoint,
-                "remote telemetry flush skipped (not connected)"
-            );
+                "remote telemetry flush skipped (provider not installed)"
+            )
         })?;
         tracing::debug!(target: "gpui_starter::telemetry", endpoint = %self.endpoint, "remote telemetry flush");
         self.force_flush_provider()

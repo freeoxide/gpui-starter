@@ -17,6 +17,9 @@ pub struct ConnectivitySnapshot {
     pub probe_url: String,
     pub interfaces: Vec<String>,
     pub last_error: Option<String>,
+    /// Token of the newest spawned probe; completions carrying an older
+    /// token are stale and must not overwrite a fresher result.
+    probe_generation: u64,
 }
 
 impl Default for ConnectivitySnapshot {
@@ -26,6 +29,7 @@ impl Default for ConnectivitySnapshot {
             probe_url: "https://example.com".to_string(),
             interfaces: Vec::new(),
             last_error: None,
+            probe_generation: 0,
         }
     }
 }
@@ -58,6 +62,11 @@ pub fn check_now(cx: &mut App) {
         return;
     };
 
+    let generation = cx.update_global::<ConnectivitySnapshot, _>(|next, _| {
+        next.probe_generation += 1;
+        next.probe_generation
+    });
+
     cx.spawn(async move |cx| {
         let probe_handle = rt.spawn(async move {
             client
@@ -87,6 +96,13 @@ pub fn check_now(cx: &mut App) {
 
         cx.update(move |cx| {
             cx.update_global::<ConnectivitySnapshot, _>(|next, _cx| {
+                if next.probe_generation != generation {
+                    tracing::debug!(
+                        target: "gpui_starter::connectivity",
+                        "discarding stale connectivity probe result"
+                    );
+                    return;
+                }
                 next.interfaces = interfaces;
                 match result {
                     Ok(response) if response.status().is_success() => {
@@ -152,3 +168,7 @@ pub fn check_now(cx: &mut App) {
         "connectivity snapshot updated from navigator.onLine"
     );
 }
+
+#[cfg(test)]
+#[path = "connectivity.test.rs"]
+mod connectivity_test;

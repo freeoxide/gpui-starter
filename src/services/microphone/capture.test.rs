@@ -62,7 +62,7 @@ fn i32_conversion_covers_the_extremes() {
 }
 
 #[gpui_kit::test]
-async fn callback_downmixes_four_channels_into_a_stereo_producer(cx: &mut TestAppContext) {
+async fn convert_chunk_downmixes_the_first_two_device_channels(cx: &mut TestAppContext) {
     let state = cx.new(|_| WaveformState::new());
     let mut producer = state.update(cx, |state, cx| {
         state.attach_source(48_000, 2, DEFAULT_RETENTION, cx)
@@ -70,21 +70,53 @@ async fn callback_downmixes_four_channels_into_a_stereo_producer(cx: &mut TestAp
     let meter = LevelMeter::new();
     let gain_q8 = AtomicI32::new(0);
 
-    let frames = 128;
+    // 600 frames x 2 output samples crosses the 1024-sample buffer wrap; the
+    // ch2/ch3 bait amplitudes make any wrong mapping shift rms and peak.
+    let frames = 600;
     let mut buffer = Vec::with_capacity(frames * 4);
-    for frame in 0..frames {
-        for channel in 0..4 {
-            buffer.push(((frame % 100) as i16 - 50) * (channel as i16 + 1) * 60);
-        }
+    for _ in 0..frames {
+        buffer.extend_from_slice(&[0.30, 0.10, 0.90, 0.70]);
     }
     convert_chunk(&buffer, &mut producer, &meter, &gain_q8, 4, 2);
 
+    state.update(cx, |state, cx| state.refresh(cx));
     cx.update(|cx| {
-        assert_eq!(state.read(cx).channels(), 2);
-        assert_eq!(state.read(cx).dropped_samples(), 0);
-        state.update(cx, |state, cx| state.refresh(cx));
+        assert!(state.read(cx).spectrum().is_some());
         assert_eq!(state.read(cx).dropped_samples(), 0);
     });
-    let (_, peak) = meter.read();
-    assert!(peak > 0.);
+    let (rms, peak) = meter.read();
+    assert!(
+        (peak - 0.30).abs() < 1e-4,
+        "peak must come from ch0: {peak}"
+    );
+    let expected = ((0.3f32 * 0.3 + 0.1 * 0.1) / 2.).sqrt();
+    assert!(
+        (rms - expected).abs() < 1e-4,
+        "rms must mix ch0 and ch1: {rms}"
+    );
+}
+
+#[gpui_kit::test]
+async fn convert_chunk_zero_fills_the_missing_output_channel(cx: &mut TestAppContext) {
+    let state = cx.new(|_| WaveformState::new());
+    let mut producer = state.update(cx, |state, cx| {
+        state.attach_source(48_000, 2, DEFAULT_RETENTION, cx)
+    });
+    let meter = LevelMeter::new();
+    let gain_q8 = AtomicI32::new(0);
+
+    let frames = 300;
+    let buffer = vec![0.25f32; frames];
+    convert_chunk(&buffer, &mut producer, &meter, &gain_q8, 1, 2);
+
+    state.update(cx, |state, cx| state.refresh(cx));
+    cx.update(|cx| assert!(state.read(cx).spectrum().is_some()));
+    // Duplicating the mono channel into the right slot would raise rms to 0.25.
+    let (rms, peak) = meter.read();
+    assert!((peak - 0.25).abs() < 1e-4);
+    let expected = (0.25f32 * 0.25 / 2.).sqrt();
+    assert!(
+        (rms - expected).abs() < 1e-4,
+        "right channel must be zero: {rms}"
+    );
 }

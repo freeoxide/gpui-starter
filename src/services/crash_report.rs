@@ -1,12 +1,12 @@
 use std::path::Path;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use gpui_kit::App;
 #[cfg(not(target_family = "wasm"))]
 use gpui_kit::BorrowAppContext as _;
-use gpui_kit::Global;
+use gpui_kit::{Global, Task};
 use serde::{Deserialize, Serialize};
 
 // Caps keep reports (and the upload payload) bounded; scrubbing keeps the
@@ -113,15 +113,24 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 }
 
 fn scrub(text: &str, max_chars: usize) -> String {
+    scrub_home(text).chars().take(max_chars).collect()
+}
+
+/// Returns `text` with the user's home directory replaced by `~`; the only
+/// scrub implementation, shared with error_surface.
+pub fn scrub_home(text: &str) -> String {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_default();
-    let scrubbed = if home.is_empty() {
+    scrub_home_with(text, &home)
+}
+
+fn scrub_home_with(text: &str, home: &str) -> String {
+    if home.is_empty() {
         text.to_string()
     } else {
-        text.replace(&home, "~")
-    };
-    scrubbed.chars().take(max_chars).collect()
+        text.replace(home, "~")
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -130,6 +139,7 @@ pub struct CrashReportSnapshot {
     pub last_crash_timestamp: Option<String>,
     pub upload_endpoint: String,
     pub last_upload_error: Option<String>,
+    pub upload_in_progress: bool,
 }
 
 impl Global for CrashReportSnapshot {}
@@ -281,8 +291,277 @@ pub fn detect_pending_reports(data_dir: &Path) -> Vec<CrashReport> {
     reports
 }
 
-/// No-op without an endpoint or backend. Wasm has no report producer (the
-/// native panic hook owns that), so it degrades to a debug log.
+/// The uploader and the snapshot count work in bounded batches of this size;
+/// the count is the pending batch size, not a table total.
+#[cfg(not(target_family = "wasm"))]
+const PENDING_REPORT_BATCH: usize = 50;
+
+/// Shutdown waits at most this long for the final upload flush before quitting.
+const UPLOAD_SHUTDOWN_BUDGET: Duration = Duration::from_secs(5);
+
+/// Persist every on-disk report into the crash_reports table and delete each
+/// file once stored. Idempotent: INSERT OR IGNORE plus unlink keep concurrent
+/// runs harmless.
+#[cfg(not(target_family = "wasm"))]
+async fn ingest_files(backend: &dyn crate::storage::StorageBackend, data_dir: &Path) {
+    let mut persisted = 0;
+    for report in detect_pending_reports(data_dir) {
+        if let Err(err) = backend.persist_crash_report(&report).await {
+            tracing::warn!(
+                target: "gpui_starter::crash_report",
+                id = %report.id,
+                error = %err,
+                "failed to persist crash report; file kept for next startup"
+            );
+            continue;
+        }
+        let path = data_dir
+            .join("crash_reports")
+            .join(format!("{}.json", report.id));
+        let _ = std::fs::remove_file(&path);
+        persisted += 1;
+    }
+    if persisted > 0 {
+        tracing::info!(
+            target: "gpui_starter::crash_report",
+            count = persisted,
+            "ingested crash report files into storage"
+        );
+    }
+}
+
+/// Bridge the panic hook's on-disk reports into the sqlite table the uploader
+/// reads; nothing else ever connects the two.
+#[cfg(not(target_family = "wasm"))]
+pub fn ingest_pending_reports(cx: &mut App) {
+    let Some(storage_runtime) = cx.try_global::<crate::storage::StorageRuntime>() else {
+        tracing::warn!(
+            target: "gpui_starter::crash_report",
+            "storage runtime not available for crash report ingest"
+        );
+        return;
+    };
+
+    let data_dir = crate::app_state::paths(cx).data_dir.clone();
+    let backend = storage_runtime.backend.clone();
+    let bg = cx.background_executor().clone();
+
+    cx.spawn(async move |cx| {
+        let summary = bg
+            .spawn(async move {
+                ingest_files(&*backend, &data_dir).await;
+                load_pending_summary(backend).await
+            })
+            .await;
+        cx.update(|cx| match summary {
+            Ok((pending_count, newest)) => {
+                cx.update_global::<CrashReportSnapshot, _>(|snap, _| {
+                    snap.pending_count = pending_count;
+                    snap.last_crash_timestamp = newest;
+                });
+            }
+            Err(err) => {
+                tracing::warn!(
+                    target: "gpui_starter::crash_report",
+                    error = %err,
+                    "failed to count pending crash reports after ingest"
+                );
+            }
+        });
+    })
+    .detach();
+}
+
+/// Wasm has no report producer and no sqlite files, so there is nothing to
+/// ingest.
+#[cfg(target_family = "wasm")]
+pub fn ingest_pending_reports(_cx: &mut App) {
+    tracing::debug!(
+        target: "gpui_starter::crash_report",
+        "crash report ingest unavailable on wasm (no crash report producer)"
+    );
+}
+
+/// (pending count, newest pending timestamp) for the current batch; callers
+/// must drive it on a background executor (synchronous sqlite behind it).
+#[cfg(not(target_family = "wasm"))]
+async fn load_pending_summary(
+    backend: std::sync::Arc<dyn crate::storage::StorageBackend>,
+) -> Result<(usize, Option<String>), crate::storage::StorageError> {
+    let pending = backend
+        .load_pending_crash_reports(PENDING_REPORT_BATCH)
+        .await?;
+    Ok((
+        pending.len(),
+        pending.first().map(|report| report.timestamp.clone()),
+    ))
+}
+
+#[cfg(not(target_family = "wasm"))]
+struct UploadOutcome {
+    pending_count: usize,
+    newest_pending: Option<String>,
+    last_error: Option<String>,
+}
+
+/// One upload pass: ingest on-disk reports, POST each pending row on the
+/// tokio runtime (reqwest panics off-runtime), then recount what stayed.
+#[cfg(not(target_family = "wasm"))]
+async fn run_upload(
+    bg: gpui_kit::BackgroundExecutor,
+    runtime: std::sync::Arc<tokio::runtime::Runtime>,
+    backend: std::sync::Arc<dyn crate::storage::StorageBackend>,
+    http_client: reqwest::Client,
+    endpoint: String,
+    data_dir: std::path::PathBuf,
+) -> UploadOutcome {
+    let mut last_error = None;
+
+    // Ingest runs inside the pass too: startup's standalone ingest task and
+    // this load race otherwise, and the uploader would miss fresh files.
+    let ingest_backend = backend.clone();
+    bg.spawn(async move { ingest_files(&*ingest_backend, &data_dir).await })
+        .await;
+
+    let load_backend = backend.clone();
+    let reports = match bg
+        .spawn(async move {
+            load_backend
+                .load_pending_crash_reports(PENDING_REPORT_BATCH)
+                .await
+        })
+        .await
+    {
+        Ok(reports) => reports,
+        Err(err) => {
+            tracing::warn!(
+                target: "gpui_starter::crash_report",
+                error = %err,
+                "failed to load pending crash reports"
+            );
+            return UploadOutcome {
+                pending_count: 0,
+                newest_pending: None,
+                last_error: Some(err.to_string()),
+            };
+        }
+    };
+
+    if !reports.is_empty() {
+        tracing::info!(
+            target: "gpui_starter::crash_report",
+            count = reports.len(),
+            "uploading pending crash reports"
+        );
+    }
+
+    for report in &reports {
+        let body = match serde_json::to_string(report) {
+            Ok(body) => body,
+            Err(err) => {
+                tracing::warn!(
+                    target: "gpui_starter::crash_report",
+                    id = %report.id,
+                    error = %err,
+                    "failed to serialize crash report"
+                );
+                last_error = Some(format!("serialize {}: {err}", report.id));
+                continue;
+            }
+        };
+
+        let result = runtime
+            .spawn(
+                http_client
+                    .post(&endpoint)
+                    .header("Content-Type", "application/json")
+                    .body(body)
+                    .send(),
+            )
+            .await;
+
+        match result {
+            Ok(Ok(resp)) if resp.status().is_success() => {
+                let uploaded_at = chrono::Utc::now().to_rfc3339();
+                let mark_backend = backend.clone();
+                let id = report.id.clone();
+                let mark_result = bg
+                    .spawn(async move {
+                        mark_backend
+                            .mark_crash_report_uploaded(&id, &uploaded_at)
+                            .await
+                    })
+                    .await;
+                if let Err(err) = mark_result {
+                    tracing::warn!(
+                        target: "gpui_starter::crash_report",
+                        id = %report.id,
+                        error = %err,
+                        "failed to mark crash report as uploaded"
+                    );
+                    last_error = Some(format!("mark {} uploaded: {err}", report.id));
+                }
+            }
+            Ok(Ok(resp)) => {
+                tracing::warn!(
+                    target: "gpui_starter::crash_report",
+                    id = %report.id,
+                    status = %resp.status(),
+                    "crash report upload returned non-success status"
+                );
+                last_error = Some(format!("upload {}: status {}", report.id, resp.status()));
+            }
+            Ok(Err(err)) => {
+                tracing::warn!(
+                    target: "gpui_starter::crash_report",
+                    id = %report.id,
+                    error = %err,
+                    "crash report upload failed"
+                );
+                last_error = Some(format!("upload {}: {err}", report.id));
+            }
+            Err(err) => {
+                tracing::warn!(
+                    target: "gpui_starter::crash_report",
+                    id = %report.id,
+                    error = %err,
+                    "crash report upload task panicked"
+                );
+                last_error = Some(format!("upload task {}: {err}", report.id));
+            }
+        }
+    }
+
+    let mut pending_count = 0;
+    let mut newest_pending = None;
+    match bg
+        .spawn(async move { load_pending_summary(backend).await })
+        .await
+    {
+        Ok((count, newest)) => {
+            pending_count = count;
+            newest_pending = newest;
+        }
+        Err(err) => {
+            tracing::warn!(
+                target: "gpui_starter::crash_report",
+                error = %err,
+                "failed to recount pending crash reports"
+            );
+            last_error = Some(err.to_string());
+        }
+    }
+
+    UploadOutcome {
+        pending_count,
+        newest_pending,
+        last_error,
+    }
+}
+
+/// No-op without an endpoint or backend, and while another pass is running.
+/// Wasm has no report producer (the native panic hook owns that), so it
+/// degrades to a debug log.
 #[cfg(not(target_family = "wasm"))]
 pub fn upload_pending_reports(cx: &mut App) {
     let snap = snapshot(cx);
@@ -290,6 +569,13 @@ pub fn upload_pending_reports(cx: &mut App) {
         tracing::debug!(
             target: "gpui_starter::crash_report",
             "no upload endpoint configured, skipping pending report upload"
+        );
+        return;
+    }
+    if snap.upload_in_progress {
+        tracing::debug!(
+            target: "gpui_starter::crash_report",
+            "crash report upload already in progress, skipping"
         );
         return;
     }
@@ -313,112 +599,23 @@ pub fn upload_pending_reports(cx: &mut App) {
 
     let endpoint = snap.upload_endpoint.clone();
     let http_client = runtime.0.http_client.clone();
+    let tokio_runtime = runtime.0.runtime.clone();
     let backend = storage_runtime.backend.clone();
+    let data_dir = crate::app_state::paths(cx).data_dir.clone();
+    let bg = cx.background_executor().clone();
+
+    // Every caller holds &mut App (main thread), so check-then-claim cannot
+    // race; the claim also gives shutdown something bounded to wait on.
+    cx.update_global::<CrashReportSnapshot, _>(|snap, _| snap.upload_in_progress = true);
 
     cx.spawn(async move |cx| {
-        let reports = {
-            let backend = backend.clone();
-            cx.background_executor()
-                .spawn(async move { backend.load_pending_crash_reports(50).await })
-                .await
-        };
-
-        let reports = match reports {
-            Ok(r) => r,
-            Err(err) => {
-                tracing::warn!(
-                    target: "gpui_starter::crash_report",
-                    error = %err,
-                    "failed to load pending crash reports"
-                );
-                return;
-            }
-        };
-
-        if reports.is_empty() {
-            return;
-        }
-
-        tracing::info!(
-            target: "gpui_starter::crash_report",
-            count = reports.len(),
-            "uploading pending crash reports"
-        );
-
-        for report in &reports {
-            let body = match serde_json::to_string(report) {
-                Ok(b) => b,
-                Err(err) => {
-                    tracing::warn!(
-                        target: "gpui_starter::crash_report",
-                        id = %report.id,
-                        error = %err,
-                        "failed to serialize crash report"
-                    );
-                    continue;
-                }
-            };
-
-            let result = http_client
-                .post(&endpoint)
-                .header("Content-Type", "application/json")
-                .body(body)
-                .send()
-                .await;
-
-            match result {
-                Ok(resp) if resp.status().is_success() => {
-                    let uploaded_at = chrono::Utc::now().to_rfc3339();
-                    let backend = backend.clone();
-                    let id = report.id.clone();
-                    let mark_result = cx
-                        .background_executor()
-                        .spawn(async move {
-                            backend.mark_crash_report_uploaded(&id, &uploaded_at).await
-                        })
-                        .await;
-                    if let Err(err) = mark_result {
-                        tracing::warn!(
-                            target: "gpui_starter::crash_report",
-                            id = %report.id,
-                            error = %err,
-                            "failed to mark crash report as uploaded"
-                        );
-                    }
-                }
-                Ok(resp) => {
-                    tracing::warn!(
-                        target: "gpui_starter::crash_report",
-                        id = %report.id,
-                        status = %resp.status(),
-                        "crash report upload returned non-success status"
-                    );
-                }
-                Err(err) => {
-                    tracing::warn!(
-                        target: "gpui_starter::crash_report",
-                        id = %report.id,
-                        error = %err,
-                        "crash report upload failed"
-                    );
-                }
-            }
-        }
-
-        // One 1-row query yields both the pending count and newest timestamp.
-        let backend = backend.clone();
-        let latest = cx
-            .background_executor()
-            .spawn(async move { backend.load_pending_crash_reports(1).await })
-            .await;
-        let (count, timestamp) = match latest {
-            Ok(r) => (r.len(), r.first().map(|r| r.timestamp.clone())),
-            Err(_) => (0, None),
-        };
-        let _ = cx.update(|cx| {
-            cx.update_global::<CrashReportSnapshot, _>(|snap, _cx| {
-                snap.pending_count = count;
-                snap.last_crash_timestamp = timestamp;
+        let outcome = run_upload(bg, tokio_runtime, backend, http_client, endpoint, data_dir).await;
+        cx.update(|cx| {
+            cx.update_global::<CrashReportSnapshot, _>(|snap, _| {
+                snap.pending_count = outcome.pending_count;
+                snap.last_crash_timestamp = outcome.newest_pending;
+                snap.last_upload_error = outcome.last_error;
+                snap.upload_in_progress = false;
             });
         });
     })
@@ -433,12 +630,35 @@ pub fn upload_pending_reports(_cx: &mut App) {
     );
 }
 
-pub fn shutdown(cx: &mut App) {
+/// Flush pending uploads and return a task that finishes when the flush
+/// completes or its budget elapses; the quit path awaits it before exit.
+pub fn shutdown(cx: &mut App) -> Task<()> {
     tracing::debug!(
         target: "gpui_starter::crash_report",
         "crash report service shutdown requested"
     );
     upload_pending_reports(cx);
+
+    // Mirrors tasks::drain_with_timeout: poll the in-flight flag so a slow
+    // POST delays quit by at most UPLOAD_SHUTDOWN_BUDGET.
+    let start = crate::platform::clock::Instant::now();
+    cx.spawn(async move |cx| {
+        loop {
+            if !cx.update(|cx| snapshot(cx).upload_in_progress) {
+                return;
+            }
+            if start.elapsed() >= UPLOAD_SHUTDOWN_BUDGET {
+                tracing::warn!(
+                    target: "gpui_starter::crash_report",
+                    "crash report upload exceeded the shutdown budget; quitting without it"
+                );
+                return;
+            }
+            cx.background_executor()
+                .timer(Duration::from_millis(100))
+                .await;
+        }
+    })
 }
 
 #[cfg(test)]

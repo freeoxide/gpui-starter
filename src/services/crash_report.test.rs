@@ -1,5 +1,9 @@
-use super::*;
+use std::sync::{Arc, Mutex};
+
+use gpui_kit::TestAppContext;
 use tempfile::tempdir;
+
+use super::*;
 
 #[test]
 fn crash_report_new_populates_fields() {
@@ -64,6 +68,19 @@ fn snapshot_default_values() {
     assert!(snap.last_crash_timestamp.is_none());
     assert!(snap.upload_endpoint.is_empty());
     assert!(snap.last_upload_error.is_none());
+    assert!(!snap.upload_in_progress);
+}
+
+#[test]
+fn scrub_home_replaces_home_prefix() {
+    assert_eq!(
+        scrub_home_with("/home/me/logs/x.log", "/home/me"),
+        "~/logs/x.log"
+    );
+    // Replacement is textual, so a shared prefix without a path boundary is
+    // also rewritten — still scrubbed.
+    assert_eq!(scrub_home_with("/home/me2/x", "/home/me"), "~2/x");
+    assert_eq!(scrub_home_with("plain text", ""), "plain text");
 }
 
 #[test]
@@ -79,12 +96,14 @@ fn write_crash_report_creates_directory() {
 fn detect_pending_sorts_newest_first() {
     let dir = tempdir().expect("tempdir");
 
-    // Write two reports with a small delay so timestamps differ.
-    let r1 = CrashReport::new("first".into(), "bt".into(), false, vec![]);
-    write_crash_report(&r1, dir.path()).expect("write");
-    std::thread::sleep(std::time::Duration::from_millis(10));
-    let r2 = CrashReport::new("second".into(), "bt".into(), false, vec![]);
-    write_crash_report(&r2, dir.path()).expect("write");
+    // Crafted stamps 50ms apart within one second pin the comparator without
+    // a wall-clock sleep.
+    let mut older = CrashReport::new("first".into(), "bt".into(), false, vec![]);
+    older.timestamp = rfc3339(1_700_000_000_000_000_000);
+    let mut newer = CrashReport::new("second".into(), "bt".into(), false, vec![]);
+    newer.timestamp = rfc3339(1_700_000_000_050_000_000);
+    write_crash_report(&older, dir.path()).expect("write older");
+    write_crash_report(&newer, dir.path()).expect("write newer");
 
     let detected = detect_pending_reports(dir.path());
     assert_eq!(detected.len(), 2);
@@ -212,5 +231,162 @@ fn timestamps_sort_lexicographically_in_write_order() {
     assert_eq!(
         stamps, sorted,
         "fixed-width RFC3339 must sort the way detect_pending_reports sorts"
+    );
+}
+
+/// file -> detect -> persist -> mark uploaded: the startup ingest leg plus the
+/// uploader's storage steps, minus the network POST (no endpoint in tests).
+#[test]
+fn file_to_storage_to_uploaded_pipeline() {
+    use crate::storage::{StorageBackend as _, init_db};
+
+    let dir = tempdir().expect("tempdir");
+    let first = CrashReport::new("first panic".into(), "bt".into(), false, vec![]);
+    write_crash_report(&first, dir.path()).expect("write first");
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    let second = CrashReport::new("second panic".into(), "bt".into(), false, vec![]);
+    write_crash_report(&second, dir.path()).expect("write second");
+
+    let db_path = dir.path().join("pipeline.db");
+    init_db(&db_path).expect("init db");
+    let backend = crate::storage::SqliteStorage::new_for_test(db_path);
+
+    tokio::runtime::Runtime::new()
+        .expect("tokio runtime for test")
+        .block_on(async {
+            for report in detect_pending_reports(dir.path()) {
+                backend
+                    .persist_crash_report(&report)
+                    .await
+                    .expect("persist ingested report");
+                let file = dir
+                    .path()
+                    .join("crash_reports")
+                    .join(format!("{}.json", report.id));
+                std::fs::remove_file(&file).expect("delete ingested file");
+            }
+
+            let pending = backend
+                .load_pending_crash_reports(PENDING_REPORT_BATCH)
+                .await
+                .expect("load pending");
+            assert_eq!(
+                pending.len(),
+                2,
+                "the pending count must cover the whole batch, not one row"
+            );
+            assert_eq!(pending[0].panic_message, "second panic", "newest first");
+
+            for report in &pending {
+                backend
+                    .mark_crash_report_uploaded(&report.id, "2026-01-01T00:00:00+00:00")
+                    .await
+                    .expect("mark uploaded");
+            }
+
+            let after = backend
+                .load_pending_crash_reports(PENDING_REPORT_BATCH)
+                .await
+                .expect("reload pending");
+            assert!(after.is_empty(), "uploaded rows leave the pending set");
+        });
+
+    assert!(
+        detect_pending_reports(dir.path()).is_empty(),
+        "ingested files are removed from disk"
+    );
+}
+
+/// Local 200-OK stand-in for the crash endpoint; records every request body.
+fn upload_sink(runtime: &Arc<tokio::runtime::Runtime>) -> (String, Arc<Mutex<Vec<String>>>) {
+    use tokio::io::AsyncWriteExt as _;
+
+    let std_listener = std::net::TcpListener::bind("127.0.0.1:0").expect("sink bind");
+    let port = std_listener.local_addr().expect("sink port");
+    std_listener
+        .set_nonblocking(true)
+        .expect("sink nonblocking");
+    let recorded = Arc::new(Mutex::new(Vec::new()));
+    let sink = recorded.clone();
+    let _guard = runtime.enter();
+    let listener = tokio::net::TcpListener::from_std(std_listener).expect("tokio listener");
+    runtime.spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let Some(request) =
+                crate::services::auth_social::providers::fake_idp::read_request(&mut stream).await
+            else {
+                continue;
+            };
+            sink.lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .push(String::from_utf8_lossy(&request.body).into_owned());
+            let response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok";
+            let _ = stream.write_all(response.as_bytes()).await;
+            let _ = stream.shutdown().await;
+        }
+    });
+    (format!("http://127.0.0.1:{port}/crash-reports"), recorded)
+}
+
+/// file -> persist -> upload through the real code: ingest_files stores and
+/// deletes the file, then the upload pass POSTs the stored row. The pipeline
+/// test above covers the storage steps; this one adds the network POST leg.
+#[gpui_kit::test]
+async fn run_upload_ingests_persists_and_posts_the_file(cx: &TestAppContext) {
+    // Real tokio/reqwest I/O completes off the deterministic scheduler's threads.
+    cx.executor().allow_parking();
+
+    let dir = tempdir().expect("tempdir");
+    let report = CrashReport::new("upload panic".into(), "bt".into(), false, vec![]);
+    write_crash_report(&report, dir.path()).expect("write report file");
+
+    let db_path = dir.path().join("upload.db");
+    crate::storage::init_db(&db_path).expect("init db");
+    let backend: Arc<dyn crate::storage::StorageBackend> =
+        Arc::new(crate::storage::SqliteStorage::new_for_test(db_path));
+
+    let runtime = Arc::new(
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("scratch runtime"),
+    );
+    let (endpoint, posted) = upload_sink(&runtime);
+
+    let outcome = run_upload(
+        cx.background_executor().clone(),
+        runtime.clone(),
+        backend,
+        reqwest::Client::new(),
+        endpoint,
+        dir.path().to_path_buf(),
+    )
+    .await;
+
+    assert!(
+        outcome.last_error.is_none(),
+        "a clean pass must not record an error: {:?}",
+        outcome.last_error
+    );
+    assert_eq!(
+        outcome.pending_count, 0,
+        "the uploaded row leaves the pending set"
+    );
+    assert!(
+        !dir.path()
+            .join("crash_reports")
+            .join(format!("{}.json", report.id))
+            .exists(),
+        "a persisted report file is deleted"
+    );
+    let posted = posted
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .clone();
+    assert_eq!(posted.len(), 1, "each stored report is POSTed once");
+    assert!(
+        posted[0].contains(&report.id),
+        "the POST body carries the stored report: {}",
+        posted[0]
     );
 }
