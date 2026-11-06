@@ -454,11 +454,10 @@ mod native {
             return false;
         };
         let (tx, rx) = flume::bounded::<ForwardedPayload>(FORWARD_QUEUE_CAP);
-        let ipc_name_for_thread = ipc_name.clone();
         let thread = std::thread::Builder::new()
             .name("gpui-ipc-forwarder".to_string())
             .spawn(move || {
-                tracing::info!(target: LOG, ipc = %ipc_name_for_thread, "starting ipc deep-link listener");
+                tracing::info!(target: LOG, ipc = %ipc_name, "starting ipc deep-link listener");
 
                 for conn in listener.incoming() {
                     if !ipc_running.load(Ordering::SeqCst) {
@@ -686,7 +685,7 @@ mod native {
         }
     }
 
-    pub(crate) fn drain_forwarded_links(path: &PathBuf) -> Vec<String> {
+    pub(crate) fn drain_forwarded_links(path: &Path) -> Vec<String> {
         let drained = path.with_extension("drained");
         // Windows rename refuses an existing target; a crashed run's leftover
         // must not wedge every later drain.

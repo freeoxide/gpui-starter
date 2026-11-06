@@ -1,6 +1,5 @@
-use gpui_kit::App;
-use gpui_kit::SharedString;
 use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::{App, SharedString};
 
 /// Runs unconditionally at startup, and again after a watcher reload (which
 /// clears the registry); name-dedup keeps already-registered dev themes winning.

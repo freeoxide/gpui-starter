@@ -23,8 +23,8 @@ struct ProjectAssets;
 #[include = "icons/*.svg"]
 struct WasmAssets;
 
-// Icons the app uses but the wasm icon folder does not embed; the five
-// outside the kit's default bundle resolve nowhere natively without this.
+// Icons the app uses but the wasm icon folder does not embed; none are in
+// the kit's default bundle, so they resolve nowhere natively without this.
 gpui_kit::assets::icon_assets!(
     AppIcons,
     [

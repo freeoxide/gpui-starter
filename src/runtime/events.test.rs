@@ -102,8 +102,7 @@ async fn drain_called_from_a_global_observer_terminates(cx: &TestAppContext) {
         emit(AppEventKind::DiagnosticsChanged, cx);
     });
     // emit fires the observer once; its drain re-fires it once more before
-    // the empty guard stops the effect chain. A naive default_global drain
-    // pushed a fresh effect on every call and never terminated.
+    // the empty guard stops the effect chain.
     assert_eq!(firings.get(), 2);
     assert!(cx.update(|cx| drain(cx)).is_empty());
 }

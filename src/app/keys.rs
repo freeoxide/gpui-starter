@@ -1,9 +1,8 @@
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::{Action, App, KeyBinding, KeyBindingContextPredicate, Keystroke, OperatingSystem};
 
-// `secondary-` is gpui's cross-platform modifier: cmd on macOS, ctrl on
-// Windows, Linux, and wasm. Binding with cmd- would hit the platform
-// modifier, which is the Windows key there and mostly OS-intercepted.
+// `secondary-` is cmd on macOS, ctrl on Windows, Linux, and wasm; cmd-
+// would bind the Windows key there, which the OS mostly intercepts.
 pub const TOGGLE_SEARCH: &str = "secondary-k";
 pub const TOGGLE_SIDEBAR: &str = "secondary-b";
 // In-app fallback for the quick-float accelerator: every platform with

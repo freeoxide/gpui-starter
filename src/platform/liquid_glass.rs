@@ -8,7 +8,7 @@ use objc2_app_kit::NSView;
 use objc2_foundation::NSArray;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-const LOG: &str = "liquid_glass";
+const LOG: &str = "gpui_starter::liquid_glass";
 
 const NS_VIEW_WIDTH_SIZABLE: u64 = 1 << 1;
 const NS_VIEW_HEIGHT_SIZABLE: u64 = 1 << 4;

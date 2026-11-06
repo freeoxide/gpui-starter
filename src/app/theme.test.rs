@@ -54,9 +54,8 @@ fn apply_config_resolves_chart_grid_for_every_embedded_theme() {
     }
 }
 
-// Every chart/danger/success/warning/info/sidebar fallback in kit
-// apply_config derives from these keys; miss one and the family renders
-// in kit Default colors instead of the theme's palette.
+// Kit apply_config derives every chart/danger/success/warning/info/sidebar
+// fallback from these keys; miss one and the family renders as kit Default.
 const SEMANTIC_FALLBACK_FEEDS: &[&str] = &[
     "background",
     "border",

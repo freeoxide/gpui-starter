@@ -5,4 +5,3 @@ pub mod command;
 pub mod rpc;
 
 pub use command::{ForwardedCommand, ForwardedRequest, ForwardedResponse};
-pub use rpc::{decode_request, encode_line};

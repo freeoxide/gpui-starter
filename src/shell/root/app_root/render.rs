@@ -173,12 +173,9 @@ impl Render for AppRoot {
                     }),
             );
 
-        // Expanded: the sidebar fills a resizable panel (the wrapper must
-        // resolve the sidebar's relative width against a definite size).
-        // Collapsed: a fixed 48px icon rail outside the resizable group —
-        // the group only takes ResizablePanel children, and the panel's
-        // keyed size state must not pin the rail open at the panel width.
-        // In RTL locales the sidebar appears on the right; swap panel order.
+        // Expanded: the resizable panel gives the sidebar's relative width
+        // a definite size. Collapsed: a fixed 48px rail sibling, because a
+        // ResizablePanel child's keyed size would pin it at the panel width.
         let layout: AnyElement = if self.collapsed {
             let rail = div().id("sidebar-rail").h_full().flex_shrink_0().child(
                 div()
