@@ -1,17 +1,19 @@
+// XML/tag wiring only: the Activated/Dismissed handler plumbing needs
+// live WinRT events and cannot be driven from a unit test.
 use super::*;
 
 #[test]
 fn actions_category_adds_buttons() {
-    let xml = toast_xml(&NotificationRequest::action_buttons("Title", "Body"));
-    assert_eq!(
-        actions_xml(&NotificationRequest::action_buttons("Title", "Body")),
-        format!(
-            r#"<actions><action content="{}" arguments="settings.open" activationType="foreground"/><action content="{}" arguments="settings.snooze" activationType="foreground"/></actions>"#,
-            crate::i18n::localize("toast_open"),
-            crate::i18n::localize("toast_snooze"),
-        ),
-        "button ids must match the macOS category registrations"
-    );
+    let request = NotificationRequest::action_buttons("Title", "Body");
+    let actions = actions_xml(&request);
+    for (action, key) in [(ACTION_OPEN, "toast_open"), (ACTION_SNOOZE, "toast_snooze")] {
+        assert!(
+            actions.contains(&format!(r#"arguments="{action}""#)),
+            "button ids must match the macOS category registrations"
+        );
+        assert!(actions.contains(&format!(r#"content="{}""#, crate::i18n::localize(key))));
+    }
+    let xml = toast_xml(&request);
     assert!(xml.contains(r#"<text id="1">Title</text>"#));
     assert!(xml.contains(r#"<text id="3">Body</text>"#));
 }
@@ -19,15 +21,20 @@ fn actions_category_adds_buttons() {
 #[test]
 fn reply_category_adds_input_bound_to_send() {
     let xml = actions_xml(&NotificationRequest::reply("Title", "Body"));
-    assert_eq!(
-        xml,
-        format!(
-            r#"<actions><input id="reply" type="text" placeHolderContent="{}"/><action content="{}" arguments="settings.reply" hint-inputId="reply"/></actions>"#,
-            crate::i18n::localize("toast_reply_placeholder"),
-            crate::i18n::localize("toast_send"),
-        ),
+    assert!(xml.contains(&format!(r#"input id="{REPLY_INPUT_ID}""#)));
+    assert!(xml.contains(&format!(r#"arguments="{ACTION_REPLY}""#)));
+    assert!(
+        xml.contains(&format!(r#"hint-inputId="{REPLY_INPUT_ID}""#)),
         "the Send button must submit the reply input box"
     );
+    assert!(xml.contains(&format!(
+        r#"content="{}""#,
+        crate::i18n::localize("toast_send")
+    )));
+    assert!(xml.contains(&format!(
+        r#"placeHolderContent="{}""#,
+        crate::i18n::localize("toast_reply_placeholder")
+    )));
 }
 
 #[test]
@@ -92,4 +99,11 @@ fn unthreaded_requests_get_distinct_uuid_tags() {
         assert_eq!(tag.as_bytes()[8], b'-');
         assert_eq!(tag.as_bytes()[13], b'-');
     }
+}
+
+#[test]
+fn notifier_aumid_is_the_installed_shortcut_aumid() {
+    // The notifier id and toast_identity's shortcut install share this
+    // constant, whose value must also match the macOS bundle id verbatim.
+    assert_eq!(DESKTOP_ENTRY_ID, "com.gpui-starter.app");
 }

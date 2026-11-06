@@ -7,7 +7,6 @@ use tray_icon::{
 
 use super::LOG;
 use crate::app::assets;
-use crate::capabilities::{self, CapabilityStatus};
 
 #[cfg(test)]
 #[path = "windows.test.rs"]
@@ -73,7 +72,7 @@ fn build_menu() -> tray_icon::menu::Result<Menu> {
     Ok(menu)
 }
 
-enum TrayAction {
+pub(super) enum TrayAction {
     OpenLauncher,
     ShowWindow,
     OpenCharts,
@@ -129,16 +128,16 @@ fn show_window(cx: &mut App) {
     }
 }
 
-fn apply_action(action: TrayAction, cx: &mut App) {
+pub(super) fn apply_action(action: TrayAction, cx: &mut App) {
     match action {
-        TrayAction::OpenLauncher => crate::launcher::open_launcher(cx),
+        TrayAction::OpenLauncher => crate::features::command_palette::open_launcher(cx),
         TrayAction::ShowWindow => show_window(cx),
         TrayAction::OpenCharts => {
             crate::features::menubar_charts::open_sheet(cx);
         }
         TrayAction::OpenSettings => crate::events::emit(
             crate::events::AppEventKind::Navigate(crate::routes::AppRoute::page(
-                crate::sidebar::Page::Settings,
+                crate::page::Page::Settings,
             )),
             cx,
         ),
@@ -148,90 +147,27 @@ fn apply_action(action: TrayAction, cx: &mut App) {
     }
 }
 
-// The drain thread parks on blocking crossbeam recvs and forwards over flume:
-// `AsyncApp` is `!Send`, so it cannot `cx.update` (same shape as
-// spawn_hotkey_event_forwarder in input/shortcuts.rs).
-fn spawn_action_pump(rx: flume::Receiver<TrayAction>, cx: &mut App) {
-    cx.spawn(async move |cx| {
-        loop {
-            // Parked until a tray click or menu pick fires — no periodic
-            // wake-ups.
-            let Ok(action) = rx.recv_async().await else {
-                break;
-            };
-            let _ = cx.update(|cx| apply_action(action, cx));
-        }
-    })
-    .detach();
-}
-
-/// Tray entry point; call once from the bootstrap launch closure on Windows.
-pub fn setup(cx: &mut App) {
-    tracing::info!(target: LOG, "Setting up tray icon");
-
-    let menu = match build_menu() {
-        Ok(menu) => menu,
-        Err(err) => {
-            tracing::error!(target: LOG, error = %err, "failed to build tray menu");
-            capabilities::set("system_tray", CapabilityStatus::error(err.to_string()), cx);
-            return;
-        }
-    };
-
-    let icon = match branded_icon() {
-        Ok(icon) => icon,
-        Err(err) => {
-            tracing::error!(target: LOG, error = %err, "failed to load branded tray icon");
-            capabilities::set("system_tray", CapabilityStatus::error(err), cx);
-            return;
-        }
-    };
-
+pub(super) fn build_tray() -> Result<tray_icon::TrayIcon, String> {
+    let menu = build_menu().map_err(|err| format!("tray menu build failed: {err}"))?;
+    let icon = branded_icon()?;
     // tray-icon creates its hidden window on this (main) thread and its
     // messages ride the app's own pump — no manager worker thread is needed.
-    let tray = match TrayIconBuilder::new()
+    TrayIconBuilder::new()
         .with_menu(Box::new(menu))
         .with_icon(icon)
         .with_tooltip("GPUI Starter")
         .with_menu_on_left_click(false)
         .build()
-    {
-        Ok(tray) => tray,
-        Err(err) => {
-            tracing::error!(target: LOG, error = %err, "failed to create system tray icon");
-            capabilities::set("system_tray", CapabilityStatus::error(err.to_string()), cx);
-            return;
-        }
-    };
-    Box::leak(Box::new(tray));
-    tracing::debug!(target: LOG, "Tray icon created");
-
-    let (tx, rx) = flume::unbounded::<TrayAction>();
-    let drain = spawn_event_drain(tx);
-
-    match drain {
-        Ok(()) => capabilities::set("system_tray", CapabilityStatus::supported_enabled(), cx),
-        Err(err) => {
-            tracing::error!(
-                target: LOG,
-                error = %err,
-                "failed to spawn gpui-tray-events thread; tray clicks and menu will not be delivered"
-            );
-            // The icon is live but no event will ever reach the app.
-            capabilities::set("system_tray", CapabilityStatus::degraded(err), cx);
-        }
-    }
-
-    spawn_action_pump(rx, cx);
+        .map_err(|err| err.to_string())
 }
 
 // One drain thread multiplexes tray-icon's two global crossbeam channels with
 // Select and forwards actions over flume; a receiver disconnect ends the loop.
-fn spawn_event_drain(tx: flume::Sender<TrayAction>) -> Result<(), String> {
+pub(super) fn spawn_event_drain(tx: flume::Sender<TrayAction>) -> Result<(), String> {
     std::thread::Builder::new()
         .name("gpui-tray-events".into())
-        // The join handle is dropped like the macOS setup's: this drain parks
-        // on the global receivers for the process lifetime.
+        // The join handle is dropped: this drain parks on the global
+        // receivers for the process lifetime.
         .spawn(move || {
             let tray_rx = TrayIconEvent::receiver();
             let menu_rx = MenuEvent::receiver();

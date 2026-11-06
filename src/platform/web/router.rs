@@ -1,11 +1,17 @@
 //! Hash deep links: `location.hash` ↔ [`AppRoute`] with History API sync;
 //! every movement funnels into Navigate events or history entries.
 
+use std::sync::Mutex;
+
 use wasm_bindgen::{JsCast as _, JsValue, prelude::Closure};
 
 use crate::{events::AppEventKind, routes::AppRoute};
 
 const LOG: &str = "gpui_starter::web::router";
+
+/// Last hash this module pushed or dispatched. Browsers fire `hashchange`
+/// and `popstate` for one back/forward traversal; the second event is a no-op.
+static LAST_HASH: Mutex<Option<String>> = Mutex::new(None);
 
 /// Install hash routing at app init; an empty hash means no deep link and the
 /// configured startup route wins.
@@ -65,6 +71,8 @@ pub fn push_route_hash(route: &AppRoute) {
                     hash = %hash,
                     "history.pushState failed"
                 );
+            } else if let Ok(mut last) = LAST_HASH.lock() {
+                *last = Some(hash);
             }
         }
         Err(err) => tracing::warn!(target: LOG, error = ?err, "history API unavailable"),
@@ -84,8 +92,7 @@ fn install_listeners() {
             .add_event_listener_with_callback(event, handler.as_ref().unchecked_ref())
             .is_ok();
         if registered {
-            // Leaked intentionally: the listener must live for the page
-            // lifetime (house pattern; see the module docs).
+            // Leaked for the page lifetime (see web::connectivity).
             handler.forget();
         } else {
             tracing::warn!(target: LOG, event, "could not install hash routing listener");
@@ -97,6 +104,16 @@ fn install_listeners() {
 /// emit a Navigate event through the dispatch queue.
 fn on_external_navigation() {
     let hash = current_hash();
+    let redispatched = matches!(
+        LAST_HASH.lock().as_deref(),
+        Ok(Some(last)) if *last == hash
+    );
+    if redispatched {
+        return;
+    }
+    if let Ok(mut last) = LAST_HASH.lock() {
+        *last = Some(hash.clone());
+    }
     match AppRoute::from_hash(&hash) {
         Ok(route) => {
             tracing::info!(

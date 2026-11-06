@@ -1,4 +1,3 @@
-use global_hotkey::GlobalHotKeyEvent;
 use gpui_kit::App;
 use tray_icon::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
@@ -69,20 +68,12 @@ fn icon_pixels(size: usize) -> Vec<u8> {
     px
 }
 
-enum TrayAction {
-    Hotkey {
-        id: u32,
-    },
-    ToggleCharts {
-        rect: crate::features::menubar_charts::IconRect,
-    },
+pub(super) enum TrayAction {
+    ToggleCharts { x: f64 },
 }
 
-/// Tray + global-hotkey entry point; call once from `main()` on macOS.
-pub fn setup(cx: &mut App) {
-    tracing::info!(target: LOG, "Setting up tray icon");
-
-    let Ok(tray) = TrayIconBuilder::new()
+pub(super) fn build_tray() -> Result<tray_icon::TrayIcon, String> {
+    TrayIconBuilder::new()
         .with_icon(icon(ICON_SIZE))
         .with_icon_as_template(true)
         .with_tooltip(format!(
@@ -91,19 +82,29 @@ pub fn setup(cx: &mut App) {
         ))
         .with_menu_on_left_click(false)
         .build()
-    else {
-        tracing::error!("failed to create system tray icon");
-        return;
-    };
-    Box::leak(Box::new(tray));
-    tracing::debug!(target: LOG, "Tray icon created");
+        .map_err(|err| err.to_string())
+}
 
-    // Tray/hotkey threads park on blocking crossbeam recvs and forward
-    // ticks over flume: `AsyncApp` is `!Send`, so they cannot `cx.update`.
-    let (tx, rx) = flume::unbounded::<TrayAction>();
-    let tx_hotkey = tx.clone();
+// Left-button release toggles the charts popover at the click's x position;
+// no menu is attached on macOS, so every other event is ignored.
+fn action_from_tray_event(event: &TrayIconEvent) -> Option<TrayAction> {
+    if let TrayIconEvent::Click {
+        button: MouseButton::Left,
+        button_state: MouseButtonState::Up,
+        rect,
+        ..
+    } = event
+    {
+        tracing::info!(target: LOG, source = "tray_click", "Charts toggle trigger");
+        return Some(TrayAction::ToggleCharts { x: rect.position.x });
+    }
+    None
+}
 
-    if let Err(e) = std::thread::Builder::new()
+// The drain parks on tray-icon's global crossbeam receiver for the process
+// lifetime and forwards over flume: AsyncApp is !Send, so no cx.update here.
+pub(super) fn spawn_event_drain(tx: flume::Sender<TrayAction>) -> Result<(), String> {
+    std::thread::Builder::new()
         .name("gpui-tray-events".into())
         .spawn(move || {
             let tray_rx = TrayIconEvent::receiver();
@@ -111,72 +112,16 @@ pub fn setup(cx: &mut App) {
                 let Ok(event) = tray_rx.recv() else {
                     return;
                 };
-                if let TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    button_state: MouseButtonState::Up,
-                    rect,
-                    ..
-                } = event
-                {
-                    tracing::info!(target: LOG, source = "tray_click", "Charts toggle trigger");
-                    let _ = tx.send(TrayAction::ToggleCharts {
-                        rect: crate::features::menubar_charts::IconRect {
-                            x: rect.position.x,
-                            y: rect.position.y,
-                            width: rect.size.width,
-                            height: rect.size.height,
-                        },
-                    });
+                if let Some(action) = action_from_tray_event(&event) {
+                    let _ = tx.send(action);
                 }
             }
         })
-    {
-        tracing::error!(
-            target: LOG,
-            error = %e,
-            "failed to spawn gpui-tray-events thread; tray clicks will not be delivered"
-        );
-    }
+        .map(|_| ())
+        .map_err(|err| format!("failed to spawn gpui-tray-events thread: {err}"))
+}
 
-    if let Err(e) = std::thread::Builder::new()
-        .name("gpui-hotkey-events".into())
-        .spawn(move || {
-            let hotkey_rx = GlobalHotKeyEvent::receiver();
-            loop {
-                let Ok(event) = hotkey_rx.recv() else {
-                    return;
-                };
-                // The crate emits Pressed and Released per press; forwarding
-                // both would fire the accelerator twice per tap.
-                if event.state() == global_hotkey::HotKeyState::Pressed {
-                    let _ = tx_hotkey.send(TrayAction::Hotkey { id: event.id() });
-                }
-            }
-        })
-    {
-        tracing::error!(
-            target: LOG,
-            error = %e,
-            "failed to spawn gpui-hotkey-events thread; global hotkey will not be delivered"
-        );
-    }
-
-    cx.spawn(async move |cx| {
-        loop {
-            // Parked until a tray click or hotkey fires — no periodic wake-ups.
-            let Ok(action) = rx.recv_async().await else {
-                break;
-            };
-            match action {
-                TrayAction::Hotkey { id } => {
-                    let _ = cx.update(|cx| crate::shortcuts::dispatch_hotkey(id, cx));
-                }
-                TrayAction::ToggleCharts { rect } => {
-                    let _ =
-                        cx.update(|cx| crate::features::menubar_charts::toggle_popover(rect, cx));
-                }
-            }
-        }
-    })
-    .detach();
+pub(super) fn apply_action(action: TrayAction, cx: &mut App) {
+    let TrayAction::ToggleCharts { x } = action;
+    crate::features::menubar_charts::toggle_popover(x, cx);
 }

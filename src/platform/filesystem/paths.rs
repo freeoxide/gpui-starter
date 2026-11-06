@@ -21,12 +21,24 @@ pub struct AppPaths {
 }
 
 impl AppPaths {
+    /// Resolve the app's directories: rooted at `$GPUI_STARTER_HOME` when
+    /// set (tests, sandboxes), else the OS-standard ProjectDirs locations.
     pub fn new() -> Result<Self, AppError> {
-        let project_dirs = project_dirs().ok_or(AppError::PathInitialization)?;
-
-        let config_dir = project_dirs.config_dir().to_path_buf();
-        let data_dir = project_dirs.data_dir().to_path_buf();
-        let cache_dir = project_dirs.cache_dir().to_path_buf();
+        // Empty counts as unset: GPUI_STARTER_HOME="" keeps the real dirs.
+        let home = std::env::var_os("GPUI_STARTER_HOME")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from);
+        // The override is the single root: config, data, and cache share it.
+        let (config_dir, data_dir, cache_dir) = if let Some(home) = home {
+            (home.clone(), home.clone(), home)
+        } else {
+            let project_dirs = project_dirs().ok_or(AppError::PathInitialization)?;
+            (
+                project_dirs.config_dir().to_path_buf(),
+                project_dirs.data_dir().to_path_buf(),
+                project_dirs.cache_dir().to_path_buf(),
+            )
+        };
         let log_dir = data_dir.join("logs");
         let runtime_dir = cache_dir.join("runtime");
         let state_file = config_dir.join("state.json");

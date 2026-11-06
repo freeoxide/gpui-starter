@@ -38,8 +38,8 @@ fn clipboard_handle() -> Option<web_sys::Clipboard> {
     }
 }
 
-/// Attach a rejection logger; the closure is leaked so it outlives the
-/// pending Promise, with nothing to reclaim afterwards.
+/// Attach a rejection logger. Ownership of the closure passes to the JS GC:
+/// the promise reaction holds the only reference once this returns.
 fn log_rejection(promise: &Promise, what: &'static str) {
     let on_reject: Closure<dyn FnMut(JsValue)> = Closure::new(move |err: JsValue| {
         tracing::warn!(
@@ -50,5 +50,5 @@ fn log_rejection(promise: &Promise, what: &'static str) {
         );
     });
     let _ = promise.catch(&on_reject);
-    on_reject.forget();
+    drop(on_reject.into_js_value());
 }

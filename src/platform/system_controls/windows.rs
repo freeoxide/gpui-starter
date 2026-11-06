@@ -1,8 +1,9 @@
 use brightness::blocking::Brightness as _;
+use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
 use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
 use windows::Win32::Media::Audio::{IMMDeviceEnumerator, MMDeviceEnumerator, eConsole, eRender};
 use windows::Win32::System::Com::{
-    CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
+    CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoUninitialize,
 };
 
 use super::SystemOp;
@@ -42,34 +43,68 @@ fn unavailable<T>(error: &str) -> ControlState<T> {
     }
 }
 
-fn endpoint_volume() -> Option<IAudioEndpointVolume> {
-    // SAFETY: plain COM init and activation; no pointers escape.
-    unsafe {
-        // windows-rs 0.61 returns a raw HRESULT here, not Result.
-        if CoInitializeEx(None, COINIT_MULTITHREADED).is_err() {
-            return None;
+// RAII balance for CoInitializeEx: Owned (S_OK or S_FALSE) releases its
+// reference on drop; Foreign (RPC_E_CHANGED_MODE) never acquired one.
+enum ComApartment {
+    Owned,
+    Foreign,
+}
+
+impl ComApartment {
+    fn new() -> Option<Self> {
+        // SAFETY: plain COM init; no pointers escape.
+        unsafe {
+            // windows-rs 0.61 returns a raw HRESULT here, not Result.
+            let result = CoInitializeEx(None, COINIT_MULTITHREADED);
+            if result == RPC_E_CHANGED_MODE {
+                Some(ComApartment::Foreign)
+            } else {
+                result.ok().map(|()| ComApartment::Owned)
+            }
         }
+    }
+}
+
+impl Drop for ComApartment {
+    fn drop(&mut self) {
+        if matches!(self, ComApartment::Owned) {
+            // SAFETY: balances the CoInitializeEx from new.
+            unsafe { CoUninitialize() };
+        }
+    }
+}
+
+// Runs f on the default endpoint while the COM apartment is held: the
+// interface must not outlive the CoUninitialize that balances the init.
+fn endpoint_volume<T>(
+    f: impl FnOnce(&IAudioEndpointVolume) -> windows::core::Result<T>,
+) -> Option<T> {
+    let _apartment = ComApartment::new()?;
+    // SAFETY: plain COM activation; no pointers escape.
+    unsafe {
         let enumerator: IMMDeviceEnumerator =
             CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
         let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole).ok()?;
-        device
+        let endpoint = device
             .Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None)
-            .ok()
+            .ok()?;
+        f(&endpoint).ok()
     }
 }
 
 fn read_volume() -> ControlState<VolumeStatus> {
     let read = || -> Option<VolumeStatus> {
-        let endpoint = endpoint_volume()?;
-        // SAFETY: plain COM property reads on a freshly activated endpoint.
-        unsafe {
-            let level = endpoint.GetMasterVolumeLevelScalar().ok()?;
-            let muted = endpoint.GetMute().ok()?;
-            Some(VolumeStatus {
-                level: level.clamp(0., 1.),
-                muted: muted.as_bool(),
-            })
-        }
+        endpoint_volume(|endpoint| {
+            // SAFETY: plain COM property reads on a freshly activated endpoint.
+            unsafe {
+                let level = endpoint.GetMasterVolumeLevelScalar()?;
+                let muted = endpoint.GetMute()?;
+                Ok(VolumeStatus {
+                    level: level.clamp(0., 1.),
+                    muted: muted.as_bool(),
+                })
+            }
+        })
     };
     match read() {
         Some(status) => ControlState::Ready(status),
@@ -78,23 +113,19 @@ fn read_volume() -> ControlState<VolumeStatus> {
 }
 
 fn set_volume(level: f32) -> Result<(), String> {
-    let endpoint = endpoint_volume().ok_or_else(|| "no default audio device".to_string())?;
-    // SAFETY: plain COM property write; the event-context GUID is null.
-    unsafe {
-        endpoint
-            .SetMasterVolumeLevelScalar(level.clamp(0., 1.), std::ptr::null())
-            .map_err(|error| error.to_string())
-    }
+    endpoint_volume(|endpoint| {
+        // SAFETY: plain COM property write; the event-context GUID is null.
+        unsafe { endpoint.SetMasterVolumeLevelScalar(level.clamp(0., 1.), std::ptr::null()) }
+    })
+    .ok_or_else(|| "no default audio device".to_string())
 }
 
 fn set_volume_muted(muted: bool) -> Result<(), String> {
-    let endpoint = endpoint_volume().ok_or_else(|| "no default audio device".to_string())?;
-    // SAFETY: plain COM property write; the event-context GUID is null.
-    unsafe {
-        endpoint
-            .SetMute(muted, std::ptr::null())
-            .map_err(|error| error.to_string())
-    }
+    endpoint_volume(|endpoint| {
+        // SAFETY: plain COM property write; the event-context GUID is null.
+        unsafe { endpoint.SetMute(muted, std::ptr::null()) }
+    })
+    .ok_or_else(|| "no default audio device".to_string())
 }
 
 fn read_brightness() -> ControlState<BrightnessStatus> {
