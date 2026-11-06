@@ -252,9 +252,6 @@ insta.workspace = true
 # Test-only: TestAppContext + deterministic timers for the config-store
 # debounce tests. Dev-dep features never reach production or wasm builds.
 gpui = { package = "gpui-pre", version = "0.3.10", features = ["test-support"] }
-# Test-only: headless wgpu renderer (window.render_to_image) for the canvas
-# raster tests; enables test-support on the already-locked platform crate.
-gpui-kit = { workspace = true, features = ["test-support"] }
 # GPU-free WGSL validation; same version as the lock's naga.
 naga = { version = "=30.0.1", features = ["wgsl-in"] }
 

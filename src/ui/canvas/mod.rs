@@ -14,10 +14,6 @@ mod scene;
 mod state;
 mod tool;
 
-#[cfg(all(test, target_os = "linux"))]
-#[path = "raster.test.rs"]
-pub(crate) mod raster_test;
-
 #[cfg(test)]
 static LAST_PAINT_US: AtomicU64 = AtomicU64::new(0);
 
