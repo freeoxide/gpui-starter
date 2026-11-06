@@ -182,6 +182,9 @@ async fn deleted_shapes_reach_new_joiners_as_tombstones() {
     assert!(snapshot.tombstones.is_empty());
 
     let (client_b, mut relay_b) = client(&url, &peer(22, "B")).await;
+    // Sequence on the join event: emitting before the server finishes the
+    // connect handshake drops the op on some interleavings.
+    relay_a.next("peer_join").await;
     let add = WireOp::Add {
         key: ShapeKey { origin: 22, seq: 1 },
         version: Version {
