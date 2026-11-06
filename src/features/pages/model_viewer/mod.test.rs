@@ -21,8 +21,8 @@ fn construction_and_first_render_stay_synchronous_gpu_free(cx: &mut TestAppConte
     let (page, cx) = open_page(cx);
     cx.read(|cx| {
         let page_view = page.read(cx);
-        assert!(page_view.renderer.is_none());
-        assert!(page_view.engine.is_none());
+        assert!(page_view.native.renderer.is_none());
+        assert!(page_view.native.engine.is_none());
     });
 }
 

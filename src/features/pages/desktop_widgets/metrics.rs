@@ -26,13 +26,6 @@ impl MetricsWidget {
         Self { metrics }
     }
 
-    #[cfg(test)]
-    pub(crate) fn new_for_test(cx: &mut Context<Self>) -> Self {
-        let metrics = cx.new(|_| MetricsState::new());
-        cx.observe(&metrics, |_, _, cx| cx.notify()).detach();
-        Self { metrics }
-    }
-
     pub(crate) fn view(window: &mut Window, cx: &mut App) -> Entity<MetricsWidget> {
         cx.new(|cx| Self::new(window, cx))
     }

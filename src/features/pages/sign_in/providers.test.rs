@@ -1,6 +1,7 @@
 use gpui_kit::TestAppContext;
 
 use super::{ProviderKind, is_available, providers};
+use crate::capabilities::Capability;
 
 #[gpui_kit::test]
 async fn registry_is_static_with_email_first(cx: &mut TestAppContext) {
@@ -8,7 +9,7 @@ async fn registry_is_static_with_email_first(cx: &mut TestAppContext) {
     assert_eq!(all.len(), 3);
     let ids: Vec<&str> = all.iter().map(|spec| spec.id).collect();
     assert_eq!(ids, vec!["email", "google", "github"]);
-    assert!(matches!(all[0].kind, ProviderKind::Email));
+    assert!(matches!(all[0].kind, ProviderKind::Email { .. }));
     assert!(matches!(all[1].kind, ProviderKind::Browser));
     assert!(matches!(all[2].kind, ProviderKind::Browser));
 }
@@ -19,7 +20,7 @@ async fn email_row_follows_the_capability_entry(cx: &mut TestAppContext) {
     let email = &providers()[0];
     cx.update(|cx| {
         crate::capabilities::set(
-            "auth_email",
+            Capability::AUTH_EMAIL,
             crate::capabilities::CapabilityStatus::supported_enabled(),
             cx,
         )
@@ -28,11 +29,27 @@ async fn email_row_follows_the_capability_entry(cx: &mut TestAppContext) {
 
     cx.update(|cx| {
         crate::capabilities::set(
-            "auth_email",
+            Capability::AUTH_EMAIL,
             crate::capabilities::CapabilityStatus {
                 supported: true,
                 enabled: false,
                 degraded: false,
+                reason: None,
+                last_error: None,
+            },
+            cx,
+        )
+    });
+    cx.read(|cx| assert!(!is_available(email, cx)));
+
+    // The wasm combination: enabled but unsupported must stay unavailable.
+    cx.update(|cx| {
+        crate::capabilities::set(
+            Capability::AUTH_EMAIL,
+            crate::capabilities::CapabilityStatus {
+                supported: false,
+                enabled: true,
+                degraded: true,
                 reason: None,
                 last_error: None,
             },
@@ -49,7 +66,7 @@ async fn browser_rows_stay_unavailable_without_social_config(cx: &mut TestAppCon
     let github = &providers()[2];
     cx.update(|cx| {
         crate::capabilities::set(
-            "auth_social",
+            Capability::AUTH_SOCIAL,
             crate::capabilities::CapabilityStatus::supported_enabled(),
             cx,
         )

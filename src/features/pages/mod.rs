@@ -48,6 +48,6 @@ pub use render_error::ReloadCurrentPage;
 pub use render_error::RenderErrorPage;
 pub use render_error::TriggerRenderError;
 pub use settings::SettingsPage;
-pub use shaders::{CAPABILITY_SHADERS, ShaderCanvasPage};
+pub use shaders::ShaderCanvasPage;
 pub use sign_in::SignInPage;
 pub use system_controls::SystemControlsPage;

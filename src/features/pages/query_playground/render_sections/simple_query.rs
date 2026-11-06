@@ -5,26 +5,16 @@ use gpui_kit::component::{
 };
 use gpui_kit::{prelude::*, *};
 
-use gpui_query::core::QueryStatus;
-
 use super::super::QueryPlaygroundPage;
-use super::super::ui_helpers::{chip, fetch_label, section_card, status_badge};
+use super::super::ui_helpers::{
+    chip, fetch_label, query_data, query_status, section_card, status_badge,
+};
 
 impl QueryPlaygroundPage {
     pub(in super::super) fn render_simple_query(&mut self, cx: &mut Context<Self>) -> Div {
-        let loading = self.simple_query.as_ref().map_or(false, |(e, _)| {
-            e.read_with(cx, |r, _| r.status().is_loading())
-        });
-        let status = self
-            .simple_query
-            .as_ref()
-            .map_or(QueryStatus::Idle, |(e, _)| {
-                e.read_with(cx, |r, _| r.status())
-            });
-        let data_preview = self
-            .simple_query
-            .as_ref()
-            .and_then(|(e, _)| e.read_with(cx, |r, _| r.data().cloned()));
+        let status = query_status(self.simple_query.as_ref(), cx);
+        let loading = status.is_loading();
+        let data_preview = query_data(self.simple_query.as_ref(), cx);
         let cache_age = self.simple_query.as_ref().and_then(|(e, _)| {
             e.read_with(cx, |r, _| {
                 let now = crate::platform::clock::SystemTime::now()

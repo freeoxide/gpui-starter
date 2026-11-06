@@ -156,19 +156,43 @@ pub fn render_runtime_boundaries_section(
                         .outline()
                         .label(crate::i18n::localize("settings_write_secure_value_demo"))
                         .on_click(|_, window, cx| {
-                            let message = match secure_storage::set_secret(
-                                "gpui-starter",
-                                "demo-token",
-                                "demo-value",
-                                cx,
-                            ) {
-                                Ok(()) => crate::i18n::localize("settings_secure_value_written"),
-                                Err(err) => format!(
-                                    "{}: {err}",
-                                    crate::i18n::localize("settings_secure_write_failed")
-                                ),
-                            };
-                            window.push_notification(message, cx);
+                            #[cfg(not(target_family = "wasm"))]
+                            {
+                                let written =
+                                    crate::i18n::localize("settings_secure_value_written");
+                                let failed = crate::i18n::localize("settings_secure_write_failed");
+                                spawn_keyring_demo(window, cx, move || {
+                                    match secure_storage::set_secret_blocking(
+                                        "gpui-starter",
+                                        "demo-token",
+                                        "demo-value",
+                                    ) {
+                                        Ok(()) => (Some(None), written),
+                                        Err(err) => (
+                                            Some(Some(err.to_string())),
+                                            format!("{failed}: {err}"),
+                                        ),
+                                    }
+                                });
+                            }
+                            #[cfg(target_family = "wasm")]
+                            {
+                                let message = match secure_storage::set_secret(
+                                    "gpui-starter",
+                                    "demo-token",
+                                    "demo-value",
+                                    cx,
+                                ) {
+                                    Ok(()) => {
+                                        crate::i18n::localize("settings_secure_value_written")
+                                    }
+                                    Err(err) => format!(
+                                        "{}: {err}",
+                                        crate::i18n::localize("settings_secure_write_failed")
+                                    ),
+                                };
+                                window.push_notification(message, cx);
+                            }
                         }),
                 )
                 .child(
@@ -176,18 +200,41 @@ pub fn render_runtime_boundaries_section(
                         .outline()
                         .label(crate::i18n::localize("settings_delete_secure_value_demo"))
                         .on_click(|_, window, cx| {
-                            let message = match secure_storage::delete_secret(
-                                "gpui-starter",
-                                "demo-token",
-                                cx,
-                            ) {
-                                Ok(()) => crate::i18n::localize("settings_secure_value_deleted"),
-                                Err(err) => format!(
-                                    "{}: {err}",
-                                    crate::i18n::localize("settings_secure_delete_failed")
-                                ),
-                            };
-                            window.push_notification(message, cx);
+                            #[cfg(not(target_family = "wasm"))]
+                            {
+                                let deleted =
+                                    crate::i18n::localize("settings_secure_value_deleted");
+                                let failed = crate::i18n::localize("settings_secure_delete_failed");
+                                spawn_keyring_demo(window, cx, move || {
+                                    match secure_storage::delete_secret_blocking(
+                                        "gpui-starter",
+                                        "demo-token",
+                                    ) {
+                                        Ok(()) => (Some(None), deleted),
+                                        Err(err) => (
+                                            Some(Some(err.to_string())),
+                                            format!("{failed}: {err}"),
+                                        ),
+                                    }
+                                });
+                            }
+                            #[cfg(target_family = "wasm")]
+                            {
+                                let message = match secure_storage::delete_secret(
+                                    "gpui-starter",
+                                    "demo-token",
+                                    cx,
+                                ) {
+                                    Ok(()) => {
+                                        crate::i18n::localize("settings_secure_value_deleted")
+                                    }
+                                    Err(err) => format!(
+                                        "{}: {err}",
+                                        crate::i18n::localize("settings_secure_delete_failed")
+                                    ),
+                                };
+                                window.push_notification(message, cx);
+                            }
                         }),
                 ),
         )
@@ -196,16 +243,66 @@ pub fn render_runtime_boundaries_section(
                 .outline()
                 .label(crate::i18n::localize("settings_read_secure_value_demo"))
                 .on_click(|_, window, cx| {
-                    let message = match secure_storage::get_secret("gpui-starter", "demo-token", cx)
+                    #[cfg(not(target_family = "wasm"))]
                     {
-                        Ok(Some(_)) => crate::i18n::localize("settings_secure_value_exists"),
-                        Ok(None) => crate::i18n::localize("settings_secure_value_missing"),
-                        Err(err) => format!(
-                            "{}: {err}",
-                            crate::i18n::localize("settings_secure_read_failed")
-                        ),
-                    };
-                    window.push_notification(message, cx);
+                        let exists = crate::i18n::localize("settings_secure_value_exists");
+                        let missing = crate::i18n::localize("settings_secure_value_missing");
+                        let failed = crate::i18n::localize("settings_secure_read_failed");
+                        spawn_keyring_demo(window, cx, move || {
+                            match secure_storage::get_secret_blocking("gpui-starter", "demo-token")
+                            {
+                                Ok(Some(_)) => (Some(None), exists),
+                                Ok(None) => (Some(None), missing),
+                                // Read failures leave the stored last_error as-is.
+                                Err(err) => (None, format!("{failed}: {err}")),
+                            }
+                        });
+                    }
+                    #[cfg(target_family = "wasm")]
+                    {
+                        let message =
+                            match secure_storage::get_secret("gpui-starter", "demo-token", cx) {
+                                Ok(Some(_)) => {
+                                    crate::i18n::localize("settings_secure_value_exists")
+                                }
+                                Ok(None) => crate::i18n::localize("settings_secure_value_missing"),
+                                Err(err) => format!(
+                                    "{}: {err}",
+                                    crate::i18n::localize("settings_secure_read_failed")
+                                ),
+                            };
+                        window.push_notification(message, cx);
+                    }
                 }),
         )
+}
+
+/// Runs a blocking keyring op off the UI thread and reports from the update
+/// turn; the snapshot write's outer Option means "leave last_error untouched".
+#[cfg(not(target_family = "wasm"))]
+fn spawn_keyring_demo(
+    window: &mut Window,
+    cx: &mut App,
+    op: impl FnOnce() -> (Option<Option<String>>, String) + Send + 'static,
+) {
+    let window_handle = window.window_handle();
+    let exec = cx.background_executor().clone();
+    cx.spawn(async move |cx| {
+        let (snapshot_write, message) = exec.spawn(async move { op() }).await;
+        let _ = cx.update(|cx| {
+            if let Some(last_error) = snapshot_write {
+                secure_storage::update_last_error(last_error, cx);
+            }
+            if let Err(err) = cx.update_window(window_handle, |_, window, cx| {
+                window.push_notification(message, cx);
+            }) {
+                tracing::warn!(
+                    target: "gpui_starter::settings",
+                    ?err,
+                    "keyring demo feedback dropped"
+                );
+            }
+        });
+    })
+    .detach();
 }

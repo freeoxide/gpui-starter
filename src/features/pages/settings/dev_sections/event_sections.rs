@@ -56,7 +56,7 @@ pub fn render_event_emitter_section(
                         .on_click(|_, _, cx| {
                             crate::events::emit(
                                 crate::events::AppEventKind::Navigate(
-                                    crate::routes::AppRoute::page(crate::sidebar::Page::Home),
+                                    crate::routes::AppRoute::page(crate::page::Page::Home),
                                 ),
                                 cx,
                             );
@@ -71,9 +71,7 @@ pub fn render_event_emitter_section(
                         .on_click(|_, _, cx| {
                             crate::events::emit(
                                 crate::events::AppEventKind::Navigate(
-                                    crate::routes::AppRoute::page(
-                                        crate::sidebar::Page::Notifications,
-                                    ),
+                                    crate::routes::AppRoute::page(crate::page::Page::Notifications),
                                 ),
                                 cx,
                             );

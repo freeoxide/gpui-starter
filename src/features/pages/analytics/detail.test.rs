@@ -22,7 +22,8 @@ async fn detail_starts_loading_and_finishes_ready(cx: &mut TestAppContext) {
         assert_eq!(detail.phase, super::DetailPhase::Loading);
         assert_eq!(detail.series.len(), 90);
     });
-    detail.update(cx, |detail, cx| detail.finish_loading(cx));
+    cx.executor().advance_clock(super::DETAIL_DELAY);
+    cx.run_until_parked();
     cx.read(|cx| {
         assert_eq!(detail.read(cx).phase, super::DetailPhase::Ready);
     });

@@ -5,38 +5,14 @@ use gpui_kit::component::{
 };
 use gpui_kit::{prelude::*, *};
 
-use gpui_query::core::{QueryResource, QueryStatus, RetryPolicy};
+use gpui_query::core::RetryPolicy;
 
 use crate::accessibility::A11yExt as _;
 
 use super::super::QueryPlaygroundPage;
-use super::super::ui_helpers::{chip, fetch_label, mini_card, section_card, status_badge};
-
-// Readers for the recurring `Option<(Entity<QueryResource<..>>, Subscription)>`
-// shape; MutationStatus/infinite/bare-Entity sites don't fit and stay inline.
-
-fn query_status<T: 'static, E: 'static>(
-    opt: Option<&(Entity<QueryResource<T, E>>, Subscription)>,
-    cx: &App,
-) -> QueryStatus {
-    opt.map_or(QueryStatus::Idle, |(e, _)| {
-        e.read_with(cx, |r, _| r.status())
-    })
-}
-
-fn query_data<T: Clone + 'static, E: 'static>(
-    opt: Option<&(Entity<QueryResource<T, E>>, Subscription)>,
-    cx: &App,
-) -> Option<T> {
-    opt.and_then(|(e, _)| e.read_with(cx, |r, _| r.data().cloned()))
-}
-
-fn query_error<T: 'static, E: Clone + 'static>(
-    opt: Option<&(Entity<QueryResource<T, E>>, Subscription)>,
-    cx: &App,
-) -> Option<E> {
-    opt.and_then(|(e, _)| e.read_with(cx, |r, _| r.error().cloned()))
-}
+use super::super::ui_helpers::{
+    chip, fetch_label, mini_card, query_data, query_error, query_status, section_card, status_badge,
+};
 
 impl QueryPlaygroundPage {
     pub(in super::super) fn render_cache_policies(&mut self, cx: &mut Context<Self>) -> Div {

@@ -47,16 +47,7 @@ impl WidgetKind {
     }
 }
 
-pub(crate) const fn system_controls_available() -> bool {
-    true
-}
-
-pub(crate) const fn metrics_available() -> bool {
-    true
-}
-
-/// Kinds this build offers. Data-plan-dependent kinds drop out in reduced
-/// builds (the plan's fallback recipe); the clock never does.
+/// Kinds this build offers.
 pub fn available_kinds() -> Vec<WidgetKind> {
     [
         WidgetKind::Clock,
@@ -65,11 +56,6 @@ pub fn available_kinds() -> Vec<WidgetKind> {
         WidgetKind::Metrics,
     ]
     .into_iter()
-    .filter(|kind| match kind {
-        WidgetKind::Clock => true,
-        WidgetKind::Battery | WidgetKind::System => system_controls_available(),
-        WidgetKind::Metrics => metrics_available(),
-    })
     .collect()
 }
 

@@ -24,9 +24,18 @@ impl NotificationsPage {
 
 impl Render for NotificationsPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let items = inbox::snapshot(cx);
-        let unread = items.iter().filter(|item| !item.read).count();
-        let total = items.len();
+        let unread = inbox::unread_count(cx);
+        let (total, rows) = inbox::with_items(cx, |items| {
+            let total = items.len();
+            (
+                total,
+                items
+                    .iter()
+                    .enumerate()
+                    .map(move |(ix, item)| render_item(ix, total, item))
+                    .collect::<Vec<_>>(),
+            )
+        });
         let list_label = crate::i18n::localize("notifications_title");
         let title = format!(
             "{} ({unread} {})",
@@ -87,22 +96,17 @@ impl Render for NotificationsPage {
                     // AT-SPI derives each item's setsize from the nearest
                     // ancestor that declares one; item-level values are ignored.
                     .aria_size_of_set(total)
-                    .children(
-                        items
-                            .into_iter()
-                            .enumerate()
-                            .map(move |(ix, item)| render_item(ix, total, item)),
-                    ),
+                    .children(rows),
             )
     }
 }
 
-fn render_item(index: usize, total: usize, item: NotificationInboxItem) -> Stateful<Div> {
+fn render_item(index: usize, total: usize, item: &NotificationInboxItem) -> Stateful<Div> {
     let timestamp = item.created_at.to_rfc3339();
     let summary = item.summary_line();
-    let title = item.title;
-    let body = item.body;
-    let error_summary = item.error_summary;
+    let title = item.title.clone();
+    let body = item.body.clone();
+    let error_summary = item.error_summary.clone();
 
     let mut label = format!("{title}. {body}. {summary}");
     if let Some(error) = &error_summary {

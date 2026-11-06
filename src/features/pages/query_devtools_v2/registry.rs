@@ -6,7 +6,7 @@ use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::ui::widgets::{
-    bounded_list_height, render_virtual_list, variable_item_sizes, virtual_list_item,
+    ItemSizeCache, bounded_list_height, render_virtual_list, virtual_list_item,
 };
 use gpui_query::client::{ClientDiagnostic, QueryDiagnostic};
 use gpui_query::core::QueryStatus;
@@ -39,6 +39,7 @@ pub(super) struct RegistryRowCache {
     sort: Option<QuerySort>,
     filter: Option<QueryStatus>,
     rows: Rc<Vec<RegistryRow>>,
+    size_cache: ItemSizeCache,
 }
 
 /// Cheap signature of the diagnostic's query slice; equal signatures mean the
@@ -237,7 +238,7 @@ pub(super) fn render_query_registry(
         })
         .collect();
 
-    let item_sizes = variable_item_sizes(&item_heights);
+    let item_sizes = row_cache.size_cache.variable(&item_heights);
     let list_h = bounded_list_height(&item_sizes, px(REGISTRY_LIST_GAP), px(REGISTRY_MAX_LIST_H));
 
     let registry_empty = crate::i18n::localize("query_devtools_registry_empty");
@@ -254,7 +255,6 @@ pub(super) fn render_query_registry(
         let scroll_handle = scroll_handle.clone();
         let rows = queries.clone();
         let expanded = expanded_key.clone();
-        let total = queries.len();
 
         render_virtual_list(
             cx,
@@ -278,7 +278,6 @@ pub(super) fn render_query_registry(
                             SharedString::from(format!("{}-item", row.element_id)),
                             registry_row_label(row),
                             ix,
-                            total,
                         )
                         .gap_1()
                         .child(query_row(row, is_expanded, cx).h(px(REGISTRY_ROW_H)));

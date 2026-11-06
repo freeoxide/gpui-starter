@@ -153,7 +153,7 @@ impl Render for AssetPaletteView {
 }
 
 pub(crate) struct StickyNoteView {
-    textarea: Entity<TextareaState>,
+    pub(crate) textarea: Entity<TextareaState>,
     _subscriptions: Vec<Subscription>,
 }
 

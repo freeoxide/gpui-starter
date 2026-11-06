@@ -68,3 +68,23 @@ fn sort_or_filter_changes_rebuild_the_cache() {
         "a changed filter must not reuse the cached rows"
     );
 }
+
+/// Same sort, same filter, one changed field: only the diagnostic signature
+/// can invalidate, so a signature that ignored live fields serves stale rows.
+#[test]
+fn changed_diagnostic_fields_invalidate_the_cache() {
+    let mut cache = RegistryRowCache::default();
+    let first = diagnostic(vec![query("playground::a", QueryStatus::Idle, 3)]);
+    let rows = cached_registry_rows(&mut cache, &Some(first), QuerySort::Key, &None);
+    assert_eq!(rows[0].query.status, QueryStatus::Idle);
+    assert_eq!(rows[0].cache_hits_str.as_ref(), "3");
+
+    let second = diagnostic(vec![query("playground::a", QueryStatus::Failure, 7)]);
+    let rebuilt = cached_registry_rows(&mut cache, &Some(second), QuerySort::Key, &None);
+    assert!(
+        !Rc::ptr_eq(&rows, &rebuilt),
+        "a changed status or hit count must not reuse the cached rows"
+    );
+    assert_eq!(rebuilt[0].query.status, QueryStatus::Failure);
+    assert_eq!(rebuilt[0].cache_hits_str.as_ref(), "7");
+}

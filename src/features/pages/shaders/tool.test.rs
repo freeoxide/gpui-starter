@@ -63,14 +63,17 @@ async fn pointer_move_maps_doc_position_to_uv(cx: &mut TestAppContext) {
 async fn out_of_bounds_positions_clamp_to_the_unit_square(cx: &mut TestAppContext) {
     let (shader, canvas) = installed_pair(cx);
 
-    for doc in [(-64., 300.), (700., 512.)] {
+    for (doc, expected) in [((-64., 300.), (0.0, 0.5859375)), ((700., 512.), (1.0, 1.0))] {
         let event = pointer_at(doc);
         cx.update(|cx| {
             canvas.update(cx, |s, cx| {
                 s.dispatch_tool_event(cx, |tool, s, cx| tool.pointer_down(&event, &ctx(), s, cx))
             })
         });
+        assert_eq!(
+            mouse_uv(cx, &shader),
+            expected,
+            "doc position {doc:?} must clamp per dispatch"
+        );
     }
-
-    assert_eq!(mouse_uv(cx, &shader), (1.0, 1.0));
 }

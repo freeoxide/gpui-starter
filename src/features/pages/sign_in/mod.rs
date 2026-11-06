@@ -1,7 +1,7 @@
 //! Removable sign-in page over the plan-21 auth controller. `SignInPage` is
 //! the only public surface; the provider registry and form stay private.
 //! Removal = delete this directory and revert the seam touches: the
-//! Page::SignIn arms and all() entry in shell/sidebar.rs, the VALID_HOSTS
+//! Page::SignIn arms and all() entry in shell/page.rs, the VALID_HOSTS
 //! entry in shell/route.rs, the AppRoot wiring in shell/root/app_root/
 //! state.rs, the mod/pub use lines in features/pages/mod.rs, the auth_ui
 //! service (services/mod.rs, lib.rs, app/init.rs install line), the account
@@ -10,7 +10,7 @@
 //! command arms, the locale keys, and the page count in
 //! tests/e2e_navigation.rs.
 
-use gpui_auth::{AuthState, SecretString};
+use gpui_auth::{AuthError, AuthState, MOCK_PROVIDER_ID, SecretString};
 use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, Sizable as _, Size,
     avatar::Avatar,
@@ -68,7 +68,18 @@ impl SignInPage {
                     this.try_submit(cx);
                 }
             }),
-            cx.observe_global::<crate::services::auth_ui::AuthUiState>(|_, cx| cx.notify()),
+            cx.observe_global_in::<crate::services::auth_ui::AuthUiState>(
+                window,
+                |this, window, cx| {
+                    if matches!(
+                        crate::auth_ui::snapshot(cx).state,
+                        AuthState::SignedIn { .. } | AuthState::SignedOut
+                    ) {
+                        this.clear_credentials(window, cx);
+                    }
+                    cx.notify();
+                },
+            ),
         ];
         cx.bind_keys([KeyBinding::new("escape", BackToProviders, Some("SignIn"))]);
         Self {
@@ -150,7 +161,29 @@ impl SignInPage {
         self.dirty = false;
     }
 
+    /// Secrets live only in the token store: the form holder and both input
+    /// buffers drop their text once a session boundary is crossed.
+    fn clear_credentials(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.current_data = SignInFormFormValueHolder::default();
+        self.cached_errors = Default::default();
+        self.touched = false;
+        self.dirty = false;
+        self.fields.email_input.update(cx, |state, cx| {
+            state.set_value("", window, cx);
+        });
+        self.fields.password_input.update(cx, |state, cx| {
+            state.set_value("", window, cx);
+        });
+    }
+
     fn try_submit(&mut self, cx: &mut Context<Self>) {
+        // Enter must respect the same in-flight guard the submit button has.
+        if matches!(crate::auth_ui::snapshot(cx).state, AuthState::SigningIn) {
+            return;
+        }
+        if self.mode != Mode::Email {
+            return;
+        }
         self.touched = true;
         self.recompute_validation();
         let valid = self.cached_errors.iter().all(|errors| errors.is_none());
@@ -158,17 +191,14 @@ impl SignInPage {
             cx.notify();
             return;
         }
+        // The chosen mode owns the dispatch: a provider without PasswordAuth
+        // surfaces the controller's hard error, never a browser-flow swap.
         let email = self.current_data.email.clone().unwrap_or_default();
         let password = self.current_data.password.clone().unwrap_or_default();
         match crate::services::auth::controller(cx) {
             Some(entity) => {
-                let provider_id = crate::auth_ui::snapshot(cx).provider_id;
                 entity.update(cx, |controller, cx| {
-                    if provider_id == "email" {
-                        controller.sign_in_with_password(email, SecretString::new(password), cx);
-                    } else {
-                        controller.start_sign_in(cx);
-                    }
+                    controller.sign_in_with_password(email, SecretString::new(password), cx);
                 });
                 cx.notify();
             }
@@ -190,7 +220,8 @@ impl SignInPage {
         let specs = providers();
         let total = specs.len();
         let signing_in = matches!(snapshot.state, AuthState::SigningIn);
-        let any_disabled = specs.iter().any(|spec| !is_available(spec, cx));
+        let availability: Vec<bool> = specs.iter().map(|spec| is_available(spec, cx)).collect();
+        let any_disabled = availability.iter().any(|available| !available);
         let heading = crate::i18n::localize("sign_in_provider_heading");
 
         v_flex()
@@ -209,40 +240,39 @@ impl SignInPage {
                     .a11y(Role::List, heading)
                     .gap_2()
                     .aria_size_of_set(total)
-                    .children(specs.iter().enumerate().map(|(ix, spec)| {
-                        let available = is_available(spec, cx);
-                        let label = crate::i18n::localize(spec.label_key);
-                        v_flex()
-                            .id(ElementId::Name(SharedString::from(format!(
-                                "sign-in-provider-row-{}",
-                                spec.id
-                            ))))
-                            .a11y(Role::ListItem, label.clone())
-                            .aria_position_in_set(ix)
-                            .aria_size_of_set(total)
-                            .child(
-                                Button::new(ElementId::Name(SharedString::from(format!(
-                                    "auth-provider-{}",
+                    .children(specs.iter().enumerate().zip(&availability).map(
+                        |((ix, spec), &available)| {
+                            let label = crate::i18n::localize(spec.label_key);
+                            v_flex()
+                                .id(ElementId::Name(SharedString::from(format!(
+                                    "sign-in-provider-row-{}",
                                     spec.id
                                 ))))
-                                .outline()
-                                .label(label)
-                                .icon(spec.icon.clone())
-                                .disabled(!available)
-                                .loading(signing_in && available)
-                                .on_click(cx.listener(
-                                    move |this, _, _, cx| match spec.kind {
-                                        ProviderKind::Email => {
+                                .a11y(Role::ListItem, label.clone())
+                                .aria_position_in_set(ix)
+                                .aria_size_of_set(total)
+                                .child(
+                                    Button::new(ElementId::Name(SharedString::from(format!(
+                                        "auth-provider-{}",
+                                        spec.id
+                                    ))))
+                                    .outline()
+                                    .label(label)
+                                    .icon(spec.icon.clone())
+                                    .disabled(!available)
+                                    .loading(signing_in && available)
+                                    .on_click(cx.listener(move |this, _, _, cx| match spec.kind {
+                                        ProviderKind::Email { .. } => {
                                             this.mode = Mode::Email;
                                             cx.notify();
                                         }
                                         ProviderKind::Browser => {
                                             providers::start_browser_flow(spec, cx)
                                         }
-                                    },
-                                )),
-                            )
-                    })),
+                                    })),
+                                )
+                        },
+                    )),
             ))
             .when(any_disabled, |this| {
                 this.child(self.render_note(
@@ -251,7 +281,7 @@ impl SignInPage {
                     cx,
                 ))
             })
-            .when(snapshot.provider_id == "mock", |this| {
+            .when(snapshot.provider_id == MOCK_PROVIDER_ID, |this| {
                 this.child(self.render_note("sign-in-demo-note", "sign_in_demo_note", cx))
             })
     }
@@ -397,15 +427,12 @@ impl SignInPage {
             )
     }
 
-    fn render_error_banner(&self, message: &str, cx: &Context<Self>) -> impl IntoElement {
+    fn render_error_banner(&self, error: &AuthError, cx: &Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let heading = crate::i18n::localize("sign_in_error_heading");
-        let detail = match error_detail_key(message) {
+        let detail = match error_detail_key(error) {
             Some(key) => crate::i18n::localize(key),
-            None => format!(
-                "{}: {message}",
-                crate::i18n::localize("sign_in_err_unknown")
-            ),
+            None => format!("{}: {error}", crate::i18n::localize("sign_in_err_unknown")),
         };
         div()
             .id("auth-error")
@@ -427,17 +454,18 @@ impl SignInPage {
     ) -> impl IntoElement {
         let danger = cx.theme().danger;
         let signing_in = matches!(snapshot.state, AuthState::SigningIn);
-        let show_demo =
-            signing_in && snapshot.provider_id == "mock" && snapshot.demo_authorize_url.is_some();
+        let show_demo = signing_in
+            && snapshot.provider_id == MOCK_PROVIDER_ID
+            && snapshot.demo_authorize_url.is_some();
 
         v_flex()
             .gap_3()
             .when_some(
                 match &snapshot.state {
-                    AuthState::Error(message) => Some(message.clone()),
+                    AuthState::Error(error) => Some(error.clone()),
                     _ => None,
                 },
-                |this, message| this.child(self.render_error_banner(&message, cx)),
+                |this, error| this.child(self.render_error_banner(&error, cx)),
             )
             .child(
                 v_form()
@@ -466,7 +494,8 @@ impl SignInPage {
                                         Button::new("auth-use-another")
                                             .ghost()
                                             .label(crate::i18n::localize("sign_in_back"))
-                                            .on_click(cx.listener(|this, _, _, cx| {
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.clear_credentials(window, cx);
                                                 this.mode = Mode::Choose;
                                                 cx.notify();
                                             })),
@@ -487,19 +516,14 @@ impl SignInPage {
     }
 }
 
-fn error_detail_key(message: &str) -> Option<&'static str> {
-    if message.contains("invalid email or password") {
-        Some("sign_in_err_invalid_credentials")
-    } else if message.contains("network failure") {
-        Some("sign_in_err_network")
-    } else if message.contains("TOTP code rejected")
-        || message.contains("challenge unknown or expired")
-    {
-        Some("sign_in_err_challenge")
-    } else if message.contains("state mismatch") {
-        Some("sign_in_err_state_mismatch")
-    } else {
-        None
+/// Locale key for errors the product copy calls out; everything else falls
+/// back to the generic banner with the Display text.
+fn error_detail_key(error: &AuthError) -> Option<&'static str> {
+    match error {
+        AuthError::InvalidCredentials => Some("sign_in_err_invalid_credentials"),
+        AuthError::Network(_) => Some("sign_in_err_network"),
+        AuthError::StateMismatch => Some("sign_in_err_state_mismatch"),
+        _ => None,
     }
 }
 
@@ -520,7 +544,8 @@ impl Render for SignInPage {
             .min_h_full()
             .p_6()
             .gap_4()
-            .on_action(cx.listener(|this, _: &BackToProviders, _, cx| {
+            .on_action(cx.listener(|this, _: &BackToProviders, window, cx| {
+                this.clear_credentials(window, cx);
                 this.mode = Mode::Choose;
                 cx.notify();
             }))

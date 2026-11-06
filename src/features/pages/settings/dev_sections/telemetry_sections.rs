@@ -46,12 +46,9 @@ pub fn render_telemetry_section(cx: &mut Context<super::super::SettingsPage>) ->
                         .outline()
                         .label(crate::i18n::localize("settings_telemetry_remote"))
                         .on_click(|_, _, cx| {
-                            telemetry::set_mode(
-                                TelemetryMode::Remote,
-                                true,
-                                Some("https://telemetry.example.com/v1/events"),
-                                cx,
-                            );
+                            // None resolves OTEL_EXPORTER_OTLP_ENDPOINT or the
+                            // default; an inline URL would double the path.
+                            telemetry::set_mode(TelemetryMode::Remote, true, None, cx);
                         }),
                 ),
         )

@@ -33,13 +33,20 @@ fn window_slices_the_tail_by_range() {
 }
 
 #[test]
-fn previous_window_is_empty_or_the_equal_length_stretch_before() {
+fn previous_window_is_the_stretch_of_days_directly_before_the_window() {
     let data = load();
     assert!(data.previous_window(DateRange::Last90).is_empty());
-    assert_eq!(data.previous_window(DateRange::Last7).len(), 7);
     let window = data.window(DateRange::Last7);
     let previous = data.previous_window(DateRange::Last7);
     assert_eq!(previous.len(), window.len());
+    assert_eq!(previous.last().unwrap().date, "2025-09-21");
+    assert_eq!(window.first().unwrap().date, "2025-09-22");
+    let window_dates: std::collections::HashSet<_> =
+        window.iter().map(|row| row.date.clone()).collect();
+    assert!(
+        previous.iter().all(|row| !window_dates.contains(&row.date)),
+        "the two stretches must be disjoint"
+    );
 }
 
 #[test]
@@ -47,6 +54,24 @@ fn kpis_carry_deltas_only_when_history_exists() {
     let data = load();
     assert!(data.kpis(DateRange::Last30)[0].delta.is_some());
     assert!(data.kpis(DateRange::Last90)[0].delta.is_none());
+}
+
+#[test]
+fn visitors_delta_is_computed_from_the_two_window_sums() {
+    let data = load();
+    let kpis = data.kpis(DateRange::Last30);
+    assert_eq!(kpis[0].label_key, "analytics_kpi_visitors");
+    let delta = kpis[0].delta.expect("Last30 has a previous stretch");
+    // Visitors over the two fixture stretches: 331125 vs 334873.
+    assert!((delta - (331125. - 334873.) / 334873. * 100.).abs() < 1e-9);
+}
+
+#[test]
+fn change_percent_handles_zero_previous_and_signs() {
+    assert_eq!(change_percent(5., 0.), 0.);
+    assert_eq!(change_percent(0., 0.), 0.);
+    assert_eq!(change_percent(150., 100.), 50.);
+    assert_eq!(change_percent(-10., -5.), -100.);
 }
 
 #[test]

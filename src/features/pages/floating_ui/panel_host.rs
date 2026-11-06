@@ -70,7 +70,18 @@ impl PalettePanelHost {
             let factory = palette_view_factory(*id);
             content.insert(*id, factory(window, cx));
         }
-        let session_watch = cx.observe(&session, |_, _, cx| {
+        // Panel views seed from persistence once, so a reopened panel needs
+        // a fresh view or it keeps the text the window surface replaced.
+        let session_watch = cx.observe_in(&session, window, |this, session, window, cx| {
+            for id in PaletteId::ALL {
+                if session.read(cx).is_open(*id)
+                    && session.read(cx).surface(*id) == Some(PaletteSurface::Panel)
+                    && !this.rendered.contains(id)
+                {
+                    this.content
+                        .insert(*id, palette_view_factory(*id)(window, cx));
+                }
+            }
             cx.notify();
         });
         Self {
@@ -141,21 +152,16 @@ impl PalettePanelHost {
             .on_drag_move(
                 cx.listener(|this, ev: &DragMoveEvent<PanelDrag>, window, cx| {
                     let pos = ev.event.position;
-                    let Some(active) = this.drag.as_mut() else {
-                        this.drag = Some(ActiveDrag {
-                            id: ev.drag(cx).id,
-                            last_cursor: pos,
-                        });
-                        return;
-                    };
-                    let delta = pos - active.last_cursor;
-                    let Some(geom) = this.geoms.get_mut(&active.id) else {
-                        return;
-                    };
-                    geom.origin =
-                        clamp_origin(geom.origin + delta, geom.size, window.viewport_size());
-                    active.last_cursor = pos;
-                    cx.notify();
+                    let id = ev.drag(cx).id;
+                    if drag_step(
+                        &mut this.drag,
+                        id,
+                        pos,
+                        &mut this.geoms,
+                        window.viewport_size(),
+                    ) {
+                        cx.notify();
+                    }
                 }),
             )
             .child(
@@ -217,6 +223,41 @@ impl PalettePanelHost {
         });
         cx.notify();
     }
+}
+
+/// One drag-move step: the first move only seeds the drag, later moves shift
+/// the pane by the cursor delta and clamp it into the viewport. Returns
+/// whether the pane moved and a redraw is needed.
+fn drag_step(
+    drag: &mut Option<ActiveDrag>,
+    id: PaletteId,
+    pos: Point<Pixels>,
+    geoms: &mut BTreeMap<PaletteId, PanelGeom>,
+    viewport: gpui_kit::Size<Pixels>,
+) -> bool {
+    let Some(active) = drag.as_mut() else {
+        *drag = Some(ActiveDrag {
+            id,
+            last_cursor: pos,
+        });
+        return false;
+    };
+    // A drop outside every pane leaves the old drag behind; the next pane's
+    // drag must reseed, not move the pane the stale state points at.
+    if active.id != id {
+        *active = ActiveDrag {
+            id,
+            last_cursor: pos,
+        };
+        return false;
+    }
+    let delta = pos - active.last_cursor;
+    let Some(geom) = geoms.get_mut(&active.id) else {
+        return false;
+    };
+    geom.origin = clamp_origin(geom.origin + delta, geom.size, viewport);
+    active.last_cursor = pos;
+    true
 }
 
 #[cfg(test)]

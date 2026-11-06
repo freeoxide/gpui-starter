@@ -1,8 +1,11 @@
+use gpui_auth::EMAIL_PROVIDER_ID;
 use gpui_kit::App;
 use gpui_kit::component::IconName;
 
+use crate::capabilities::Capability;
+
 pub(crate) enum ProviderKind {
-    Email,
+    Email { capability: Capability },
     Browser,
 }
 
@@ -11,30 +14,28 @@ pub(crate) struct ProviderSpec {
     pub(crate) kind: ProviderKind,
     pub(crate) label_key: &'static str,
     pub(crate) icon: IconName,
-    pub(crate) capability: Option<&'static str>,
 }
 
 const PROVIDERS: [ProviderSpec; 3] = [
     ProviderSpec {
-        id: "email",
-        kind: ProviderKind::Email,
+        id: EMAIL_PROVIDER_ID,
+        kind: ProviderKind::Email {
+            capability: Capability::AUTH_EMAIL,
+        },
         label_key: "sign_in_provider_email",
         icon: IconName::User,
-        capability: Some("auth_email"),
     },
     ProviderSpec {
         id: "google",
         kind: ProviderKind::Browser,
         label_key: "sign_in_provider_google",
         icon: IconName::Globe,
-        capability: Some("auth_social"),
     },
     ProviderSpec {
         id: "github",
         kind: ProviderKind::Browser,
         label_key: "sign_in_provider_github",
         icon: IconName::Github,
-        capability: Some("auth_social"),
     },
 ];
 
@@ -44,11 +45,10 @@ pub(crate) fn providers() -> &'static [ProviderSpec] {
 
 pub(crate) fn is_available(spec: &ProviderSpec, cx: &App) -> bool {
     match spec.kind {
-        ProviderKind::Email => spec.capability.is_some_and(|name| {
-            crate::capabilities::snapshot(cx)
-                .get(name)
-                .is_some_and(|status| status.enabled)
-        }),
+        ProviderKind::Email { capability } => crate::capabilities::get(capability, cx)
+            // wasm keeps password auth enabled but unsupported; the row
+            // must not offer a form no provider can answer.
+            .is_some_and(|status| status.supported && status.enabled),
         ProviderKind::Browser => browser_configured(spec.id, cx),
     }
 }

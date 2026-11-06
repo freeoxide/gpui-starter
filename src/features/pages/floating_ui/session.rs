@@ -7,7 +7,9 @@ use super::state::PaletteId;
 #[cfg(not(target_family = "wasm"))]
 use super::views::palette_view_factory;
 #[cfg(not(target_family = "wasm"))]
-use crate::ui::floating::{FloatAnchor, FloatLevel, FloatingSpec, Placement9, spawn_floating};
+use crate::ui::floating::{
+    FloatAnchor, FloatLevel, FloatingHandle, FloatingSpec, Placement9, spawn_floating,
+};
 use crate::ui::floating::{
     FloatingWindowId, FloatingWindowRegistry, close_floating, floating_snapshot,
 };
@@ -51,6 +53,9 @@ struct SessionSlot {
 pub struct PaletteSession {
     slots: BTreeMap<PaletteId, SessionSlot>,
     restored: bool,
+    // One live bounds watch per open palette window; dropped with the window.
+    #[cfg(not(target_family = "wasm"))]
+    origin_watches: BTreeMap<PaletteId, Subscription>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -81,6 +86,8 @@ impl PaletteSession {
         Self {
             slots,
             restored: false,
+            #[cfg(not(target_family = "wasm"))]
+            origin_watches: BTreeMap::new(),
             _subscriptions: vec![registry_watch],
         }
     }
@@ -243,8 +250,58 @@ impl PaletteSession {
                 changed = true;
             }
         }
+        #[cfg(not(target_family = "wasm"))]
+        self.reconcile_origin_watches(cx);
         if changed {
             cx.notify();
+        }
+    }
+
+    /// Keep one bounds watch per open palette window: spawns attach (the
+    /// registry fires when a deferred spawn finally lands), closes detach.
+    /// The watch writes the dragged origin back so a reopen, in-session or
+    /// after restart, returns to where the user left the window.
+    #[cfg(not(target_family = "wasm"))]
+    fn reconcile_origin_watches(&mut self, cx: &mut Context<Self>) {
+        let windows: Vec<(PaletteId, FloatingHandle)> = floating_snapshot(cx)
+            .into_iter()
+            .filter_map(|entry| {
+                let id = PaletteId::ALL
+                    .iter()
+                    .copied()
+                    .find(|id| id.window_id() == entry.id)?;
+                Some((id, entry.handle))
+            })
+            .collect();
+        self.origin_watches
+            .retain(|id, _| windows.iter().any(|(open, _)| open == id));
+        for (id, handle) in windows {
+            if self.origin_watches.contains_key(&id) {
+                continue;
+            }
+            let FloatingHandle::Native(window) = handle else {
+                continue;
+            };
+            let session = cx.entity();
+            // A drag moves the window every frame; the config store
+            // debounces, so hand it the latest origin each time.
+            let watch = window.update(cx, |_, window, app| {
+                session.update(app, |_, cx| {
+                    cx.observe_window_bounds(window, move |this, window, cx| {
+                        let origin = window.window_bounds().get_bounds().origin;
+                        if let Some(slot) = this.slots.get_mut(&id) {
+                            slot.window_origin = Some(origin);
+                        }
+                        persistence::update_slot(id, cx, |entry| {
+                            entry.x = f32::from(origin.x);
+                            entry.y = f32::from(origin.y);
+                        });
+                    })
+                })
+            });
+            if let Ok(subscription) = watch {
+                self.origin_watches.insert(id, subscription);
+            }
         }
     }
 }

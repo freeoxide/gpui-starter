@@ -5,7 +5,7 @@ use gpui_kit::component::{
     checkbox::Checkbox,
     form::{Field, field, v_form},
     h_flex,
-    input::{Input, InputEvent, InputState},
+    input::{Input, InputContentType, InputEvent, InputState},
     v_flex,
 };
 use gpui_kit::{prelude::*, *};
@@ -38,7 +38,7 @@ pub struct RegistrationForm {
 
     #[gpui_form(component(input))]
     #[koruma(UrlValidation::<_>::builder())]
-    pub website: String,
+    pub website: Option<String>,
 }
 
 /// The five input fields of [`RegistrationForm`]; the enum keeps label, input,
@@ -124,6 +124,7 @@ impl FormPage {
         let email_input = cx.new(|cx| RegistrationFormFormComponents::email_input(window, cx));
         let password_input =
             cx.new(|cx| RegistrationFormFormComponents::password_input(window, cx));
+        password_input.update(cx, |state, cx| state.set_masked(true, window, cx));
         let phone_input = cx.new(|cx| RegistrationFormFormComponents::phone_input(window, cx));
         let website_input = cx.new(|cx| RegistrationFormFormComponents::website_input(window, cx));
 
@@ -170,6 +171,7 @@ impl FormPage {
                     };
                     field.set_on(&mut this.current_data, value);
                     this.dirty = true;
+                    this.submitted = false;
                 }
             },
         )
@@ -256,9 +258,6 @@ impl FormPage {
                 });
             self.cached_errors[FormField::Website as usize] =
                 field_error_keys(&e.website().all(), |v| match v {
-                    RegistrationFormFormValueHolderWebsiteKorumaValidator::RequiredValidation(
-                        _,
-                    ) => "validation.required",
                     RegistrationFormFormValueHolderWebsiteKorumaValidator::UrlValidation(_) => {
                         "validation.url"
                     }
@@ -279,9 +278,27 @@ impl FormPage {
         let error_id: ElementId =
             ElementId::Name(SharedString::from(format!("form-error-{:?}", field_kind)));
         let input = self.field_input(field_kind);
+        let input_element = match field_kind {
+            FormField::Password => Input::new(input)
+                .mask_toggle()
+                .content_type(InputContentType::Password)
+                .aria_label(label_text.clone())
+                .into_any_element(),
+            FormField::Email => Input::new(input)
+                .content_type(InputContentType::EmailAddress)
+                .aria_label(label_text.clone())
+                .into_any_element(),
+            FormField::Website => Input::new(input)
+                .content_type(InputContentType::Url)
+                .aria_label(label_text.clone())
+                .into_any_element(),
+            _ => Input::new(input)
+                .aria_label(label_text.clone())
+                .into_any_element(),
+        };
 
         field()
-            .label(label_text.clone())
+            .label(label_text)
             .required(required)
             .description_fn(move |_, _| {
                 div()
@@ -301,7 +318,7 @@ impl FormPage {
                         )
                     })
             })
-            .child(Input::new(input).aria_label(label_text))
+            .child(input_element)
     }
 }
 

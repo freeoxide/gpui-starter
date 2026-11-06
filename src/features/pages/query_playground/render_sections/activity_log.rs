@@ -2,13 +2,18 @@ use gpui_kit::component::{ActiveTheme as _, button::Button, h_flex};
 use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
-use crate::ui::widgets::{render_virtual_list, uniform_item_sizes, virtual_list_item};
+use crate::ui::widgets::{render_virtual_list, virtual_list_item};
 
 use super::super::QueryPlaygroundPage;
 use super::super::ui_helpers::section_card;
 
+// `v_virtual_list` positions rows purely from `item_sizes`, so the row
+// renderer and the list clamp must stay pinned to these heights.
+const LOG_ROW_H: f32 = 20.0;
+const LOG_LIST_H: f32 = 200.0;
+
 impl QueryPlaygroundPage {
-    pub(in super::super) fn render_activity_log(&self, cx: &mut Context<Self>) -> Div {
+    pub(in super::super) fn render_activity_log(&mut self, cx: &mut Context<Self>) -> Div {
         let has_logs = !self.activity_log.is_empty();
         let log_count = self.activity_log.len();
         let scroll_handle = self.log_scroll_handle.clone();
@@ -62,13 +67,13 @@ impl QueryPlaygroundPage {
             )
         } else {
             let item_count = self.activity_log.len();
-            let item_height = px(20.);
-            let item_sizes = uniform_item_sizes(item_count, item_height);
+            let item_height = px(LOG_ROW_H);
+            let item_sizes = self.log_size_cache.uniform(item_count, item_height);
 
             card.child(
                 div()
                     .px_4()
-                    .max_h(px(200.))
+                    .max_h(px(LOG_LIST_H))
                     // Block scroll events from bubbling to the outer page scroll.
                     .on_scroll(|_, _, cx| {
                         cx.stop_propagation();
@@ -77,7 +82,7 @@ impl QueryPlaygroundPage {
                         cx,
                         "activity-log-vlist",
                         item_sizes,
-                        px(200.),
+                        px(LOG_LIST_H),
                         px(0.),
                         &scroll_handle,
                         false,
@@ -92,8 +97,8 @@ impl QueryPlaygroundPage {
                                         .get(entry_ix)
                                         .cloned()
                                         .unwrap_or_default();
-                                    virtual_list_item(ix, entry.clone(), ix, total)
-                                        .h(px(20.))
+                                    virtual_list_item(ix, entry.clone(), ix)
+                                        .h(px(LOG_ROW_H))
                                         .text_xs()
                                         .font_family("monospace")
                                         .text_color(cx.theme().muted_foreground)

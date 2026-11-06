@@ -2,7 +2,7 @@
 //! surface via `views::AnalyticsPage`; everything else stays private to the
 //! module. Removal = delete this directory and revert its seam touches: the
 //! `mod analytics;`/`pub use` lines in features/pages/mod.rs, the
-//! Page::Analytics arms and all() entry in shell/sidebar.rs, the VALID_HOSTS
+//! Page::Analytics arms and all() entry in shell/page.rs, the VALID_HOSTS
 //! entry in shell/route.rs, the AppRoot wiring in
 //! shell/root/app_root/state.rs, the page count in tests/e2e_navigation.rs,
 //! and the nav_analytics + analytics_* keys in locales/en.yml and
@@ -47,9 +47,9 @@ thread_local! {
     /// Layout bounds recorded by `mark` during a paint pass, in paint order.
     pub(crate) static LAYOUT_PROBE: std::cell::RefCell<Vec<(&'static str, Bounds<Pixels>)>> =
         const { std::cell::RefCell::new(Vec::new()) };
-    /// Band keys fed to the sessions chart by the last render, in order.
-    pub(crate) static SESSION_BAND_KEYS: std::cell::RefCell<Vec<String>> =
-        const { std::cell::RefCell::new(Vec::new()) };
+    /// Title of the detail sheet opened by the last `open_detail` call.
+    pub(crate) static LAST_SHEET_TITLE: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
 }
 
 /// Test-only: attaches an absolute measuring canvas so bounds tests can read
@@ -117,11 +117,15 @@ enum RegionView {
 }
 
 const RELOAD_DELAY: Duration = Duration::from_millis(350);
+const TOP_PAGES_COUNT: usize = 6;
 
 pub struct AnalyticsPage {
     data: Rc<WorkspaceData>,
     range: DateRange,
     segment: Segment,
+    kpis: [model::Kpi; 4],
+    top_pages: Vec<model::PageSessions>,
+    window_rows: Vec<model::DailyRow>,
     range_select: Entity<SelectState<Vec<SharedString>>>,
     segment_select: Entity<SelectState<Vec<SharedString>>>,
     density: Density,
@@ -157,6 +161,9 @@ impl AnalyticsPage {
         });
 
         let all_rows = data.channels(Segment::All);
+        let kpis = data.kpis(DateRange::Last30);
+        let top_pages = data.top_pages(Segment::All, TOP_PAGES_COUNT);
+        let window_rows = data.window(DateRange::Last30).to_vec();
         let table = cx.new(|cx| {
             TableState::new(ChannelTableDelegate::new(all_rows), window, cx)
                 .col_selectable(false)
@@ -191,6 +198,9 @@ impl AnalyticsPage {
             range: DateRange::Last30,
             segment: Segment::All,
             data,
+            kpis,
+            top_pages,
+            window_rows,
             range_select,
             segment_select,
             density: Density::Comfortable,
@@ -264,9 +274,18 @@ impl AnalyticsPage {
         if self.table.read(cx).selected_row().is_none() {
             self.selected_key = None;
         }
+        self.recompute_aggregates();
         self.phase = Phase::Ready;
         self.committed = true;
         cx.notify();
+    }
+
+    /// Aggregates depend only on range/segment, so they are rebuilt at commit
+    /// time; every table notify re-renders the page without re-aggregating.
+    fn recompute_aggregates(&mut self) {
+        self.kpis = self.data.kpis(self.range);
+        self.top_pages = self.data.top_pages(self.segment, TOP_PAGES_COUNT);
+        self.window_rows = self.data.window(self.range).to_vec();
     }
 
     fn on_table_event(&mut self, event: &TableEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -306,6 +325,8 @@ impl AnalyticsPage {
         }
         let detail = ChannelDetail::view(row.clone(), self.data.clone(), self.density.size(), cx);
         let title = localize_with_args("analytics_detail_title", &[("page", row.page.as_ref())]);
+        #[cfg(test)]
+        LAST_SHEET_TITLE.with_borrow_mut(|slot| *slot = Some(title.clone()));
         window.open_sheet(cx, move |sheet, _, _| {
             sheet
                 .size(px(420.))
@@ -488,9 +509,8 @@ impl AnalyticsPage {
                     row.child(self.render_state(view == RegionView::Empty, cx))
                 }
                 RegionView::Content => row.children(
-                    self.data
-                        .kpis(self.range)
-                        .into_iter()
+                    self.kpis
+                        .iter()
                         .map(|kpi| self.render_kpi_card(kpi, compact, cx)),
                 ),
             });
@@ -521,7 +541,7 @@ impl AnalyticsPage {
 
     fn render_kpi_card(
         &self,
-        kpi: model::Kpi,
+        kpi: &model::Kpi,
         compact: bool,
         cx: &Context<Self>,
     ) -> impl IntoElement {
@@ -599,7 +619,7 @@ impl AnalyticsPage {
                     .text_color(cx.theme().muted_foreground)
                     .child(localize(kpi.label_key).to_uppercase()),
             )
-            .child(div().text_xl().font_semibold().child(kpi.value))
+            .child(div().text_xl().font_semibold().child(kpi.value.clone()))
             .child(delta_row);
         mark("kpi-card", card)
     }
@@ -729,7 +749,6 @@ impl AnalyticsPage {
 
     fn render_charts(&self, cx: &mut Context<Self>) -> AnyElement {
         let view = self.region_view();
-        let window_rows: Vec<model::DailyRow> = self.data.window(self.range).to_vec();
         let min_height = if matches!(self.density, Density::Compact) {
             10_f32
         } else {
@@ -747,6 +766,7 @@ impl AnalyticsPage {
                 .child(self.render_chart_skeleton(cx))
                 .child(self.render_chart_skeleton(cx).flex_none().w_full()),
             RegionView::Content => {
+                let window_rows: Vec<model::DailyRow> = self.window_rows.clone();
                 let theme = cx.theme();
                 let segments = [
                     (
@@ -791,7 +811,7 @@ impl AnalyticsPage {
                     .grid(true)
                     .id("analytics-visitors");
 
-                let revenue_chart = LineChart::new(window_rows.clone())
+                let revenue_chart = LineChart::new(window_rows)
                     .x(|row: &model::DailyRow| row.date.clone())
                     .y(|row| row.revenue)
                     .stroke(theme.chart_5)
@@ -805,12 +825,8 @@ impl AnalyticsPage {
                 // ScaleBand keys bands by page, so two rows of one page would
                 // draw into the same band and overpaint each other; feed one
                 // aggregated row per page.
-                let top_pages = self.data.top_pages(self.segment, 6);
-                #[cfg(test)]
-                SESSION_BAND_KEYS.with_borrow_mut(|keys| {
-                    *keys = top_pages.iter().map(|row| row.page.to_string()).collect();
-                });
-                let sessions_total: f64 = top_pages.iter().map(|row| row.sessions).sum();
+                let top_pages = self.top_pages.clone();
+                let sessions_total: f64 = self.top_pages.iter().map(|row| row.sessions).sum();
                 let sessions_fill = theme.chart_2;
                 let sessions_chart = BarChart::new(top_pages)
                     .band(|row: &model::PageSessions| row.page.clone())
@@ -823,7 +839,7 @@ impl AnalyticsPage {
                     .value_tick_format(format::compact)
                     .id("analytics-sessions");
 
-                let last_day = window_rows.last();
+                let last_day = self.window_rows.last();
                 let visitors_now = last_day
                     .map(|row| format::compact(row.organic + row.paid + row.social + row.direct))
                     .unwrap_or_default();

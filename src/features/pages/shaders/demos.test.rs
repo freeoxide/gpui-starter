@@ -1,7 +1,10 @@
 use super::*;
 
+/// Cross-checks to_bytes against the WGSL itself: naga resolves the same
+/// member offsets the pipeline layout uses, so a reordered or extended
+/// `Params` struct in the shader breaks this, not just the rendering.
 #[test]
-fn uniform_bytes_match_the_wgsl_layout() {
+fn uniform_bytes_match_the_wgsl_struct_offsets() {
     let params = ShaderParams {
         time: 1.5,
         delta: 0.25,
@@ -10,14 +13,47 @@ fn uniform_bytes_match_the_wgsl_layout() {
         mouse: (0.25, 0.75),
     };
     let bytes = params.to_bytes();
-    assert_eq!(&bytes[0..4], &1.5f32.to_le_bytes());
-    assert_eq!(&bytes[4..8], &0.25f32.to_le_bytes());
-    assert_eq!(&bytes[8..12], &0.75f32.to_le_bytes());
-    assert_eq!(&bytes[12..16], &0f32.to_le_bytes());
-    assert_eq!(&bytes[16..20], &384.0f32.to_le_bytes());
-    assert_eq!(&bytes[20..24], &256.0f32.to_le_bytes());
-    assert_eq!(&bytes[24..28], &0.25f32.to_le_bytes());
-    assert_eq!(&bytes[28..32], &0.75f32.to_le_bytes());
+
+    let module = naga::front::wgsl::parse_str(GRADIENT_WGSL).expect("gradient wgsl parses");
+    let offsets: std::collections::HashMap<String, u32> = module
+        .types
+        .iter()
+        .find_map(|(_, ty)| match &ty.inner {
+            naga::TypeInner::Struct { members, .. } => members
+                .iter()
+                .any(|m| m.name.as_deref() == Some("mouse"))
+                .then(|| {
+                    members
+                        .iter()
+                        .map(|m| (m.name.clone().unwrap_or_default(), m.offset))
+                        .collect::<Vec<_>>()
+                }),
+            _ => None,
+        })
+        .expect("the Params struct exists")
+        .into_iter()
+        .collect();
+
+    let packed_at = |name: &str, plus: u32, value: f32| {
+        let start = (offsets[name] + plus) as usize;
+        assert_eq!(
+            &bytes[start..start + 4],
+            &value.to_le_bytes(),
+            "{name} must pack at its WGSL offset {start}"
+        );
+    };
+    packed_at("time", 0, 1.5);
+    packed_at("delta", 0, 0.25);
+    packed_at("slider", 0, 0.75);
+    assert_eq!(
+        &bytes[12..16],
+        &0f32.to_le_bytes(),
+        "the pad slot stays zero"
+    );
+    packed_at("resolution", 0, 384.0);
+    packed_at("resolution", 4, 256.0);
+    packed_at("mouse", 0, 0.25);
+    packed_at("mouse", 4, 0.75);
 }
 
 #[test]

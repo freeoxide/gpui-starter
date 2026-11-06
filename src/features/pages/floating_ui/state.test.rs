@@ -102,3 +102,61 @@ async fn apply_change_fires_global_observers(cx: &mut TestAppContext) {
     assert!(fired.get());
     observer.detach();
 }
+
+#[gpui_kit::test]
+async fn apply_change_skips_observers_when_the_value_is_unchanged(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+        cx.set_global(PaletteSyncState {
+            color_hex: "#FF0000".to_string(),
+            last_asset: None,
+        });
+    });
+    let fired = cx.update(|_| std::rc::Rc::new(std::cell::Cell::new(0_usize)));
+    let observer = {
+        let fired = fired.clone();
+        cx.update(|cx| {
+            cx.observe_global::<PaletteSyncState>(move |_| {
+                fired.set(fired.get() + 1);
+            })
+        })
+    };
+    cx.update(|cx| apply_change("color", "#FF0000", cx));
+    assert_eq!(
+        fired.get(),
+        0,
+        "re-picking the current color must not notify any observer"
+    );
+    cx.update(|cx| apply_change("assets", "🚀", cx));
+    assert_eq!(fired.get(), 1);
+    cx.update(|cx| apply_change("assets", "🚀", cx));
+    assert_eq!(
+        fired.get(),
+        1,
+        "re-picking the current asset must not notify any observer"
+    );
+    observer.detach();
+}
+
+#[gpui_kit::test]
+async fn apply_change_for_the_note_slug_never_touches_the_global(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+        cx.set_global(PaletteSyncState::default());
+    });
+    let fired = cx.update(|_| std::rc::Rc::new(std::cell::Cell::new(0_usize)));
+    let observer = {
+        let fired = fired.clone();
+        cx.update(|cx| {
+            cx.observe_global::<PaletteSyncState>(move |_| {
+                fired.set(fired.get() + 1);
+            })
+        })
+    };
+    cx.update(|cx| apply_change("note", "anything", cx));
+    assert_eq!(fired.get(), 0);
+    cx.read(|cx| {
+        let state = cx.global::<PaletteSyncState>();
+        assert_eq!(state.color_hex, "");
+        assert_eq!(state.last_asset, None);
+    });
+    observer.detach();
+}

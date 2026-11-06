@@ -1,20 +1,11 @@
-//! Removable shader-canvas page. `ShaderCanvasPage` and
-//! `CAPABILITY_SHADERS` are the only public surface; the WGSL demos, state,
-//! runtime, and tool stay private to this module. Removal = delete this
-//! directory and revert its ten seam touches: the wgpu/naga lines in
-//! Cargo.toml plus the regenerated Cargo.lock (only if plan 11's bridge is
-//! not keeping them), the `mod shaders;` line and the
-//! `pub use shaders::{ShaderCanvasPage, CAPABILITY_SHADERS};` re-export in
-//! features/pages/mod.rs, the Page::ShaderCanvas arms and all() entry in
-//! shell/sidebar.rs, the VALID_HOSTS entry in shell/route.rs, the AppRoot
-//! wiring in shell/root/app_root/state.rs, the page count in
-//! tests/e2e_navigation.rs, the shader_* and nav_shader_canvas keys in both
-//! locale files, and the canvas_shaders capability lines in app/init.rs.
+//! Removable shader-canvas page: `ShaderCanvasPage` is the only public
+//! surface; everything else stays private to this module.
 
 mod demos;
 #[cfg(not(target_family = "wasm"))]
 mod runtime;
 mod state;
+#[cfg(not(target_family = "wasm"))]
 mod tool;
 
 #[cfg(all(test, not(target_family = "wasm")))]
@@ -36,6 +27,8 @@ use gpui_kit::component::{
 use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
+#[cfg(not(target_family = "wasm"))]
+use crate::capabilities::Capability;
 use crate::ui::canvas::CanvasState;
 #[cfg(not(target_family = "wasm"))]
 use crate::ui::canvas::{BuiltinTool, Canvas, CanvasGrid, CanvasShape, ShapeId};
@@ -50,9 +43,6 @@ use demos::{DEMOS, DemoSpec};
 use std::sync::Arc;
 #[cfg(not(target_family = "wasm"))]
 use std::sync::atomic::Ordering;
-
-/// Capability-registry name registered at startup ("canvas_shaders").
-pub const CAPABILITY_SHADERS: &str = "canvas_shaders";
 
 #[cfg(not(target_family = "wasm"))]
 const LOG: &str = "gpui_starter::shader_page";
@@ -269,7 +259,7 @@ impl ShaderCanvasPage {
                     // the timeout panel, not stack a runtime under it.
                     page.shader.update(cx, |s, cx| s.clear_error(cx));
                     crate::capabilities::set(
-                        CAPABILITY_SHADERS,
+                        Capability::CANVAS_SHADERS,
                         crate::capabilities::CapabilityStatus::supported_enabled(),
                         cx,
                     );
@@ -278,7 +268,7 @@ impl ShaderCanvasPage {
                 }
                 Err(err) => {
                     crate::capabilities::set(
-                        CAPABILITY_SHADERS,
+                        Capability::CANVAS_SHADERS,
                         crate::capabilities::CapabilityStatus::error(err.to_string()),
                         cx,
                     );
@@ -301,7 +291,7 @@ impl ShaderCanvasPage {
                     INIT_TIMEOUT.as_secs()
                 );
                 crate::capabilities::set(
-                    CAPABILITY_SHADERS,
+                    Capability::CANVAS_SHADERS,
                     crate::capabilities::CapabilityStatus::error(err.to_string()),
                     cx,
                 );
@@ -318,6 +308,18 @@ impl ShaderCanvasPage {
             return;
         };
         let id = spec.id;
+        let (current, errored) = {
+            let shader = self.shader.read(cx);
+            (shader.demo(), shader.runtime_error().is_some())
+        };
+        if id == current {
+            return;
+        }
+        // Without a runtime the canvas stays blank; a switch would drop the
+        // error panel holding this page's only Retry button.
+        if self.runtime.is_none() && errored {
+            return;
+        }
         self.shader.update(cx, |s, cx| s.set_demo(id, cx));
         self.install_demo(cx);
     }
@@ -358,13 +360,16 @@ impl ShaderCanvasPage {
         // fit request re-centers on the next ticker paint instead.
         self.shader.update(cx, |s, cx| s.request_fit(cx));
         let slider_spec = spec.slider;
-        self.slider = cx.new(|_| {
-            SliderState::new()
+        // Same entity: a fresh one would orphan an in-progress drag and
+        // reset the knob against the value set_demo just committed.
+        let value = self.shader.read(cx).slider();
+        self.slider.update(cx, |state, cx| {
+            *state = SliderState::new()
                 .min(slider_spec.min)
                 .max(slider_spec.max)
-                .default_value(slider_spec.default)
+                .default_value(value);
+            cx.notify();
         });
-        self.wire_subscriptions(cx);
     }
 
     fn heading() -> Stateful<Div> {
@@ -686,7 +691,7 @@ async fn frame_task(
         Err(err) => {
             let _ = cx.update(|cx| {
                 crate::capabilities::set(
-                    CAPABILITY_SHADERS,
+                    Capability::CANVAS_SHADERS,
                     crate::capabilities::CapabilityStatus::degraded(err.to_string()),
                     cx,
                 );

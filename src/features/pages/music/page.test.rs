@@ -102,29 +102,53 @@ fn album_detail_keeps_orders_empty(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn queue_panel_toggles_and_renders_queue_rows(cx: &mut TestAppContext) {
+fn queue_panel_flag_toggles_without_touching_the_engine(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
     let page = open_page_window(cx);
     let engine = cx.read(|cx| page.read(cx).player.clone());
     cx.update(|cx| {
-        engine.update(cx, |engine, cx| {
-            let order = Library::catalog()
-                .playlist(PlaylistId(0))
-                .unwrap()
-                .track_ids
-                .clone();
-            engine.play_queue(order, 0, cx);
-        });
         page.update(cx, |page, cx| page.toggle_queue_panel(cx));
     });
-    cx.add_window(|_window, _cx| PageHost { page: page.clone() });
     cx.read(|cx| {
-        let page = page.read(cx);
-        assert!(page.queue_panel_open);
-        assert_eq!(engine.read(cx).queue().len(), 12);
+        assert!(page.read(cx).queue_panel_open);
+        assert!(
+            engine.read(cx).queue().is_empty(),
+            "toggling the panel must not start playback"
+        );
     });
     cx.update(|cx| {
         page.update(cx, |page, cx| page.toggle_queue_panel(cx));
     });
     cx.read(|cx| assert!(!page.read(cx).queue_panel_open));
+}
+
+#[gpui_kit::test]
+fn play_detail_at_starts_the_detail_order_at_the_clicked_index(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::component::theme::init);
+    let page = open_page_window(cx);
+    let engine = cx.read(|cx| page.read(cx).player.clone());
+    cx.update(|cx| {
+        page.update(cx, |page, cx| {
+            page.open_detail(DetailSource::Playlist(PlaylistId(0)), cx);
+        })
+    });
+    let expected_order = cx.read(|cx| page.read(cx).detail_order());
+
+    cx.update(|cx| {
+        page.update(cx, |page, cx| page.play_detail_at(3, cx));
+    });
+
+    cx.read(|cx| {
+        assert_eq!(
+            engine.read(cx).queue(),
+            expected_order.as_slice(),
+            "the page must enqueue exactly the detail's track order"
+        );
+        assert_eq!(
+            engine.read(cx).current_ix(),
+            Some(3),
+            "playback must start at the clicked row"
+        );
+        assert!(engine.read(cx).current_track().is_some());
+    });
 }

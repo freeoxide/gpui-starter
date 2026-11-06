@@ -2,7 +2,7 @@
 //! (plan 02) or in-window snap-to-edge panels, persisted in `AppConfig`.
 //! Removal: delete this directory and revert the seam touches: the
 //! `mod floating_ui;`/`pub use` lines in `src/features/pages/mod.rs`, the
-//! `Page::FloatingUi` arms + `all()` entry in `src/shell/sidebar.rs`, the
+//! `Page::FloatingUi` arms + `all()` entry in `src/shell/page.rs`, the
 //! `VALID_HOSTS` entry in `src/shell/route.rs`, the `floating_ui_session`/
 //! `floating_ui_host` fields + constructor lines + the RootWindow restore
 //! observer + the `PaletteChanged` drain arm in
@@ -34,9 +34,8 @@ use gpui_kit::component::{
 use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
+use crate::capabilities::Capability;
 use state::{COLOR_PRESETS, rgba_to_hex};
-
-pub const CAPABILITY_FLOATING_UI: &str = "floating_ui_palettes";
 
 /// Feature boot hook: seeds `PaletteSyncState` (first color preset) and
 /// writes the `floating_ui_palettes` capability entry. Call once from
@@ -52,7 +51,7 @@ pub fn init(cx: &mut App) {
     }
     #[cfg(target_family = "wasm")]
     crate::capabilities::set(
-        CAPABILITY_FLOATING_UI,
+        Capability::FLOATING_UI_PALETTES,
         crate::capabilities::CapabilityStatus {
             supported: false,
             enabled: true,
@@ -67,7 +66,7 @@ pub fn init(cx: &mut App) {
     );
     #[cfg(not(target_family = "wasm"))]
     crate::capabilities::set(
-        CAPABILITY_FLOATING_UI,
+        Capability::FLOATING_UI_PALETTES,
         crate::capabilities::CapabilityStatus::supported_enabled(),
         cx,
     );

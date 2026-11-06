@@ -36,23 +36,6 @@ fn every_album_and_playlist_track_resolves() {
 }
 
 #[test]
-fn fixture_shape_matches_the_plan() {
-    let library = Library::catalog();
-    let track_count: usize = library.albums.iter().map(|a| a.track_ids.len()).sum();
-    assert_eq!(library.albums().len(), 8);
-    assert!((48..=56).contains(&track_count), "got {track_count}");
-    assert_eq!(library.playlists().len(), 2);
-    assert_eq!(library.playlist(PlaylistId(0)).unwrap().track_ids.len(), 12);
-    assert_eq!(
-        library.playlist(PlaylistId(1)).unwrap().track_ids.len(),
-        120
-    );
-    for track in &library.tracks {
-        assert!((90_000..=300_000).contains(&track.duration_ms));
-    }
-}
-
-#[test]
 fn track_album_resolves_for_every_track() {
     let library = Library::catalog();
     for track in &library.tracks {

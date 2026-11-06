@@ -14,8 +14,8 @@ use gpui_query::core::{MutationStatus, QueryStatus};
 use crate::accessibility::A11yExt as _;
 
 use super::super::ui_helpers::{
-    chip, fetch_label, mapped_preview, mutation_status_label, section_card, source_preview,
-    status_badge,
+    chip, fetch_label, mapped_preview, mutation_status_label, query_data, query_status,
+    section_card, source_preview, status_badge,
 };
 use super::super::{PlaygroundPage, QueryPlaygroundPage};
 
@@ -397,16 +397,8 @@ impl QueryPlaygroundPage {
     }
 
     pub(in super::super) fn render_imperative_fetch(&mut self, cx: &mut Context<Self>) -> Div {
-        let status = self
-            .imperative_query
-            .as_ref()
-            .map_or(QueryStatus::Idle, |(e, _)| {
-                e.read_with(cx, |r, _| r.status())
-            });
-        let data = self
-            .imperative_query
-            .as_ref()
-            .and_then(|(e, _)| e.read_with(cx, |r, _| r.data().cloned()));
+        let status = query_status(self.imperative_query.as_ref(), cx);
+        let data = query_data(self.imperative_query.as_ref(), cx);
         let signal_cancelled = self.imperative_query.as_ref().map_or(false, |(e, _)| {
             e.read_with(cx, |r, _| {
                 r.signal().map(|s| s.is_cancelled()).unwrap_or(false)

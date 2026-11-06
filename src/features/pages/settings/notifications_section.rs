@@ -11,29 +11,7 @@ use crate::notifications::{
     self, NotificationPermissionState, NotificationRequest, NotificationRuntimeSnapshot,
 };
 
-/// `id` keys the row; the label is localized and would re-key the row on every
-/// locale switch. The visible texts are plain strings, so the combined text is
-/// the accessible label.
-pub(super) fn status_row(
-    id: &'static str,
-    label: impl Into<SharedString>,
-    value: impl Into<SharedString>,
-) -> impl IntoElement {
-    let label = label.into();
-    let value = value.into();
-    let text = format!("{label}: {value}");
-    div()
-        .id(ElementId::Name(SharedString::from(format!(
-            "settings-status-{id}"
-        ))))
-        .a11y(Role::Paragraph, text)
-        .flex()
-        .items_center()
-        .justify_between()
-        .gap_4()
-        .child(Label::new(label))
-        .child(div().text_sm().child(value))
-}
+use super::rows::status_row;
 
 pub(super) fn render_notifications_section(
     notifications_snapshot: &NotificationRuntimeSnapshot,
@@ -56,10 +34,9 @@ pub(super) fn render_notifications_section(
                 NotificationPermissionState::Denied | NotificationPermissionState::Unavailable(_)
             ));
 
-    let notifications_snapshot = notifications_snapshot.clone();
     let enabled_label = crate::i18n::localize("settings_native_notifications");
 
-    super::dev_sections::settings_card_base(cx)
+    super::rows::settings_card_base(cx)
         .child(
             div()
                 .flex()
@@ -76,11 +53,13 @@ pub(super) fn render_notifications_section(
                 ),
         )
         .child(status_row(
+            "settings-status",
             "backend",
             crate::i18n::localize("settings_native_backend"),
             notifications_snapshot.active_backend.to_string(),
         ))
         .child(status_row(
+            "settings-status",
             "permission",
             crate::i18n::localize("settings_permission"),
             notifications_snapshot.permission.label(),
@@ -89,6 +68,7 @@ pub(super) fn render_notifications_section(
             notifications_snapshot.degraded_reason.clone(),
             |this, reason| {
                 this.child(status_row(
+                    "settings-status",
                     "degraded",
                     crate::i18n::localize("settings_degraded"),
                     reason,
@@ -99,6 +79,7 @@ pub(super) fn render_notifications_section(
             notifications_snapshot.last_backend_error.clone(),
             |this, error| {
                 this.child(status_row(
+                    "settings-status",
                     "backend-error",
                     crate::i18n::localize("settings_last_backend_error"),
                     error,
@@ -109,6 +90,7 @@ pub(super) fn render_notifications_section(
             notifications_snapshot.daemon_capabilities.clone(),
             |this, caps| {
                 this.child(status_row(
+                    "settings-status",
                     "daemon-capabilities",
                     crate::i18n::localize("settings_daemon_capabilities"),
                     caps,

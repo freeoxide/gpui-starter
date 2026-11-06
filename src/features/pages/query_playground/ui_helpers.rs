@@ -1,11 +1,37 @@
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::{prelude::*, *};
 
-use gpui_query::core::{MutationStatus, QueryStatus};
+use gpui_query::core::{MutationStatus, QueryResource, QueryStatus};
 
 use crate::accessibility::A11yExt as _;
 
 use super::PlaygroundUser;
+
+// Readers for the recurring `Option<(Entity<QueryResource<..>>, Subscription)>`
+// shape; MutationStatus/infinite/bare-Entity sites don't fit and stay inline.
+
+pub(super) fn query_status<T: 'static, E: 'static>(
+    opt: Option<&(Entity<QueryResource<T, E>>, Subscription)>,
+    cx: &App,
+) -> QueryStatus {
+    opt.map_or(QueryStatus::Idle, |(e, _)| {
+        e.read_with(cx, |r, _| r.status())
+    })
+}
+
+pub(super) fn query_data<T: Clone + 'static, E: 'static>(
+    opt: Option<&(Entity<QueryResource<T, E>>, Subscription)>,
+    cx: &App,
+) -> Option<T> {
+    opt.and_then(|(e, _)| e.read_with(cx, |r, _| r.data().cloned()))
+}
+
+pub(super) fn query_error<T: 'static, E: Clone + 'static>(
+    opt: Option<&(Entity<QueryResource<T, E>>, Subscription)>,
+    cx: &App,
+) -> Option<E> {
+    opt.and_then(|(e, _)| e.read_with(cx, |r, _| r.error().cloned()))
+}
 
 /// Section frame. `key` is a stable per-section id (never localized, unique
 /// by construction) that derives the heading/description element ids.

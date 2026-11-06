@@ -38,13 +38,12 @@ impl QueryPlaygroundPage {
 
     pub(in super::super) fn cancel_simple(&mut self, cx: &mut Context<Self>) {
         if let Some((entity, _)) = &self.simple_query {
+            // Same contract as cancel_imperative: discard the in-flight result.
             entity.update(cx, |r, _| {
-                if let Some(s) = r.signal() {
-                    s.cancel();
-                }
+                r.cancel(QueryError::cancelled("cancelled mid-flight"));
             });
-            self.log("Simple: signal cancelled");
-            // No cx.notify() needed: the QueryObserver re-renders on status change.
+            self.log("Simple: cancelled mid-flight");
+            cx.notify();
         }
     }
 
@@ -306,17 +305,8 @@ impl QueryPlaygroundPage {
                 let exec = exec.clone();
                 let page_num = last_page.map(|p| p.page_number + 1).unwrap_or(5);
                 async move {
-                    exec.timer(std::time::Duration::from_millis(600)).await;
-                    let items: Vec<String> = (0..5)
-                        .map(|i| format!("page {} item {}", page_num, i))
-                        .collect();
-                    Ok((
-                        PlaygroundPage {
-                            items,
-                            page_number: page_num,
-                        },
-                        page_num < 10,
-                    ))
+                    let page = fabricate_page(exec, page_num).await;
+                    Ok((page, page_num < 10))
                 }
             },
             cx,
@@ -341,17 +331,8 @@ impl QueryPlaygroundPage {
                     .map(|p| p.page_number.saturating_sub(1))
                     .unwrap_or(5);
                 async move {
-                    exec.timer(std::time::Duration::from_millis(600)).await;
-                    let items: Vec<String> = (0..5)
-                        .map(|i| format!("page {} item {}", page_num, i))
-                        .collect();
-                    Ok((
-                        PlaygroundPage {
-                            items,
-                            page_number: page_num,
-                        },
-                        page_num > 0,
-                    ))
+                    let page = fabricate_page(exec, page_num).await;
+                    Ok((page, page_num > 0))
                 }
             },
             cx,
@@ -375,26 +356,7 @@ impl QueryPlaygroundPage {
                 &source,
                 move |_signal| {
                     let exec = exec.clone();
-                    async move {
-                        exec.timer(std::time::Duration::from_secs(1)).await;
-                        Ok(vec![
-                            PlaygroundUser {
-                                id: 10,
-                                name: "Eve".into(),
-                                email: "eve@test.com".into(),
-                            },
-                            PlaygroundUser {
-                                id: 11,
-                                name: "Frank".into(),
-                                email: "frank@test.com".into(),
-                            },
-                            PlaygroundUser {
-                                id: 12,
-                                name: "Grace".into(),
-                                email: "grace@test.com".into(),
-                            },
-                        ])
-                    }
+                    async move { fetch_select_roster(exec).await }
                 },
                 cx,
             );
@@ -518,6 +480,43 @@ impl QueryPlaygroundPage {
             self.log("HTTP: reset");
             cx.notify();
         }
+    }
+}
+
+/// Shared with the initial fetch in init.rs so both copies of the select demo
+/// land on the same roster.
+pub(super) async fn fetch_select_roster(
+    exec: BackgroundExecutor,
+) -> Result<Vec<PlaygroundUser>, QueryError> {
+    exec.timer(std::time::Duration::from_secs(1)).await;
+    Ok(vec![
+        PlaygroundUser {
+            id: 10,
+            name: "Eve".into(),
+            email: "eve@test.com".into(),
+        },
+        PlaygroundUser {
+            id: 11,
+            name: "Frank".into(),
+            email: "frank@test.com".into(),
+        },
+        PlaygroundUser {
+            id: 12,
+            name: "Grace".into(),
+            email: "grace@test.com".into(),
+        },
+    ])
+}
+
+/// Shared page fabrication for the infinite demo: init.rs's initial fetch and
+/// both direction fetches here must agree on timer and page content.
+pub(super) async fn fabricate_page(exec: BackgroundExecutor, page_num: u32) -> PlaygroundPage {
+    exec.timer(std::time::Duration::from_millis(600)).await;
+    PlaygroundPage {
+        items: (0..5)
+            .map(|i| format!("page {} item {}", page_num, i))
+            .collect(),
+        page_number: page_num,
     }
 }
 
