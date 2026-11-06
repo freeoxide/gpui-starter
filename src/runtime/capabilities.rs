@@ -5,9 +5,8 @@ use std::rc::Rc;
 use gpui_kit::{App, Global, SharedString};
 use serde::{Deserialize, Serialize};
 
-/// Registry key. Every row is one of the consts below, so a typo'd or
-/// unregistered key cannot compile; the inner string is the stable name
-/// diagnostics and tests display.
+/// Registry key: one of the consts below, so an unregistered key cannot
+/// compile; the inner string is the stable name diagnostics and tests show.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Capability(&'static str);
 

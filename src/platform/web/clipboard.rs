@@ -26,11 +26,8 @@ pub fn write_text_fire_and_forget(text: &str) {
 /// property `undefined` in insecure contexts despite the web-sys typing.
 fn clipboard_handle() -> Option<web_sys::Clipboard> {
     let navigator = web_sys::window()?.navigator();
-    let has_clipboard = js_sys::Reflect::has(
-        &JsValue::from(navigator.clone()),
-        &JsValue::from_str("clipboard"),
-    )
-    .unwrap_or(false);
+    let has_clipboard =
+        js_sys::Reflect::has(navigator.as_ref(), &JsValue::from_str("clipboard")).unwrap_or(false);
     if has_clipboard {
         Some(navigator.clipboard())
     } else {

@@ -14,10 +14,9 @@ pub fn page(i: usize) -> String {
     format!("secondary-{}", i + 1)
 }
 
-/// KeyBinding for a `secondary-` or runtime-built keystroke. The 0.3.10
-/// KeyBinding::new only takes static strings with explicit modifiers, so
-/// secondary resolution and dynamic input route through load here.
-/// Panics if `keystrokes` or `context` fails to parse.
+/// KeyBinding for a `secondary-` or runtime-built keystroke: 0.3.10
+/// KeyBinding::new takes only static strings with explicit modifiers, so both
+/// route through load here. Panics if `keystrokes` or `context` fails to parse.
 pub fn binding<A: Action>(
     keystrokes: &str,
     action: A,

@@ -193,11 +193,10 @@ pub fn init(cx: &mut App) {
 
     // Embedded themes are the bundle's only portable theme source; they
     // register before any registry lookup, on native and wasm alike.
-    let persisted_theme = persisted.theme.clone();
     crate::app::theme::register_embedded_themes(cx);
     if let Some(theme) = gpui_kit::component::ThemeRegistry::global(cx)
         .themes()
-        .get(persisted_theme.as_str())
+        .get(persisted.theme.as_str())
         .cloned()
     {
         gpui_kit::component::Theme::update(cx, |t| t.apply_config(&theme));
@@ -227,8 +226,7 @@ pub fn init(cx: &mut App) {
     }
 
     if let Some(show) = persisted.scrollbar_show {
-        // set_scrollbar_mode routes through Theme::update, which projects the
-        // mode onto the Base scrollbar and refreshes windows.
+        // Routes through Theme::update, which already refreshes every window.
         gpui_kit::component::Theme::set_scrollbar_mode(show, cx);
     }
 
@@ -488,7 +486,7 @@ pub fn init(cx: &mut App) {
         );
     });
     #[cfg(debug_assertions)]
-    cx.on_action(|_: &TriggerTestPanic, _cx| {
+    cx.on_action(|_: &TriggerTestPanic, _| {
         panic!("gpui-starter test panic action");
     });
     cx.on_action(|command: &ExecuteCommand, cx| {

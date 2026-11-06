@@ -12,10 +12,9 @@ pub fn register_embedded_themes(cx: &mut App) {
     }
 }
 
-/// Restore embedded themes a kit watcher reload dropped: kit `reload()` clears
-/// the registry and only re-reads `themes_dir`, so anything not on disk
-/// (the embedded set) vanishes on every watcher event, file deletion included.
-/// No-op when nothing is missing.
+/// Re-register embedded themes a kit watcher reload dropped: `reload()` clears
+/// the registry and re-reads only `themes_dir`, so the embedded set vanishes on
+/// every watcher event. No-op when nothing is missing.
 pub fn ensure_embedded_themes(cx: &mut App) {
     // global_mut notifies observers even when nothing changes; only take it
     // when a file is missing, or the observer that called us never terminates.

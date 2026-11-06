@@ -59,10 +59,9 @@ fn should_close_root_window(cx: &App) -> bool {
     true
 }
 
-/// Dispatch Quit at the recorded root window, falling back to app-level
-/// dispatch. `App::dispatch_action` routes at `active_window()` — thread-local
-/// `GetActiveWindow()` on Windows — which still reports the closing palette
-/// after an Esc and drops the action.
+/// Dispatch Quit at the recorded root, falling back to app-level dispatch:
+/// `App::dispatch_action` routes at `active_window()`, which still reports a
+/// closing palette after Esc and drops the action.
 pub fn dispatch_quit(cx: &mut App) {
     let routed = root_window(cx).is_some_and(|root| {
         root.update(cx, |_, window, cx| {
@@ -147,8 +146,6 @@ pub fn create_new_window(title: &str, cx: &mut App) {
             window_background: gpui_kit::WindowBackgroundAppearance::Transparent,
             #[cfg(target_os = "linux")]
             window_decorations: Some(gpui_kit::WindowDecorations::Client),
-            // X11 _NET_WM_ICON from the embedded 48px brand PNG; Wayland has
-            // no icon path in gpui-pre 0.3.8 (desktop entry resolves it).
             #[cfg(target_os = "linux")]
             icon: crate::app::assets::window_icon(),
             ..Default::default()
@@ -177,8 +174,6 @@ pub fn create_new_window(title: &str, cx: &mut App) {
             return Ok::<_, anyhow::Error>(());
         };
 
-        // Stored so tray Show and the quit path reach the window without
-        // active_window() (thread-local GetActiveWindow on Windows).
         cx.update(|cx| note_root_window(window, cx));
 
         window.update(cx, |_, window, _| {

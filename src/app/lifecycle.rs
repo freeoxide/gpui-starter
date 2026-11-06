@@ -193,11 +193,8 @@ fn handle_panic(summary: &str, is_render: bool) {
     HANDLING_PANIC.store(false, Ordering::SeqCst);
 }
 
-// File-based crash detection is native-only: path APIs panic at runtime on
-// wasm and a browser tab has no next-launch semantics anyway.
-
-// Marker lives under the app data dir, never $TMPDIR (symlink planting); an
-// unset dir disables the feature.
+// Native-only: path APIs panic on wasm. The marker lives under the app data
+// dir, never $TMPDIR (symlink planting); an unset dir disables the feature.
 #[cfg(not(target_family = "wasm"))]
 fn crash_marker_path() -> Option<PathBuf> {
     APP_DATA_DIR.get().map(|dir| dir.join("crash-marker"))

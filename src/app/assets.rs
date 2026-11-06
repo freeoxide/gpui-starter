@@ -40,9 +40,8 @@ gpui_kit::assets::icon_assets!(
     ]
 );
 
-/// Branded app-icon PNGs for surfaces with no icon-theme fallback: the
-/// Windows tray and the X11 window icon (the macOS tray stays a template
-/// glyph, so macOS is excluded).
+/// Branded app-icon PNGs for the Windows tray and the X11 window icon; the
+/// macOS tray stays a template glyph, so macOS is excluded.
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 #[derive(rust_embed::RustEmbed)]
 #[folder = "assets/app-icon/hicolor"]
@@ -58,9 +57,8 @@ pub fn app_icon_png(size: u16) -> Option<image::RgbaImage> {
         .map(|img| img.into_rgba8())
 }
 
-/// 48px branded PNG for `WindowOptions.icon` (X11 `_NET_WM_ICON`). Wayland
-/// has no icon path in gpui-pre 0.3.8, so None only defers to desktop-entry
-/// resolution there.
+/// 48px branded PNG for `WindowOptions.icon` (X11 `_NET_WM_ICON`); Wayland has
+/// no icon path in gpui-pre 0.3.8 and resolves it from the desktop entry.
 #[cfg(target_os = "linux")]
 pub fn window_icon() -> Option<std::sync::Arc<image::RgbaImage>> {
     app_icon_png(48).map(std::sync::Arc::new)
@@ -107,12 +105,6 @@ impl CombinedAssets {
             #[cfg(target_family = "wasm")]
             component: gpui_kit::assets::Assets::default(),
         }
-    }
-}
-
-impl Default for CombinedAssets {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

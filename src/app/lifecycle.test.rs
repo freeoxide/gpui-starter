@@ -99,9 +99,8 @@ fn test_data_dir() -> &'static PathBuf {
     })
 }
 
-/// Handler tests flip process-global state; serialize them against each
-/// other. Other modules' deliberate panics cannot take this lock, so the
-/// writer tests retry around that documented bail window.
+/// Handler tests flip process-global state; serialize them. Other modules'
+/// panics bypass this lock, so the writer tests retry around the bail window.
 static HOOK_TESTS: Mutex<()> = Mutex::new(());
 
 fn hook_test_lock() -> std::sync::MutexGuard<'static, ()> {

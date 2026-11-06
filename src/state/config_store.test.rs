@@ -343,10 +343,6 @@ fn load_config_repairs_values_the_validation_tier_only_lints() {
     assert_eq!(loaded.window_bounds, None);
 }
 
-// ---------------------------------------------------------------------------
-// Write-path decision functions (prepare_flush / commit_flush)
-// ---------------------------------------------------------------------------
-
 /// Hand-built against a throwaway dir because [`initialize`] would point
 /// the store at the real OS config dir; the child module reaches the
 /// private fields directly.
@@ -494,15 +490,6 @@ fn commit_flush_rearms_when_a_write_was_superseded() {
         "abandoned bytes must not be recorded as flushed"
     );
 }
-
-// ---------------------------------------------------------------------------
-// Write-path orchestration (update_config / force_save / arm_debounce)
-// ---------------------------------------------------------------------------
-
-// SAVE_SCHEDULED is process-global while each test gets its own App, so
-// debounce-arming tests (this module and out-of-module feature tests) share
-// the promoted poison-tolerant lock.
-use super::debounce_test_lock;
 
 /// A clean store: nothing pending, the default config already flushed, so
 /// only a real mutation produces bytes.

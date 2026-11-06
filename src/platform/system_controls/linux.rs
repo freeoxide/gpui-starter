@@ -40,7 +40,7 @@ pub(super) fn apply(op: SystemOp) -> Result<(), String> {
         SystemOp::SetVolume { level } => with_pulse(|session| {
             let sink = session.default_sink_name()?;
             let (mut volumes, _) = session.sink_volumes(&sink)?;
-            let target = Volume(((level.clamp(0., 1.)) * Volume::NORMAL.0 as f32).round() as u32);
+            let target = Volume((level.clamp(0., 1.) * Volume::NORMAL.0 as f32).round() as u32);
             volumes.set(volumes.len(), target);
             session.set_sink_volume(&sink, &volumes)
         }),

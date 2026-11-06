@@ -16,7 +16,7 @@ use crate::{
     routes::AppRoute,
 };
 
-use super::super::actions::NavigateToPage;
+use super::super::actions::{NavigateToPage, ToggleSidebar};
 
 pub struct AppRoot {
     pub(crate) focus_handle: FocusHandle,
@@ -112,7 +112,6 @@ impl AppRoot {
         })
         .detach();
 
-        // Register the v2 QueryClient global so DevTools/Playground pages can observe it.
         if !cx.has_global::<gpui_query::client::QueryClient>() {
             cx.set_global(gpui_query::client::QueryClient::new());
         }
@@ -246,21 +245,13 @@ impl AppRoot {
         let bindings = pages
             .iter()
             .enumerate()
-            .filter_map(|(i, _)| {
-                if i < 9 {
-                    Some(crate::app::keys::binding(
-                        &crate::app::keys::page(i),
-                        NavigateToPage(i),
-                        None,
-                        cx,
-                    ))
-                } else {
-                    None
-                }
+            .take(9)
+            .map(|(i, _)| {
+                crate::app::keys::binding(&crate::app::keys::page(i), NavigateToPage(i), None, cx)
             })
             .chain(std::iter::once(crate::app::keys::binding(
                 crate::app::keys::TOGGLE_SIDEBAR,
-                super::super::actions::ToggleSidebar,
+                ToggleSidebar,
                 None,
                 cx,
             )))
@@ -322,10 +313,10 @@ impl AppRoot {
             self.error_page = Some(cx.new(|_| RenderErrorPage::new(summary)));
         }
 
-        if self.render_error {
-            if let Some(ref error_page) = self.error_page {
-                return error_page.clone().into();
-            }
+        if self.render_error
+            && let Some(error_page) = &self.error_page
+        {
+            return error_page.clone().into();
         }
 
         self.unchecked_active_page_view()

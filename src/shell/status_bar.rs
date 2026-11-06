@@ -17,8 +17,7 @@ pub fn render(route: &AppRoute, cx: &App) -> impl IntoElement {
         .map(|s| &s.state);
     let degraded = cx
         .try_global::<notifications::NativeNotificationState>()
-        .map(|s| s.snapshot.degraded_reason.as_deref())
-        .flatten()
+        .and_then(|s| s.snapshot.degraded_reason.as_deref())
         .map(|reason| reason.to_string())
         .unwrap_or_else(|| crate::i18n::localize("status_no"));
     let active_backend = cx

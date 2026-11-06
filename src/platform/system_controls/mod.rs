@@ -1,18 +1,9 @@
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum SystemOp {
-    SetVolume {
-        level: f32,
-    },
-    SetVolumeMuted {
-        muted: bool,
-    },
-    SetBrightness {
-        level: f32,
-    },
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-    SetBluetoothPowered {
-        powered: bool,
-    },
+    SetVolume { level: f32 },
+    SetVolumeMuted { muted: bool },
+    SetBrightness { level: f32 },
+    SetBluetoothPowered { powered: bool },
 }
 
 #[cfg(target_os = "linux")]

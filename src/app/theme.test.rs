@@ -3,9 +3,6 @@ use std::rc::Rc;
 
 use gpui_kit::SharedString;
 
-// No App context: gpui test-support is a dev-dependency change, so drive
-// load_themes_from_str and Theme::apply_config (the init.rs code paths).
-
 /// (file, theme names) of every theme inside every embedded themes/*.json.
 fn embedded_theme_names() -> Vec<(SharedString, Vec<SharedString>)> {
     crate::app::assets::embedded_themes()
