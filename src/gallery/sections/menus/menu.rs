@@ -373,7 +373,7 @@ impl Render for MenuSection {
                                     let mut this = this
                                         .scrollable(true)
                                         .max_h(px(300.))
-                                        .label(format!("Total {} items", 100));
+                                        .label("Total 100 items");
                                     for i in 0..100 {
                                         if i % 5 == 0 {
                                             this = this.separator();
@@ -419,10 +419,8 @@ impl Render for MenuSection {
                             .outline()
                             .label("Scrollable Menu (5 items)")
                             .dropdown_menu_with_anchor(Anchor::TopRight, move |this, _, _| {
-                                let mut this = this
-                                    .scrollable(true)
-                                    .max_h(px(300.))
-                                    .label(format!("Total {} items", 5));
+                                let mut this =
+                                    this.scrollable(true).max_h(px(300.)).label("Total 5 items");
                                 for i in 0..5 {
                                     this = this.menu(
                                         SharedString::from(format!("Item {}", i)),

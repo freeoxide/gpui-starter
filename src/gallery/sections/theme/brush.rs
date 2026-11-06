@@ -148,20 +148,9 @@ impl BrushSection {
             };
 
             let should_add = if let Some(last) = stroke.points.last() {
-                let dx_px = local_pos.x - last.x;
-                let dy_px = local_pos.y - last.y;
-
-                let dx_abs = if dx_px < px(0.0) {
-                    px(0.0) - dx_px
-                } else {
-                    dx_px
-                };
-                let dy_abs = if dy_px < px(0.0) {
-                    px(0.0) - dy_px
-                } else {
-                    dy_px
-                };
-                dx_abs >= px(1.0) || dy_abs >= px(1.0)
+                let dx = (local_pos.x - last.x).abs();
+                let dy = (local_pos.y - last.y).abs();
+                dx >= px(1.0) || dy >= px(1.0)
             } else {
                 true
             };
@@ -186,11 +175,9 @@ impl BrushSection {
         self.is_drawing = false;
         if let Some(stroke) = self.current_stroke.take() {
             // Even a one-point stroke is a mark: a click leaves a dot.
-            if !stroke.points.is_empty() {
-                let mut new_strokes = (*self.strokes).clone();
-                new_strokes.push(stroke);
-                self.strokes = Rc::new(new_strokes);
-            }
+            let mut new_strokes = (*self.strokes).clone();
+            new_strokes.push(stroke);
+            self.strokes = Rc::new(new_strokes);
         }
         cx.notify();
     }
@@ -354,8 +341,7 @@ fn build_stroke_path(stroke: &Stroke, origin: Point<Pixels>) -> Option<Path<Pixe
 
     let mut builder = PathBuilder::stroke(px(stroke.size));
 
-    // A click without movement still leaves a mark: the short centered
-    // segment strokes into a dot.
+    // A lone point strokes as a short centered segment, which renders as a dot.
     if stroke.points.len() == 1 {
         let radius = stroke.size / 2.0;
         builder.move_to(Point::new(

@@ -64,7 +64,7 @@ pub(crate) fn options_dropdown(
     items: Vec<(&'static str, bool, DemoToggle)>,
 ) -> DropdownButton {
     DropdownButton::new(id)
-        .button(Button::new(SharedString::from(format!("{id}-trigger"))).label("Options"))
+        .button(Button::new(format!("{id}-trigger")).label("Options"))
         .dropdown_menu(move |menu, _, _| {
             items.iter().fold(menu, |menu, (label, checked, action)| {
                 menu.menu_with_check(*label, *checked, Box::new(action.clone()))

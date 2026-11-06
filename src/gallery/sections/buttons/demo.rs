@@ -125,7 +125,7 @@ pub(crate) fn options_dropdown(id: &'static str, demo: &DemoState) -> DropdownBu
     let selected = demo.selected;
     let compact = demo.compact;
     DropdownButton::new(id)
-        .button(Button::new(SharedString::from(format!("{id}-trigger"))).label("Options"))
+        .button(Button::new(format!("{id}-trigger")).label("Options"))
         .dropdown_menu(move |menu, _, cx| {
             menu.menu_with_check("Disabled", disabled, Box::new(DemoToggle::Disabled))
                 .menu_with_check("Loading", loading, Box::new(DemoToggle::Loading))

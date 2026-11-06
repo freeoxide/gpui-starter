@@ -30,10 +30,10 @@ impl DemoToggle {
     /// The size this toggle selects; `None` for the list options.
     fn size(&self) -> Option<Size> {
         match self {
-            DemoToggle::SizeXSmall => Some(Size::XSmall),
-            DemoToggle::SizeSmall => Some(Size::Small),
-            DemoToggle::SizeMedium => Some(Size::Medium),
-            DemoToggle::SizeLarge => Some(Size::Large),
+            Self::SizeXSmall => Some(Size::XSmall),
+            Self::SizeSmall => Some(Size::Small),
+            Self::SizeMedium => Some(Size::Medium),
+            Self::SizeLarge => Some(Size::Large),
             _ => None,
         }
     }

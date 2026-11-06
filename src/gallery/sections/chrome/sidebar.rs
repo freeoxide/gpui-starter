@@ -28,12 +28,12 @@ use crate::gallery::demo::section;
 /// Payload of the header company dropdown (upstream `SelectCompany`).
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = gallery_chrome, no_json)]
-pub(crate) struct SelectCompany(SharedString);
+struct SelectCompany(SharedString);
 
 /// Knobs of the upstream `SidebarStory` options menu.
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = gallery_chrome, no_json)]
-pub(crate) enum SidebarOption {
+enum SidebarOption {
     Icon,
     Offcanvas,
     None,
@@ -347,23 +347,23 @@ impl Item {
         }
     }
 
-    fn items(&self) -> Vec<SubItem> {
+    fn items(&self) -> &'static [SubItem] {
         match self {
-            Self::Playground => vec![SubItem::History, SubItem::Starred, SubItem::Settings],
-            Self::Models => vec![SubItem::Genesis, SubItem::Explorer, SubItem::Quantum],
-            Self::Documentation => vec![
+            Self::Playground => &[SubItem::History, SubItem::Starred, SubItem::Settings],
+            Self::Models => &[SubItem::Genesis, SubItem::Explorer, SubItem::Quantum],
+            Self::Documentation => &[
                 SubItem::Introduction,
                 SubItem::GetStarted,
                 SubItem::Tutorial,
                 SubItem::Changelog,
             ],
-            Self::Settings => vec![
+            Self::Settings => &[
                 SubItem::General,
                 SubItem::Team,
                 SubItem::Billing,
                 SubItem::Limits,
             ],
-            _ => Vec::new(),
+            _ => &[],
         }
     }
 }
@@ -616,7 +616,7 @@ impl Render for SidebarSection {
                                                         })
                                                     })
                                                     .children(
-                                                        item.items().into_iter().enumerate().map(
+                                                        item.items().iter().copied().enumerate().map(
                                                             |(ix, sub_item)| {
                                                                 SidebarMenuItem::new(
                                                                     sub_item.label(),

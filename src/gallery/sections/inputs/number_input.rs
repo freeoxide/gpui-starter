@@ -70,7 +70,7 @@ impl NumberInputSection {
             InputState::new(window, cx)
                 .placeholder("Styling")
                 .default_value("0.9")
-                .step_by(|value, action, _cx| match action {
+                .step_by(|value, action, _| match action {
                     StepAction::Increment => {
                         if value < 1.0 {
                             0.1
@@ -120,39 +120,30 @@ impl NumberInputSection {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if matches!(event, InputEvent::Change) {
-            let text = state.read(cx).value();
-            if state == &self.number_input1 {
-                if let Ok(value) = text.parse::<i64>() {
-                    self.number_input1_value = value;
-                }
-            }
+        if matches!(event, InputEvent::Change)
+            && state == &self.number_input1
+            && let Ok(value) = state.read(cx).value().parse::<i64>()
+        {
+            self.number_input1_value = value;
         }
     }
 
     fn on_number_input_event(
         &mut self,
-        this: &Entity<InputState>,
+        state: &Entity<InputState>,
         event: &NumberInputEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        match event {
-            NumberInputEvent::Step(step_action) => {
-                if this == &self.number_input1 {
-                    match step_action {
-                        StepAction::Decrement => {
-                            self.number_input1_value -= 1;
-                        }
-                        StepAction::Increment => {
-                            self.number_input1_value += 1;
-                        }
-                    }
-                    this.update(cx, |input, cx| {
-                        input.set_value(self.number_input1_value.to_string(), window, cx);
-                    });
-                }
+        let NumberInputEvent::Step(step_action) = event;
+        if state == &self.number_input1 {
+            match step_action {
+                StepAction::Decrement => self.number_input1_value -= 1,
+                StepAction::Increment => self.number_input1_value += 1,
             }
+            state.update(cx, |input, cx| {
+                input.set_value(self.number_input1_value.to_string(), window, cx);
+            });
         }
     }
 }

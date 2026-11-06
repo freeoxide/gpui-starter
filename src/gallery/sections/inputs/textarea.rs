@@ -128,8 +128,10 @@ impl TextareaSection {
         let _subscriptions = vec![cx.subscribe_in(
             &chat_input,
             window,
-            |this: &mut Self, input, event, window, cx| match event {
-                InputEvent::PressEnter { shift, .. } if !shift => {
+            |this: &mut Self, input, event, window, cx| {
+                if let InputEvent::PressEnter { shift, .. } = event
+                    && !shift
+                {
                     let text = input.read(cx).value().trim().to_string();
                     if !text.is_empty() {
                         this.chat_messages.push(text);
@@ -139,7 +141,6 @@ impl TextareaSection {
                         cx.notify();
                     }
                 }
-                _ => {}
             },
         )];
 

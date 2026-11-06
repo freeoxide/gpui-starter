@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use gpui_kit::*;
 
-pub(crate) use crate::gallery::demo::section;
+pub(crate) use crate::gallery::demo::{section, size_label};
 
 /// The preview every media card shares, decoded once through the image cache
 /// (keyed by the bytes' hash). The app installs no HTTP client, so an

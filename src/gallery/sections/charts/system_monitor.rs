@@ -30,7 +30,6 @@ const MONITOR_SVG: &[u8] = include_bytes!("assets/monitor.svg");
 const SMARTPHONE_SVG: &[u8] = include_bytes!("assets/smartphone.svg");
 const TABLET_SVG: &[u8] = include_bytes!("assets/tablet.svg");
 
-/// Tab indices
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum MonitorTab {
     #[default]
@@ -420,11 +419,7 @@ impl Render for SystemMonitorSection {
             Self::start_tick_loop(cx);
         }
         let active_tab_index = self.active_tab as usize;
-        let in_view: f64 = self
-            .data
-            .iter()
-            .map(|d| d.desktop + d.mobile + d.tablet + d.watch)
-            .sum();
+        let in_view: f64 = self.data.iter().map(device_total).sum();
 
         v_flex()
             .w_full()

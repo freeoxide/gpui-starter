@@ -148,7 +148,7 @@ impl Render for ProgressSection {
                                         div()
                                             .text_sm()
                                             .text_color(cx.theme().muted_foreground)
-                                            .child(format!("{}%", value)),
+                                            .child(format!("{value}%")),
                                     ),
                             )
                             .child(
@@ -198,7 +198,7 @@ impl Render for ProgressSection {
                                                 .items_center()
                                                 .justify_center()
                                                 .font_weight(FontWeight::SEMIBOLD)
-                                                .child(format!("{}%", value)),
+                                                .child(format!("{value}%")),
                                         )
                                     }),
                             )

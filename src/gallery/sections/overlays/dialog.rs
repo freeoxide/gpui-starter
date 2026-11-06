@@ -182,8 +182,8 @@ impl DialogSection {
                 Dialog::new(cx)
                     .trigger(Button::new("dialog-show").outline().label("Open Dialog"))
                     .overlay(dialog_overlay)
-                    .keyboard(self.keyboard)
-                    .close_button(self.close_button)
+                    .keyboard(keyboard)
+                    .close_button(close_button)
                     .overlay_closable(overlay_closable)
                     .on_ok({
                         let input1 = input1.clone();
@@ -626,6 +626,8 @@ impl DialogSection {
     fn render_textview_dialog(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let dialog_overlay = self.dialog_overlay;
         let overlay_closable = self.overlay_closable;
+        let close_button = self.close_button;
+        let keyboard = self.keyboard;
 
         section("dialog-selectable-text", "Selectable text")
             .description("Embed selectable rich text.")
@@ -637,8 +639,8 @@ impl DialogSection {
                             .label("TextView Dialog"),
                     )
                     .overlay(dialog_overlay)
-                    .keyboard(self.keyboard)
-                    .close_button(self.close_button)
+                    .keyboard(keyboard)
+                    .close_button(close_button)
                     .overlay_closable(overlay_closable)
                     .p_0()
                     .content(move |content, _, cx| {

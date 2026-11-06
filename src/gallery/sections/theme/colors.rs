@@ -2,12 +2,12 @@
 //! theme picker plus a two-pane color browser (category tree and swatch
 //! list over a transparency checkerboard).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::rc::Rc;
 
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, IndexPath, StyledExt as _, Theme, ThemeColor, ThemeRegistry,
-    ThemeStyled as _, WindowExt as _,
+    ActiveTheme as _, Icon, IconName, IndexPath, StyledExt as _, Theme, ThemeColor,
+    ThemeConfigColors, ThemeRegistry, ThemeStyled as _, WindowExt as _,
     button::{Button, ButtonVariants as _, DropdownButton},
     clipboard::Clipboard,
     h_flex,
@@ -128,14 +128,13 @@ impl ThemeColorsSection {
         let active_theme_name = cx.theme().theme_name().clone();
         let items: Vec<ThemeItem> = theme_items(cx);
 
-        let current_theme = active_theme_name;
-        let selected_index = items.iter().position(|item| item.name == current_theme);
+        let selected_index = items.iter().position(|item| item.name == active_theme_name);
         let selected_path = selected_index.map(|idx| IndexPath::default().row(idx));
         let select_state = cx.new(|cx| SelectState::new(items, selected_path, window, cx));
 
         let mut this = Self {
             select_state: select_state.clone(),
-            selected_theme_name: current_theme,
+            selected_theme_name: active_theme_name,
             show_all_colors: false,
             sidebar_render_key: 0,
             force_open_state: None,
@@ -570,14 +569,11 @@ impl ThemeColorsSection {
     }
 }
 
-fn format_colors(
-    theme: &ThemeColor,
-    config: Option<&gpui_kit::component::theme::ThemeConfigColors>,
-) -> Vec<ColorCategory> {
+fn format_colors(theme: &ThemeColor, config: Option<&ThemeConfigColors>) -> Vec<ColorCategory> {
     let json_theme = serde_json::to_value(theme).unwrap_or(serde_json::Value::Null);
     let mut categories: BTreeMap<String, Vec<ColorEntry>> = BTreeMap::new();
 
-    let config_keys: Option<std::collections::HashSet<String>> = config.map(|c| {
+    let config_keys: Option<HashSet<String>> = config.map(|c| {
         let json_config = serde_json::to_value(c).unwrap_or(serde_json::Value::Null);
         if let serde_json::Value::Object(map) = json_config {
             map.into_iter()
@@ -585,7 +581,7 @@ fn format_colors(
                 .map(|(k, _)| k)
                 .collect()
         } else {
-            std::collections::HashSet::new()
+            HashSet::new()
         }
     });
 

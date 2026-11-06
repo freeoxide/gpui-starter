@@ -848,7 +848,7 @@ impl TableDelegate for StockTableDelegate {
         cx.notify();
 
         self._load_task = cx.spawn(async move |view, cx| {
-            // Simulate network request, delay 1s to load data.
+            // Stands in for a network fetch; the delay makes the loading state visible.
             cx.background_executor().timer(Duration::from_secs(1)).await;
 
             _ = cx.update(|cx| {
@@ -933,7 +933,7 @@ impl TableDelegate for UsersTable {
         _: &mut Context<TableState<Self>>,
     ) -> impl IntoElement {
         match col_ix {
-            0 => format!("{}", row_ix).into_any_element(),
+            0 => row_ix.to_string().into_any_element(),
             1 => format!("User {}", row_ix).into_any_element(),
             2 => format!("user-{}@mail.com", row_ix).into_any_element(),
             3 => "User".into_any_element(),
@@ -1021,7 +1021,7 @@ impl DataTableSection {
             .border_dashed()
             .border_color(cx.theme().border)
             .text_color(cx.theme().muted_foreground)
-            .child(SharedString::from(label.to_string()))
+            .child(label.to_string())
     }
 }
 

@@ -123,9 +123,8 @@ impl SliderSection {
                     cx.notify();
                 }
             }),
-            cx.subscribe(&slider3, |this, _, event: &SliderEvent, cx| match event {
-                SliderEvent::Change(_) => {}
-                SliderEvent::Release(value) => {
+            cx.subscribe(&slider3, |this, _, event: &SliderEvent, cx| {
+                if let SliderEvent::Release(value) = event {
                     this.slider3_released_value = *value;
                     cx.notify();
                 }

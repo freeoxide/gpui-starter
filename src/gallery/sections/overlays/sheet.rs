@@ -253,7 +253,7 @@ impl SheetSection {
         })
     }
 
-    fn open_sheet_at(&mut self, placement: Placement, window: &mut Window, cx: &mut Context<Self>) {
+    fn open_sheet_at(&self, placement: Placement, window: &mut Window, cx: &mut Context<Self>) {
         let list = self.list.clone();
 
         let drawer_h = match placement {

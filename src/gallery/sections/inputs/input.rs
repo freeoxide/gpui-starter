@@ -249,7 +249,7 @@ impl InputSection {
 
         // Typing in the plain field drives the disabled field, the story's
         // one visible demonstration of `set_value`.
-        let subscriptions = vec![
+        let _subscriptions = vec![
             cx.subscribe_in(&name_input, window, |this, state, event, _, cx| {
                 if matches!(event, InputEvent::Change) {
                     this.greeting = format!("Hello, {}!", state.read(cx).value()).into();
@@ -299,7 +299,7 @@ impl InputSection {
             content_type_inputs,
             tokens: TokenComposer::new("input", false, window, cx),
             token_hover: TokenHover::new(false, window, cx),
-            _subscriptions: subscriptions,
+            _subscriptions,
         }
     }
 

@@ -38,8 +38,8 @@ const MAX_ITEMS: [usize; 5] = [1, 2, 3, 5, 10];
 pub struct NotificationSection;
 
 impl NotificationSection {
-    pub fn view(_window: &mut Window, _cx: &mut App) -> Entity<Self> {
-        _cx.new(|_| Self)
+    pub fn view(_window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(|_| Self)
     }
 }
 

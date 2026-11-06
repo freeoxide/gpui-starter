@@ -266,12 +266,13 @@ impl WorkspaceSection {
         let Some(json) = self.saved_json.as_ref() else {
             return;
         };
-        let restored = serde_json::from_str::<DockAreaState>(json).map_err(|err| err.to_string());
-        let restored = restored.and_then(|state| {
-            self.dock_area.update(cx, |area, cx| {
-                area.load(state, window, cx).map_err(|err| err.to_string())
-            })
-        });
+        let restored = serde_json::from_str::<DockAreaState>(json)
+            .map_err(|err| err.to_string())
+            .and_then(|state| {
+                self.dock_area.update(cx, |area, cx| {
+                    area.load(state, window, cx).map_err(|err| err.to_string())
+                })
+            });
         if let Err(message) = restored {
             window.push_notification(format!("Couldn't restore the layout: {message}"), cx);
         }

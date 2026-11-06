@@ -620,7 +620,7 @@ impl ListDelegate for CompanyListDelegate {
         cx.notify();
 
         cx.spawn_in(window, async move |view, window| {
-            // Simulate network request, delay 1s to load data.
+            // Stands in for a network fetch; the delay makes the loading state visible.
             window
                 .background_executor()
                 .timer(Duration::from_secs(1))

@@ -1,7 +1,5 @@
-//! Input-family sections, ported from the upstream stories: Input (with the
-//! standalone `input` example folded in), Input Group, Number Input, OTP
-//! Input, Speech, Stepper, and Textarea, plus the atomic-inline-token
-//! composer the Input and Textarea stories share.
+//! Input-family sections, ported from the upstream stories: Input, Input
+//! Group, Number Input, OTP Input, Speech, Stepper, and Textarea.
 
 mod demo;
 mod input;

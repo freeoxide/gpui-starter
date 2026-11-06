@@ -107,7 +107,7 @@ impl Render for ProfileSettings {
                     .child(
                         Field::new()
                             .label("Changes")
-                            .child(format!("{}", self.changes)),
+                            .child(self.changes.to_string()),
                     )
                     .child(
                         Field::new().label_indent(false).child(

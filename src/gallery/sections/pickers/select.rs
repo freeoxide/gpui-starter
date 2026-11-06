@@ -294,10 +294,10 @@ impl SelectItem for Country {
 /// upstream chunk_by grouping (not one group per distinct prefix).
 fn country_groups() -> SearchableVec<SelectGroup<Country>> {
     let mut groups: Vec<SelectGroup<Country>> = Vec::new();
-    for (name, code) in COUNTRIES {
+    for &(name, code) in COUNTRIES {
         let country = Country {
-            name: (*name).into(),
-            code: (*code).into(),
+            name: name.into(),
+            code: code.into(),
         };
         let prefix = country.letter_prefix().to_string();
         match groups.last_mut() {

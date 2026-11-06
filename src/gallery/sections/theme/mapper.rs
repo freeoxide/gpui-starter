@@ -21,11 +21,9 @@ pub(crate) fn parse_theme_key(key: &str) -> ParsedKey {
         };
     }
 
-    // The flat ThemeColor struct loses the dot hierarchy, so this table
-    // reconstructs it for the keys that carry one. Every current field is
-    // listed: the dotted spellings follow the kit's ThemeConfigColors serde
-    // renames, which no rule derives (title_bar keeps its underscore,
-    // progress_bar does not).
+    // The flat ThemeColor struct loses the dot hierarchy; this table restores
+    // it from ThemeConfigColors serde renames, which no rule derives
+    // (title_bar keeps its underscore, progress_bar does not).
     let (category, name, canonical) = match key {
         // Accordion
         "accordion" => ("Accordion", "Background", "accordion.background"),

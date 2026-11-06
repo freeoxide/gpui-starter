@@ -34,10 +34,10 @@ impl DemoToggle {
     /// The size this toggle selects.
     fn size(&self) -> Option<Size> {
         match self {
-            DemoToggle::SizeXSmall => Some(Size::XSmall),
-            DemoToggle::SizeSmall => Some(Size::Small),
-            DemoToggle::SizeMedium => Some(Size::Medium),
-            DemoToggle::SizeLarge => Some(Size::Large),
+            Self::SizeXSmall => Some(Size::XSmall),
+            Self::SizeSmall => Some(Size::Small),
+            Self::SizeMedium => Some(Size::Medium),
+            Self::SizeLarge => Some(Size::Large),
             _ => None,
         }
     }
@@ -140,11 +140,6 @@ impl AccordionSection {
             show_icon: false,
         })
     }
-
-    fn toggle_accordion(&mut self, open_ixs: Vec<usize>, cx: &mut Context<Self>) {
-        self.open_ixs = open_ixs;
-        cx.notify();
-    }
 }
 
 impl Render for AccordionSection {
@@ -207,9 +202,9 @@ impl Render for AccordionSection {
                                     .title("Is it accessible?")
                                     .child(
                                         "Yes. Each item is a button with an aria-expanded \
-                                        state, so screen readers announce whether the \
-                                        section is open, and the whole group can be \
-                                        reached with the keyboard.",
+                                         state, so screen readers announce whether the \
+                                         section is open, and the whole group can be \
+                                         reached with the keyboard.",
                                     )
                             })
                             .item(|this| {
@@ -221,8 +216,8 @@ impl Render for AccordionSection {
                                             .gap_3()
                                             .child(
                                                 "An item takes any element as its content, \
-                                            not just text. The height animation measures \
-                                            whatever you put in it.",
+                                                 not just text. The height animation measures \
+                                                 whatever you put in it.",
                                             )
                                             .child(
                                                 h_flex()
@@ -244,8 +239,8 @@ impl Render for AccordionSection {
                                     .title("Is it animated?")
                                     .child(
                                         "Yes. Expanding and collapsing animates the height \
-                                    of the content, and the chevron rotates to follow. \
-                                    Items below move along with it.",
+                                         of the content, and the chevron rotates to follow. \
+                                         Items below move along with it.",
                                     )
                             })
                             .item(|this| {
@@ -254,7 +249,8 @@ impl Render for AccordionSection {
                                     .child("This item cannot be expanded.")
                             })
                             .on_toggle_click(cx.listener(|this, open_ixs: &[usize], _, cx| {
-                                this.toggle_accordion(open_ixs.to_vec(), cx);
+                                this.open_ixs = open_ixs.to_vec();
+                                cx.notify();
                             })),
                     ),
             )
@@ -280,8 +276,8 @@ impl Render for AccordionSection {
                                             "Account Settings",
                                             Some(Tag::success().outline().child("New")),
                                             "Manage your account preferences, security \
-                                        settings, and personal information. You can also \
-                                        configure two-factor authentication here.",
+                                             settings, and personal information. You can also \
+                                             configure two-factor authentication here.",
                                             settings_item_style,
                                         )
                                         .open(self.styled_open_ixs.contains(&0))
@@ -293,7 +289,7 @@ impl Render for AccordionSection {
                                             "Privacy & Security",
                                             None,
                                             "Control who can see your profile and how your \
-                                        data is used.",
+                                             data is used.",
                                             settings_item_style,
                                         )
                                         .open(self.styled_open_ixs.contains(&1))
@@ -305,7 +301,7 @@ impl Render for AccordionSection {
                                             "Help & Support",
                                             None,
                                             "Browse the documentation, or get in touch with \
-                                        the support team.",
+                                             the support team.",
                                             settings_item_style,
                                         )
                                         .open(self.styled_open_ixs.contains(&2))

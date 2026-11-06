@@ -26,7 +26,7 @@ fn typing_in_the_name_field_updates_the_greeting(cx: &mut TestAppContext) {
         .update(cx, |_, window, cx| {
             section.update(cx, |state, cx| {
                 state.name_input.update(cx, |input, cx| {
-                    input.set_value("Ada".to_string(), window, cx);
+                    input.set_value("Ada", window, cx);
                     cx.emit(InputEvent::Change);
                 });
             });

@@ -103,7 +103,7 @@ impl NativeMenuSection {
             .border_color(cx.theme().border)
             .rounded(cx.theme().radius_lg)
             .text_color(cx.theme().muted_foreground)
-            .child(SharedString::from(label.to_string()))
+            .child(label.to_string())
     }
 }
 

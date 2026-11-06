@@ -44,10 +44,7 @@ pub(crate) fn size_dropdown<T: SizeToggle + Action>(
     size: Size,
 ) -> DropdownButton {
     DropdownButton::new(id)
-        .button(
-            Button::new(SharedString::from(format!("{id}-trigger")))
-                .label(format!("Size: {}", size_label(size))),
-        )
+        .button(Button::new(format!("{id}-trigger")).label(format!("Size: {}", size_label(size))))
         .dropdown_menu(move |menu, _, _| {
             menu.menu_with_check("XSmall", size == Size::XSmall, Box::new(T::xsmall()))
                 .menu_with_check("Small", size == Size::Small, Box::new(T::small()))

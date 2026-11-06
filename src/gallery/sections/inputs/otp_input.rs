@@ -34,8 +34,7 @@ impl OtpInputSection {
 
         let _subscriptions = vec![cx.subscribe(&otp_state, |this, state, ev: &OtpEvent, cx| {
             if matches!(ev, OtpEvent::Complete) {
-                let text = state.read(cx).value();
-                this.otp_value = Some(text.clone());
+                this.otp_value = Some(state.read(cx).value().clone());
                 cx.notify();
             }
         })];
@@ -115,7 +114,7 @@ impl Render for OtpInputSection {
                     .v_flex()
                     .child(OtpInput::new(&self.otp_state).with_size(self.size))
                     .when_some(self.otp_value.clone(), |this, otp| {
-                        this.child(format!("Value: {}", otp))
+                        this.child(format!("Value: {otp}"))
                     }),
             )
             .child(

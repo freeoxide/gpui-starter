@@ -1,6 +1,5 @@
 //! Input Group section, ported from the upstream `InputGroupStory` and its
-//! `examples` companion module (merged here; the story crate split the demo
-//! builders out only to keep its own file small).
+//! `examples` companion module.
 
 use std::{collections::BTreeMap, time::Duration};
 
@@ -23,7 +22,7 @@ use gpui_kit::component::{
     v_flex,
 };
 use gpui_kit::{
-    App, AppContext as _, ClipboardItem, Context, Entity, FontWeight, IntoElement, Keystroke,
+    App, AppContext as _, ClipboardItem, Context, Div, Entity, FontWeight, IntoElement, Keystroke,
     ParentElement as _, Render, SharedString, Styled as _, Subscription, Window, div,
     prelude::FluentBuilder as _, rems,
 };
@@ -124,7 +123,7 @@ fn labeled(label: &'static str, description: &'static str, control: impl IntoEle
 }
 
 /// The narrow column every demo box stacks its groups in.
-fn column() -> gpui_kit::Div {
+fn column() -> Div {
     v_flex().w_full().max_w(rems(24.)).gap_4()
 }
 

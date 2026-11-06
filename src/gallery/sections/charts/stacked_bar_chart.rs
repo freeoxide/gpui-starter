@@ -211,12 +211,12 @@ impl Plot for StackedBarChart {
                 .map(|p| p.y1 - p.y0)
                 .unwrap_or(0.);
             total += value;
-            tooltip = tooltip.row(color, series.key.clone(), format!("{}", value));
+            tooltip = tooltip.row(color, series.key.clone(), value.to_string());
         }
 
         Some(
             tooltip
-                .plain_row("total", format!("{}", total))
+                .plain_row("total", total.to_string())
                 .into_any_element(),
         )
     }

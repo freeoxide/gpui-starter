@@ -289,7 +289,7 @@ impl Render for VirtualListSection {
                                                                 render_item(cx).child(if i == 0 {
                                                                     format!("row: {}", ix)
                                                                 } else {
-                                                                    format!("{}", i)
+                                                                    i.to_string()
                                                                 })
                                                             }),
                                                         )
