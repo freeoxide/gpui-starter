@@ -30,11 +30,23 @@ pub(crate) fn build_router(state: ServerState) -> (Router, SocketIo) {
         async move {
             let snapshot = {
                 let mut guard = shared.lock().unwrap();
+                // Reconnecting clients re-send their session Peer verbatim;
+                // any other Peer on a taken id is a spoof, not an overwrite.
+                if guard
+                    .peers
+                    .get(&hello.id)
+                    .is_some_and(|existing| *existing != hello)
+                {
+                    tracing::warn!(id = hello.id, "rejecting duplicate peer id");
+                    s.disconnect().ok();
+                    return;
+                }
                 guard.peers.insert(hello.id, hello.clone());
                 guard.sockets.insert(s.id.to_string(), hello.id);
                 SnapshotMsg {
                     peers: guard.peers.values().cloned().collect(),
                     shapes: guard.board.shapes().cloned().collect(),
+                    tombstones: guard.board.tombstones().collect(),
                 }
             };
             s.emit("snapshot", &snapshot).ok();
@@ -50,12 +62,16 @@ pub(crate) fn build_router(state: ServerState) -> (Router, SocketIo) {
                         }
                         WireOp::Delete { .. } => Change::Remove,
                     };
-                    {
+                    // Rejected ops stop here: relaying one would resurrect a
+                    // deleted shape on any peer whose snapshot lacked the tombstone.
+                    let accepted = {
                         let mut guard = shared.lock().unwrap();
                         guard.board.observe(op.version());
-                        guard.board.integrate(op.key(), op.version(), change);
+                        guard.board.integrate(op.key(), op.version(), change)
+                    };
+                    if accepted {
+                        s.broadcast().emit("op", &op).await.ok();
                     }
-                    s.broadcast().emit("op", &op).await.ok();
                 }
             });
 
@@ -75,6 +91,11 @@ pub(crate) fn build_router(state: ServerState) -> (Router, SocketIo) {
                         let Some(origin) = guard.sockets.remove(&s.id.to_string()) else {
                             return;
                         };
+                        // A reconnect registers its replacement socket before the
+                        // dead one disconnects; evict only with the last socket.
+                        if guard.sockets.values().any(|&id| id == origin) {
+                            return;
+                        }
                         guard.peers.remove(&origin)
                     };
                     if let Some(peer) = left {
@@ -107,10 +128,12 @@ async fn main() {
         .init();
 
     let port = std::env::var("COLLAB_PORT").unwrap_or_else(|_| "3001".into());
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
+    // Loopback by default; set COLLAB_HOST=0.0.0.0 to expose the relay.
+    let host = std::env::var("COLLAB_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let listener = tokio::net::TcpListener::bind(format!("{host}:{port}"))
         .await
         .expect("bind collab-server port");
-    tracing::info!(port, "collab-server listening");
+    tracing::info!(host, port, "collab-server listening");
     let (router, _io) = build_router(ServerState::default());
     axum::serve(listener, router)
         .await

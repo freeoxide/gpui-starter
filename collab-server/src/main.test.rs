@@ -31,6 +31,12 @@ fn rect_shape(x: f32) -> WireShape {
     }
 }
 
+fn peer_ids(snapshot: &SnapshotMsg) -> Vec<ClientId> {
+    let mut ids: Vec<ClientId> = snapshot.peers.iter().map(|p| p.id).collect();
+    ids.sort_unstable();
+    ids
+}
+
 fn json_of(payload: Payload) -> Option<serde_json::Value> {
     match payload {
         Payload::Text(values) => values.first().cloned(),
@@ -102,17 +108,21 @@ async fn client(url: &str, hello: &Peer) -> (rust_socketio::asynchronous::Client
     (client, relay)
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn two_clients_snapshot_relay_and_reconnect_presence() {
+async fn spawn_server() -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let (router, _io) = build_router(ServerState::default());
     tokio::spawn(async move { axum::serve(listener, router).await });
-    let url = format!("http://{addr}");
+    format!("http://{addr}")
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn two_clients_snapshot_relay_and_peer_leave() {
+    let url = spawn_server().await;
 
     let (client_a, mut relay_a) = client(&url, &peer(11, "A")).await;
     let snapshot: SnapshotMsg = serde_json::from_value(relay_a.next("snapshot").await).unwrap();
-    assert!(snapshot.peers.iter().any(|p| p.id == 11));
+    assert_eq!(peer_ids(&snapshot), vec![11]);
 
     let (client_b, mut relay_b) = client(&url, &peer(22, "B")).await;
     let joined: Peer = serde_json::from_value(relay_a.next("peer_join").await).unwrap();
@@ -146,11 +156,11 @@ async fn two_clients_snapshot_relay_and_reconnect_presence() {
         .emit("op", Payload::from(serde_json::to_value(&stale).unwrap()))
         .await
         .unwrap();
-    let relayed: WireOp = serde_json::from_value(relay_b.next("op").await).unwrap();
-    assert_eq!(relayed, stale);
+    relay_b.assert_no("op").await;
 
     let (_client_c, mut relay_c) = client(&url, &peer(33, "C")).await;
     let snapshot: SnapshotMsg = serde_json::from_value(relay_c.next("snapshot").await).unwrap();
+    assert_eq!(peer_ids(&snapshot), vec![11, 22, 33]);
     let entry = snapshot.shapes.iter().find(|e| e.key.seq == 1).unwrap();
     assert_eq!(entry.shape, rect_shape(5.));
 
@@ -160,5 +170,114 @@ async fn two_clients_snapshot_relay_and_reconnect_presence() {
     assert_eq!(left.id, 22);
 
     let _ = client_a.disconnect().await;
+    let _ = _client_c.disconnect().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn deleted_shapes_reach_new_joiners_as_tombstones() {
+    let url = spawn_server().await;
+
+    let (client_a, mut relay_a) = client(&url, &peer(11, "A")).await;
+    let snapshot: SnapshotMsg = serde_json::from_value(relay_a.next("snapshot").await).unwrap();
+    assert!(snapshot.tombstones.is_empty());
+
+    let (client_b, mut relay_b) = client(&url, &peer(22, "B")).await;
+    let add = WireOp::Add {
+        key: ShapeKey { origin: 22, seq: 1 },
+        version: Version {
+            lamport: 10,
+            origin: 22,
+        },
+        shape: rect_shape(5.),
+    };
+    client_b
+        .emit("op", Payload::from(serde_json::to_value(&add).unwrap()))
+        .await
+        .unwrap();
+    let relayed: WireOp = serde_json::from_value(relay_a.next("op").await).unwrap();
+    assert_eq!(relayed, add);
+
+    let delete = WireOp::Delete {
+        key: ShapeKey { origin: 22, seq: 1 },
+        version: Version {
+            lamport: 12,
+            origin: 11,
+        },
+    };
+    client_a
+        .emit("op", Payload::from(serde_json::to_value(&delete).unwrap()))
+        .await
+        .unwrap();
+    let relayed: WireOp = serde_json::from_value(relay_b.next("op").await).unwrap();
+    assert_eq!(relayed, delete);
+
+    let stale = WireOp::Add {
+        key: ShapeKey { origin: 22, seq: 1 },
+        version: Version {
+            lamport: 11,
+            origin: 22,
+        },
+        shape: rect_shape(9.),
+    };
+    client_b
+        .emit("op", Payload::from(serde_json::to_value(&stale).unwrap()))
+        .await
+        .unwrap();
+    relay_a.assert_no("op").await;
+
+    let (_client_c, mut relay_c) = client(&url, &peer(33, "C")).await;
+    let snapshot: SnapshotMsg = serde_json::from_value(relay_c.next("snapshot").await).unwrap();
+    assert!(snapshot.shapes.iter().all(|entry| entry.key.seq != 1));
+    assert_eq!(snapshot.tombstones.len(), 1);
+    let (key, version) = snapshot.tombstones[0];
+    assert_eq!(key, ShapeKey { origin: 22, seq: 1 });
+    assert_eq!(version.lamport, 12);
+    assert_eq!(version.origin, 11);
+
+    let _ = client_a.disconnect().await;
+    let _ = client_b.disconnect().await;
+    let _ = _client_c.disconnect().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reconnect_with_same_peer_keeps_presence() {
+    let url = spawn_server().await;
+
+    let (client_a, _relay_a) = client(&url, &peer(11, "A")).await;
+    let (client_a2, mut relay_a2) = client(&url, &peer(11, "A")).await;
+    let snapshot: SnapshotMsg = serde_json::from_value(relay_a2.next("snapshot").await).unwrap();
+    assert_eq!(peer_ids(&snapshot), vec![11]);
+
+    // The old socket's late disconnect must not evict the reconnected peer.
+    client_a.disconnect().await.unwrap();
+    relay_a2.assert_no("peer_leave").await;
+
+    let (_client_b, mut relay_b) = client(&url, &peer(22, "B")).await;
+    let snapshot: SnapshotMsg = serde_json::from_value(relay_b.next("snapshot").await).unwrap();
+    assert_eq!(peer_ids(&snapshot), vec![11, 22]);
+
+    let _ = client_a2.disconnect().await;
+    let _ = _client_b.disconnect().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn duplicate_peer_id_with_a_different_peer_is_rejected() {
+    let url = spawn_server().await;
+
+    let (client_a, mut relay_a) = client(&url, &peer(11, "A")).await;
+    let snapshot: SnapshotMsg = serde_json::from_value(relay_a.next("snapshot").await).unwrap();
+    assert_eq!(peer_ids(&snapshot), vec![11]);
+
+    let (client_spoof, mut relay_spoof) = client(&url, &peer(11, "spoof")).await;
+    relay_spoof.assert_no("snapshot").await;
+    relay_a.assert_no("peer_join").await;
+
+    let (_client_c, mut relay_c) = client(&url, &peer(33, "C")).await;
+    let snapshot: SnapshotMsg = serde_json::from_value(relay_c.next("snapshot").await).unwrap();
+    assert_eq!(peer_ids(&snapshot), vec![11, 33]);
+    assert!(snapshot.peers.iter().any(|p| p.id == 11 && p.name == "A"));
+
+    let _ = client_a.disconnect().await;
+    let _ = client_spoof.disconnect().await;
     let _ = _client_c.disconnect().await;
 }
