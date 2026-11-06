@@ -1,8 +1,7 @@
 use std::time::Duration;
 
 use gpui_kit::TestAppContext;
-use gpui_kit::prelude::*;
-use gpui_kit::{Bounds, Pixels, point, px, size};
+use gpui_kit::{Bounds, point, px, size};
 
 use super::{AudioPage, format_time, fraction_at, transport_idle};
 use crate::audio::PlaybackStatus;

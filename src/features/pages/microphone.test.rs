@@ -1,5 +1,4 @@
 use gpui_kit::TestAppContext;
-use gpui_kit::prelude::*;
 
 use crate::features::pages::MicrophonePage;
 use crate::microphone::{self, CaptureStatus, InputDeviceInfo};

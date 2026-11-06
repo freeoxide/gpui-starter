@@ -1,4 +1,4 @@
-use gpui_kit::{AppContext as _, TestAppContext, VisualTestContext, px, size};
+use gpui_kit::{TestAppContext, VisualTestContext, px, size};
 
 use super::ModelViewerPage;
 

@@ -5,7 +5,7 @@ use super::types::{
 };
 use super::*;
 use crate::app_state::{AppConfig, install_for_tests};
-use gpui_kit::{TestAppContext, UpdateGlobal as _};
+use gpui_kit::TestAppContext;
 
 #[test]
 fn manifest_parse_valid_full() {
@@ -172,9 +172,9 @@ fn install_online_check_fixture(cx: &mut gpui_kit::App) {
             http_client: reqwest::Client::new(),
         },
     ));
-    cx.set_global(crate::connectivity::ConnectivitySnapshot {
-        state: crate::connectivity::ConnectivityState::Online,
-        ..Default::default()
+    crate::connectivity::initialize(cx);
+    crate::connectivity::ConnectivitySnapshot::update_global(cx, |next, _| {
+        next.state = crate::connectivity::ConnectivityState::Online;
     });
     initialize(cx);
 }

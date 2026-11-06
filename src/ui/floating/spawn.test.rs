@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use gpui_kit::{
-    AnyView, App, AppContext as _, Bounds, Context, IntoElement, Modifiers, ParentElement as _,
-    Point, Render, Styled as _, TestAppContext, VisualTestContext, Window, div, point, px, size,
+    AnyView, App, Bounds, Context, IntoElement, Modifiers, ParentElement as _, Point, Render,
+    Styled as _, TestAppContext, VisualTestContext, Window, div, point, px, size,
 };
 
 use super::*;

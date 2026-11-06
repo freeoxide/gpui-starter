@@ -302,7 +302,7 @@ fn upload_sink(runtime: &Arc<tokio::runtime::Runtime>) -> (String, Arc<Mutex<Vec
     use tokio::io::AsyncWriteExt as _;
 
     let std_listener = std::net::TcpListener::bind("127.0.0.1:0").expect("sink bind");
-    let port = std_listener.local_addr().expect("sink port");
+    let port = std_listener.local_addr().expect("sink port").port();
     std_listener
         .set_nonblocking(true)
         .expect("sink nonblocking");
@@ -354,7 +354,7 @@ async fn run_upload_ingests_persists_and_posts_the_file(cx: &TestAppContext) {
     let (endpoint, posted) = upload_sink(&runtime);
 
     let outcome = run_upload(
-        cx.background_executor().clone(),
+        cx.background_executor.clone(),
         runtime.clone(),
         backend,
         reqwest::Client::new(),

@@ -2,8 +2,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui_kit::{
-    AnyWindowHandle, AppContext as _, Bounds, Context, FocusHandle, InteractiveElement,
-    IntoElement, Render, TestAppContext, Window, WindowBounds, div, px, size,
+    AnyWindowHandle, Bounds, Context, FocusHandle, InteractiveElement, IntoElement, Render,
+    TestAppContext, Window, WindowBounds, div, px, size,
 };
 
 use super::*;

@@ -17,7 +17,6 @@ pub(crate) struct RecordedRequest {
     pub(crate) body: String,
     pub(crate) authorization: Option<String>,
     pub(crate) accept: Option<String>,
-    pub(crate) content_type: Option<String>,
 }
 
 pub(crate) struct FullRequest {
@@ -132,7 +131,6 @@ fn route(request: &FullRequest, state: &Arc<Mutex<FakeState>>) -> (String, Strin
         body: body.clone(),
         authorization: request.header("authorization").map(str::to_string),
         accept: request.header("accept").map(str::to_string),
-        content_type: request.header("content-type").map(str::to_string),
     });
     let mints_token = path == "/token" || path == "/login/oauth/access_token";
     if mints_token {

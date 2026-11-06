@@ -6,7 +6,7 @@ use super::RippleTool;
 use crate::features::pages::shaders::demos::{DemoId, demo};
 use crate::features::pages::shaders::state::ShaderState;
 use crate::ui::canvas::{
-    CanvasPointerEvent, CanvasState, CanvasTool, CanvasTransform, ToolContext,
+    CanvasPointerEvent, CanvasState, CanvasTransform, ToolContext,
 };
 
 fn pointer_at(doc: (f32, f32)) -> CanvasPointerEvent {

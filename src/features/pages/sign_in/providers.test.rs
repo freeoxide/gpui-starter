@@ -4,7 +4,7 @@ use super::{ProviderKind, is_available, providers};
 use crate::capabilities::Capability;
 
 #[gpui_kit::test]
-async fn registry_is_static_with_email_first(cx: &mut TestAppContext) {
+async fn registry_is_static_with_email_first(_cx: &mut TestAppContext) {
     let all = providers();
     assert_eq!(all.len(), 3);
     let ids: Vec<&str> = all.iter().map(|spec| spec.id).collect();

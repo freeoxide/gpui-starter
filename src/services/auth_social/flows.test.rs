@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gpui_auth::{AuthError, AuthEvent, AuthIo, AuthState, InMemoryStore, TokenStore};
-use gpui_kit::{AppContext as _, Entity, Subscription, TestAppContext};
+use gpui_kit::{Entity, Subscription, TestAppContext};
 
 use super::*;
 use crate::capabilities::Capability;

@@ -1,4 +1,7 @@
-use gpui_kit::{AnyView, App, Context, IntoElement, Render, TestAppContext, Window, div, px, size};
+use gpui_kit::{
+    AnyView, App, AppContext as _, Context, IntoElement, Render, TestAppContext, Window, div, px,
+    size,
+};
 
 use super::*;
 use crate::ui::floating::{FloatingHandle, FloatingWindowId, floating_snapshot, init};
@@ -40,7 +43,7 @@ async fn spawns_anyway_once_the_retry_budget_is_spent(cx: &mut TestAppContext) {
     });
     cx.run_until_parked();
     for _ in 0..9 {
-        cx.advance_clock(DISPLAY_POLL_INTERVAL);
+        cx.executor().advance_clock(DISPLAY_POLL_INTERVAL);
         cx.run_until_parked();
     }
     assert_eq!(
@@ -48,7 +51,7 @@ async fn spawns_anyway_once_the_retry_budget_is_spent(cx: &mut TestAppContext) {
         0,
         "nine polls spent; the budget still holds one"
     );
-    cx.advance_clock(DISPLAY_POLL_INTERVAL);
+    cx.executor().advance_clock(DISPLAY_POLL_INTERVAL);
     cx.run_until_parked();
     let snapshot = cx.read(|cx| floating_snapshot(cx));
     assert_eq!(snapshot.len(), 1, "the exhausted budget must still spawn");

@@ -1,5 +1,4 @@
 use gpui_kit::component::slider::{SliderEvent, SliderValue};
-use gpui_kit::prelude::*;
 use gpui_kit::{SharedString, TestAppContext};
 
 use super::{BluetoothPanel, SystemControlsPage, bluetooth_panel};
@@ -209,6 +208,7 @@ async fn a_dragging_slider_is_not_yanked_by_a_stale_readback(cx: &mut TestAppCon
 #[gpui_kit::test]
 async fn an_a11y_value_change_commits_and_survives_the_next_sync(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
+    cx.update(crate::error_surface::initialize);
     let mut entity = None;
     let handle = cx.add_window(|window, cx| {
         let page = SystemControlsPage::new(window, cx);

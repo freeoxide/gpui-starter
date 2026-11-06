@@ -59,7 +59,7 @@ fn quick_float_chord_parses_on_every_os() {
     }
 }
 
-fn counter() -> (Rc<Cell<u32>>, impl Fn(&mut App) + 'static) {
+fn counter() -> (Rc<Cell<u32>>, impl Fn(&mut App) + Clone + 'static) {
     let hits = Rc::new(Cell::new(0u32));
     let closure = {
         let hits = hits.clone();
@@ -128,10 +128,12 @@ async fn a_handler_may_register_another_accelerator_during_dispatch(cx: &mut Tes
     cx.update(gpui_kit::init);
     let (hits, handler) = counter();
     cx.update(|cx| {
+        let chained = handler.clone();
         set_handler(
             QUICK_FLOAT,
             move |cx| {
-                set_handler(LAUNCHER, handler, cx).unwrap();
+                handler(cx);
+                set_handler(LAUNCHER, chained.clone(), cx).unwrap();
             },
             cx,
         )

@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use gpui_kit::{AppContext as _, BorrowAppContext as _, TestAppContext};
+use gpui_kit::TestAppContext;
 use tokio::io::AsyncWriteExt as _;
 
 use super::*;

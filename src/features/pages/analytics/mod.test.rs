@@ -3,7 +3,7 @@ use gpui_kit::component::{
     table::{TableDelegate as _, TableEvent},
 };
 use gpui_kit::{
-    AnyWindowHandle, AppContext as _, Bounds, Context, Entity, Pixels, Render as _, TestAppContext,
+    AnyWindowHandle, AppContext as _, Bounds, Context, Entity, Pixels, TestAppContext,
     VisualTestContext, Window, WindowOptions, point, px, size,
 };
 
@@ -183,12 +183,15 @@ async fn double_click_opens_the_detail_sheet(cx: &TestAppContext) {
 async fn open_detail_is_a_no_op_while_a_sheet_is_open(cx: &TestAppContext) {
     let (handle, page) = open_page(cx);
     commit_first_reload(cx, &page);
+    // Titles come from the sorted table, not fixture order; rows sharing a
+    // page yield equal titles, so the second row must sit on another page.
     let titles: Vec<String> = cx.read(|cx| {
-        WorkspaceData::load()
-            .channels(Segment::All)
-            .iter()
-            .take(2)
-            .map(|row| {
+        let analytics = page.read(cx);
+        let delegate = analytics.table.read(cx).delegate();
+        (0..delegate.rows_count(cx))
+            .map(|ix| {
+                let key = delegate.key_at(ix).expect("row key");
+                let row = analytics.data.channel_row(&key).expect("channel row");
                 crate::i18n::localize_with_args(
                     "analytics_detail_title",
                     &[("page", row.page.as_ref())],
@@ -196,11 +199,15 @@ async fn open_detail_is_a_no_op_while_a_sheet_is_open(cx: &TestAppContext) {
             })
             .collect()
     });
-    let (first, second) = (&titles[0], &titles[1]);
+    let first = &titles[0];
+    let second_row = titles
+        .iter()
+        .position(|title| title != first)
+        .expect("the All segment spans more than one page");
     super::LAST_SHEET_TITLE.with_borrow_mut(|slot| *slot = None);
     with_window(cx, &handle, &page, |page, window, cx| {
         page.on_table_event(&TableEvent::DoubleClickedRow(0), window, cx);
-        page.on_table_event(&TableEvent::DoubleClickedRow(1), window, cx);
+        page.on_table_event(&TableEvent::DoubleClickedRow(second_row), window, cx);
     });
     let open = cx.update(|cx| {
         handle
@@ -211,7 +218,7 @@ async fn open_detail_is_a_no_op_while_a_sheet_is_open(cx: &TestAppContext) {
     super::LAST_SHEET_TITLE.with_borrow(|title| {
         assert_ne!(
             title.as_deref(),
-            Some(second.as_str()),
+            Some(titles[second_row].as_str()),
             "the second double-click must not reach the sheet builder"
         );
         assert_eq!(

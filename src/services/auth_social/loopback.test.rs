@@ -1,7 +1,5 @@
 use std::time::Duration;
 
-use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-
 use super::*;
 
 fn scratch_runtime() -> tokio::runtime::Runtime {

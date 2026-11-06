@@ -8,8 +8,8 @@ use crate::app_state::{
     install_for_tests,
 };
 use gpui_kit::{
-    AnyWindowHandle, AppContext as _, Bounds, Context, IntoElement, Render, TestAppContext, Window,
-    WindowBounds, div, point, px, size,
+    AnyWindowHandle, Bounds, Context, IntoElement, Render, TestAppContext, Window, WindowBounds,
+    div, point, px, size,
 };
 
 #[test]
@@ -24,7 +24,7 @@ fn is_slow_frame_at_threshold() {
 
 #[test]
 fn is_slow_frame_above_threshold() {
-    assert!(!is_slow_frame(4_001));
+    assert!(is_slow_frame(4_001));
 }
 
 #[test]

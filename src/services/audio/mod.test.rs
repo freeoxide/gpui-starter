@@ -1,5 +1,4 @@
 use gpui_kit::TestAppContext;
-use gpui_kit::prelude::*;
 
 use crate::capabilities::Capability;
 

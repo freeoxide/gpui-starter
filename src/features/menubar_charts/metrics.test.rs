@@ -1,5 +1,4 @@
 use gpui_kit::AppContext as _;
-use gpui_kit::PlatformDispatcher as _;
 
 use super::*;
 
