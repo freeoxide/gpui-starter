@@ -158,7 +158,7 @@ impl Render for Launcher {
                 // state the menus see (undo stack, sign-in, platform).
                 let availability = commands::availability(command_id, cx);
                 let subtitle = match &availability.disabled_reason {
-                    Some(reason) => format!("{} ({reason})", subtitle).into(),
+                    Some(reason) => format!("{subtitle} ({reason})").into(),
                     None => subtitle,
                 };
                 let binding = page_binding(command_id);
@@ -214,7 +214,7 @@ impl Render for Launcher {
             .child(command);
 
         // The trap container has an id but no a11y role, so gpui drops the
-        // wrapped element's node — trap a roleless wrapper, not the Dialog.
+        // wrapped element's node; trap a roleless wrapper, not the Dialog.
         let focus_handle = self.focus_handle(cx);
         div()
             .size_full()
@@ -326,10 +326,9 @@ fn render_footer(state: &CommandState, titles: &[SharedString], cx: &App) -> Div
             .get(path.row)
             .map(|title| {
                 format!(
-                    "{title}, {} {} {}",
+                    "{title}, {} {} {count}",
                     path.row + 1,
                     crate::i18n::localize("palette_of"),
-                    count
                 )
             })
             .unwrap_or_else(|| status_text.clone()),
@@ -385,8 +384,7 @@ impl Focusable for LauncherRoot {
 
 impl LauncherRoot {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // Install Liquid Glass — creates NSGlassEffectView directly in the
-        // native view hierarchy, no GPUI source patches needed.
+        // Attaches an NSGlassEffectView to the native view tree; no GPUI patch.
         #[cfg(target_os = "macos")]
         crate::platform::liquid_glass::LiquidGlass::install(window);
 
@@ -554,7 +552,7 @@ pub fn open_launcher(cx: &mut App) {
             cx.update(|cx| {
                 cx.set_global(LauncherOpen(false));
             });
-            return Ok::<_, anyhow::Error>(());
+            return;
         };
 
         // Recorded so toggle paths can find the live window.
@@ -570,8 +568,6 @@ pub fn open_launcher(cx: &mut App) {
                 window.set_window_title(&crate::i18n::localize("palette_window_title"));
             })
             .ok();
-
-        Ok::<_, anyhow::Error>(())
     })
     .detach();
 }

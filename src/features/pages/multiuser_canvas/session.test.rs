@@ -1,17 +1,19 @@
+use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use collab_protocol::{
     ClientId, Peer, ShapeEntry, ShapeKey, SnapshotMsg, Version, WireColor, WireOp, WireShape,
+    WireStyle,
 };
 use gpui_kit::prelude::*;
-use gpui_kit::{Entity, TestAppContext, WindowTextSystem, point, px, size};
+use gpui_kit::{Bounds, Entity, TestAppContext, WindowTextSystem, black, point, px, size};
 
 use super::super::fake::PEER_COUNT;
 use super::{CollabSession, InboundEvent, Mode, NetLink, Status};
 use crate::capabilities::Capability;
 use crate::platform::clock::Duration;
-use crate::ui::canvas::{CanvasShape, CanvasState, ShapeStyle};
+use crate::ui::canvas::{CanvasShape, CanvasState, ShapeStyle, StrokeStyle};
 
 fn new_session(cx: &TestAppContext) -> (Entity<CanvasState>, Entity<CollabSession>) {
     cx.update(|cx| {
@@ -23,7 +25,7 @@ fn new_session(cx: &TestAppContext) -> (Entity<CanvasState>, Entity<CollabSessio
 
 fn rect_shape(x: f32) -> CanvasShape {
     CanvasShape::rect(
-        gpui_kit::Bounds {
+        Bounds {
             origin: point(px(x), px(0.)),
             size: size(px(20.), px(20.)),
         },
@@ -34,7 +36,7 @@ fn rect_shape(x: f32) -> CanvasShape {
 fn wire_rect(x: f32) -> WireShape {
     WireShape::Rect {
         bounds: [x, 0., 20., 20.],
-        style: collab_protocol::WireStyle {
+        style: WireStyle {
             fill: None,
             stroke: None,
         },
@@ -303,14 +305,14 @@ impl NetLink for RecordingLink {
 #[gpui_kit::test]
 fn cursor_sends_are_throttled(cx: &mut TestAppContext) {
     let (_, session) = new_session(cx);
-    let link = std::sync::Arc::new(RecordingLink::default());
+    let link = Arc::new(RecordingLink::default());
     session.update(cx, |s, cx| {
         s.install_link_for_test(link.clone(), cx);
         s.set_mode(Mode::Live, cx);
     });
-    session.update(cx, |s, cx| {
-        s.set_own_cursor(point(px(1.), px(2.)), cx);
-        s.set_own_cursor(point(px(3.), px(4.)), cx);
+    session.update(cx, |s, _| {
+        s.set_own_cursor(point(px(1.), px(2.)));
+        s.set_own_cursor(point(px(3.), px(4.)));
     });
     let sends = link.sends.lock().unwrap();
     let cursors = sends.iter().filter(|(event, _)| *event == "cursor").count();
@@ -323,7 +325,7 @@ fn cursor_sends_are_throttled(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn disconnect_shuts_the_link_down(cx: &mut TestAppContext) {
     let (_, session) = new_session(cx);
-    let link = std::sync::Arc::new(RecordingLink::default());
+    let link = Arc::new(RecordingLink::default());
     session.update(cx, |s, cx| {
         s.install_link_for_test(link.clone(), cx);
         s.set_mode(Mode::Live, cx);
@@ -361,16 +363,16 @@ async fn demo_loop_draws_and_stops_on_live(cx: &TestAppContext) {
 #[gpui_kit::test]
 fn triangle_round_trips_through_the_wire_format(cx: &mut TestAppContext) {
     cx.update(|cx| {
-        let canvas_shape = crate::ui::canvas::CanvasShape::triangle(
-            gpui_kit::Bounds {
+        let canvas_shape = CanvasShape::triangle(
+            Bounds {
                 origin: point(px(4.), px(7.)),
                 size: size(px(30.), px(20.)),
             },
             ShapeStyle::both(
-                gpui_kit::black(),
-                crate::ui::canvas::StrokeStyle {
+                black(),
+                StrokeStyle {
                     width: px(2.),
-                    color: gpui_kit::black(),
+                    color: black(),
                     dash: None,
                 },
             ),

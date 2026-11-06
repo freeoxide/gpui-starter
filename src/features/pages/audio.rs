@@ -47,7 +47,7 @@ fn paint_peaks(
     cx: &App,
 ) {
     let scale = window.scale_factor();
-    let width_px = ((bounds.size.width.as_f32() * scale).round().max(1.)) as usize;
+    let width_px = (bounds.size.width.as_f32() * scale).round().max(1.) as usize;
     let played = cx.theme().primary.opacity(0.9);
     let unplayed = cx.theme().muted_foreground.opacity(0.45);
     for x in 0..width_px {
@@ -146,13 +146,12 @@ impl AudioPage {
         let device_select =
             cx.new(|cx| SelectState::new(device_names.clone(), selected_index, window, cx));
 
-        let mut subscriptions = Vec::new();
-        subscriptions.push(cx.observe(&engine, |_, _, cx| cx.notify()));
-        subscriptions.push(cx.observe(&waveform, |_, _, cx| cx.notify()));
-        subscriptions.push(cx.observe_in(&engine, window, |this, _, window, cx| {
-            this.reconcile_devices(window, cx);
-        }));
-        subscriptions.push(
+        let subscriptions = vec![
+            cx.observe(&engine, |_, _, cx| cx.notify()),
+            cx.observe(&waveform, |_, _, cx| cx.notify()),
+            cx.observe_in(&engine, window, |this, _, window, cx| {
+                this.reconcile_devices(window, cx);
+            }),
             cx.subscribe(
                 &volume_slider,
                 |this, _, event: &SliderEvent, cx| match event {
@@ -162,17 +161,17 @@ impl AudioPage {
                     }
                 },
             ),
-        );
-        subscriptions.push(cx.subscribe(
-            &device_select,
-            |this, _, event: &SelectEvent<Vec<String>>, cx| {
-                let SelectEvent::Confirm(value) = event;
-                if let Some(name) = value {
-                    this.engine
-                        .update(cx, |engine, cx| engine.select_device(name, cx));
-                }
-            },
-        ));
+            cx.subscribe(
+                &device_select,
+                |this, _, event: &SelectEvent<Vec<String>>, cx| {
+                    let SelectEvent::Confirm(value) = event;
+                    if let Some(name) = value {
+                        this.engine
+                            .update(cx, |engine, cx| engine.select_device(name, cx));
+                    }
+                },
+            ),
+        ];
 
         Self {
             engine,
@@ -385,7 +384,7 @@ impl AudioPage {
                             seek_engine.update(cx, |engine, cx| engine.seek_fraction(fraction, cx));
                         }
                     })
-                    .on_drag(DragSeek(self.engine.entity_id()), |drag, _, _, cx| {
+                    .on_drag(DragSeek(expected_id), |drag, _, _, cx| {
                         cx.stop_propagation();
                         cx.new(|_| drag.clone())
                     })
@@ -444,21 +443,15 @@ impl AudioPage {
                         this.engine.update(cx, |engine, cx| engine.stop(cx));
                     })),
             )
-            .child(
+            .child({
+                let time_label = format!("{} / {}", format_time(position), format_time(duration));
                 div()
                     .id("audio-time")
-                    .a11y(
-                        Role::Paragraph,
-                        format!("{} / {}", format_time(position), format_time(duration)),
-                    )
+                    .a11y(Role::Paragraph, time_label.clone())
                     .a11y_live(accesskit::Live::Polite)
                     .text_sm()
-                    .child(format!(
-                        "{} / {}",
-                        format_time(position),
-                        format_time(duration)
-                    )),
-            )
+                    .child(time_label)
+            })
             .children(status.map(|status| {
                 div()
                     .text_sm()

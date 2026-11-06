@@ -8,6 +8,7 @@ use gpui_kit::{
 };
 use image::{DynamicImage, ImageFormat, ImageReader, RgbaImage};
 
+use super::document::FilterSettings;
 use super::{EditorTool, ImageEditorPage, SaveState};
 use crate::ui::canvas::{
     CanvasPointerEvent, CanvasShape, CanvasTransform, StrokeStyle, ToolContext,
@@ -276,7 +277,7 @@ fn undo_resyncs_filter_controls_with_the_document(cx: &mut TestAppContext) {
     page.update(cx, |page, cx| {
         page.doc.update(cx, |doc, cx| {
             doc.set_filters(
-                crate::features::pages::image_editor::document::FilterSettings {
+                FilterSettings {
                     grayscale: true,
                     blur_sigma: 4.,
                     brightness: 12,
@@ -403,7 +404,7 @@ fn save_captures_edits_made_while_the_dialog_is_open(cx: &mut TestAppContext) {
     page.update(&mut cx, |page, cx| {
         page.doc.update(cx, |doc, cx| {
             doc.set_filters(
-                crate::features::pages::image_editor::document::FilterSettings {
+                FilterSettings {
                     grayscale: true,
                     ..Default::default()
                 },
@@ -491,7 +492,7 @@ fn reopening_an_image_resets_filter_controls(cx: &mut TestAppContext) {
         page.gray = true;
         page.doc.update(cx, |doc, cx| {
             doc.set_filters(
-                crate::features::pages::image_editor::document::FilterSettings {
+                FilterSettings {
                     grayscale: true,
                     blur_sigma: 3.,
                     brightness: 20,

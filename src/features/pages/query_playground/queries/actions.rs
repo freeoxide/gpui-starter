@@ -136,7 +136,7 @@ impl QueryPlaygroundPage {
         let exec = cx.background_executor().clone();
         self.log("LatestWins: spamming 5 fetches");
         for i in 0..5 {
-            let label = format!("attempt-{}", i);
+            let label = format!("attempt-{i}");
             let exec = exec.clone();
             fetch_query_with_signal(
                 &entity,
@@ -162,7 +162,7 @@ impl QueryPlaygroundPage {
         let exec = cx.background_executor().clone();
         self.log("IgnoreWhileLoading: spamming 5 fetches");
         for i in 0..5 {
-            let label = format!("attempt-{}", i);
+            let label = format!("attempt-{i}");
             let exec = exec.clone();
             fetch_query_with_signal(
                 &entity,
@@ -215,7 +215,7 @@ impl QueryPlaygroundPage {
             vars
         };
         let exec = cx.background_executor().clone();
-        self.log(format!("Mutation: mutate('{}')", vars));
+        self.log(format!("Mutation: mutate('{vars}')"));
         mutate(
             &entity,
             vars,
@@ -223,7 +223,7 @@ impl QueryPlaygroundPage {
                 let exec = exec.clone();
                 async move {
                     exec.timer(std::time::Duration::from_secs(1)).await;
-                    Ok(format!("result for: {}", v))
+                    Ok(format!("result for: {v}"))
                 }
             },
             cx,
@@ -242,7 +242,7 @@ impl QueryPlaygroundPage {
         } else {
             vars
         };
-        self.log(format!("Mutation: mutate_with_callbacks('{}')", vars));
+        self.log(format!("Mutation: mutate_with_callbacks('{vars}')"));
 
         let exec = cx.background_executor().clone();
         // Callbacks fire without a context; send into the page-owned channel
@@ -251,10 +251,10 @@ impl QueryPlaygroundPage {
         let tx_for_error = self.callback_log_tx.clone();
         let callbacks = MutationCallbacks::new()
             .on_success(move |data: &String| {
-                let _ = tx_for_success.send(format!("on_success: {}", data));
+                let _ = tx_for_success.send(format!("on_success: {data}"));
             })
             .on_error(move |err: &QueryError| {
-                let _ = tx_for_error.send(format!("on_error: {}", err));
+                let _ = tx_for_error.send(format!("on_error: {err}"));
             });
 
         mutate_with_callbacks(
@@ -264,7 +264,7 @@ impl QueryPlaygroundPage {
                 let exec = exec.clone();
                 async move {
                     exec.timer(std::time::Duration::from_secs(1)).await;
-                    Ok(format!("callback result for: {}", v))
+                    Ok(format!("callback result for: {v}"))
                 }
             },
             callbacks,
@@ -512,7 +512,7 @@ pub(super) async fn fabricate_page(exec: BackgroundExecutor, page_num: u32) -> P
     exec.timer(std::time::Duration::from_millis(600)).await;
     PlaygroundPage {
         items: (0..5)
-            .map(|i| format!("page {} item {}", page_num, i))
+            .map(|i| format!("page {page_num} item {i}"))
             .collect(),
         page_number: page_num,
     }

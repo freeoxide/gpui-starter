@@ -19,7 +19,7 @@ pub(crate) fn notch_layout(
     safe_top: Option<Pixels>,
     housing: Option<Bounds<Pixels>>,
 ) -> NotchLayout {
-    let pill_h = px(safe_top.map(|p| p.as_f32()).unwrap_or(24.).clamp(20., 40.));
+    let pill_h = px(safe_top.map(Pixels::as_f32).unwrap_or(24.).clamp(20., 40.));
     let collapsed_w = px(housing
         .map(|h| h.size.width.as_f32())
         .unwrap_or(240.)

@@ -16,7 +16,7 @@ async fn registry_is_static_with_email_first(_cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 async fn email_row_follows_the_capability_entry(cx: &mut TestAppContext) {
-    cx.update(|cx| crate::capabilities::initialize(cx));
+    cx.update(crate::capabilities::initialize);
     let email = &providers()[0];
     cx.update(|cx| {
         crate::capabilities::set(
@@ -61,7 +61,7 @@ async fn email_row_follows_the_capability_entry(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 async fn browser_rows_stay_unavailable_without_social_config(cx: &mut TestAppContext) {
-    cx.update(|cx| crate::capabilities::initialize(cx));
+    cx.update(crate::capabilities::initialize);
     let google = &providers()[1];
     let github = &providers()[2];
     cx.update(|cx| {

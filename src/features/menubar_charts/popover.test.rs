@@ -1,8 +1,8 @@
 use gpui_kit::{Bounds, TestAppContext, WindowOptions, point, px, size};
 
-use super::{anchor, toggle_popover};
+use super::{POPOVER_ID, anchor, toggle_popover};
 use crate::app::window::RootWindow;
-use crate::ui::floating::{FloatAnchor, Placement9, floating_snapshot, init};
+use crate::ui::floating::{FloatAnchor, Placement9, floating_snapshot};
 
 fn visible(origin_x: f32, origin_y: f32) -> Bounds<gpui_kit::Pixels> {
     Bounds {
@@ -45,7 +45,7 @@ fn anchor_tolerates_a_left_of_visible_icon() {
 #[gpui_kit::test]
 async fn toggle_popover_round_trips_the_registered_float(cx: &TestAppContext) {
     cx.update(gpui_kit::init);
-    cx.update(init);
+    cx.update(crate::ui::floating::init);
     let (handle, _) = cx
         .update(|cx| {
             gpui_kit::open_window(
@@ -59,9 +59,7 @@ async fn toggle_popover_round_trips_the_registered_float(cx: &TestAppContext) {
 
     assert!(cx.update(|cx| toggle_popover(400., cx)));
     assert!(
-        cx.read(|cx| floating_snapshot(cx)
-            .iter()
-            .any(|e| e.id.0 == "menubar-charts")),
+        cx.read(|cx| floating_snapshot(cx).iter().any(|e| e.id.0 == POPOVER_ID)),
         "open registers the popover float"
     );
 

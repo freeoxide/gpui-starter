@@ -20,8 +20,7 @@ pub(crate) mod net;
 
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::{h_flex, v_flex};
-use gpui_kit::prelude::*;
-use gpui_kit::*;
+use gpui_kit::{prelude::*, *};
 
 use crate::ui::canvas::CanvasState;
 
@@ -130,7 +129,7 @@ impl Render for MultiuserCanvasPage {
                     .p_6()
                     .gap_4()
                     .flex_shrink_0()
-                    .child(view::render_header(status, cx))
+                    .child(view::render_header(status))
                     .child(view::render_toolbar(
                         &self.session,
                         &self.canvas,

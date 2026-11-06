@@ -113,7 +113,7 @@ async fn update_slot_merges_its_fields_without_clobbering_the_rest(cx: &mut Test
     cx.read(|cx| {
         let note = slot(PaletteId::Note, cx).expect("the seeded note slot persists");
         assert_eq!(note.note.as_deref(), Some("hello"));
-        assert_eq!(note.open, true);
+        assert!(note.open);
         assert_eq!(note.surface, "window");
         assert_eq!(note.x, 10.0);
         assert_eq!(note.y, 20.0);

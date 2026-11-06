@@ -132,7 +132,7 @@ pub(crate) fn hex_to_rgba(hex: &str) -> Option<gpui_kit::Rgba> {
     Some(rgba(value))
 }
 
-/// Rgba -> "#RRGGBB"; alpha below 1.0 rounds into the channels it covers.
+/// Rgba -> "#RRGGBB"; alpha is dropped.
 pub(crate) fn rgba_to_hex(color: gpui_kit::Rgba) -> String {
     let channel = |c: f32| (c * 255.).round().clamp(0., 255.) as u8;
     format!(

@@ -98,12 +98,6 @@ impl EditorHistory {
     }
 }
 
-impl Default for EditorHistory {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 fn distinct_base_bytes(entries: &[EditOp]) -> usize {
     // Identity is content, not address: an evicted entry's allocation can be
     // reused by a later image, and re-encoded copies must still dedup.

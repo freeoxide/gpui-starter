@@ -14,7 +14,8 @@ use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::microphone::{
-    self, CaptureStatus, DeviceOption, MicrophonePermissionState, MicrophoneState, dbfs,
+    self, CaptureStatus, DeviceOption, InputDeviceInfo, MicrophonePermissionState, MicrophoneState,
+    dbfs,
 };
 use crate::ui::waveform::{Waveform, WaveformMode, WaveformState};
 
@@ -38,7 +39,7 @@ impl MicrophonePage {
                 .step(1.)
                 .default_value(snapshot.gain_db)
         });
-        let items = device_options(&snapshot);
+        let items = device_options(&snapshot.devices);
         let selected_index = snapshot
             .selected_device
             .as_ref()
@@ -76,9 +77,8 @@ impl MicrophonePage {
     }
 }
 
-fn device_options(snapshot: &microphone::MicrophoneSnapshot) -> Vec<DeviceOption> {
-    snapshot
-        .devices
+fn device_options(devices: &[InputDeviceInfo]) -> Vec<DeviceOption> {
+    devices
         .iter()
         .map(|device| DeviceOption {
             id: device.id.clone(),
@@ -102,13 +102,7 @@ fn reconcile_devices(
         if unchanged {
             return;
         }
-        devices
-            .iter()
-            .map(|device| DeviceOption {
-                id: device.id.clone(),
-                name: device.name.clone(),
-            })
-            .collect::<Vec<_>>()
+        device_options(devices)
     };
     this.device_ids = items.iter().map(|item| item.id.clone()).collect();
     this.device_select
@@ -230,7 +224,7 @@ impl Render for MicrophonePage {
                             .w_12()
                             .text_sm()
                             .text_right()
-                            .child(format!("{:+.0} dB", gain)),
+                            .child(format!("{gain:+.0} dB")),
                     ),
             )
             .child(
@@ -330,8 +324,7 @@ fn permission_alert(permission: &MicrophonePermissionState) -> Option<impl IntoE
                 .child(Alert::warning(
                     "mic-permission-alert",
                     format!(
-                        "{} {}",
-                        reason,
+                        "{reason} {}",
                         crate::i18n::localize("microphone_permission_bundle_hint")
                     ),
                 ))

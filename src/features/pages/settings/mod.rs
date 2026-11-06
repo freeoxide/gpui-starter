@@ -55,7 +55,7 @@ impl SettingsPage {
                 cx.notify();
             }),
             cx.observe_global_in::<crate::events::AppEventQueue>(window, |this, _, cx| {
-                // Peek, never drain — AppRoot owns the drain. Registration order
+                // Peek, never drain: AppRoot owns the drain. Registration order
                 // is load-bearing: this page is constructed before that observer.
                 let mut appended = false;
                 if let Some(queue) = cx.try_global::<crate::events::AppEventQueue>() {

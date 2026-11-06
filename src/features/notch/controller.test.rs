@@ -79,13 +79,14 @@ async fn external_float_close_clears_state(cx: &TestAppContext) {
     });
 }
 
+#[cfg(not(target_os = "macos"))]
 fn demo_window(cx: &TestAppContext) -> gpui_kit::AnyWindowHandle {
     let handle = cx
         .read(|cx| crate::ui::floating::floating_snapshot(cx))
-        .first()
+        .into_iter()
+        .next()
         .expect("the demo float must be registered")
-        .handle
-        .clone();
+        .handle;
     let crate::ui::floating::FloatingHandle::Native(window) = handle else {
         panic!("the demo float must spawn as a native window");
     };
@@ -109,9 +110,8 @@ async fn hover_expands_the_demo_and_its_close_button_dismisses_it(cx: &TestAppCo
     // Hover the panel body (window-local y > the h_8 float header).
     vcx.simulate_mouse_move(point(px(180.), px(120.)), None, Modifiers::none());
     vcx.update(|window, cx| window.draw(cx).clear(cx));
-    // The expanded action row sits under the widget stack (h_8 shell header
-    // plus the stack), right-aligned. Nothing else in that strip closes the
-    // window, so scanning it proves the close button is on-screen and works.
+    // Only the close button closes the window from the action strip below the
+    // header and widget stack, so a hit there proves it rendered on-screen.
     for x in [330., 316., 300.] {
         vcx.simulate_click(point(px(x), px(162.)), Modifiers::none());
         if cx

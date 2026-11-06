@@ -33,7 +33,7 @@ impl MetricsWidget {
 
 impl Render for MetricsWidget {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let samples: Vec<Sample> = self.metrics.read(cx).samples().iter().cloned().collect();
+        let samples: Vec<Sample> = self.metrics.read(cx).samples().iter().copied().collect();
         let last = samples.last().copied();
         let muted = cx.theme().muted_foreground;
         let spark_color = cx.theme().chart_2;

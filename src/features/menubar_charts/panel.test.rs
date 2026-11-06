@@ -1,17 +1,17 @@
 use gpui_kit::component::WindowExt as _;
-use gpui_kit::{TestAppContext, WindowOptions};
+use gpui_kit::{AnyWindowHandle, App, TestAppContext, WindowOptions};
 
 use super::ChartsPanel;
 use crate::app::window::RootWindow;
 use crate::features::menubar_charts::open_sheet;
 
-fn boot(cx: &mut gpui_kit::App) {
+fn boot(cx: &mut App) {
     gpui_kit::init(cx);
     crate::ui::floating::init(cx);
     crate::features::menubar_charts::init(cx);
 }
 
-fn open_root_window(cx: &gpui_kit::TestAppContext) -> gpui_kit::AnyWindowHandle {
+fn open_root_window(cx: &TestAppContext) -> AnyWindowHandle {
     let (handle, _) = cx
         .update(|cx| gpui_kit::open_window(WindowOptions::default(), cx, ChartsPanel::view))
         .expect("test window must open");
@@ -22,10 +22,9 @@ fn open_root_window(cx: &gpui_kit::TestAppContext) -> gpui_kit::AnyWindowHandle 
 #[gpui_kit::test]
 async fn panel_opens_in_a_window_and_samples_on_direct_tick(cx: &TestAppContext) {
     cx.update(gpui_kit::init);
-    let opened =
-        cx.update(|cx| gpui_kit::open_window(WindowOptions::default(), cx, ChartsPanel::view));
-    assert!(opened.is_ok());
-    let (_, panel) = opened.unwrap();
+    let (_, panel) = cx
+        .update(|cx| gpui_kit::open_window(WindowOptions::default(), cx, ChartsPanel::view))
+        .expect("test window must open");
     cx.update(|cx| {
         panel.update(cx, |panel, cx| {
             panel.metrics().update(cx, |m, cx| m.tick(cx));

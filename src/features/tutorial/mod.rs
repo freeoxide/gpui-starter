@@ -10,10 +10,12 @@
 //! and the tour bullet in docs/accessibility-checklist.md.
 
 mod controller;
-pub(crate) use controller::TourHandle;
 mod mask;
 mod target;
 mod tour;
 
+pub(crate) use controller::TourHandle;
 pub use controller::{TourController, initialize, start};
 pub use target::target;
+
+pub(crate) const LOG: &str = "gpui_starter::tutorial";

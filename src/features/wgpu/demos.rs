@@ -420,9 +420,8 @@ fn buffer_resource(buffer: &wgpu::Buffer) -> wgpu::BindingResource<'_> {
     })
 }
 
-/// Owns every wgpu pipeline and buffer for the three demos. Reached only
-/// from background tasks; mutation is serialized by the page's one-frame-
-/// in-flight rule through the enclosing `Mutex`.
+/// Every wgpu pipeline and buffer for the three demos; reached only from
+/// background tasks, serialized by the page's one-frame-in-flight rule.
 pub(in crate::features::wgpu) struct SceneRenderer {
     engine: Arc<WgpuEngine>,
     frame_params: wgpu::Buffer,

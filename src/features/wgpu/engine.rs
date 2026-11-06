@@ -121,12 +121,10 @@ impl WgpuEngine {
         })
     }
 
-    /// Blocking [`Self::new`] bounded by `INIT_DEADLINE`: the async init
-    /// runs on a dedicated thread the caller waits on, so a hung
-    /// `request_adapter` cannot outlive its caller. On timeout the init
-    /// thread is detached (it cannot be cancelled) and an init-timeout
-    /// error is returned. Blocks up to `INIT_DEADLINE`; never call from
-    /// a UI thread.
+    /// Blocking [`Self::new`] bounded by `INIT_DEADLINE`: the init runs on
+    /// a dedicated thread, so a hung `request_adapter` cannot outlive its
+    /// caller; on timeout that thread is detached. Never call from a UI
+    /// thread.
     pub fn new_fenced() -> Result<Self> {
         Self::new_fenced_with_deadline(INIT_DEADLINE)
     }
@@ -175,13 +173,9 @@ impl WgpuEngine {
     }
 
     /// Runs one unit of blocking render/readback work on a dedicated OS
-    /// thread bounded by `FRAME_DEADLINE`, outside wgpu's own calls (the
-    /// 30s waits inside `read_texture_bytes` stay as defense in depth).
-    /// On a missed deadline the engine is poisoned: this call returns a
-    /// deadline error, every later fenced call refuses work without
-    /// touching wgpu, and the wedged thread stays detached (one leaked
-    /// thread per poisoned engine). Blocks the caller up to the
-    /// deadline; never call from a UI thread.
+    /// thread bounded by `FRAME_DEADLINE`. A missed deadline poisons the
+    /// engine: later fenced calls refuse work without touching wgpu, and
+    /// the wedged thread stays detached. Never call from a UI thread.
     pub fn render_fenced<T, F>(&self, work: F) -> Result<T>
     where
         F: FnOnce() -> Result<T> + Send + 'static,
@@ -226,9 +220,8 @@ impl WgpuEngine {
     }
 
     /// Reads a COPY_SRC RGBA8 2D texture as tightly packed rows (width*4
-    /// per row). BLOCKING: submits, maps, and polls; background thread
-    /// only. The readback buffer is reused per size, so calls on one
-    /// engine serialize behind its lock.
+    /// per row). BLOCKING; background thread only. The readback buffer is
+    /// reused per size, so calls on one engine serialize behind its lock.
     pub fn read_texture_bytes(
         &self,
         texture: &wgpu::Texture,

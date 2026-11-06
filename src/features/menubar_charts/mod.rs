@@ -24,6 +24,8 @@ use gpui_kit::App;
 
 use crate::capabilities::Capability;
 
+pub(crate) const LOG: &str = "gpui_starter::menubar_charts";
+
 /// Register capability rows. Call once from `app::init` after
 /// `capabilities::initialize`. Idempotent; no key bindings.
 pub fn init(cx: &mut App) {

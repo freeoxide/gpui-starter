@@ -44,9 +44,7 @@ impl NotchFloaterView {
     }
 
     fn start_clock(&mut self, cx: &mut Context<Self>) {
-        let now = chrono::Local::now();
-        self.minute = now.format("%H:%M").to_string();
-        self.date = now.format("%a, %b %e").to_string();
+        (self.minute, self.date) = clock_strings();
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(Duration::from_secs(1)).await;
@@ -59,9 +57,7 @@ impl NotchFloaterView {
     }
 
     fn tick(&mut self, cx: &mut Context<Self>) {
-        let now = chrono::Local::now();
-        let minute = now.format("%H:%M").to_string();
-        let date = now.format("%a, %b %e").to_string();
+        let (minute, date) = clock_strings();
         if minute != self.minute || date != self.date {
             self.minute = minute;
             self.date = date;
@@ -195,4 +191,12 @@ impl Focusable for NotchFloaterView {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
+}
+
+fn clock_strings() -> (String, String) {
+    let now = chrono::Local::now();
+    (
+        now.format("%H:%M").to_string(),
+        now.format("%a, %b %e").to_string(),
+    )
 }

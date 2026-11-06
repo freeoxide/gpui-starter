@@ -1,8 +1,7 @@
-//! Deadline fence around blocking wgpu calls. A wedged GPU driver hangs
-//! below wgpu's own 30-second waits, so every fenced call runs on a
-//! dedicated OS thread bounded here. A missed deadline detaches that
-//! thread (it cannot be cancelled; at most one leaked thread per poisoned
-//! engine) and trips a poison latch that refuses further fenced work.
+//! Deadline fence around blocking wgpu calls: a wedged driver hangs below
+//! wgpu's own 30-second waits, so fenced calls run on a bounded dedicated
+//! thread. A missed deadline detaches that thread and trips a poison
+//! latch refusing further fenced work.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -65,11 +64,10 @@ impl FenceError {
     }
 }
 
-/// Runs `work` on a dedicated OS thread, waiting at most `deadline` for
-/// its result. On timeout the thread is left detached: a wedged driver
-/// cannot be cancelled, so callers must poison their state and refuse
-/// further work rather than wait. Blocks the caller; never run from a
-/// UI thread.
+/// Runs `work` on a dedicated OS thread, waiting at most `deadline`. On
+/// timeout the thread stays detached (a wedged driver cannot be
+/// cancelled); callers must poison and refuse further work. Never run
+/// from a UI thread.
 pub(in crate::features::wgpu) fn run_bounded<T, F>(
     name: &'static str,
     deadline: Duration,
@@ -119,9 +117,8 @@ fn panic_message(joined: thread::Result<()>) -> String {
     }
 }
 
-/// The engine's render fence: a one-shot poison latch plus the fenced
-/// runner. The first call to miss its deadline trips the latch; every
-/// later call refuses work without running it.
+/// One-shot poison latch: the first call to miss its deadline trips the
+/// latch, and every later call refuses work without running it.
 pub(in crate::features::wgpu) struct EngineFence {
     tripped: AtomicBool,
 }
@@ -139,9 +136,8 @@ impl EngineFence {
     }
 
     /// Runs `work` on a dedicated thread bounded by `deadline`, refusing
-    /// work once poisoned and poisoning on a missed deadline. The wedged
-    /// thread stays detached; that leak is bounded by the latch refusing
-    /// every later call.
+    /// work once poisoned and poisoning on a missed deadline; the latch
+    /// bounds the leak by refusing every later call.
     pub(in crate::features::wgpu) fn run<T, F>(
         &self,
         deadline: Duration,

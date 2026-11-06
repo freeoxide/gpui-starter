@@ -17,12 +17,10 @@ pub(crate) fn anchor(x: f64, scale: f32, visible: Bounds<Pixels>) -> FloatAnchor
     }
 }
 
-/// macOS path: toggle the anchored popover. Closes it if our id is in
-/// `floating_snapshot`; otherwise spawns at `FloatLevel::AlwaysOnTop`,
-/// `focus(false)`, anchored under the tray icon's physical x (top-left
-/// origin, as delivered by TrayIconEvent::Click; macOS flips to top-left
-/// before to_physical). Returns false when the anchor or spawn fails (no
-/// root window for the scale factor, or `spawn_floating` errored).
+/// macOS: toggle the anchored popover. Closes it when its id is registered;
+/// otherwise spawns it always-on-top, unfocused, under the tray icon's
+/// physical `x` (top-left origin: TrayIconEvent::Click flips before
+/// to_physical). Returns false without a root window/display or on spawn error.
 pub fn toggle_popover(x: f64, cx: &mut App) -> bool {
     if let Some(entry) = floating_snapshot(cx)
         .into_iter()
@@ -32,25 +30,15 @@ pub fn toggle_popover(x: f64, cx: &mut App) -> bool {
         return true;
     }
     let Some(window) = crate::app::window::root_window(cx) else {
-        tracing::warn!(
-            target: "gpui_starter::menubar_charts",
-            "no root window recorded; charts popover ignored"
-        );
+        tracing::warn!(target: super::LOG, "no root window recorded; charts popover ignored");
         return false;
     };
-    let scale = window.update(cx, |_, window, _| window.scale_factor());
-    let Ok(scale) = scale else {
-        tracing::warn!(
-            target: "gpui_starter::menubar_charts",
-            "root window unavailable; charts popover ignored"
-        );
+    let Ok(scale) = window.update(cx, |_, window, _| window.scale_factor()) else {
+        tracing::warn!(target: super::LOG, "root window unavailable; charts popover ignored");
         return false;
     };
     let Some(visible) = cx.primary_display().map(|display| display.visible_bounds()) else {
-        tracing::warn!(
-            target: "gpui_starter::menubar_charts",
-            "no primary display; charts popover ignored"
-        );
+        tracing::warn!(target: super::LOG, "no primary display; charts popover ignored");
         return false;
     };
     let spec = FloatingSpec::new(
@@ -68,11 +56,7 @@ pub fn toggle_popover(x: f64, cx: &mut App) -> bool {
     ) {
         Ok(_) => true,
         Err(err) => {
-            tracing::warn!(
-                target: "gpui_starter::menubar_charts",
-                error = %err,
-                "charts popover spawn failed"
-            );
+            tracing::warn!(target: super::LOG, error = %err, "charts popover spawn failed");
             false
         }
     }

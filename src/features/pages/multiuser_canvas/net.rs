@@ -79,9 +79,8 @@ async fn socket_loop(
     event_tx: flume::Sender<InboundEvent>,
     cmd_rx: flume::Receiver<NetCommand>,
 ) {
-    let client = match connect_with_retry(url, hello, &event_tx, &cmd_rx).await {
-        Some(client) => client,
-        None => return,
+    let Some(client) = connect_with_retry(url, hello, &event_tx, &cmd_rx).await else {
+        return;
     };
     let _ = event_tx.send(InboundEvent::Connected);
 

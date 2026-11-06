@@ -59,12 +59,6 @@ pub(crate) struct ImageEditorDocument {
 
 impl EventEmitter<ImageEditorEvent> for ImageEditorDocument {}
 
-impl Default for ImageEditorDocument {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ImageEditorDocument {
     pub(crate) fn new() -> Self {
         Self {

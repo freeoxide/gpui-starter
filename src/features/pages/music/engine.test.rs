@@ -115,8 +115,8 @@ fn ticks_advance_position_while_playing(cx: &mut TestAppContext) {
     cx.read(|cx| assert_eq!(engine.read(cx).position_ms(), 750));
 }
 
-// PlayerEngine::new spawns the tick; its entity updates are legal only from
-// that task once the timer elapses, never at spawn or construction time.
+// The tick task spawns with the engine; its entity updates are legal only
+// once the timer elapses, never at construction time.
 #[gpui_kit::test]
 fn engine_updates_only_when_the_tick_timer_fires(cx: &mut TestAppContext) {
     let engine = engine(cx);

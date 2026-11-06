@@ -87,10 +87,7 @@ impl Render for ColorPaletteView {
                             } else {
                                 Toggled::False
                             })
-                            .on_click({
-                                let hex_str = hex_str.clone();
-                                move |_, _, cx| emit_color_change(hex_str.clone(), cx)
-                            })
+                            .on_click(move |_, _, cx| emit_color_change(hex_str.clone(), cx))
                     })),
             )
             .child(

@@ -1,5 +1,5 @@
 use gpui_kit::component::{Selectable, button::Button};
-use gpui_kit::*;
+use gpui_kit::prelude::*;
 use gpui_query::core::QueryStatus;
 
 use super::dashboard::QueryDevToolsV2Page;

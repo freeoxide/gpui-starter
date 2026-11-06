@@ -35,7 +35,7 @@ impl DiagnosticsPage {
             track::<accessibility::AccessibilitySnapshot>(window, cx),
             track::<error_surface::ErrorSurfaceState>(window, cx),
             track::<crash_report::CrashReportSnapshot>(window, cx),
-            track::<crate::services::auth_ui::AuthUiState>(window, cx),
+            track::<crate::auth_ui::AuthUiState>(window, cx),
         ];
         Self { _subscriptions }
     }
@@ -80,22 +80,22 @@ impl Render for DiagnosticsPage {
                     .outline()
                     .label(crate::i18n::localize("diagnostics_copy"))
                     .on_click(|_, _, cx| {
-                        if let Err(error) = crate::desktop_actions::copy_diagnostics(cx) {
+                        if let Err(error) = desktop_actions::copy_diagnostics(cx) {
                             tracing::warn!(
                                 target: "gpui_starter::diagnostics",
                                 %error,
                                 "copy diagnostics failed"
                             );
-                            crate::error_surface::report(
+                            error_surface::report(
                                 format!(
                                     "{}: {error}",
                                     crate::i18n::localize("command_copy_diagnostics_failed")
                                 ),
                                 crate::errors::AppErrorSeverity::Error,
-                                crate::error_surface::ErrorCategory::System,
+                                error_surface::ErrorCategory::System,
                                 vec![
-                                    crate::error_surface::ErrorAction::Retry,
-                                    crate::error_surface::ErrorAction::Dismiss,
+                                    error_surface::ErrorAction::Retry,
+                                    error_surface::ErrorAction::Dismiss,
                                 ],
                                 cx,
                             );
@@ -107,22 +107,22 @@ impl Render for DiagnosticsPage {
                     .outline()
                     .label(crate::i18n::localize("diagnostics_open_logs"))
                     .on_click(|_, _, cx| {
-                        if let Err(error) = crate::desktop_actions::open_logs_folder(cx) {
+                        if let Err(error) = desktop_actions::open_logs_folder(cx) {
                             tracing::warn!(
                                 target: "gpui_starter::diagnostics",
                                 %error,
                                 "open logs folder failed"
                             );
-                            crate::error_surface::report(
+                            error_surface::report(
                                 format!(
                                     "{}: {error}",
                                     crate::i18n::localize("command_open_logs_failed")
                                 ),
                                 crate::errors::AppErrorSeverity::Error,
-                                crate::error_surface::ErrorCategory::Storage,
+                                error_surface::ErrorCategory::Storage,
                                 vec![
-                                    crate::error_surface::ErrorAction::OpenSettings,
-                                    crate::error_surface::ErrorAction::Dismiss,
+                                    error_surface::ErrorAction::OpenSettings,
+                                    error_surface::ErrorAction::Dismiss,
                                 ],
                                 cx,
                             );
@@ -134,8 +134,8 @@ impl Render for DiagnosticsPage {
                     .outline()
                     .label(crate::i18n::localize("diagnostics_dismiss_latest_error"))
                     .on_click(|_, _, cx| {
-                        if let Some(error) = crate::error_surface::latest(cx) {
-                            crate::error_surface::dismiss(error.id, cx);
+                        if let Some(error) = error_surface::latest(cx) {
+                            error_surface::dismiss(error.id, cx);
                         }
                     }),
             )
@@ -144,7 +144,7 @@ impl Render for DiagnosticsPage {
                     .outline()
                     .label(crate::i18n::localize("diagnostics_retry_crash_upload"))
                     .on_click(|_, _, cx| {
-                        crate::crash_report::upload_pending_reports(cx);
+                        crash_report::upload_pending_reports(cx);
                     }),
             )
             .when(cfg!(debug_assertions), |this| {

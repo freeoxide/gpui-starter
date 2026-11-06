@@ -221,13 +221,13 @@ impl ModelRenderer {
         self.index_count = index_count;
     }
 
-    fn reconfigure(&mut self, width: u32, height: u32) -> bool {
+    fn reconfigure(&mut self, width: u32, height: u32) {
         if self
             .targets
             .as_ref()
             .is_some_and(|targets| targets.width == width && targets.height == height)
         {
-            return false;
+            return;
         }
         let device = self.engine.device();
         let depth = device.create_texture(&wgpu::TextureDescriptor {
@@ -265,7 +265,6 @@ impl ModelRenderer {
             out_view: out.create_view(&wgpu::TextureViewDescriptor::default()),
             out,
         });
-        true
     }
 
     /// Renders one frame and reads it back as tightly packed RGBA bytes.

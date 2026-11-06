@@ -1,20 +1,25 @@
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::*;
-use gpui_kit::{Bounds, Entity, TestAppContext, VisualTestContext, Window, div, point, px, size};
-
-use super::InfiniteCanvasPage;
-use super::minimap::{
-    MiniProjection, fit_projection, minimap_probe, project_doc_to_minimap, unproject_minimap_to_doc,
+use gpui_kit::{
+    Bounds, DevicePixels, Entity, Hsla, Modifiers, Pixels, Point, Size, TestAppContext,
+    VisualTestContext, Window, div, point, px, size,
 };
 
-fn rect(x: f32, y: f32, w: f32, h: f32) -> Bounds<gpui_kit::Pixels> {
+use super::InfiniteCanvasPage;
+use super::content::{NoteField, PALETTE_LEN};
+use super::minimap::{
+    MiniProjection, fit_projection, minimap_probe, project_doc_to_minimap, rasterize_dots,
+    unproject_minimap_to_doc,
+};
+
+fn rect(x: f32, y: f32, w: f32, h: f32) -> Bounds<Pixels> {
     Bounds {
         origin: point(px(x), px(y)),
         size: size(px(w), px(h)),
     }
 }
 
-fn assert_px_near(actual: gpui_kit::Pixels, expected: gpui_kit::Pixels) {
+fn assert_px_near(actual: Pixels, expected: Pixels) {
     assert!(
         (actual.as_f32() - expected.as_f32()).abs() < 0.001,
         "expected ~{expected:?}, got {actual:?}"
@@ -77,7 +82,7 @@ fn mounted_host(cx: &mut TestAppContext) -> (Entity<InfiniteCanvasPage>, VisualT
     });
     let host = handle.root(cx).unwrap();
     let page = cx.read(|cx| host.read(cx).page.clone());
-    let mut cx = VisualTestContext::from_window(handle.into(), &cx);
+    let mut cx = VisualTestContext::from_window(handle.into(), cx);
     cx.update(|window, cx| window.draw(cx).clear(cx));
     (page, cx)
 }
@@ -85,7 +90,7 @@ fn mounted_host(cx: &mut TestAppContext) -> (Entity<InfiniteCanvasPage>, VisualT
 fn assert_doc_at_local_center(
     cx: &VisualTestContext,
     page: &Entity<InfiniteCanvasPage>,
-    expected: gpui_kit::Point<gpui_kit::Pixels>,
+    expected: Point<Pixels>,
 ) {
     let state = cx.read(|cx| page.read(cx).state.clone());
     let viewport = cx.read(|cx| page.read(cx).viewport);
@@ -110,7 +115,7 @@ fn clicking_the_minimap_center_jumps_the_viewport_to_the_field_center(cx: &mut T
     let (page, mut cx) = mounted_host(cx);
     let span_center = cx.read(|cx| page.read(cx).field.span().center());
     let click = cx.read(|cx| page.read(cx).minimap_bounds.center());
-    cx.simulate_click(click, gpui_kit::Modifiers::none());
+    cx.simulate_click(click, Modifiers::none());
     assert_doc_at_local_center(&cx, &page, span_center);
 }
 
@@ -123,7 +128,7 @@ fn clicking_an_interior_minimap_point_jumps_there(cx: &mut TestAppContext) {
     });
     let probe_doc = span.origin + point(span.size.width, span.size.height) * 0.25;
     let click = project_doc_to_minimap(probe_doc, &fit_projection(span, minimap_bounds));
-    cx.simulate_click(click, gpui_kit::Modifiers::none());
+    cx.simulate_click(click, Modifiers::none());
     assert_doc_at_local_center(&cx, &page, probe_doc);
 }
 
@@ -151,10 +156,6 @@ fn regenerate_re_rasterizes_the_minimap_dots(cx: &mut TestAppContext) {
 
 #[test]
 fn rasterized_dots_paint_at_projected_positions_in_palette_colors() {
-    use super::content::{NoteField, PALETTE_LEN};
-    use super::minimap::rasterize_dots;
-    use gpui_kit::{DevicePixels, Hsla, Size};
-
     let field = NoteField { seed: 7, count: 4 };
     let palette: [Hsla; PALETTE_LEN] = [
         Hsla::red(),
@@ -171,15 +172,12 @@ fn rasterized_dots_paint_at_projected_positions_in_palette_colors() {
         &pr,
         minimap.origin,
         Size {
-            width: gpui_kit::px(160.),
-            height: gpui_kit::px(96.),
+            width: px(160.),
+            height: px(96.),
         },
         1.,
     );
-    assert_eq!(
-        image.size(0),
-        gpui_kit::size(DevicePixels(160), DevicePixels(96))
-    );
+    assert_eq!(image.size(0), size(DevicePixels(160), DevicePixels(96)));
     let frame = image.as_bytes(0).unwrap();
     let px_at = |x: u32, y: u32| {
         let start = ((y * 160 + x) * 4) as usize;

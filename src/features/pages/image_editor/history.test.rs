@@ -7,8 +7,7 @@ use super::{
     DocSnapshot, EditLabel, EditOp, EditorHistory, HISTORY_ENTRY_LIMIT, HISTORY_PIXEL_BUDGET,
 };
 use crate::features::pages::image_editor::document::FilterSettings;
-use crate::ui::canvas::ShapeId;
-use crate::ui::canvas::{CanvasShape, ShapeStyle};
+use crate::ui::canvas::{CanvasShape, ShapeId, ShapeStyle};
 
 fn snapshot(base: Arc<RgbaImage>, annotations: usize) -> DocSnapshot {
     DocSnapshot {

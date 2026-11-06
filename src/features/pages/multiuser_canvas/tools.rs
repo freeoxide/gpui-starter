@@ -40,7 +40,7 @@ impl PenTool {
     fn report_cursor(&self, event: &CanvasPointerEvent, cx: &mut Context<CanvasState>) {
         let doc = event.doc_position;
         self.session
-            .update(cx, |session, cx| session.set_own_cursor(doc, cx));
+            .update(cx, |session, _| session.set_own_cursor(doc));
     }
 }
 
@@ -138,7 +138,7 @@ impl SelectTool {
     fn report_cursor(&self, event: &CanvasPointerEvent, cx: &mut Context<CanvasState>) {
         let doc = event.doc_position;
         self.session
-            .update(cx, |session, cx| session.set_own_cursor(doc, cx));
+            .update(cx, |session, _| session.set_own_cursor(doc));
     }
 }
 

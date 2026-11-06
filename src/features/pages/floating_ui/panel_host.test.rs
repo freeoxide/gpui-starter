@@ -1,6 +1,5 @@
-// Do NOT `use super::*` here: panel_host.rs does `use gpui_kit::{prelude::*, *}`,
-// which re-exports gpui's `test` proc-macro and turns a bare `#[test]` (emitted
-// by `#[gpui_kit::test]`) into infinite recursion. Import only what is needed.
+// No `use super::*`: gpui's `test` proc-macro glob would make bare `#[test]`
+// recurse infinitely. Import only what we need.
 use std::collections::BTreeMap;
 
 use gpui_kit::prelude::*;

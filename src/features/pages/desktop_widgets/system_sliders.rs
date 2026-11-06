@@ -166,7 +166,7 @@ impl SystemSlidersWidget {
                             div()
                                 .text_sm()
                                 .text_color(cx.theme().foreground)
-                                .child(format!("{:.0}%", percent)),
+                                .child(format!("{percent:.0}%")),
                         ),
                     )
                     .child(Slider::new(slider).horizontal())

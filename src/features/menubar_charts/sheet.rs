@@ -7,10 +7,7 @@ use gpui_kit::{App, ParentElement, px};
 /// this never swaps out a sheet it did not open.
 pub fn open_sheet(cx: &mut App) -> bool {
     let Some(handle) = crate::app::window::root_window(cx) else {
-        tracing::warn!(
-            target: "gpui_starter::menubar_charts",
-            "no root window recorded; charts sheet ignored"
-        );
+        tracing::warn!(target: super::LOG, "no root window recorded; charts sheet ignored");
         return false;
     };
     handle

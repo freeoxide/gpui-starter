@@ -66,7 +66,7 @@ f -3 -2 -1
     // The explicit vn normal (0,0,1) survives the parser.
     assert_eq!(
         [row(&mesh, 0)[3], row(&mesh, 0)[4], row(&mesh, 0)[5]],
-        [0.0, 0.0, 1.0,]
+        [0.0, 0.0, 1.0]
     );
 }
 

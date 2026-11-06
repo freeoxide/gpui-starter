@@ -63,10 +63,7 @@ fn shape_ids(cx: &TestAppContext, canvas: &Entity<CanvasState>) -> Vec<ShapeId> 
 #[gpui_kit::test]
 fn page_constructs_and_renders_a_frame(cx: &mut TestAppContext) {
     let (page, cx) = open_page(cx);
-    let (canvas, session) = {
-        let cx_ref = &cx as &TestAppContext;
-        page_entities(cx_ref, &page)
-    };
+    let (canvas, session) = page_entities(&cx, &page);
     cx.read(|cx| {
         assert_eq!(session.read(cx).status(), Status::Demo);
         assert_eq!(canvas.read(cx).active_tool_id(), "pen");
@@ -103,10 +100,7 @@ fn seeded_published_shape(
 #[gpui_kit::test]
 fn delete_selection_removes_locally_and_publishes_the_delete(cx: &mut TestAppContext) {
     let (page, mut cx) = open_page(cx);
-    let (canvas, session) = {
-        let cx_ref = &cx as &TestAppContext;
-        page_entities(cx_ref, &page)
-    };
+    let (canvas, session) = page_entities(&cx, &page);
     let shape_id = seeded_published_shape(&mut cx, &canvas, &session);
     let wire_key: ShapeKey = cx.read(|cx| {
         session
@@ -151,10 +145,7 @@ fn delete_selection_removes_locally_and_publishes_the_delete(cx: &mut TestAppCon
 #[gpui_kit::test]
 fn demo_peers_then_local_pen_stroke(cx: &mut TestAppContext) {
     let (page, mut cx) = open_page(cx);
-    let (canvas, session) = {
-        let cx_ref = &cx as &TestAppContext;
-        page_entities(cx_ref, &page)
-    };
+    let (canvas, session) = page_entities(&cx, &page);
 
     for _ in 0..150 {
         cx.executor().advance_clock(Duration::from_millis(80));
@@ -187,7 +178,7 @@ fn demo_peers_then_local_pen_stroke(cx: &mut TestAppContext) {
         Modifiers::none(),
     );
 
-    let (new_path, has_wire_key) = cx.read(|cx| {
+    let has_wire_key = cx.read(|cx| {
         let state = canvas.read(cx);
         let mine = state
             .document()
@@ -195,10 +186,9 @@ fn demo_peers_then_local_pen_stroke(cx: &mut TestAppContext) {
             .find(|(_, id, shape)| {
                 !before.contains(id) && matches!(shape, CanvasShape::Path { .. })
             })
-            .map(|(_, id, _)| id);
-        let mine = mine.expect("pen stroke committed to the document");
-        (mine, session.read(cx).wire_key(mine).is_some())
+            .map(|(_, id, _)| id)
+            .expect("pen stroke committed to the document");
+        session.read(cx).wire_key(mine).is_some()
     });
     assert!(has_wire_key, "the local stroke must carry a wire key");
-    let _ = new_path;
 }

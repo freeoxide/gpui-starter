@@ -83,29 +83,12 @@ impl SystemControlsPage {
             cx.observe(&brightness, |this, slider, cx| {
                 this.commit_if_drifted(SliderTarget::Brightness, &slider, cx);
             }),
-            cx.subscribe(&volume, |this, _, event: &SliderEvent, cx| match event {
-                SliderEvent::Change(_) => {
-                    this.suppress_until = Some(suppress_window());
-                    cx.notify();
-                }
-                SliderEvent::Release(value) => {
-                    crate::system_controls::set_volume(value.start(), cx);
-                    this.suppress_until = Some(suppress_window());
-                }
+            cx.subscribe(&volume, |this, _, event: &SliderEvent, cx| {
+                this.on_slider_event(SliderTarget::Volume, event, cx)
             }),
-            cx.subscribe(
-                &brightness,
-                |this, _, event: &SliderEvent, cx| match event {
-                    SliderEvent::Change(_) => {
-                        this.suppress_until = Some(suppress_window());
-                        cx.notify();
-                    }
-                    SliderEvent::Release(value) => {
-                        crate::system_controls::set_brightness(value.start(), cx);
-                        this.suppress_until = Some(suppress_window());
-                    }
-                },
-            ),
+            cx.subscribe(&brightness, |this, _, event: &SliderEvent, cx| {
+                this.on_slider_event(SliderTarget::Brightness, event, cx)
+            }),
             cx.observe_global_in::<SystemControlsSnapshot>(window, |this, window, cx| {
                 this.sync_sliders(window, cx);
                 cx.notify();
@@ -119,6 +102,24 @@ impl SystemControlsPage {
             brightness,
             suppress_until: None,
             _subscriptions,
+        }
+    }
+
+    fn on_slider_event(
+        &mut self,
+        target: SliderTarget,
+        event: &SliderEvent,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            SliderEvent::Change(_) => {
+                self.suppress_until = Some(suppress_window());
+                cx.notify();
+            }
+            SliderEvent::Release(value) => {
+                target.apply(value.start(), cx);
+                self.suppress_until = Some(suppress_window());
+            }
         }
     }
 
@@ -186,7 +187,7 @@ impl SystemControlsPage {
                         .gap_2()
                         .child(value_row(
                             crate::i18n::localize("system_controls_charge"),
-                            format!("{}% · {}", (battery.charge * 100.).round(), state_text),
+                            format!("{}% · {state_text}", (battery.charge * 100.).round()),
                             cx,
                         ))
                         .child(value_row(

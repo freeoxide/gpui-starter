@@ -1,12 +1,10 @@
-//! Removable analytics workspace page. `AnalyticsPage` is the only public
-//! surface via `views::AnalyticsPage`; everything else stays private to the
-//! module. Removal = delete this directory and revert its seam touches: the
+//! Removable analytics workspace page; `AnalyticsPage` is its only public
+//! item. Removal = delete this directory and revert its seam touches: the
 //! `mod analytics;`/`pub use` lines in features/pages/mod.rs, the
-//! Page::Analytics arms and all() entry in shell/page.rs, the VALID_HOSTS
-//! entry in shell/route.rs, the AppRoot wiring in
-//! shell/root/app_root/state.rs, the page count in tests/e2e_navigation.rs,
-//! and the nav_analytics + analytics_* keys in locales/en.yml and
-//! locales/zh-CN.yml.
+//! Page::Analytics arms and all() entry in shell/page.rs, the AppRoot wiring
+//! in shell/root/app_root/state.rs, the Page::Analytics entries in
+//! tests/e2e_navigation.rs, and the nav_analytics + analytics_* keys in
+//! locales/en.yml and locales/zh-CN.yml.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -241,10 +239,10 @@ impl AnalyticsPage {
     }
 
     fn reload(&mut self, cx: &mut Context<Self>) {
-        self.phase = if !self.committed {
-            Phase::Initial
-        } else {
+        self.phase = if self.committed {
             Phase::Refreshing
+        } else {
+            Phase::Initial
         };
         self.table
             .update(cx, |table, _| table.delegate_mut().set_loading(true));
@@ -393,7 +391,7 @@ impl AnalyticsPage {
                         .icon(IconName::RotateCw)
                         .label(localize("analytics_retry"))
                         .on_click(cx.listener(|this, _, _, cx| {
-                            this.preview = PreviewStateToggle::Live.into_state();
+                            this.preview = PreviewState::Live;
                             this.reload(cx);
                         })),
                 ),

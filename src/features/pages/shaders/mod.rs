@@ -196,19 +196,15 @@ impl ShaderCanvasPage {
     }
 
     fn wire_subscriptions(&mut self, cx: &mut Context<Self>) {
-        let canvas = self.canvas.clone();
-        let shader = self.shader.clone();
-        let slider = self.slider.clone();
-        let mut subscriptions = vec![
-            cx.observe(&canvas, |_, _, cx| cx.notify()),
-            cx.observe(&shader, |_, _, cx| cx.notify()),
+        self._subscriptions = vec![
+            cx.observe(&self.canvas, |_, _, cx| cx.notify()),
+            cx.observe(&self.shader, |_, _, cx| cx.notify()),
+            cx.subscribe(&self.slider, |this, _, event, cx| {
+                if let SliderEvent::Change(SliderValue::Single(value)) = event {
+                    this.shader.update(cx, |s, cx| s.set_slider(*value, cx));
+                }
+            }),
         ];
-        subscriptions.push(cx.subscribe(&slider, |this, _, event, cx| {
-            if let SliderEvent::Change(SliderValue::Single(value)) = event {
-                this.shader.update(cx, |s, cx| s.set_slider(*value, cx));
-            }
-        }));
-        self._subscriptions = subscriptions;
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -349,12 +345,11 @@ impl ShaderCanvasPage {
                 },
                 cx,
             );
-            let shape = s.edit_document(cx, |d| {
+            s.edit_document(cx, |d| {
                 d.clear();
                 let layer = d.add_layer();
                 d.add_shape(layer, CanvasShape::image(doc_bounds(spec), blank_image()))
-            });
-            shape
+            })
         });
         // reset_view would land after the initial fit consumed it; a fresh
         // fit request re-centers on the next ticker paint instead.

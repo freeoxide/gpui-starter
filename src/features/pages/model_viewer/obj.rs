@@ -1,7 +1,7 @@
 //! Minimal OBJ parser: `v`/`vn`/`vt`/`f` statements with fan
 //! triangulation. Everything else in the stream (groups, materials,
 //! comments, free-form curves) is skipped. Positions are recentered on the
-//! origin and scaled so the longest axis spans 2.0 units — the viewer's
+//! origin and scaled so the longest axis spans 2.0 units: the viewer's
 //! camera orbits a fixed shell and needs a model-normalized scene.
 
 use crate::features::wgpu::encode_f32_rows;
@@ -87,8 +87,8 @@ pub(in crate::features::pages::model_viewer) fn parse(source: &str) -> Result<Me
     })
 }
 
-/// Torus knot-free built-in demo mesh: a plain torus (major 1.0, minor
-/// 0.4) so the viewer always has something on screen before a load.
+/// Built-in demo mesh: a plain torus (major 1.0, minor 0.4) so the viewer
+/// always has something on screen before a load.
 pub(in crate::features::pages::model_viewer) fn builtin_torus() -> Mesh {
     let (major_segments, minor_segments) = (48usize, 24usize);
     let (major_radius, minor_radius) = (1.0f32, 0.4f32);

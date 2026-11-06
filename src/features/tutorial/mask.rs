@@ -101,7 +101,7 @@ pub(crate) fn paint_spotlight(
     match builder.build() {
         Ok(path) => window.paint_path(path, cx.theme().overlay),
         Err(error) => tracing::warn!(
-            target: "gpui_starter::tutorial",
+            target: super::LOG,
             %error,
             "spotlight mask path failed to build; skipping paint"
         ),

@@ -1,8 +1,8 @@
 use gpui_kit::*;
 
 use crate::{
-    accessibility, app_state, capabilities, commands, connectivity, crash_report, desktop_actions,
-    error_surface,
+    accessibility, app_state, auth_ui, capabilities, commands, connectivity, crash_report,
+    desktop_actions, error_surface,
     lifecycle::{LifecycleStage, LifecycleState},
     logging, notifications, secure_storage, session, shortcuts, storage, telemetry, undo_stack,
 };
@@ -26,7 +26,7 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
     let shortcuts = shortcuts::snapshot(cx);
     let desktop_actions = desktop_actions::snapshot(cx);
     let undo = undo_stack::snapshot(cx);
-    let auth = crate::auth_ui::snapshot(cx);
+    let auth = auth_ui::snapshot(cx);
     let latest_error = error_surface::latest(cx);
     let crash_snap = crash_report::snapshot(cx);
 
@@ -83,7 +83,7 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
         }
     };
     let lifecycle_panic_summary =
-        crate::lifecycle::last_panic_summary().unwrap_or(none_label.clone());
+        crate::lifecycle::last_panic_summary().unwrap_or_else(|| none_label.clone());
 
     let mut rows: Vec<Stateful<Div>> = vec![
         row("diagnostics_app", env!("CARGO_PKG_NAME")),
@@ -157,7 +157,7 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
         row("diagnostics_auth_provider", &auth.provider_id),
         row(
             "diagnostics_auth_token_expiry",
-            &crate::auth_ui::format_expiry(auth.expires_at)
+            &auth_ui::format_expiry(auth.expires_at)
                 .unwrap_or_else(|| crate::i18n::localize("auth_no_expiry")),
         ),
         row("diagnostics_auth_store", auth.store_backend),

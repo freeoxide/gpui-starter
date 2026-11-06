@@ -91,7 +91,7 @@ pub(super) fn render_session_section(cx: &mut Context<super::SettingsPage>) -> i
                 "settings-status",
                 "auth-provider",
                 crate::i18n::localize("settings_auth_provider"),
-                snapshot.provider_id.clone(),
+                snapshot.provider_id,
             ))
             .child(super::rows::status_row(
                 "settings-status",

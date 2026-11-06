@@ -5,7 +5,6 @@ use crate::ui::canvas::perf_probe;
 
 use super::InfiniteCanvasPage;
 use super::minimap::minimap_probe;
-
 use super::perf::{
     PAGE_SLOW_RENDER_THRESHOLD_US, is_slow_page_render, last_gen_us, last_page_render_us,
     store_gen_us, store_page_render_us,

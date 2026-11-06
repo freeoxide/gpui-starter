@@ -233,8 +233,8 @@ impl PaletteSession {
 
     fn sync_external_closes(&mut self, cx: &mut Context<Self>) {
         let open_ids: Vec<FloatingWindowId> = floating_snapshot(cx)
-            .iter()
-            .map(|entry| entry.id.clone())
+            .into_iter()
+            .map(|entry| entry.id)
             .collect();
         let mut changed = false;
         for id in PaletteId::ALL {

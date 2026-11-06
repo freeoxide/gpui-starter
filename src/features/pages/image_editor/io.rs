@@ -11,7 +11,7 @@ pub(crate) fn save_image(path: &Path, img: &RgbaImage) -> anyhow::Result<()> {
         .map(|ext| ext.to_ascii_lowercase())
         .as_deref()
     {
-        Some("jpg") | Some("jpeg") => ImageFormat::Jpeg,
+        Some("jpg" | "jpeg") => ImageFormat::Jpeg,
         _ => ImageFormat::Png,
     };
     DynamicImage::ImageRgba8(img.clone())

@@ -20,7 +20,7 @@ fn idle_page_renders_without_a_source(cx: &mut TestAppContext) {
         crate::app_state::initialize(cx);
         microphone::initialize(cx);
     });
-    let waveform = cx.read(|cx| microphone::snapshot(cx)).waveform;
+    let waveform = cx.read(microphone::snapshot).waveform;
     cx.update(gpui_kit::component::theme::init);
     cx.add_window(|window, cx| MicrophonePage::new(window, cx));
     cx.read(|cx| {
@@ -37,14 +37,14 @@ fn demo_page_renders_with_a_zero_meter_before_the_first_tick(cx: &mut TestAppCon
         microphone::force_demo_for_tests(cx);
         microphone::start(cx);
     });
-    let waveform = cx.read(|cx| microphone::snapshot(cx)).waveform;
+    let waveform = cx.read(microphone::snapshot).waveform;
     cx.update(gpui_kit::component::theme::init);
     cx.add_window(|window, cx| MicrophonePage::new(window, cx));
     cx.read(|cx| {
         assert!(waveform.read(cx).has_source());
         assert_eq!(microphone::meter(cx).read(), (0.0, 0.0));
     });
-    cx.update(|cx| microphone::stop(cx));
+    cx.update(microphone::stop);
 }
 
 #[gpui_kit::test]

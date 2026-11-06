@@ -107,7 +107,7 @@ impl ItemFilter {
             if !query.contains(' ') {
                 return None;
             }
-            let no_spaces: String = query.chars().filter(|c| *c != ' ').collect();
+            let no_spaces = query.replace(' ', "");
             if let Some(hit) = self.matcher.fuzzy_indices(text, &no_spaces) {
                 return Some(hit);
             }
@@ -127,7 +127,7 @@ impl ItemFilter {
             }
         }
 
-        score += self.contiguity_bonus(&indices);
+        score += Self::contiguity_bonus(&indices);
 
         if is_description {
             score = (score as f64 * DESCRIPTION_PENALTY) as i64;
@@ -136,7 +136,7 @@ impl ItemFilter {
         Some(score)
     }
 
-    fn contiguity_bonus(&self, indices: &[usize]) -> i64 {
+    fn contiguity_bonus(indices: &[usize]) -> i64 {
         if indices.len() <= 1 {
             return CONTIGUITY_BONUS;
         }

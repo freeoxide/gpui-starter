@@ -1,12 +1,12 @@
-use gpui_kit::{Bounds, Pixels, point, px, size};
+use gpui_kit::{Bounds, Pixels, Size, point, px, size};
 
 use super::*;
 
-fn viewport() -> gpui_kit::Size<Pixels> {
+fn viewport() -> Size<Pixels> {
     size(px(800.), px(600.))
 }
 
-fn panel() -> gpui_kit::Size<Pixels> {
+fn panel() -> Size<Pixels> {
     size(px(200.), px(120.))
 }
 
@@ -91,7 +91,7 @@ fn restore_anchor_reproduces_the_origin_for_various_visible_bounds() {
             panic!("restore_anchor must be screen-anchored");
         };
         assert!(display.is_none());
-        assert_eq!(placement, crate::ui::floating::Placement9::TopLeft);
+        assert_eq!(placement, Placement9::TopLeft);
         assert_eq!(visible.origin + offset, origin);
     }
 }

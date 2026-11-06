@@ -9,7 +9,7 @@ pub(crate) fn compact(value: f64) -> String {
     } else if magnitude >= 1_000. {
         format!("{:.1}K", value / 1_000.)
     } else {
-        format!("{:.0}", value)
+        format!("{value:.0}")
     }
 }
 
@@ -25,7 +25,7 @@ pub(crate) fn money(value: f64) -> String {
 }
 
 pub(crate) fn percent(value: f64, digits: usize) -> String {
-    format!("{:.*}%", digits, value)
+    format!("{value:.digits$}%")
 }
 
 pub(crate) fn duration(total_secs: f64) -> String {

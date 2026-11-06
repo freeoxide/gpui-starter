@@ -126,15 +126,11 @@ impl InfiniteCanvasPage {
     }
 
     fn store_viewport(&mut self, bounds: Bounds<Pixels>) {
-        if self.viewport != bounds {
-            self.viewport = bounds;
-        }
+        self.viewport = bounds;
     }
 
     fn store_minimap_bounds(&mut self, bounds: Bounds<Pixels>) {
-        if self.minimap_bounds != bounds {
-            self.minimap_bounds = bounds;
-        }
+        self.minimap_bounds = bounds;
     }
 
     fn zoom_view(&mut self, factor: f32, cx: &mut Context<Self>) {

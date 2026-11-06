@@ -233,7 +233,7 @@ fn drag_step(
     id: PaletteId,
     pos: Point<Pixels>,
     geoms: &mut BTreeMap<PaletteId, PanelGeom>,
-    viewport: gpui_kit::Size<Pixels>,
+    viewport: Size<Pixels>,
 ) -> bool {
     let Some(active) = drag.as_mut() else {
         *drag = Some(ActiveDrag {

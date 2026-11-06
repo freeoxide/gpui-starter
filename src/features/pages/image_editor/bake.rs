@@ -2,7 +2,7 @@
 use std::f32::consts::TAU;
 
 #[cfg(not(target_family = "wasm"))]
-use gpui_kit::{Hsla, Pixels, Point, Rgba};
+use gpui_kit::{Hsla, Rgba};
 use image::{DynamicImage, RgbaImage};
 
 use super::document::FilterSettings;
@@ -131,18 +131,6 @@ fn hsla_to_rgba(color: Hsla) -> [u8; 4] {
 }
 
 #[cfg(not(target_family = "wasm"))]
-fn path_points(shape: &CanvasShape) -> Option<(&[Point<Pixels>], [u8; 4], f32)> {
-    match shape {
-        CanvasShape::Path { points, style } => Some((
-            points,
-            hsla_to_rgba(style.color),
-            style.width.as_f32().max(1.),
-        )),
-        _ => None,
-    }
-}
-
-#[cfg(not(target_family = "wasm"))]
 pub(crate) fn rasterize_shape(
     buf: &mut RgbaImage,
     shape: &CanvasShape,
@@ -150,11 +138,10 @@ pub(crate) fn rasterize_shape(
     fallback_width: f32,
 ) {
     match shape {
-        CanvasShape::Path { .. } => {
-            let Some((points, rgba, width)) = path_points(shape) else {
-                return;
-            };
-            match points {
+        CanvasShape::Path { points, style } => {
+            let rgba = hsla_to_rgba(style.color);
+            let width = style.width.as_f32().max(1.);
+            match points.as_slice() {
                 [p] => fill_circle(buf, (p.x.as_f32(), p.y.as_f32()), width / 2., rgba),
                 _ => {
                     for pair in points.windows(2) {

@@ -98,7 +98,7 @@ async fn submit_over_the_mock_reaches_signing_in_then_signed_in(cx: &mut TestApp
     });
     cx.run_until_parked();
     cx.read(|cx| {
-        assert_eq!(crate::auth_ui::snapshot(cx).state, AuthState::SigningIn,);
+        assert_eq!(crate::auth_ui::snapshot(cx).state, AuthState::SigningIn);
     });
     cx.update(|cx| assert!(crate::auth_ui::complete_demo_sign_in(cx)));
     cx.run_until_parked();

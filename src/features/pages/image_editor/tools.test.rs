@@ -361,8 +361,8 @@ fn crop_click_keeps_the_stored_crop_rect(cx: &mut TestAppContext) {
     let after_click = cx
         .read(|cx| doc.read(cx).crop_rect())
         .expect("a plain click leaves the stored rect alone");
-    assert_px_eq(after_click.origin.x, stored.origin.x.into());
-    assert_px_eq(after_click.size.width, stored.size.width.into());
+    assert_px_eq(after_click.origin.x, stored.origin.x.as_f32());
+    assert_px_eq(after_click.size.width, stored.size.width.as_f32());
 
     dispatch(&canvas, cx, phase_down, (2., 2.));
     dispatch(&canvas, cx, phase_move, (5., 9.));
@@ -370,7 +370,7 @@ fn crop_click_keeps_the_stored_crop_rect(cx: &mut TestAppContext) {
     let after_small = cx
         .read(|cx| doc.read(cx).crop_rect())
         .expect("a sub-minimum drag leaves the stored rect alone");
-    assert_px_eq(after_small.size.width, stored.size.width.into());
+    assert_px_eq(after_small.size.width, stored.size.width.as_f32());
 }
 
 #[gpui_kit::test]
@@ -472,7 +472,7 @@ fn every_editor_tool_has_crosshair_cursor(cx: &mut TestAppContext) {
     assert_eq!(crop.cursor(), CursorStyle::Crosshair);
 }
 
-#[gpui_kit::test]
+#[test]
 fn arrow_head_geometry_rotates_with_the_shaft() {
     let horizontal = arrow_segments(point(px(0.), px(0.)), point(px(10.), px(0.)));
     assert_px_eq(horizontal[0].0.x, 0.);
@@ -499,7 +499,7 @@ fn arrow_head_geometry_rotates_with_the_shaft() {
     );
 }
 
-#[gpui_kit::test]
+#[test]
 fn bounds_from_corners_normalizes_reversed_corners() {
     let bounds = bounds_from_corners(point(px(8.), px(6.)), point(px(2.), px(0.)));
     assert_px_eq(bounds.origin.x, 2.);

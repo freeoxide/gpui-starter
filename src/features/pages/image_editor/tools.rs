@@ -3,8 +3,8 @@ use gpui_kit::*;
 use super::document::{ImageEditorDocument, MIN_CROP_PX, capture_annotations};
 use super::history::{AnnotationSnapshot, EditLabel};
 use crate::ui::canvas::{
-    CanvasPointerEvent, CanvasShape, CanvasState, CanvasTool, LayerId, ShapeStyle, StrokeStyle,
-    ToolContext,
+    CanvasPointerEvent, CanvasShape, CanvasState, CanvasTool, LayerId, ShapeId, ShapeStyle,
+    StrokeStyle, ToolContext,
 };
 
 pub(crate) fn bounds_from_corners(a: Point<Pixels>, b: Point<Pixels>) -> Bounds<Pixels> {
@@ -386,7 +386,7 @@ impl EraserTool {
         cx: &mut Context<CanvasState>,
     ) {
         let tolerance = px(self.radius);
-        let hits: Vec<crate::ui::canvas::ShapeId> = state
+        let hits: Vec<ShapeId> = state
             .document()
             .layer(self.layer)
             .map(|layer| {

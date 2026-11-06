@@ -6,8 +6,7 @@ use gpui_kit::{prelude::*, *};
 use super::{ChatStreamSource, ChatTurn, Role as ChatRole};
 use crate::accessibility::A11yExt as _;
 
-/// The full-width U+258C (LEFT HALF BLOCK) cursor appended to a streaming
-/// assistant message.
+/// U+258C LEFT HALF BLOCK, appended to the assistant message while it streams.
 const STREAMING_CURSOR: char = '\u{258C}';
 
 /// Backend-agnostic: tokens arrive via [`Self::append_token`].
@@ -47,10 +46,10 @@ impl AiResponseView {
     /// Append a decoded token to the latest assistant turn. No-op if there is
     /// no assistant turn yet.
     pub fn append_token(&mut self, token: &str) {
-        if let Some(last) = self.turns.last_mut() {
-            if last.role == ChatRole::Assistant {
-                last.content.push_str(token);
-            }
+        if let Some(last) = self.turns.last_mut()
+            && last.role == ChatRole::Assistant
+        {
+            last.content.push_str(token);
         }
     }
 
@@ -255,7 +254,7 @@ fn render_assistant_message(
             )
     } else {
         let display = if streaming {
-            format!("{}{}", content, STREAMING_CURSOR)
+            format!("{content}{STREAMING_CURSOR}")
         } else {
             content.to_string()
         };

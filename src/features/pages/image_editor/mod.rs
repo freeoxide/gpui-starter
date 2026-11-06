@@ -351,24 +351,21 @@ impl ImageEditorPage {
     }
 
     fn on_undo(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        let canvas = self.canvas.clone();
-        self.doc.update(cx, |doc, cx| doc.undo(&canvas, cx));
+        self.doc.update(cx, |doc, cx| doc.undo(&self.canvas, cx));
     }
 
     fn on_redo(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        let canvas = self.canvas.clone();
-        self.doc.update(cx, |doc, cx| doc.redo(&canvas, cx));
+        self.doc.update(cx, |doc, cx| doc.redo(&self.canvas, cx));
     }
 
     fn on_rotate(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        let canvas = self.canvas.clone();
-        self.doc.update(cx, |doc, cx| doc.rotate90(&canvas, cx));
+        self.doc
+            .update(cx, |doc, cx| doc.rotate90(&self.canvas, cx));
     }
 
     fn on_apply_crop(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        let canvas = self.canvas.clone();
         self.doc.update(cx, |doc, cx| {
-            if !doc.apply_crop(&canvas, cx) {
+            if !doc.apply_crop(&self.canvas, cx) {
                 doc.set_crop_rect(None, cx);
             }
         });

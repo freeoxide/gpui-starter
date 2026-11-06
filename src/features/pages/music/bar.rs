@@ -169,22 +169,17 @@ impl Render for NowPlayingBar {
             ),
         };
 
-        let playing = engine.status() == TransportStatus::Playing;
-        let play_button = if playing {
-            Button::new("npb-play")
-                .ghost()
-                .xsmall()
-                .icon(IconName::Pause)
-                .accessibility_label(crate::i18n::localize("music_pause"))
-                .on_click(cx.listener(|this, _, _, cx| this.on_toggle_play(cx)))
+        let (play_icon, play_label) = if engine.status() == TransportStatus::Playing {
+            (IconName::Pause, "music_pause")
         } else {
-            Button::new("npb-play")
-                .ghost()
-                .xsmall()
-                .icon(IconName::Play)
-                .accessibility_label(crate::i18n::localize("music_play"))
-                .on_click(cx.listener(|this, _, _, cx| this.on_toggle_play(cx)))
+            (IconName::Play, "music_play")
         };
+        let play_button = Button::new("npb-play")
+            .ghost()
+            .xsmall()
+            .icon(play_icon)
+            .accessibility_label(crate::i18n::localize(play_label))
+            .on_click(cx.listener(|this, _, _, cx| this.on_toggle_play(cx)));
 
         h_flex()
             .id("now-playing-bar")

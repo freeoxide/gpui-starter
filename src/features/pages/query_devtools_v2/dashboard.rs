@@ -1,6 +1,6 @@
 use gpui_kit::component::{
-    ActiveTheme as _, Disableable, Icon, IconName, VirtualListScrollHandle, button::Button, h_flex,
-    v_flex,
+    ActiveTheme as _, Disableable as _, Icon, IconName, VirtualListScrollHandle, button::Button,
+    h_flex, v_flex,
 };
 use gpui_kit::{prelude::*, *};
 

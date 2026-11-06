@@ -3,13 +3,13 @@ use std::sync::Arc;
 
 use collab_protocol::{
     Board, Change, ClientId, CursorMsg, Peer, PeerLeaveMsg, ShapeKey, SnapshotMsg, WireColor,
-    WireOp, WireShape,
+    WireOp, WireShape, WireStroke, WireStyle,
 };
 use gpui_kit::*;
 
 use crate::capabilities::{Capability, CapabilityStatus};
 use crate::platform::clock::{Duration, Instant};
-use crate::ui::canvas::{CanvasShape, CanvasState, ShapeId, measure_text};
+use crate::ui::canvas::{CanvasShape, CanvasState, ShapeId, ShapeStyle, StrokeStyle, measure_text};
 
 use super::fake;
 
@@ -386,7 +386,11 @@ impl CollabSession {
 
     #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub(crate) fn apply_snapshot(&mut self, msg: SnapshotMsg, cx: &mut Context<Self>) {
-        self.board.replace_all(msg.shapes.clone(), msg.tombstones);
+        let SnapshotMsg {
+            peers,
+            shapes,
+            tombstones,
+        } = msg;
         let mut by_wire = HashMap::new();
         let mut by_local = HashMap::new();
         let text_system = WindowTextSystem::new(cx.text_system().clone());
@@ -394,7 +398,7 @@ impl CollabSession {
             state.edit_document(cx, |doc| {
                 doc.clear();
                 let layer = doc.add_layer();
-                for entry in &msg.shapes {
+                for entry in &shapes {
                     let shape = wire_shape_to_canvas(&entry.shape, &text_system);
                     if let Some(local_id) = doc.add_shape(layer, shape) {
                         by_wire.insert(entry.key, local_id);
@@ -403,21 +407,13 @@ impl CollabSession {
                 }
             });
         });
+        self.board.replace_all(shapes, tombstones);
         self.by_wire = by_wire;
         self.by_local = by_local;
-        self.peers = msg
-            .peers
-            .iter()
+        self.peers = peers
+            .into_iter()
             .filter(|peer| peer.id != self.identity.id)
-            .map(|peer| {
-                (
-                    peer.id,
-                    PeerCursor {
-                        peer: peer.clone(),
-                        doc: None,
-                    },
-                )
-            })
+            .map(|peer| (peer.id, PeerCursor { peer, doc: None }))
             .collect();
         self.status = Status::Connected;
         self.announce_status(cx);
@@ -494,7 +490,7 @@ impl CollabSession {
 
     /// Throttles the own cursor to 20 Hz and pushes it over the link when
     /// one exists. Nothing rendered reads this state, so there is no notify.
-    pub(crate) fn set_own_cursor(&mut self, doc: Point<Pixels>, _cx: &mut Context<Self>) {
+    pub(crate) fn set_own_cursor(&mut self, doc: Point<Pixels>) {
         let now = Instant::now();
         let due = self
             .last_cursor
@@ -641,8 +637,8 @@ fn hsla_to_wire(color: Hsla) -> WireColor {
     WireColor([color.h * 360., color.s, color.l, color.a])
 }
 
-fn wire_stroke_to_canvas(stroke: &collab_protocol::WireStroke) -> crate::ui::canvas::StrokeStyle {
-    crate::ui::canvas::StrokeStyle {
+fn wire_stroke_to_canvas(stroke: &WireStroke) -> StrokeStyle {
+    StrokeStyle {
         width: px(stroke.width),
         color: wire_color_to_hsla(stroke.color),
         dash: stroke
@@ -669,15 +665,14 @@ fn canvas_bounds_to_wire(bounds: &Bounds<Pixels>) -> [f32; 4] {
 }
 
 fn wire_shape_to_canvas(shape: &WireShape, text_system: &WindowTextSystem) -> CanvasShape {
-    use collab_protocol::WireStyle;
     let style_to_canvas = |style: &WireStyle| match (
         style.fill.map(wire_color_to_hsla),
         style.stroke.as_ref().map(wire_stroke_to_canvas),
     ) {
-        (Some(fill), Some(stroke)) => crate::ui::canvas::ShapeStyle::both(fill, stroke),
-        (Some(fill), None) => crate::ui::canvas::ShapeStyle::filled(fill),
-        (None, Some(stroke)) => crate::ui::canvas::ShapeStyle::stroked(stroke),
-        (None, None) => crate::ui::canvas::ShapeStyle::default(),
+        (Some(fill), Some(stroke)) => ShapeStyle::both(fill, stroke),
+        (Some(fill), None) => ShapeStyle::filled(fill),
+        (None, Some(stroke)) => ShapeStyle::stroked(stroke),
+        (None, None) => ShapeStyle::default(),
     };
     match shape {
         WireShape::Rect { bounds, style } => {
@@ -711,8 +706,7 @@ fn wire_shape_to_canvas(shape: &WireShape, text_system: &WindowTextSystem) -> Ca
 }
 
 pub(crate) fn canvas_shape_to_wire(shape: &CanvasShape) -> Option<WireShape> {
-    use collab_protocol::WireStyle;
-    let stroke_from = |stroke: &crate::ui::canvas::StrokeStyle| collab_protocol::WireStroke {
+    let stroke_from = |stroke: &StrokeStyle| WireStroke {
         width: stroke.width.as_f32(),
         color: hsla_to_wire(stroke.color),
         dash: stroke

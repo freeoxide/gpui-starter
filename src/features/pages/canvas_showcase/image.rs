@@ -46,7 +46,6 @@ impl ImageDemo {
             );
             let layer = s.add_layer(cx);
             let border = cx.theme().border;
-            let image = image.clone();
             s.edit_document(cx, |doc| {
                 for (origin, side) in [((160., 140.), 192.), ((400., 140.), 96.)] {
                     let bounds = Bounds {

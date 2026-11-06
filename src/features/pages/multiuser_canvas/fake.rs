@@ -1,3 +1,5 @@
+use std::f32::consts::TAU;
+
 use collab_protocol::{CursorMsg, Peer, ShapeKey, Version, WireOp, WireShape, WireStroke};
 
 use super::session::PEER_PALETTE;
@@ -6,7 +8,6 @@ pub(crate) const PEER_COUNT: usize = 2;
 pub(crate) const DEMO_WIDTH: f32 = 800.;
 pub(crate) const DEMO_HEIGHT: f32 = 600.;
 const FAKE_ID_BASE: u64 = 0xFABE_0000_0000_0000;
-const TAU: f32 = std::f32::consts::TAU;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum PeerEvent {

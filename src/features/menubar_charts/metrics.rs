@@ -154,7 +154,7 @@ impl MetricsState {
         if self.paused {
             return;
         }
-        let Some(sample) = self.sampler.as_mut().map(|s| s.sample()) else {
+        let Some(sample) = self.sampler.as_mut().map(Sampler::sample) else {
             return;
         };
         self.push(sample, cx);

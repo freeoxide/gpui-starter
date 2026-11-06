@@ -2,15 +2,16 @@ use gpui_kit::AppContext as _;
 
 use super::*;
 
-const GIB: f64 = 1024. * 1024. * 1024.;
-
 #[test]
 fn fixture_first_sample_matches_the_formula() {
     let mut sampler = Sampler::fixture();
     let first = sampler.sample();
     assert_eq!(first.seq, 0);
-    assert_eq!(first.mem_total_bytes, 16 * 1024 * 1024 * 1024);
-    assert_eq!(first.mem_used_bytes, (16. * GIB * 0.55) as u64);
+    assert_eq!(first.mem_total_bytes, FIXTURE_TOTAL_BYTES);
+    assert_eq!(
+        first.mem_used_bytes,
+        (FIXTURE_TOTAL_BYTES as f64 * 0.55) as u64
+    );
     assert!((first.cpu_percent - 25.).abs() < 1e-3);
     assert!((0_f32..=100.).contains(&first.cpu_percent));
 }

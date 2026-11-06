@@ -141,7 +141,7 @@ async fn renders_one_million_particles_and_meets_the_budget_on_hardware(
         }
     }
 
-    samples.sort_by(|a, b| a.partial_cmp(b).expect("finite sample"));
+    samples.sort_by(|a, b| a.total_cmp(b));
     let median = samples[samples.len() / 2];
     if software {
         eprintln!(

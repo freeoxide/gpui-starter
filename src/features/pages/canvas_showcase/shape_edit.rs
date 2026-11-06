@@ -294,42 +294,28 @@ impl CanvasTool for ShapeEditTool {
         state: &mut CanvasState,
         cx: &mut Context<CanvasState>,
     ) {
-        if let Some((handle_ix, start_bounds, shape_id)) = self
-            .resize_drag
-            .as_ref()
-            .map(|drag| (drag.handle_ix, drag.start_bounds, drag.shape_id))
-        {
-            let pointer = event.doc_position;
-            let path_snapshot = self
-                .resize_drag
-                .as_ref()
-                .and_then(|drag| drag.path_snapshot.clone());
+        if let Some(drag) = self.resize_drag.as_ref() {
+            let target =
+                geometry::resize_bounds(drag.start_bounds, drag.handle_ix, event.doc_position);
             state.edit_document(cx, |doc| {
-                doc.update_shape(shape_id, |shape| match shape {
+                doc.update_shape(drag.shape_id, |shape| match shape {
                     CanvasShape::Rect { bounds, .. }
                     | CanvasShape::Ellipse { bounds, .. }
                     | CanvasShape::Triangle { bounds, .. } => {
-                        *bounds = geometry::resize_bounds(start_bounds, handle_ix, pointer);
+                        *bounds = target;
                     }
                     CanvasShape::Path { points, .. } => {
-                        if let Some(snapshot) = &path_snapshot {
-                            *points = geometry::scale_points(
-                                snapshot,
-                                start_bounds,
-                                geometry::resize_bounds(start_bounds, handle_ix, pointer),
-                            );
+                        if let Some(snapshot) = &drag.path_snapshot {
+                            *points = geometry::scale_points(snapshot, drag.start_bounds, target);
                         }
                     }
                     _ => {}
                 });
-                self.place_handles(doc, shape_id);
+                self.place_handles(doc, drag.shape_id);
             });
-        } else if let Some(origin) = self.move_drag.as_ref().map(|drag| drag.origin) {
-            let delta = event.doc_position - origin;
+        } else if let Some(drag) = self.move_drag.as_ref() {
+            let delta = event.doc_position - drag.origin;
             state.edit_document(cx, |doc| {
-                let Some(drag) = self.move_drag.as_ref() else {
-                    return;
-                };
                 for (id, snapshot_shape) in &drag.snapshot {
                     doc.update_shape(*id, |shape| {
                         *shape = snapshot_shape.clone();

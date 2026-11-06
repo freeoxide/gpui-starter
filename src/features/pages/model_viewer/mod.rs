@@ -153,7 +153,7 @@ impl ModelViewerPage {
                 .unwrap_or_default();
             let _ = state.update(cx, |s, cx| s.set_loading(true, cx));
             let bytes = cx
-                .background_spawn(async move { std::fs::read(&path).map_err(|e| e.to_string()) })
+                .background_spawn(async move { std::fs::read(path).map_err(|e| e.to_string()) })
                 .await;
             let parsed = match bytes {
                 Ok(bytes) => {

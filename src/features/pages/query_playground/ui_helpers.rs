@@ -8,7 +8,7 @@ use crate::accessibility::A11yExt as _;
 use super::PlaygroundUser;
 
 // Readers for the recurring `Option<(Entity<QueryResource<..>>, Subscription)>`
-// shape; MutationStatus/infinite/bare-Entity sites don't fit and stay inline.
+// shape; mutation/infinite/select sites don't fit it and stay inline.
 
 pub(super) fn query_status<T: 'static, E: 'static>(
     opt: Option<&(Entity<QueryResource<T, E>>, Subscription)>,

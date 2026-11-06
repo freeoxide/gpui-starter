@@ -211,11 +211,10 @@ impl PlayerEngine {
         };
         if ix + 1 < self.queue.len() {
             self.current = Some(ix + 1);
-            self.position_ms = 0;
         } else {
-            self.position_ms = 0;
             self.status = TransportStatus::Stopped;
         }
+        self.position_ms = 0;
         cx.notify();
     }
 }
