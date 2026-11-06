@@ -683,7 +683,7 @@ async fn set_bluetooth_powered_applies_through_an_open_gate(cx: &TestAppContext)
 #[gpui_kit::test]
 async fn a_failed_apply_reports_to_the_error_surface(cx: &TestAppContext) {
     cx.update(|cx| install_for_tests(AppConfig::default(), cx));
-    cx.update(|cx| crate::error_surface::initialize(cx));
+    cx.update(crate::error_surface::initialize);
     let (readers, ops) = write_seam(ready_core(), Err("no mixer".to_string()));
     cx.update(|cx| {
         cx.set_global(readers);
@@ -695,7 +695,7 @@ async fn a_failed_apply_reports_to_the_error_surface(cx: &TestAppContext) {
 
     assert_eq!(ops.lock().unwrap().len(), 1);
     let message = cx
-        .read(|cx| crate::error_surface::latest_message(cx))
+        .read(crate::error_surface::latest_message)
         .expect("the failed apply reaches the error surface");
     assert!(
         message.contains("no mixer"),

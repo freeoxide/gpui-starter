@@ -13,8 +13,11 @@ use gpui_kit::{AppContext as _, BorrowAppContext as _};
 #[cfg(not(target_family = "wasm"))]
 use std::sync::Arc;
 
+#[cfg(test)]
 pub(crate) const REASON_WEB: &str = "system_controls_reason_web";
+#[cfg(test)]
 pub(crate) const REASON_MACOS_BRIGHTNESS: &str = "system_controls_reason_macos_brightness";
+#[cfg(test)]
 pub(crate) const REASON_WINDOWS_BLUETOOTH: &str = "system_controls_reason_windows_bluetooth";
 pub(crate) const REASON_MACOS_BLUETOOTH_POWER: &str =
     "system_controls_reason_macos_bluetooth_power";

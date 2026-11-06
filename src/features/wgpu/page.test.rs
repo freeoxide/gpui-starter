@@ -268,7 +268,7 @@ async fn a_landed_frame_re_renders_the_page_without_a_manual_notify(cx: &mut Tes
     let state = cx.read(|cx| page.read(cx).state.clone());
     let repaints = std::rc::Rc::new(std::cell::Cell::new(0usize));
     let counter = repaints.clone();
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         cx.observe(&page, move |_, _| counter.set(counter.get() + 1))
             .detach();
     });
@@ -278,7 +278,7 @@ async fn a_landed_frame_re_renders_the_page_without_a_manual_notify(cx: &mut Tes
     // Only the state notifies here; the page's own subscription must carry
     // it into a repaint, or landed frames never reach the screen.
     let image = super::super::frame::bgra_to_render_image(1, 1, vec![10, 10, 10, 255]);
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         state.update(cx, |s, cx| {
             s.frame_done(crate::platform::clock::Instant::now(), image, 5.0, cx);
         })

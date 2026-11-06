@@ -12,7 +12,7 @@ use super::{AudioEngine, PlaybackStatus};
 use crate::ui::waveform::{DEFAULT_RETENTION, WaveformState};
 
 fn loaded_sweep_engine(cx: &mut TestAppContext) -> gpui_kit::Entity<AudioEngine> {
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, cx| {
             engine.load_bytes("sweep.wav", demo::sweep_wav(1), cx)
@@ -87,7 +87,7 @@ fn failed_load_keeps_the_previous_load(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn failed_reload_keeps_the_previous_load_playable(cx: &mut TestAppContext) {
     let waveform = cx.update(|cx| cx.new(|_| WaveformState::new()));
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, cx| engine.attach_meter(&waveform, cx));
         engine.update(cx, |engine, cx| {
@@ -128,7 +128,7 @@ fn failed_reload_keeps_the_previous_load_playable(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn newer_load_wins_the_generation_race(cx: &mut TestAppContext) {
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, cx| {
             engine.load_bytes("bad.wav", b"not audio".to_vec(), cx)
@@ -166,7 +166,7 @@ fn newer_load_wins_the_generation_race(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn attach_meter_feeds_and_detaches_the_widget(cx: &mut TestAppContext) {
     let waveform = cx.update(|cx| cx.new(|_| WaveformState::new()));
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, cx| engine.attach_meter(&waveform, cx));
         engine.update(cx, |engine, cx| {
@@ -185,7 +185,7 @@ fn attach_meter_feeds_and_detaches_the_widget(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn refresh_devices_and_unknown_select_are_safe(cx: &mut TestAppContext) {
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, cx| engine.refresh_devices(cx));
         engine.update(cx, |engine, cx| engine.select_device("no such device", cx));
@@ -199,7 +199,7 @@ fn refresh_devices_and_unknown_select_are_safe(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn refresh_devices_scans_off_the_caller_and_commits_from_a_task(cx: &mut TestAppContext) {
     let expected = super::super::output::enumerate();
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, cx| engine.refresh_devices(cx));
         assert!(
@@ -304,7 +304,7 @@ fn fake_loaded_engine(
     cx: &mut TestAppContext,
     fake: Arc<FakeSession>,
 ) -> gpui_kit::Entity<AudioEngine> {
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, _| {
             engine.session_builder = fake_session_builder(fake);
@@ -375,7 +375,7 @@ fn playback_runs_without_a_meter_and_pauses_and_stops(cx: &mut TestAppContext) {
 fn stop_cancels_a_session_build_queued_by_toggle(cx: &mut TestAppContext) {
     let fake = Arc::new(FakeSession::new());
     let first_build_fails = Arc::new(AtomicBool::new(true));
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, _| {
             let fake = fake.clone();

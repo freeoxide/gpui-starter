@@ -56,7 +56,7 @@ fn open_bar_window(
         BarHost { bar: entity }
     });
     let bar = bar.expect("bar entity created");
-    let mut cx = VisualTestContext::from_window(handle, cx);
+    let mut cx = VisualTestContext::from_window(*handle, cx);
     cx.update(|window, cx| window.draw(cx).clear(cx));
     (bar, cx)
 }
@@ -76,7 +76,7 @@ fn slider_point_at(
 #[gpui_kit::test]
 fn bar_draws_idle_without_touching_the_engine(cx: &mut TestAppContext) {
     let engine = two_track_engine(cx);
-    let (bar, mut cx) = open_bar_window(cx, engine.clone());
+    let (bar, cx) = open_bar_window(cx, engine.clone());
     cx.read(|cx| {
         let bar = bar.read(cx);
         assert!(bar.scrub.is_none());
@@ -165,7 +165,7 @@ fn seek_drag_scrubs_and_release_commits_the_position(cx: &mut TestAppContext) {
         );
     });
 
-    cx.update(|cx| seek.update(cx, |state, cx| state.handle_release(cx)));
+    cx.update(|_window, cx| seek.update(cx, |state, cx| state.handle_release(cx)));
     cx.run_until_parked();
     cx.read(|cx| {
         assert_eq!(bar.read(cx).scrub, None, "release must clear the scrub");
@@ -203,7 +203,7 @@ fn volume_drag_updates_the_engine_through_the_subscription(cx: &mut TestAppConte
 fn transport_handlers_drive_the_engine(cx: &mut TestAppContext) {
     let engine = two_track_engine(cx);
     let (bar, mut cx) = open_bar_window(cx, engine.clone());
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         engine.update(cx, |engine, cx| {
             engine.play_queue(vec![T0, T1], 0, cx);
         });
@@ -211,7 +211,7 @@ fn transport_handlers_drive_the_engine(cx: &mut TestAppContext) {
     });
     cx.read(|cx| assert_eq!(engine.read(cx).current_ix(), Some(1)));
 
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         bar.update(cx, |bar, cx| {
             bar.on_previous(cx);
             bar.on_toggle_play(cx);

@@ -1,13 +1,22 @@
 use std::time::Duration;
 
-use gpui_kit::{Modifiers, MouseButton, TestAppContext, point, px};
+use gpui_kit::{
+    ListAlignment, ListState, Modifiers, MouseButton, ScrollHandle, TestAppContext, point, px,
+};
 
 use super::ScrollBounceSection;
 
 #[gpui_kit::test]
 fn mouse_drag_scrolls_and_stretches_the_example_list(cx: &mut TestAppContext) {
-    cx.update(gpui_kit::component::theme::init);
-    let (section, cx) = cx.add_window_view(|window, cx| ScrollBounceSection::view(window, cx));
+    cx.update(gpui_kit::init);
+    let (section, cx) = cx.add_window_view(|_window, _cx| ScrollBounceSection {
+        list: ListState::new(super::ROWS, ListAlignment::Top, px(200.)).measure_all(),
+        short: ScrollHandle::new(),
+        enabled: true,
+        wrapper_wheel: true,
+        generation: 0,
+        drag: None,
+    });
     cx.run_until_parked();
     cx.update(|window, cx| window.draw(cx).clear(cx));
     let handle = cx.read(|cx| section.read(cx).list.clone());
@@ -61,10 +70,21 @@ fn mouse_drag_scrolls_and_stretches_the_example_list(cx: &mut TestAppContext) {
         MouseButton::Left,
         Modifiers::none(),
     );
-    // ScrollBounce runs on the real monotonic clock, not the test executor's
-    // virtual timer. A delayed frame may settle fully; either is valid.
-    std::thread::sleep(Duration::from_millis(30));
-    cx.update(|window, cx| window.draw(cx).clear(cx));
-    let returning = handle.viewport_bounds().origin.y;
-    assert!(returning >= bounds.origin.y && returning < stretched);
+    // The shared overscroll engine steps on the executor's virtual clock, so
+    // the return needs clock advances between frames. A spring that settles
+    // between polls also passes.
+    let mut returning = stretched;
+    for _ in 0..60 {
+        cx.executor().advance_clock(Duration::from_millis(16));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        returning = handle.viewport_bounds().origin.y;
+        if returning < stretched {
+            break;
+        }
+    }
+    assert!(
+        returning >= bounds.origin.y && returning < stretched,
+        "spring must return from {stretched:?} toward {}, got {returning:?}",
+        bounds.origin.y
+    );
 }

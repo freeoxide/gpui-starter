@@ -80,7 +80,7 @@ fn open_tour_window(
         (host.tour.clone(), host.outside.clone())
     });
     let root: AnyWindowHandle = window.into();
-    let cx = VisualTestContext::from_window(root, cx);
+    let mut cx = VisualTestContext::from_window(root, cx);
     cx.update(|window, cx| window.draw(cx).clear(cx));
     (tour, outside, root, cx)
 }
@@ -209,11 +209,14 @@ fn advance_saturates_closes_on_last_and_restores_focus(cx: &mut TestAppContext) 
 fn start_runs_the_demo_tour_in_the_root_window(cx: &mut TestAppContext) {
     let (tour, _, root, mut cx) = open_tour_window(cx);
 
-    cx.update(|_, cx| {
+    // start re-enters the window via RootWindow; a window-scoped update here
+    // would find the slot already taken and report the window missing.
+    let app: &TestAppContext = &cx;
+    app.update(|cx| {
         cx.set_global(TourHandle(tour.clone()));
         cx.set_global(RootWindow(root));
+        super::start(cx);
     });
-    cx.update(|_, cx| super::start(cx));
 
     assert_eq!(active_ix(&tour, &cx), Some(0));
     assert_eq!(

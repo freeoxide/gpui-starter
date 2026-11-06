@@ -18,7 +18,7 @@ fn app_error_derives_category_and_severity_from_variant() {
     assert_eq!(write.category(), ErrorCategory::Storage);
     assert_eq!(write.severity(), crate::errors::AppErrorSeverity::Error);
 
-    let deep_link = AppError::invalid_deep_link("gpui-starter://", "no page".into());
+    let deep_link = AppError::invalid_deep_link("gpui-starter://", "no page");
     assert_eq!(deep_link.category(), ErrorCategory::System);
 
     assert_eq!(

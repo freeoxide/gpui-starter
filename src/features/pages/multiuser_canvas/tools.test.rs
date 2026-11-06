@@ -9,8 +9,7 @@ use gpui_kit::{Bounds, Entity, Modifiers, MouseButton, TestAppContext, point, px
 use super::super::session::{CollabSession, Mode, NetLink};
 use super::{PenTool, SelectTool};
 use crate::ui::canvas::{
-    CanvasPointerEvent, CanvasShape, CanvasState, CanvasTool, CanvasTransform, ShapeId, ShapeStyle,
-    ToolContext,
+    CanvasPointerEvent, CanvasShape, CanvasState, CanvasTransform, ShapeId, ShapeStyle, ToolContext,
 };
 
 fn harness(cx: &TestAppContext) -> (Entity<CanvasState>, Entity<CollabSession>) {
@@ -107,7 +106,7 @@ fn ops_of_kind(link: &RecordingLink, matching: fn(&WireOp) -> bool) -> Vec<WireO
         .iter()
         .filter(|(event, _)| *event == "op")
         .map(|(_, payload)| serde_json::from_value(payload.clone()).unwrap())
-        .filter(|op| matching(op))
+        .filter(matching)
         .collect()
 }
 

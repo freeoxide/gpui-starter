@@ -3,7 +3,6 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use collab_protocol::{ShapeKey, WireOp};
-use gpui_kit::prelude::*;
 use gpui_kit::{
     Bounds, Entity, Modifiers, MouseButton, TestAppContext, VisualTestContext, point, px, size,
 };
@@ -63,7 +62,7 @@ fn shape_ids(cx: &TestAppContext, canvas: &Entity<CanvasState>) -> Vec<ShapeId> 
 
 #[gpui_kit::test]
 fn page_constructs_and_renders_a_frame(cx: &mut TestAppContext) {
-    let (page, mut cx) = open_page(cx);
+    let (page, cx) = open_page(cx);
     let (canvas, session) = {
         let cx_ref = &cx as &TestAppContext;
         page_entities(cx_ref, &page)
@@ -116,7 +115,7 @@ fn delete_selection_removes_locally_and_publishes_the_delete(cx: &mut TestAppCon
             .expect("the seeded shape carries a wire key")
     });
     let link = Arc::new(RecordingLink::default());
-    cx.update(|cx| {
+    cx.update(|_window, cx| {
         session.update(cx, |s, cx| s.install_link_for_test(link.clone(), cx));
     });
     cx.update(|window, cx| window.draw(cx).clear(cx));

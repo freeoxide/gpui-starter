@@ -252,7 +252,8 @@ fn consecutive_undecodable_messages_degrade_the_capability_until_one_decodes(
         });
     }
     cx.read(|cx| {
-        let status = crate::capabilities::snapshot(cx)
+        let snapshot = crate::capabilities::snapshot(cx);
+        let status = snapshot
             .get(&Capability::COLLAB_CANVAS)
             .expect("collab_canvas capability registered");
         assert!(
@@ -272,7 +273,8 @@ fn consecutive_undecodable_messages_degrade_the_capability_until_one_decodes(
         )
     });
     cx.read(|cx| {
-        let status = crate::capabilities::snapshot(cx)
+        let snapshot = crate::capabilities::snapshot(cx);
+        let status = snapshot
             .get(&Capability::COLLAB_CANVAS)
             .expect("collab_canvas capability registered");
         assert!(
