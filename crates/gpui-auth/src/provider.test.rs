@@ -47,7 +47,9 @@ async fn drive_runs_on_a_real_runtime_and_propagates_task_panics(_cx: &mut gpui:
         http: reqwest::Client::new(),
         runtime: Some(std::sync::Arc::clone(&runtime)),
     };
-    assert_eq!(io.drive(std::future::ready(7)).await, 7);
+    // drive() parks on the spawned JoinHandle, so its own cold runtime must
+    // drive it; the deterministic test executor forbids that park.
+    assert_eq!(runtime.block_on(io.drive(std::future::ready(7))), 7);
 
     let previous_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));

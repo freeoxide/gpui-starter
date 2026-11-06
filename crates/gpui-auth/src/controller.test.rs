@@ -230,6 +230,7 @@ async fn refresh_after_sign_in_merges_per_reuse_until_dead(cx: &mut TestAppConte
 async fn refresh_while_signed_out_reports_no_refresh_token(cx: &mut TestAppContext) {
     let (controller, _store) = new_controller(cx);
     controller.update(cx, |controller, cx| controller.refresh(cx));
+    cx.run_until_parked();
     let state = current_state(cx, &controller);
     assert!(matches!(state, AuthState::Error(AuthError::NoRefreshToken)));
 }
