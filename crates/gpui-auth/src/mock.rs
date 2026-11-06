@@ -5,9 +5,13 @@ use crate::pkce::{PkcePair, random_state};
 use crate::provider::{AuthProvider, FlowLaunch, RedirectParams};
 use crate::token::{AccountInfo, RefreshPolicy, SecretString, TokenSet};
 
-/// Scripted provider (id `"mock"`) for demos and tests: real random state
-/// and PKCE, deterministic tokens, no HTTP anywhere. Its `urn:` authorize URL
-/// is deliberately not http(s) so nothing can trip the OS browser.
+/// Provider id for the scripted demo provider; also the store key.
+pub const MOCK_PROVIDER_ID: &str = "mock";
+
+/// Scripted provider (id [`MOCK_PROVIDER_ID`]) for demos and tests: real
+/// random state and PKCE, deterministic tokens, no HTTP anywhere. Its `urn:`
+/// authorize URL is deliberately not http(s) so nothing can trip the OS
+/// browser.
 pub struct MockProvider {
     counter: AtomicU64,
 }
@@ -21,7 +25,7 @@ impl MockProvider {
 
     fn mint(&self, access_seq: u64, refresh_token: SecretString) -> TokenSet {
         TokenSet {
-            provider_id: "mock".to_string(),
+            provider_id: MOCK_PROVIDER_ID.to_string(),
             access_token: SecretString::new(format!("mock-access-{access_seq}")),
             refresh_token: Some(refresh_token),
             id_token: None,
@@ -48,7 +52,7 @@ impl Default for MockProvider {
 #[cfg_attr(target_family = "wasm", async_trait::async_trait(?Send))]
 impl AuthProvider for MockProvider {
     fn id(&self) -> &str {
-        "mock"
+        MOCK_PROVIDER_ID
     }
 
     fn display_name(&self) -> &str {

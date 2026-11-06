@@ -16,34 +16,28 @@ fn tokens(tag: &str) -> TokenSet {
 }
 
 #[gpui::test]
-async fn save_then_load_round_trips(cx: &mut gpui::TestAppContext) {
+async fn save_then_load_round_trips() {
     let store = InMemoryStore::new();
-    cx.update(|cx| {
-        store.save("mock", &tokens("1"), cx).unwrap();
-        let loaded = store.load("mock", cx).unwrap().unwrap();
-        assert_eq!(loaded, tokens("1"));
-    });
+    store.save("mock", &tokens("1")).await.unwrap();
+    let loaded = store.load("mock").await.unwrap().unwrap();
+    assert_eq!(loaded, tokens("1"));
 }
 
 #[gpui::test]
-async fn save_overwrites_the_previous_set(cx: &mut gpui::TestAppContext) {
+async fn save_overwrites_the_previous_set() {
     let store = InMemoryStore::new();
-    cx.update(|cx| {
-        store.save("mock", &tokens("1"), cx).unwrap();
-        store.save("mock", &tokens("2"), cx).unwrap();
-        assert_eq!(store.load("mock", cx).unwrap(), Some(tokens("2")));
-    });
+    store.save("mock", &tokens("1")).await.unwrap();
+    store.save("mock", &tokens("2")).await.unwrap();
+    assert_eq!(store.load("mock").await.unwrap(), Some(tokens("2")));
 }
 
 #[gpui::test]
-async fn delete_then_load_misses_and_double_delete_is_ok(cx: &mut gpui::TestAppContext) {
+async fn delete_then_load_misses_and_double_delete_is_ok() {
     let store = InMemoryStore::new();
-    cx.update(|cx| {
-        store.save("mock", &tokens("1"), cx).unwrap();
-        store.delete("mock", cx).unwrap();
-        assert_eq!(store.load("mock", cx).unwrap(), None);
-        store.delete("mock", cx).unwrap();
-    });
+    store.save("mock", &tokens("1")).await.unwrap();
+    store.delete("mock").await.unwrap();
+    assert_eq!(store.load("mock").await.unwrap(), None);
+    store.delete("mock").await.unwrap();
 }
 
 #[test]

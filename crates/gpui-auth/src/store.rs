@@ -4,18 +4,15 @@ use std::sync::Mutex;
 use crate::error::AuthError;
 use crate::token::TokenSet;
 
-/// Persisted-token storage keyed by provider id. Every method runs on the
-/// caller's App context so app-side implementations can update their own
-/// globals.
+/// Persisted-token storage keyed by provider id. Methods run on whatever
+/// thread awaits them (callers keep OS-keyring I/O off the UI thread), so
+/// implementations must not touch main-thread-only state.
+#[cfg_attr(not(target_family = "wasm"), async_trait::async_trait)]
+#[cfg_attr(target_family = "wasm", async_trait::async_trait(?Send))]
 pub trait TokenStore: Send + Sync {
-    fn save(
-        &self,
-        provider_id: &str,
-        tokens: &TokenSet,
-        cx: &mut gpui::App,
-    ) -> Result<(), AuthError>;
-    fn load(&self, provider_id: &str, cx: &mut gpui::App) -> Result<Option<TokenSet>, AuthError>;
-    fn delete(&self, provider_id: &str, cx: &mut gpui::App) -> Result<(), AuthError>;
+    async fn save(&self, provider_id: &str, tokens: &TokenSet) -> Result<(), AuthError>;
+    async fn load(&self, provider_id: &str) -> Result<Option<TokenSet>, AuthError>;
+    async fn delete(&self, provider_id: &str) -> Result<(), AuthError>;
 }
 
 /// Process-lifetime store: tokens vanish when the process exits. The default
@@ -46,22 +43,19 @@ impl InMemoryStore {
     }
 }
 
+#[cfg_attr(not(target_family = "wasm"), async_trait::async_trait)]
+#[cfg_attr(target_family = "wasm", async_trait::async_trait(?Send))]
 impl TokenStore for InMemoryStore {
-    fn save(
-        &self,
-        provider_id: &str,
-        tokens: &TokenSet,
-        _cx: &mut gpui::App,
-    ) -> Result<(), AuthError> {
+    async fn save(&self, provider_id: &str, tokens: &TokenSet) -> Result<(), AuthError> {
         self.put(provider_id, tokens.clone());
         Ok(())
     }
 
-    fn load(&self, provider_id: &str, _cx: &mut gpui::App) -> Result<Option<TokenSet>, AuthError> {
+    async fn load(&self, provider_id: &str) -> Result<Option<TokenSet>, AuthError> {
         Ok(self.get(provider_id))
     }
 
-    fn delete(&self, provider_id: &str, _cx: &mut gpui::App) -> Result<(), AuthError> {
+    async fn delete(&self, provider_id: &str) -> Result<(), AuthError> {
         self.entries
             .lock()
             .expect("in-memory token store lock poisoned")

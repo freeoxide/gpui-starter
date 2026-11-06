@@ -4,9 +4,7 @@ use std::sync::Arc;
 
 use gpui::{Context, EventEmitter};
 
-use crate::email::{
-    EmailAccountStatus, PasswordAuth, SignInOutcome, TotpChallenge, TotpEnrollment,
-};
+use crate::email::{EmailAccountStatus, PasswordAuth};
 use crate::error::AuthError;
 use crate::provider::{AuthIo, AuthProvider, FlowLaunch, RedirectParams};
 use crate::store::TokenStore;
@@ -17,21 +15,15 @@ type BoxedProviderFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 #[cfg(target_family = "wasm")]
 type BoxedProviderFuture<T> = Pin<Box<dyn Future<Output = T>>>;
 
-/// Sign-in state machine; `Error(String)` is developer text, not localized
-/// product copy.
+/// Sign-in state machine; `Error(AuthError)` is developer text, not
+/// localized product copy.
 #[derive(Clone, Debug, PartialEq)]
 pub enum AuthState {
     SignedOut,
     SigningIn,
     SigningUp,
-    AwaitingChallenge {
-        email: String,
-        error: Option<String>,
-    },
-    SignedIn {
-        account_label: String,
-    },
-    Error(String),
+    SignedIn { account_label: String },
+    Error(AuthError),
 }
 
 /// Transient flow outcomes; steady-state changes ride `cx.notify` instead.
@@ -52,10 +44,10 @@ pub struct AuthController {
     pending: Option<FlowLaunch>,
     password: Option<Arc<dyn PasswordAuth>>,
     clock: Option<Arc<dyn Fn() -> i64 + Send + Sync>>,
-    pending_challenge: Option<TotpChallenge>,
     email_status: Option<EmailAccountStatus>,
-    pending_enrollment: Option<TotpEnrollment>,
-    enrollment_error: Option<String>,
+    cached_tokens: Option<TokenSet>,
+    generation: u64,
+    refreshing: bool,
     warned_no_clock: bool,
 }
 
@@ -77,10 +69,10 @@ impl AuthController {
             pending: None,
             password: None,
             clock: None,
-            pending_challenge: None,
             email_status: None,
-            pending_enrollment: None,
-            enrollment_error: None,
+            cached_tokens: None,
+            generation: 0,
+            refreshing: false,
             warned_no_clock: false,
         }
     }
@@ -98,6 +90,40 @@ impl AuthController {
         self.pending.is_some()
     }
 
+    /// Bumped whenever flow state resets; completions stamped with an older
+    /// generation are dropped so they cannot overwrite the new state.
+    fn invalidate_in_flight(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
+        self.refreshing = false;
+    }
+
+    /// Cache-first read so steady state never touches the store; a cache
+    /// miss loads in a spawned task (an OS keyring round trip must stay off
+    /// the UI thread) and continues with `then`.
+    fn with_stored_tokens(
+        &mut self,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Self, Result<Option<TokenSet>, AuthError>, &mut Context<Self>) + 'static,
+    ) {
+        if let Some(cached) = &self.cached_tokens {
+            let cached = Ok(Some(cached.clone()));
+            then(self, cached, cx);
+            return;
+        }
+        let provider_id = self.provider_id().to_string();
+        let store = Arc::clone(&self.store);
+        self.launch(
+            cx,
+            Box::pin(async move { store.load(&provider_id).await }),
+            move |controller, loaded, cx| {
+                if let Ok(Some(tokens)) = &loaded {
+                    controller.cached_tokens = Some(tokens.clone());
+                }
+                then(controller, loaded, cx);
+            },
+        );
+    }
+
     fn launch<T: Send + 'static>(
         &self,
         cx: &mut Context<Self>,
@@ -105,11 +131,17 @@ impl AuthController {
         apply: impl FnOnce(&mut Self, Result<T, AuthError>, &mut Context<Self>) + 'static,
     ) {
         let io = self.io.clone();
+        let generation = self.generation;
         cx.spawn(async move |this, cx| {
             let result = io.drive(future).await;
-            if let Err(err) =
-                cx.update(|cx| this.update(cx, |controller, cx| apply(controller, result, cx)))
-            {
+            if let Err(err) = cx.update(|cx| {
+                this.update(cx, |controller, cx| {
+                    if controller.generation != generation {
+                        return;
+                    }
+                    apply(controller, result, cx);
+                })
+            }) {
                 tracing::debug!(
                     target: "gpui_auth::controller",
                     error = %err,
@@ -122,6 +154,7 @@ impl AuthController {
 
     /// Replace any pending flow and start a new one (`SigningIn`).
     pub fn start_sign_in(&mut self, cx: &mut Context<Self>) {
+        self.invalidate_in_flight();
         self.pending = None;
         self.state = AuthState::SigningIn;
         cx.notify();
@@ -177,8 +210,10 @@ impl AuthController {
         });
     }
 
-    /// Drop the pending flow without contacting the provider.
+    /// Drop the pending flow without contacting the provider. Any provider
+    /// call already in flight is discarded on completion.
     pub fn cancel(&mut self, cx: &mut Context<Self>) {
+        self.invalidate_in_flight();
         self.pending = None;
         self.state = AuthState::SignedOut;
         cx.notify();
@@ -186,29 +221,29 @@ impl AuthController {
 
     /// Load persisted tokens; `SignedIn` when the store has them.
     pub fn restore(&mut self, cx: &mut Context<Self>) {
-        match self.store.load(self.provider_id(), cx) {
+        self.with_stored_tokens(cx, |controller, loaded, cx| match loaded {
             Ok(Some(tokens)) => {
                 let account_label =
-                    account_label(tokens.account.as_ref(), self.provider.display_name());
+                    account_label(tokens.account.as_ref(), controller.provider.display_name());
                 tracing::info!(
                     target: "gpui_auth::controller",
-                    provider_id = self.provider_id(),
+                    provider_id = controller.provider_id(),
                     summary = %tokens.redacted_summary(),
                     "restored persisted tokens"
                 );
-                self.state = AuthState::SignedIn { account_label };
+                controller.state = AuthState::SignedIn { account_label };
                 cx.notify();
             }
             Ok(None) => {}
             Err(error) => {
                 tracing::warn!(
                     target: "gpui_auth::controller",
-                    provider_id = self.provider_id(),
+                    provider_id = controller.provider_id(),
                     error = %error,
                     "token restore failed"
                 );
             }
-        }
+        });
     }
 
     /// Unconditional refresh; callers gate on `TokenSet::needs_refresh`.
@@ -230,66 +265,86 @@ impl AuthController {
             }
             return;
         };
-        let Ok(Some(tokens)) = self.store.load(self.provider_id(), cx) else {
-            return;
-        };
-        if !tokens.needs_refresh(clock(), margin_secs) {
-            return;
-        }
-        self.do_refresh(cx);
+        self.with_stored_tokens(cx, move |controller, stored, cx| {
+            let Ok(Some(tokens)) = stored else {
+                return;
+            };
+            if !tokens.needs_refresh(clock(), margin_secs) {
+                return;
+            }
+            controller.do_refresh(cx);
+        });
     }
 
     fn do_refresh(&mut self, cx: &mut Context<Self>) {
-        let tokens = match self.store.load(self.provider_id(), cx) {
-            Ok(Some(tokens)) => tokens,
-            Ok(None) => {
-                self.on_refresh_refused(AuthError::NoRefreshToken, cx);
-                return;
-            }
-            Err(error) => {
-                self.on_refresh_refused(error, cx);
-                return;
-            }
-        };
-        let Some(refresh_token) = tokens.refresh_token.clone() else {
-            self.on_refresh_refused(AuthError::NoRefreshToken, cx);
-            return;
-        };
-        if self.provider.refresh_policy() == RefreshPolicy::None {
-            self.on_refresh_refused(AuthError::NoRefreshToken, cx);
+        if self.refreshing {
             return;
         }
-        let provider = Arc::clone(&self.provider);
-        let http = self.io.http.clone();
-        let secret = refresh_token.expose().to_string();
-        let future = Box::pin(async move { provider.refresh(http, &secret).await });
-        self.launch(cx, future, move |controller, result, cx| match result {
-            Ok(new_tokens) => controller.on_tokens_refreshed(tokens, new_tokens, cx),
-            Err(error) => controller.on_refresh_refused(error, cx),
+        self.with_stored_tokens(cx, |controller, stored, cx| {
+            // The load hop can race a second do_refresh; only one refresh.
+            if controller.refreshing {
+                return;
+            }
+            let tokens = match stored {
+                Ok(Some(tokens)) => tokens,
+                Ok(None) => {
+                    controller.on_refresh_refused(AuthError::NoRefreshToken, cx);
+                    return;
+                }
+                Err(error) => {
+                    controller.on_refresh_refused(error, cx);
+                    return;
+                }
+            };
+            let Some(refresh_token) = tokens.refresh_token.clone() else {
+                controller.on_refresh_refused(AuthError::NoRefreshToken, cx);
+                return;
+            };
+            if controller.provider.refresh_policy() == RefreshPolicy::None {
+                controller.on_refresh_refused(AuthError::NoRefreshToken, cx);
+                return;
+            }
+            let provider = Arc::clone(&controller.provider);
+            let http = controller.io.http.clone();
+            // The secret moves into the future as a SecretString so the copy
+            // wipes on drop instead of living on as a plain String.
+            let future =
+                Box::pin(async move { provider.refresh(http, refresh_token.expose()).await });
+            controller.refreshing = true;
+            controller.launch(cx, future, move |controller, result, cx| {
+                controller.refreshing = false;
+                match result {
+                    Ok(new_tokens) => controller.on_tokens_refreshed(tokens, new_tokens, cx),
+                    Err(error) => controller.on_refresh_refused(error, cx),
+                }
+            });
         });
     }
 
     /// Best-effort revoke, then delete stored tokens, then `SignedOut`.
+    /// Any provider call already in flight is discarded on completion.
     pub fn sign_out(&mut self, cx: &mut Context<Self>) {
-        let stored = self.store.load(self.provider_id(), cx).ok().flatten();
-        let Some(tokens) = stored else {
-            self.finish_sign_out(cx);
-            return;
-        };
-        let provider = Arc::clone(&self.provider);
-        let http = self.io.http.clone();
-        let secret = tokens.access_token.expose().to_string();
-        let future = Box::pin(async move { provider.revoke(http, &secret).await });
-        self.launch(cx, future, |controller, result, cx| {
-            if let Err(error) = result {
-                tracing::warn!(
-                    target: "gpui_auth::controller",
-                    provider_id = controller.provider_id(),
-                    error = %error,
-                    "revoke failed; continuing sign-out"
-                );
-            }
-            controller.finish_sign_out(cx);
+        self.invalidate_in_flight();
+        self.with_stored_tokens(cx, |controller, stored, cx| {
+            let Some(tokens) = stored.ok().flatten() else {
+                controller.finish_sign_out(cx);
+                return;
+            };
+            let provider = Arc::clone(&controller.provider);
+            let http = controller.io.http.clone();
+            let secret = tokens.access_token.clone();
+            let future = Box::pin(async move { provider.revoke(http, secret.expose()).await });
+            controller.launch(cx, future, |controller, result, cx| {
+                if let Err(error) = result {
+                    tracing::warn!(
+                        target: "gpui_auth::controller",
+                        provider_id = controller.provider_id(),
+                        error = %error,
+                        "revoke failed; continuing sign-out"
+                    );
+                }
+                controller.finish_sign_out(cx);
+            });
         });
     }
 
@@ -309,17 +364,27 @@ impl AuthController {
         self.email_status.as_ref()
     }
 
-    pub fn totp_enrollment(&self) -> Option<&TotpEnrollment> {
-        self.pending_enrollment.as_ref()
-    }
-
-    pub fn totp_enrollment_error(&self) -> Option<&str> {
-        self.enrollment_error.as_deref()
+    /// Non-secret account facts (email, token expiry) from the cached
+    /// token set; never touches the store, so UI mirrors can call it
+    /// freely. `None` while signed out.
+    pub fn account_facts(&self) -> (Option<String>, Option<i64>) {
+        self.cached_tokens
+            .as_ref()
+            .map(|tokens| {
+                (
+                    tokens
+                        .account
+                        .as_ref()
+                        .and_then(|account| account.email.clone()),
+                    tokens.expires_at,
+                )
+            })
+            .unwrap_or_default()
     }
 
     fn password_auth(&mut self, cx: &mut Context<Self>) -> Option<Arc<dyn PasswordAuth>> {
         let Some(auth) = self.password.clone() else {
-            self.state = AuthState::Error(AuthError::PasswordAuthUnavailable.to_string());
+            self.state = AuthState::Error(AuthError::PasswordAuthUnavailable);
             cx.notify();
             return None;
         };
@@ -345,6 +410,7 @@ impl AuthController {
         let Some(auth) = self.password_auth(cx) else {
             return;
         };
+        self.invalidate_in_flight();
         self.state = AuthState::SigningUp;
         cx.notify();
         let http = self.io.http.clone();
@@ -363,8 +429,7 @@ impl AuthController {
         });
     }
 
-    /// Password sign-in: straight to `SignedIn`, or `AwaitingChallenge`
-    /// when the backend demands TOTP.
+    /// Password sign-in: straight to `SignedIn`.
     pub fn sign_in_with_password(
         &mut self,
         email: String,
@@ -374,6 +439,7 @@ impl AuthController {
         let Some(auth) = self.password_auth(cx) else {
             return;
         };
+        self.invalidate_in_flight();
         self.state = AuthState::SigningIn;
         cx.notify();
         tracing::info!(
@@ -384,142 +450,11 @@ impl AuthController {
         let http = self.io.http.clone();
         let future = Box::pin(async move { auth.sign_in(http, &email, &password).await });
         self.launch(cx, future, |controller, result, cx| match result {
-            Ok(SignInOutcome::Authenticated(session)) => {
+            Ok(session) => {
                 controller.email_status = Some(session.status);
                 controller.on_tokens(session.tokens, cx);
-            }
-            Ok(SignInOutcome::TotpRequired(challenge)) => {
-                controller.state = AuthState::AwaitingChallenge {
-                    email: challenge.email.clone(),
-                    error: None,
-                };
-                controller.pending_challenge = Some(challenge);
-                cx.notify();
             }
             Err(error) => controller.on_flow_failed(error, cx),
-        });
-    }
-
-    /// Answer the pending TOTP challenge; a wrong code keeps it with `error`
-    /// set, an expired one drops it back to `SignedOut`.
-    pub fn submit_totp(&mut self, code: String, cx: &mut Context<Self>) {
-        let Some(auth) = self.password_auth(cx) else {
-            return;
-        };
-        let Some(challenge) = self.pending_challenge.clone() else {
-            self.state = AuthState::Error(AuthError::NoPendingChallenge.to_string());
-            cx.notify();
-            return;
-        };
-        let http = self.io.http.clone();
-        let challenge_email = challenge.email.clone();
-        let future = Box::pin(async move { auth.submit_totp(http, &challenge, &code).await });
-        self.launch(cx, future, move |controller, result, cx| match result {
-            Ok(session) => {
-                controller.pending_challenge = None;
-                controller.email_status = Some(session.status);
-                controller.on_tokens(session.tokens, cx);
-            }
-            Err(AuthError::TotpFailed) => {
-                controller.state = AuthState::AwaitingChallenge {
-                    email: challenge_email,
-                    error: Some(AuthError::TotpFailed.to_string()),
-                };
-                cx.notify();
-            }
-            Err(AuthError::InvalidChallenge) => {
-                controller.pending_challenge = None;
-                controller.state = AuthState::SignedOut;
-                cx.notify();
-            }
-            Err(error) => {
-                controller.pending_challenge = None;
-                controller.on_flow_failed(error, cx);
-            }
-        });
-    }
-
-    /// Drop the pending challenge and return to `SignedOut`.
-    pub fn cancel_challenge(&mut self, cx: &mut Context<Self>) {
-        self.pending_challenge = None;
-        self.state = AuthState::SignedOut;
-        cx.notify();
-    }
-
-    /// Fetch a new TOTP enrollment round for the signed-in account.
-    /// Requires `SignedIn` and an account email on record.
-    pub fn enroll_totp(&mut self, cx: &mut Context<Self>) {
-        if !matches!(self.state, AuthState::SignedIn { .. }) {
-            tracing::warn!(
-                target: "gpui_auth::controller",
-                provider_id = self.provider_id(),
-                "TOTP enrollment requires a signed-in account"
-            );
-            return;
-        }
-        let Some(auth) = self.password_auth(cx) else {
-            return;
-        };
-        let email = self
-            .email_status
-            .as_ref()
-            .map(|status| status.email.clone())
-            .or_else(|| {
-                self.store
-                    .load(self.provider_id(), cx)
-                    .ok()
-                    .flatten()
-                    .and_then(|tokens| tokens.account.and_then(|account| account.email))
-            });
-        let Some(email) = email else {
-            tracing::warn!(
-                target: "gpui_auth::controller",
-                provider_id = self.provider_id(),
-                "TOTP enrollment skipped: no account email on record"
-            );
-            return;
-        };
-        let http = self.io.http.clone();
-        let future = Box::pin(async move { auth.begin_totp_enrollment(http, &email).await });
-        self.launch(cx, future, |controller, result, cx| match result {
-            Ok(enrollment) => {
-                controller.pending_enrollment = Some(enrollment);
-                controller.enrollment_error = None;
-                cx.notify();
-            }
-            Err(error) => {
-                controller.enrollment_error = Some(error.to_string());
-                cx.notify();
-            }
-        });
-    }
-
-    /// Confirm the pending enrollment with a code; failure keeps the round
-    /// and records `enrollment_error`.
-    pub fn confirm_totp_enrollment(&mut self, code: String, cx: &mut Context<Self>) {
-        let Some(auth) = self.password_auth(cx) else {
-            return;
-        };
-        let Some(enrollment) = self.pending_enrollment.clone() else {
-            self.state = AuthState::Error(AuthError::NoPendingChallenge.to_string());
-            cx.notify();
-            return;
-        };
-        let http = self.io.http.clone();
-        let future = Box::pin(async move {
-            auth.confirm_totp_enrollment(http, &enrollment.email, &code)
-                .await
-        });
-        self.launch(cx, future, |controller, result, cx| match result {
-            Ok(()) => {
-                controller.pending_enrollment = None;
-                controller.enrollment_error = None;
-                cx.notify();
-            }
-            Err(error) => {
-                controller.enrollment_error = Some(error.to_string());
-                cx.notify();
-            }
         });
     }
 
@@ -542,12 +477,13 @@ impl AuthController {
             error = %error,
             "auth flow failed"
         );
-        self.state = AuthState::Error(error.to_string());
+        self.state = AuthState::Error(error.clone());
         cx.notify();
         cx.emit(AuthEvent::FlowFailed { error });
     }
 
-    /// Shared persistence path: provider check, store save, `SignedIn`.
+    /// Shared persistence path: provider check, store save in a spawned
+    /// task, `SignedIn` once the save lands.
     fn on_tokens(&mut self, tokens: TokenSet, cx: &mut Context<Self>) {
         if tokens.provider_id != self.provider_id() {
             self.on_flow_failed(
@@ -560,20 +496,30 @@ impl AuthController {
             );
             return;
         }
-        if let Err(error) = self.store.save(self.provider_id(), &tokens, cx) {
-            self.on_flow_failed(error, cx);
-            return;
-        }
-        tracing::info!(
-            target: "gpui_auth::controller",
-            provider_id = self.provider_id(),
-            summary = %tokens.redacted_summary(),
-            "sign-in complete"
+        let provider_id = self.provider_id().to_string();
+        let store = Arc::clone(&self.store);
+        let persisted = tokens.clone();
+        self.launch(
+            cx,
+            Box::pin(async move { store.save(&provider_id, &persisted).await }),
+            move |controller, result, cx| match result {
+                Ok(()) => {
+                    tracing::info!(
+                        target: "gpui_auth::controller",
+                        provider_id = controller.provider_id(),
+                        summary = %tokens.redacted_summary(),
+                        "sign-in complete"
+                    );
+                    controller.cached_tokens = Some(tokens.clone());
+                    let account_label =
+                        account_label(tokens.account.as_ref(), controller.provider.display_name());
+                    controller.state = AuthState::SignedIn { account_label };
+                    cx.notify();
+                    cx.emit(AuthEvent::FlowCompleted);
+                }
+                Err(error) => controller.on_flow_failed(error, cx),
+            },
         );
-        let account_label = account_label(tokens.account.as_ref(), self.provider.display_name());
-        self.state = AuthState::SignedIn { account_label };
-        cx.notify();
-        cx.emit(AuthEvent::FlowCompleted);
     }
 
     fn on_tokens_refreshed(&mut self, old: TokenSet, new_tokens: TokenSet, cx: &mut Context<Self>) {
@@ -589,19 +535,29 @@ impl AuthController {
             return;
         }
         let merged = self.provider.refresh_policy().merge(&old, new_tokens);
-        if let Err(error) = self.store.save(self.provider_id(), &merged, cx) {
-            self.on_refresh_refused(error, cx);
-            return;
-        }
-        tracing::info!(
-            target: "gpui_auth::controller",
-            provider_id = self.provider_id(),
-            summary = %merged.redacted_summary(),
-            "token refresh complete"
+        let provider_id = self.provider_id().to_string();
+        let store = Arc::clone(&self.store);
+        let persisted = merged.clone();
+        self.launch(
+            cx,
+            Box::pin(async move { store.save(&provider_id, &persisted).await }),
+            move |controller, result, cx| match result {
+                Ok(()) => {
+                    tracing::info!(
+                        target: "gpui_auth::controller",
+                        provider_id = controller.provider_id(),
+                        summary = %merged.redacted_summary(),
+                        "token refresh complete"
+                    );
+                    controller.cached_tokens = Some(merged.clone());
+                    let account_label =
+                        account_label(merged.account.as_ref(), controller.provider.display_name());
+                    controller.state = AuthState::SignedIn { account_label };
+                    cx.notify();
+                }
+                Err(error) => controller.on_refresh_refused(error, cx),
+            },
         );
-        let account_label = account_label(merged.account.as_ref(), self.provider.display_name());
-        self.state = AuthState::SignedIn { account_label };
-        cx.notify();
     }
 
     fn on_refresh_refused(&mut self, error: AuthError, cx: &mut Context<Self>) {
@@ -611,27 +567,34 @@ impl AuthController {
             error = %error,
             "token refresh refused"
         );
-        self.state = AuthState::Error(error.to_string());
+        self.state = AuthState::Error(error);
         cx.notify();
     }
 
     fn finish_sign_out(&mut self, cx: &mut Context<Self>) {
-        if let Err(error) = self.store.delete(self.provider_id(), cx) {
-            tracing::warn!(
-                target: "gpui_auth::controller",
-                provider_id = self.provider_id(),
-                error = %error,
-                "token delete failed during sign-out"
-            );
-        }
+        self.invalidate_in_flight();
         self.pending = None;
-        self.pending_challenge = None;
         self.email_status = None;
-        self.pending_enrollment = None;
-        self.enrollment_error = None;
+        self.cached_tokens = None;
         self.state = AuthState::SignedOut;
         cx.notify();
-        cx.emit(AuthEvent::SignedOut);
+        let provider_id = self.provider_id().to_string();
+        let store = Arc::clone(&self.store);
+        self.launch(
+            cx,
+            Box::pin(async move { store.delete(&provider_id).await }),
+            |controller, result, cx| {
+                if let Err(error) = result {
+                    tracing::warn!(
+                        target: "gpui_auth::controller",
+                        provider_id = controller.provider_id(),
+                        error = %error,
+                        "token delete failed during sign-out"
+                    );
+                }
+                cx.emit(AuthEvent::SignedOut);
+            },
+        );
     }
 }
 

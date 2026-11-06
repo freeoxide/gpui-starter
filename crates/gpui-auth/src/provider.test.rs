@@ -37,10 +37,23 @@ fn from_url_rejects_non_urls() {
 
 #[cfg(not(target_family = "wasm"))]
 #[gpui::test]
-async fn drive_with_no_runtime_awaits_the_future_directly(_cx: &mut gpui::TestAppContext) {
+async fn drive_runs_on_a_real_runtime_and_propagates_task_panics(_cx: &mut gpui::TestAppContext) {
+    let runtime = std::sync::Arc::new(
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("test runtime"),
+    );
     let io = AuthIo {
         http: reqwest::Client::new(),
-        runtime: None,
+        runtime: Some(std::sync::Arc::clone(&runtime)),
     };
     assert_eq!(io.drive(std::future::ready(7)).await, 7);
+
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        runtime.block_on(io.drive(async { panic!("auth worker boom") }))
+    }));
+    std::panic::set_hook(previous_hook);
+    assert!(panicked.is_err(), "a panicking auth task must surface");
 }

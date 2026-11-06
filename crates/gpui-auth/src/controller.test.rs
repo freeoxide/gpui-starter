@@ -101,7 +101,7 @@ async fn complete_callback_happy_path_signs_in_and_persists(cx: &mut TestAppCont
             .iter()
             .any(|event| matches!(event, AuthEvent::FlowCompleted))
     );
-    cx.update(|cx| assert!(store.load("mock", cx).unwrap().is_some()));
+    assert!(store.load("mock").await.unwrap().is_some());
 }
 
 #[gpui::test]
@@ -116,21 +116,21 @@ async fn wrong_state_redirect_fails_and_consumes_the_flow(cx: &mut TestAppContex
     });
     cx.run_until_parked();
     let state = current_state(cx, &controller);
-    assert!(matches!(state, AuthState::Error(message) if message.contains("state mismatch")));
+    assert!(matches!(state, AuthState::Error(AuthError::StateMismatch)));
     assert!(events.borrow().iter().any(|event| matches!(
         event,
         AuthEvent::FlowFailed {
             error: AuthError::StateMismatch
         }
     )));
-    cx.update(|cx| assert_eq!(store.load("mock", cx).unwrap(), None));
+    assert_eq!(store.load("mock").await.unwrap(), None);
 
     controller.update(cx, |controller, cx| {
         controller.complete_callback("https://cb?code=x&state=whatever", cx)
     });
     cx.run_until_parked();
     let state = current_state(cx, &controller);
-    assert!(matches!(state, AuthState::Error(message) if message.contains("no pending")));
+    assert!(matches!(state, AuthState::Error(AuthError::NoPendingFlow)));
 }
 
 #[gpui::test]
@@ -146,7 +146,10 @@ async fn error_param_redirect_maps_to_provider_denied(cx: &mut TestAppContext) {
     });
     cx.run_until_parked();
     let state = current_state(cx, &controller);
-    assert!(matches!(state, AuthState::Error(message) if message.contains("access_denied")));
+    assert!(matches!(
+        state,
+        AuthState::Error(AuthError::ProviderDenied { error, .. }) if error == "access_denied"
+    ));
 }
 
 #[gpui::test]
@@ -164,7 +167,7 @@ async fn cancel_drops_the_flow_without_provider_contact(cx: &mut TestAppContext)
     });
     cx.run_until_parked();
     let state = current_state(cx, &controller);
-    assert!(matches!(state, AuthState::Error(message) if message.contains("no pending")));
+    assert!(matches!(state, AuthState::Error(AuthError::NoPendingFlow)));
 }
 
 #[gpui::test]
@@ -185,8 +188,9 @@ async fn restore_signs_in_from_a_preseeded_store(cx: &mut TestAppContext) {
             avatar_url: None,
         }),
     };
-    cx.update(|cx| store.save("mock", &tokens, cx).unwrap());
+    store.save("mock", &tokens).await.unwrap();
     controller.update(cx, |controller, cx| controller.restore(cx));
+    cx.run_until_parked();
     assert_eq!(
         current_state(cx, &controller),
         AuthState::SignedIn {
@@ -208,7 +212,7 @@ async fn refresh_after_sign_in_merges_per_reuse_until_dead(cx: &mut TestAppConte
     cx.run_until_parked();
     controller.update(cx, |controller, cx| controller.refresh(cx));
     cx.run_until_parked();
-    let stored = cx.update(|cx| store.load("mock", cx).unwrap().unwrap());
+    let stored = store.load("mock").await.unwrap().unwrap();
     assert_eq!(stored.access_token.expose(), "mock-access-1");
     assert_eq!(stored.refresh_token.unwrap().expose(), "mock-refresh-0");
     assert_eq!(
@@ -224,7 +228,7 @@ async fn refresh_while_signed_out_reports_no_refresh_token(cx: &mut TestAppConte
     let (controller, _store) = new_controller(cx);
     controller.update(cx, |controller, cx| controller.refresh(cx));
     let state = current_state(cx, &controller);
-    assert!(matches!(state, AuthState::Error(message) if message.contains("no refresh token")));
+    assert!(matches!(state, AuthState::Error(AuthError::NoRefreshToken)));
 }
 
 #[gpui::test]
@@ -241,7 +245,7 @@ async fn sign_out_revokes_deletes_and_emits(cx: &mut TestAppContext) {
     controller.update(cx, |controller, cx| controller.sign_out(cx));
     cx.run_until_parked();
     assert_eq!(current_state(cx, &controller), AuthState::SignedOut);
-    cx.update(|cx| assert_eq!(store.load("mock", cx).unwrap(), None));
+    assert_eq!(store.load("mock").await.unwrap(), None);
     assert!(
         events
             .borrow()
@@ -319,8 +323,6 @@ async fn password_readers_start_none_and_enable_password_survives_replacement(
     cx.read(|cx| {
         let controller = fixture.controller.read(cx);
         assert_eq!(controller.email_status(), None);
-        assert!(controller.totp_enrollment().is_none());
-        assert_eq!(controller.totp_enrollment_error(), None);
     });
     drive(&fixture, cx, |controller, cx| {
         let provider = Arc::new(EmailPasswordProvider::new(
@@ -369,7 +371,7 @@ async fn password_sign_up_then_sign_in_persists_and_completes(cx: &mut TestAppCo
         event,
         AuthEvent::FlowCompleted
     )));
-    let stored = cx.update(|cx| fixture.store.load("email", cx).unwrap().unwrap());
+    let stored = fixture.store.load("email").await.unwrap().unwrap();
     assert_eq!(stored.access_token.expose(), "test-access-0");
     cx.read(|cx| {
         assert_eq!(
@@ -401,7 +403,7 @@ async fn duplicate_sign_up_and_bad_credentials_error_out(cx: &mut TestAppContext
         )
     });
     let state = current_state(cx, &fixture.controller);
-    assert!(matches!(state, AuthState::Error(message) if message.contains("already registered")));
+    assert!(matches!(state, AuthState::Error(AuthError::EmailTaken)));
     assert!(has_event(&fixture.events, |event| matches!(
         event,
         AuthEvent::FlowFailed { .. }
@@ -415,10 +417,8 @@ async fn duplicate_sign_up_and_bad_credentials_error_out(cx: &mut TestAppContext
         )
     });
     let state = current_state(cx, &fixture.controller);
-    assert!(
-        matches!(state, AuthState::Error(message) if message.contains("invalid email or password"))
-    );
-    cx.update(|cx| assert_eq!(fixture.store.load("email", cx).unwrap(), None));
+    assert!(matches!(state, AuthState::Error(AuthError::InvalidCredentials)));
+    assert_eq!(fixture.store.load("email").await.unwrap(), None);
 }
 
 #[gpui::test]
@@ -489,7 +489,7 @@ async fn a_second_sign_in_overwrites_the_single_store_row(cx: &mut TestAppContex
             account_label: "b@example.test".to_string()
         }
     );
-    let stored = cx.update(|cx| fixture.store.load("email", cx).unwrap().unwrap());
+    let stored = fixture.store.load("email").await.unwrap().unwrap();
     assert_eq!(
         stored.account.unwrap().email,
         Some("b@example.test".to_string())
@@ -497,109 +497,8 @@ async fn a_second_sign_in_overwrites_the_single_store_row(cx: &mut TestAppContex
 }
 
 #[gpui::test]
-async fn totp_challenge_keeps_on_wrong_code_and_completes_on_the_right_one(
-    cx: &mut TestAppContext,
-) {
-    let fixture = email_controller(cx, true);
-    fixture.backend.require_totp();
-    drive(&fixture, cx, |controller, cx| {
-        controller.sign_up_with_password(
-            "t@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
-            cx,
-        )
-    });
-    drive(&fixture, cx, |controller, cx| {
-        controller.sign_in_with_password(
-            "t@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
-            cx,
-        )
-    });
-    assert_eq!(
-        current_state(cx, &fixture.controller),
-        AuthState::AwaitingChallenge {
-            email: "t@example.test".to_string(),
-            error: None,
-        }
-    );
-
-    fixture.backend.fail_totp_once();
-    drive(&fixture, cx, |controller, cx| {
-        controller.submit_totp("123456".to_string(), cx)
-    });
-    assert_eq!(
-        current_state(cx, &fixture.controller),
-        AuthState::AwaitingChallenge {
-            email: "t@example.test".to_string(),
-            error: Some("TOTP code rejected".to_string()),
-        }
-    );
-
-    drive(&fixture, cx, |controller, cx| {
-        controller.submit_totp("654321".to_string(), cx)
-    });
-    assert_eq!(
-        current_state(cx, &fixture.controller),
-        AuthState::SignedIn {
-            account_label: "t@example.test".to_string()
-        }
-    );
-    cx.update(|cx| assert!(fixture.store.load("email", cx).unwrap().is_some()));
-}
-
-#[gpui::test]
-async fn expired_challenge_and_cancel_return_to_signed_out(cx: &mut TestAppContext) {
-    let fixture = email_controller(cx, true);
-    fixture.backend.require_totp();
-    drive(&fixture, cx, |controller, cx| {
-        controller.sign_up_with_password(
-            "t@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
-            cx,
-        )
-    });
-    drive(&fixture, cx, |controller, cx| {
-        controller.sign_in_with_password(
-            "t@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
-            cx,
-        )
-    });
-
-    drive(&fixture, cx, |controller, cx| {
-        controller.cancel_challenge(cx)
-    });
-    assert_eq!(current_state(cx, &fixture.controller), AuthState::SignedOut);
-
-    drive(&fixture, cx, |controller, cx| {
-        controller.sign_in_with_password(
-            "t@example.test".to_string(),
-            crate::token::SecretString::new("password-8"),
-            cx,
-        )
-    });
-    fixture.backend.fail_challenge_once();
-    drive(&fixture, cx, |controller, cx| {
-        controller.submit_totp("123456".to_string(), cx)
-    });
-    assert_eq!(current_state(cx, &fixture.controller), AuthState::SignedOut);
-}
-
-#[gpui::test]
-async fn submit_totp_without_a_pending_challenge_errors(cx: &mut TestAppContext) {
-    let fixture = email_controller(cx, true);
-    drive(&fixture, cx, |controller, cx| {
-        controller.submit_totp("123456".to_string(), cx)
-    });
-    let state = current_state(cx, &fixture.controller);
-    assert!(matches!(state, AuthState::Error(message) if message.contains("no challenge")));
-}
-
-#[gpui::test]
 async fn sign_out_clears_the_email_state_slots(cx: &mut TestAppContext) {
     let fixture = email_controller(cx, true);
-    fixture.backend.require_totp();
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
             "t@example.test".to_string(),
@@ -617,12 +516,9 @@ async fn sign_out_clears_the_email_state_slots(cx: &mut TestAppContext) {
     drive(&fixture, cx, |controller, cx| controller.sign_out(cx));
     assert_eq!(current_state(cx, &fixture.controller), AuthState::SignedOut);
     cx.read(|cx| {
-        let controller = fixture.controller.read(cx);
-        assert_eq!(controller.email_status(), None);
-        assert!(controller.totp_enrollment().is_none());
-        assert_eq!(controller.totp_enrollment_error(), None);
+        assert_eq!(fixture.controller.read(cx).email_status(), None);
     });
-    cx.update(|cx| assert_eq!(fixture.store.load("email", cx).unwrap(), None));
+    assert_eq!(fixture.store.load("email").await.unwrap(), None);
 }
 
 #[gpui::test]
@@ -650,7 +546,7 @@ async fn refresh_if_needed_respects_the_margin_and_the_clock(cx: &mut TestAppCon
     drive(&fixture, cx, |controller, cx| {
         controller.refresh_if_needed(120, cx)
     });
-    let stored = cx.update(|cx| fixture.store.load("email", cx).unwrap().unwrap());
+    let stored = fixture.store.load("email").await.unwrap().unwrap();
     assert_eq!(stored.access_token.expose(), "test-access-0");
     assert!(fixture.backend.refresh_seen().is_empty());
 
@@ -661,7 +557,7 @@ async fn refresh_if_needed_respects_the_margin_and_the_clock(cx: &mut TestAppCon
     drive(&fixture, cx, |controller, cx| {
         controller.refresh_if_needed(120, cx)
     });
-    let stored = cx.update(|cx| fixture.store.load("email", cx).unwrap().unwrap());
+    let stored = fixture.store.load("email").await.unwrap().unwrap();
     assert_eq!(stored.access_token.expose(), "test-access-1");
     assert_eq!(stored.refresh_token.unwrap().expose(), "test-refresh-0");
 }
@@ -709,101 +605,411 @@ async fn refresh_if_needed_with_a_dead_refresh_token_errors(cx: &mut TestAppCont
         controller.refresh_if_needed(120, cx)
     });
     let state = current_state(cx, &fixture.controller);
-    assert!(matches!(state, AuthState::Error(message) if message.contains("backend rejected")));
+    assert!(matches!(state, AuthState::Error(AuthError::RefreshRejected)));
 }
 
 #[gpui::test]
-async fn enrollment_requires_a_signed_in_account(cx: &mut TestAppContext) {
-    let fixture = email_controller(cx, true);
-    drive(&fixture, cx, |controller, cx| controller.enroll_totp(cx));
-    cx.read(|cx| assert!(fixture.controller.read(cx).totp_enrollment().is_none()));
-    assert_eq!(current_state(cx, &fixture.controller), AuthState::SignedOut);
-}
-
-#[gpui::test]
-async fn enrollment_round_keeps_on_failure_and_clears_on_success(cx: &mut TestAppContext) {
+async fn refresh_response_without_a_refresh_token_keeps_the_stored_one(cx: &mut TestAppContext) {
     let fixture = email_controller(cx, true);
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
-            "e@example.test".to_string(),
+            "r@example.test".to_string(),
             crate::token::SecretString::new("password-8"),
             cx,
         )
     });
     drive(&fixture, cx, |controller, cx| {
         controller.sign_in_with_password(
-            "e@example.test".to_string(),
+            "r@example.test".to_string(),
             crate::token::SecretString::new("password-8"),
             cx,
         )
     });
-    drive(&fixture, cx, |controller, cx| controller.enroll_totp(cx));
-    cx.read(|cx| {
-        let enrollment = fixture.controller.read(cx).totp_enrollment().unwrap();
-        assert_eq!(enrollment.email, "e@example.test");
-        assert_eq!(enrollment.secret_base32.len(), 32);
-        assert!(enrollment.otpauth_url.starts_with("otpauth://totp/"));
-    });
-
-    fixture.backend.fail_confirm_once();
-    drive(&fixture, cx, |controller, cx| {
-        controller.confirm_totp_enrollment("000000".to_string(), cx)
-    });
-    cx.read(|cx| {
-        let controller = fixture.controller.read(cx);
-        assert!(controller.totp_enrollment().is_some());
-        assert_eq!(
-            controller.totp_enrollment_error(),
-            Some("TOTP code rejected")
-        );
-    });
-
-    drive(&fixture, cx, |controller, cx| {
-        controller.confirm_totp_enrollment("123456".to_string(), cx)
-    });
-    cx.read(|cx| {
-        let controller = fixture.controller.read(cx);
-        assert!(controller.totp_enrollment().is_none());
-        assert_eq!(controller.totp_enrollment_error(), None);
-    });
+    fixture.backend.omit_refresh_token_once();
+    drive(&fixture, cx, |controller, cx| controller.refresh(cx));
+    let stored = fixture.store.load("email").await.unwrap().unwrap();
+    assert_eq!(stored.access_token.expose(), "test-access-1");
+    assert_eq!(stored.refresh_token.unwrap().expose(), "test-refresh-0");
 }
 
 #[gpui::test]
-async fn restored_session_enrolls_through_the_stored_account_email(cx: &mut TestAppContext) {
+async fn sign_out_contacts_revoke_and_survives_a_revoke_failure(cx: &mut TestAppContext) {
     let fixture = email_controller(cx, true);
     drive(&fixture, cx, |controller, cx| {
         controller.sign_up_with_password(
-            "restored@example.test".to_string(),
+            "s@example.test".to_string(),
             crate::token::SecretString::new("password-8"),
             cx,
         )
     });
-    let tokens = TokenSet {
-        provider_id: "email".to_string(),
-        access_token: crate::SecretString::new("stored-access"),
-        refresh_token: Some(crate::SecretString::new("stored-refresh")),
+    drive(&fixture, cx, |controller, cx| {
+        controller.sign_in_with_password(
+            "s@example.test".to_string(),
+            crate::token::SecretString::new("password-8"),
+            cx,
+        )
+    });
+    drive(&fixture, cx, |controller, cx| controller.sign_out(cx));
+    assert_eq!(current_state(cx, &fixture.controller), AuthState::SignedOut);
+    assert_eq!(
+        fixture.backend.refresh_seen(),
+        vec!["revoke:test-access-0".to_string()]
+    );
+    assert_eq!(fixture.store.load("email").await.unwrap(), None);
+
+    drive(&fixture, cx, |controller, cx| {
+        controller.sign_in_with_password(
+            "s@example.test".to_string(),
+            crate::token::SecretString::new("password-8"),
+            cx,
+        )
+    });
+    fixture.backend.fail_revoke_once();
+    drive(&fixture, cx, |controller, cx| controller.sign_out(cx));
+    assert_eq!(current_state(cx, &fixture.controller), AuthState::SignedOut);
+    assert_eq!(
+        fixture.backend.refresh_seen(),
+        vec![
+            "revoke:test-access-0".to_string(),
+            "revoke:test-access-1".to_string()
+        ]
+    );
+    assert_eq!(fixture.store.load("email").await.unwrap(), None);
+    assert!(has_event(&fixture.events, |event| matches!(
+        event,
+        AuthEvent::SignedOut
+    )));
+}
+
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Provider whose `start_flow`/`refresh` futures park on a channel gate so
+/// tests can act while a provider call is in flight.
+struct GatedProvider {
+    start_gate: Mutex<Option<tokio::sync::mpsc::Receiver<()>>>,
+    refresh_gate: Mutex<Option<tokio::sync::mpsc::Receiver<()>>>,
+    counter: AtomicU64,
+    refresh_calls: std::sync::atomic::AtomicUsize,
+}
+
+impl GatedProvider {
+    fn new(
+        start_gate: Option<tokio::sync::mpsc::Receiver<()>>,
+        refresh_gate: Option<tokio::sync::mpsc::Receiver<()>>,
+    ) -> Self {
+        Self {
+            start_gate: Mutex::new(start_gate),
+            refresh_gate: Mutex::new(refresh_gate),
+            counter: AtomicU64::new(0),
+            refresh_calls: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    async fn wait_for(gate: &Mutex<Option<tokio::sync::mpsc::Receiver<()>>>) {
+        if let Some(receiver) = gate.lock().expect("gate lock").take() {
+            let _ = receiver.recv().await;
+        }
+    }
+
+    fn mint(&self, refresh_token: &str) -> TokenSet {
+        let seq = self.counter.fetch_add(1, Ordering::SeqCst);
+        TokenSet {
+            provider_id: "gate".to_string(),
+            access_token: crate::SecretString::new(format!("gate-access-{seq}")),
+            refresh_token: Some(crate::SecretString::new(refresh_token)),
+            id_token: None,
+            token_type: "Bearer".to_string(),
+            expires_at: None,
+            scope: None,
+            account: Some(AccountInfo {
+                id: None,
+                email: None,
+                display_name: Some("Gate account".to_string()),
+                avatar_url: None,
+            }),
+        }
+    }
+}
+
+#[cfg_attr(not(target_family = "wasm"), async_trait::async_trait)]
+#[cfg_attr(target_family = "wasm", async_trait::async_trait(?Send))]
+impl AuthProvider for GatedProvider {
+    fn id(&self) -> &str {
+        "gate"
+    }
+
+    fn display_name(&self) -> &str {
+        "Gate"
+    }
+
+    fn refresh_policy(&self) -> RefreshPolicy {
+        RefreshPolicy::ReuseUntilDead
+    }
+
+    async fn start_flow(&self, _http: reqwest::Client) -> Result<FlowLaunch, AuthError> {
+        Self::wait_for(&self.start_gate).await;
+        Ok(FlowLaunch {
+            authorize_url: "urn:gpui-auth:gate".to_string(),
+            state: crate::SecretString::new("gate-state"),
+            pkce: None,
+            redirect_uri: "urn:gpui-auth:gate:redirect".to_string(),
+        })
+    }
+
+    async fn complete_callback(
+        &self,
+        _http: reqwest::Client,
+        redirect: RedirectParams,
+        _launch: &FlowLaunch,
+    ) -> Result<TokenSet, AuthError> {
+        if redirect.code.is_none() {
+            return Err(AuthError::ProviderDenied {
+                error: "missing_code".to_string(),
+                description: None,
+            });
+        }
+        Ok(self.mint("gate-refresh-0"))
+    }
+
+    async fn refresh(
+        &self,
+        _http: reqwest::Client,
+        refresh_token: &str,
+    ) -> Result<TokenSet, AuthError> {
+        self.refresh_calls.fetch_add(1, Ordering::SeqCst);
+        Self::wait_for(&self.refresh_gate).await;
+        Ok(self.mint(refresh_token))
+    }
+
+    async fn revoke(&self, _http: reqwest::Client, _access_token: &str) -> Result<(), AuthError> {
+        Ok(())
+    }
+}
+
+fn gated_controller(
+    provider: Arc<GatedProvider>,
+    cx: &mut TestAppContext,
+) -> (Entity<AuthController>, Arc<InMemoryStore>) {
+    let store = Arc::new(InMemoryStore::new());
+    let controller = cx.new(|cx| {
+        AuthController::new(
+            Arc::clone(&provider) as Arc<dyn AuthProvider>,
+            Arc::clone(&store) as Arc<dyn TokenStore>,
+            test_io(),
+            cx,
+        )
+    });
+    (controller, store)
+}
+
+async fn sign_in_gated(cx: &mut TestAppContext, controller: &Entity<AuthController>) {
+    controller.update(cx, |controller, cx| controller.start_sign_in(cx));
+    cx.run_until_parked();
+    controller.update(cx, |controller, cx| {
+        controller.complete_callback("https://cb?code=x&state=gate-state", cx)
+    });
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+async fn cancel_discards_a_late_flow_preparation(cx: &mut TestAppContext) {
+    let (release_start, start_gate) = tokio::sync::mpsc::channel::<()>(1);
+    let (controller, _store) =
+        gated_controller(Arc::new(GatedProvider::new(Some(start_gate), None)), cx);
+    let (events, _subscription) = collect_events(cx, &controller);
+    controller.update(cx, |controller, cx| controller.start_sign_in(cx));
+    cx.run_until_parked();
+    controller.update(cx, |controller, cx| controller.cancel(cx));
+    assert_eq!(current_state(cx, &controller), AuthState::SignedOut);
+    release_start.send(()).await.unwrap();
+    cx.run_until_parked();
+    assert_eq!(current_state(cx, &controller), AuthState::SignedOut);
+    assert!(!cx.read(|cx| controller.read(cx).pending_is_some()));
+    assert!(
+        events
+            .borrow()
+            .iter()
+            .all(|event| !matches!(event, AuthEvent::AuthorizationRequested { .. }))
+    );
+}
+
+#[gpui::test]
+async fn sign_out_discards_a_late_refresh_completion(cx: &mut TestAppContext) {
+    let (release_refresh, refresh_gate) = tokio::sync::mpsc::channel::<()>(1);
+    let (controller, store) =
+        gated_controller(Arc::new(GatedProvider::new(None, Some(refresh_gate))), cx);
+    let (events, _subscription) = collect_events(cx, &controller);
+    sign_in_gated(cx, &controller).await;
+    assert_eq!(
+        current_state(cx, &controller),
+        AuthState::SignedIn {
+            account_label: "Gate account".to_string()
+        }
+    );
+
+    controller.update(cx, |controller, cx| controller.refresh(cx));
+    cx.run_until_parked();
+    controller.update(cx, |controller, cx| controller.sign_out(cx));
+    cx.run_until_parked();
+    assert_eq!(current_state(cx, &controller), AuthState::SignedOut);
+    assert_eq!(store.load("gate").await.unwrap(), None);
+
+    release_refresh.send(()).await.unwrap();
+    cx.run_until_parked();
+    assert_eq!(current_state(cx, &controller), AuthState::SignedOut);
+    assert_eq!(store.load("gate").await.unwrap(), None);
+    assert_eq!(
+        events
+            .borrow()
+            .iter()
+            .filter(|event| matches!(event, AuthEvent::FlowCompleted))
+            .count(),
+        1
+    );
+}
+
+#[gpui::test]
+async fn overlapping_refreshes_coalesce_into_one_provider_call(cx: &mut TestAppContext) {
+    let (release_refresh, refresh_gate) = tokio::sync::mpsc::channel::<()>(1);
+    let provider = Arc::new(GatedProvider::new(None, Some(refresh_gate)));
+    let (controller, store) = gated_controller(Arc::clone(&provider), cx);
+    sign_in_gated(cx, &controller).await;
+
+    controller.update(cx, |controller, cx| controller.refresh(cx));
+    controller.update(cx, |controller, cx| controller.refresh(cx));
+    cx.run_until_parked();
+    assert_eq!(provider.refresh_calls.load(Ordering::SeqCst), 1);
+    release_refresh.send(()).await.unwrap();
+    cx.run_until_parked();
+    assert_eq!(provider.refresh_calls.load(Ordering::SeqCst), 1);
+
+    let stored = store.load("gate").await.unwrap().unwrap();
+    assert_eq!(stored.access_token.expose(), "gate-access-1");
+    assert_eq!(stored.refresh_token.unwrap().expose(), "gate-refresh-0");
+}
+
+struct ForeignProvider;
+
+#[cfg_attr(not(target_family = "wasm"), async_trait::async_trait)]
+#[cfg_attr(target_family = "wasm", async_trait::async_trait(?Send))]
+impl AuthProvider for ForeignProvider {
+    fn id(&self) -> &str {
+        "foreign"
+    }
+
+    fn display_name(&self) -> &str {
+        "Foreign"
+    }
+
+    fn refresh_policy(&self) -> RefreshPolicy {
+        RefreshPolicy::ReuseUntilDead
+    }
+
+    async fn start_flow(&self, _http: reqwest::Client) -> Result<FlowLaunch, AuthError> {
+        Ok(FlowLaunch {
+            authorize_url: "urn:gpui-auth:foreign".to_string(),
+            state: crate::SecretString::new("foreign-state"),
+            pkce: None,
+            redirect_uri: "urn:gpui-auth:foreign:redirect".to_string(),
+        })
+    }
+
+    async fn complete_callback(
+        &self,
+        _http: reqwest::Client,
+        redirect: RedirectParams,
+        _launch: &FlowLaunch,
+    ) -> Result<TokenSet, AuthError> {
+        if redirect.code.is_none() {
+            return Err(AuthError::ProviderDenied {
+                error: "missing_code".to_string(),
+                description: None,
+            });
+        }
+        Ok(ForeignProvider::minted("foreign-access", "foreign-refresh"))
+    }
+
+    async fn refresh(
+        &self,
+        _http: reqwest::Client,
+        _refresh_token: &str,
+    ) -> Result<TokenSet, AuthError> {
+        Ok(ForeignProvider::minted("rotated-access", "rotated-refresh"))
+    }
+
+    async fn revoke(&self, _http: reqwest::Client, _access_token: &str) -> Result<(), AuthError> {
+        Ok(())
+    }
+}
+
+impl ForeignProvider {
+    /// Every response carries a provider id other than the controller's own.
+    fn minted(access: &str, refresh: &str) -> TokenSet {
+        TokenSet {
+            provider_id: "other".to_string(),
+            access_token: crate::SecretString::new(access),
+            refresh_token: Some(crate::SecretString::new(refresh)),
+            id_token: None,
+            token_type: "Bearer".to_string(),
+            expires_at: None,
+            scope: None,
+            account: None,
+        }
+    }
+}
+
+#[gpui::test]
+async fn foreign_provider_tokens_error_out_and_never_persist(cx: &mut TestAppContext) {
+    let store = Arc::new(InMemoryStore::new());
+    let controller = cx.new(|cx| {
+        AuthController::new(
+            Arc::new(ForeignProvider),
+            Arc::clone(&store) as Arc<dyn TokenStore>,
+            test_io(),
+            cx,
+        )
+    });
+    let (events, _subscription) = collect_events(cx, &controller);
+    controller.update(cx, |controller, cx| controller.start_sign_in(cx));
+    cx.run_until_parked();
+    controller.update(cx, |controller, cx| {
+        controller.complete_callback("https://cb?code=x&state=foreign-state", cx)
+    });
+    cx.run_until_parked();
+    let state = current_state(cx, &controller);
+    assert!(matches!(
+        state,
+        AuthState::Error(AuthError::InvalidTokenResponse(message))
+            if message.contains("provider id mismatch")
+    ));
+    assert!(events.borrow().iter().any(|event| matches!(
+        event,
+        AuthEvent::FlowFailed {
+            error: AuthError::InvalidTokenResponse(_)
+        }
+    )));
+    assert_eq!(store.load("foreign").await.unwrap(), None);
+
+    let stored = TokenSet {
+        provider_id: "foreign".to_string(),
+        access_token: crate::SecretString::new("seed-access"),
+        refresh_token: Some(crate::SecretString::new("seed-refresh")),
         id_token: None,
         token_type: "Bearer".to_string(),
         expires_at: None,
         scope: None,
-        account: Some(AccountInfo {
-            id: None,
-            email: Some("restored@example.test".to_string()),
-            display_name: None,
-            avatar_url: None,
-        }),
+        account: None,
     };
-    cx.update(|cx| fixture.store.save("email", &tokens, cx).unwrap());
-    drive(&fixture, cx, |controller, cx| controller.restore(cx));
-    drive(&fixture, cx, |controller, cx| controller.enroll_totp(cx));
-    cx.read(|cx| {
-        assert_eq!(
-            fixture
-                .controller
-                .read(cx)
-                .totp_enrollment()
-                .map(|enrollment| enrollment.email.clone()),
-            Some("restored@example.test".to_string())
-        );
-    });
+    store.save("foreign", &stored).await.unwrap();
+    controller.update(cx, |controller, cx| controller.refresh(cx));
+    cx.run_until_parked();
+    let state = current_state(cx, &controller);
+    assert!(matches!(
+        state,
+        AuthState::Error(AuthError::InvalidTokenResponse(message))
+            if message.contains("provider id mismatch")
+    ));
+    let row = store.load("foreign").await.unwrap().unwrap();
+    assert_eq!(row.access_token.expose(), "seed-access");
 }
