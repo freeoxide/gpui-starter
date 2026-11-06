@@ -13,17 +13,17 @@ const CELL: u32 = 12;
 
 fn checker_swatch() -> image::RgbaImage {
     image::RgbaImage::from_fn(SWATCH, SWATCH, |x, y| {
-        let (blue, green, red) = if (x / CELL + y / CELL).is_multiple_of(2) {
-            (60, 120, 230)
+        let (red, green, blue) = if (x / CELL + y / CELL).is_multiple_of(2) {
+            (230, 120, 60)
         } else {
-            (170, 90, 40)
+            (40, 90, 170)
         };
-        image::Rgba([blue, green, red, 255])
+        image::Rgba([red, green, blue, 255])
     })
 }
 
 fn render_image() -> Arc<RenderImage> {
-    Arc::new(RenderImage::new(vec![image::Frame::new(checker_swatch())]))
+    rgba_to_render(checker_swatch())
 }
 
 pub(super) struct ImageDemo {
@@ -53,7 +53,8 @@ impl ImageDemo {
                         origin: point(px(origin.0), px(origin.1)),
                         size: size(px(side), px(side)),
                     };
-                    doc.add_shape(layer, CanvasShape::image(bounds, image.clone()));
+                    doc.add_shape(layer, CanvasShape::image(bounds, image.clone()))
+                        .expect("layer was just created");
                     doc.add_shape(
                         layer,
                         CanvasShape::rect(
@@ -64,7 +65,8 @@ impl ImageDemo {
                                 dash: None,
                             }),
                         ),
-                    );
+                    )
+                    .expect("layer was just created");
                 }
             });
         });

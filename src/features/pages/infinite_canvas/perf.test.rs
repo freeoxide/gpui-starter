@@ -124,12 +124,12 @@ fn pan_frames_reuse_every_paint_cache(cx: &mut TestAppContext) {
 }
 
 /// Wall-clock guard: medians are per `window.draw` (the harness paints the
-/// tree twice per draw), with headroom for CI variance. Release-tuned.
+/// tree twice per draw). Host timings vary ~2x, so `just perf` opts in.
 #[gpui_kit::test]
+#[ignore = "wall-clock budgets vary ~2x between hosts; run via `just perf`"]
 fn pan_frame_budget_stays_under_ceiling(cx: &mut TestAppContext) {
     let frames = if cfg!(debug_assertions) { 5 } else { 24 };
-    // Debug medians run ~60ms here but the host varies ~2x between sessions,
-    // so the debug ceiling keeps >4x headroom; release is the tuned lane.
+    // Release is the tuned lane; debug keeps >4x headroom on its ~60ms medians.
     let ceiling_us = if cfg!(debug_assertions) {
         250_000
     } else {

@@ -2,7 +2,7 @@
 //! public surface; the session, tools, net thread, and fake peers stay
 //! private. Removal = delete this directory, the collab-protocol and
 //! collab-server workspace members, and revert the seam touches: the
-//! Page::MultiuserCanvas arms and all() entry in shell/sidebar.rs, the
+//! Page::MultiuserCanvas arms and all() entry in shell/page.rs, the
 //! VALID_HOSTS entry in shell/route.rs, the AppRoot wiring in
 //! shell/root/app_root/state.rs, the mod/pub use lines in
 //! features/pages/mod.rs, the nav/multiuser locale keys, the page count in

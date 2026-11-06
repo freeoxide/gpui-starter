@@ -1,6 +1,6 @@
 use gpui_kit::{Entity, TestAppContext, VisualTestContext, point, px};
 
-use super::{FIELD_H, FIELD_W, Particle, ParticleFieldDemo, seed_particles, tick};
+use super::{FIELD_H, FIELD_W, FRAME, Particle, ParticleFieldDemo, seed_particles, tick};
 
 fn particle(pos: (f32, f32), vel: (f32, f32), diameter: f32) -> Particle {
     Particle {
@@ -95,15 +95,39 @@ fn no_particle_escapes_across_six_hundred_ticks() {
 }
 
 #[gpui_kit::test]
-fn paused_render_draws_without_advancing_positions(cx: &mut TestAppContext) {
+async fn playing_renders_advance_with_elapsed_time_and_re_renders_do_not(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
     let handle = cx.add_window(|_, cx| ParticleFieldDemo::new(cx));
     let demo: Entity<ParticleFieldDemo> = handle.root(cx).expect("demo root entity");
-    demo.update(cx, |field, _| field.playing = false);
     let mut cx = VisualTestContext::from_window(handle.into(), cx);
-    let before = demo.update(&mut cx, |field, _| field.particles.clone());
+    // The render guard requires an active window; activation lands on the
+    // parked executor.
+    cx.update(|window, _| window.activate_window());
+    cx.run_until_parked();
+    assert!(
+        cx.update(|window, _| window.is_window_active()),
+        "precondition: the test window must be active"
+    );
+
+    let seeded = demo.update(&mut cx, |field, _| field.particles.clone());
     cx.update(|window, cx| window.draw(cx).clear(cx));
+    let same_instant = demo.update(&mut cx, |field, _| field.particles.clone());
+    assert_eq!(
+        seeded, same_instant,
+        "a re-render at the same instant must not advance the field"
+    );
+
+    cx.executor().advance_clock(FRAME);
     cx.update(|window, cx| window.draw(cx).clear(cx));
-    let after = demo.update(&mut cx, |field, _| field.particles.clone());
-    assert_eq!(before, after);
+    let after_tick = demo.update(&mut cx, |field, _| field.particles.clone());
+    assert_ne!(
+        same_instant, after_tick,
+        "elapsed wall clock must advance the field"
+    );
+
+    demo.update(&mut cx, |field, _| field.playing = false);
+    cx.executor().advance_clock(FRAME);
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let paused = demo.update(&mut cx, |field, _| field.particles.clone());
+    assert_eq!(after_tick, paused, "a paused window must not advance");
 }

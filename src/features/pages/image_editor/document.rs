@@ -1,12 +1,13 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use gpui_kit::*;
 
-use image::{DynamicImage, RgbaImage};
+use image::RgbaImage;
 
-use super::bake::apply_filters;
+use super::bake::apply_filters_until;
 use super::history::{AnnotationSnapshot, DocSnapshot, EditLabel, EditOp, EditorHistory};
-use crate::ui::canvas::{CanvasShape, CanvasState, LayerId, ShapeId};
+use crate::ui::canvas::{CanvasShape, CanvasState, LayerId, ShapeId, rgba_to_render};
 
 /// Minimum crop size in doc px per axis.
 pub(crate) const MIN_CROP_PX: Pixels = px(8.);
@@ -39,18 +40,11 @@ pub(crate) fn capture_annotations(state: &CanvasState, layer: LayerId) -> Annota
         .unwrap_or_default()
 }
 
-pub(crate) fn rgba_to_render(img: &RgbaImage) -> Arc<RenderImage> {
-    let (w, h) = img.dimensions();
-    let bgra = img.clone().into_raw_bgra();
-    let buffer = RgbaImage::from_raw(w, h, bgra).unwrap_or_else(|| img.clone());
-    Arc::new(RenderImage::new(vec![image::Frame::new(buffer)]))
-}
-
 pub(crate) struct ImageEditorDocument {
     base: Option<Arc<RgbaImage>>,
     filters: FilterSettings,
     display: Option<Arc<RenderImage>>,
-    display_request: u64,
+    display_request: Arc<AtomicU64>,
     crop_rect: Option<Bounds<Pixels>>,
     history: EditorHistory,
     loading: bool,
@@ -60,6 +54,7 @@ pub(crate) struct ImageEditorDocument {
     annotations: AnnotationSnapshot,
     _derive: Option<Task<()>>,
     _open: Option<Task<()>>,
+    _transform: Option<Task<()>>,
 }
 
 impl EventEmitter<ImageEditorEvent> for ImageEditorDocument {}
@@ -76,7 +71,7 @@ impl ImageEditorDocument {
             base: None,
             filters: FilterSettings::default(),
             display: None,
-            display_request: 0,
+            display_request: Arc::new(AtomicU64::new(0)),
             crop_rect: None,
             history: EditorHistory::new(),
             loading: false,
@@ -86,6 +81,7 @@ impl ImageEditorDocument {
             annotations: Vec::new(),
             _derive: None,
             _open: None,
+            _transform: None,
         }
     }
 
@@ -127,6 +123,7 @@ impl ImageEditorDocument {
         self.base.as_ref().map(|base| base.dimensions())
     }
 
+    #[cfg(not(target_family = "wasm"))]
     pub(crate) fn base(&self) -> Option<&Arc<RgbaImage>> {
         self.base.as_ref()
     }
@@ -139,6 +136,7 @@ impl ImageEditorDocument {
         self.base_shape
     }
 
+    #[cfg(not(target_family = "wasm"))]
     pub(crate) fn annotation_shapes(&self) -> Vec<CanvasShape> {
         self.annotations
             .iter()
@@ -151,10 +149,12 @@ impl ImageEditorDocument {
     }
 
     pub(crate) fn has_valid_crop(&self) -> bool {
-        self.crop_rect
-            .is_some_and(|rect| rect.size.width >= MIN_CROP_PX && rect.size.height >= MIN_CROP_PX)
+        self.base_size()
+            .zip(self.crop_rect)
+            .is_some_and(|(dims, rect)| clipped_crop(dims, rect).is_some())
     }
 
+    #[cfg(not(target_family = "wasm"))]
     pub(crate) fn open(
         &mut self,
         bytes: Vec<u8>,
@@ -185,6 +185,7 @@ impl ImageEditorDocument {
         }));
     }
 
+    #[cfg(not(target_family = "wasm"))]
     fn apply_opened(
         &mut self,
         img: RgbaImage,
@@ -192,7 +193,9 @@ impl ImageEditorDocument {
         cx: &mut Context<Self>,
     ) {
         let (w, h) = img.dimensions();
-        let placeholder = rgba_to_render(&img);
+        // One conversion seeds the base shape and the display; a default-
+        // filter derive would rebuild pixel-identical output.
+        let display = rgba_to_render(img.clone());
         self.filters = FilterSettings::default();
         self.history.clear();
         self.crop_rect = None;
@@ -208,13 +211,14 @@ impl ImageEditorDocument {
                     origin: Point::default(),
                     size: size(px(w as f32), px(h as f32)),
                 };
-                let base_shape = doc.add_shape(base_layer, CanvasShape::image(bounds, placeholder));
+                let base_shape =
+                    doc.add_shape(base_layer, CanvasShape::image(bounds, display.clone()));
                 (annotation_layer, base_shape)
             })
         });
         self.annotation_layer = Some(annotation_layer);
         self.base_shape = base_shape;
-        self.request_display(cx);
+        self.display = Some(display);
         cx.emit(ImageEditorEvent::ImageOpened);
         cx.notify();
     }
@@ -247,25 +251,32 @@ impl ImageEditorDocument {
             .iter()
             .map(|(id, shape)| (*id, rotate_shape(shape, old_height)))
             .collect();
-        let after_base = DynamicImage::ImageRgba8((*base).clone())
-            .rotate90()
-            .to_rgba8();
-        self.base = Some(Arc::new(after_base.clone()));
         self.crop_rect = None;
-        self.rebuild_annotations(canvas, &rotated, cx);
-        self.annotations = rotated.clone();
-        self.history.record(EditOp {
-            label: EditLabel::Rotate,
-            before,
-            after: DocSnapshot {
-                base: Arc::new(after_base),
-                filters: self.filters,
-                annotations: rotated,
-            },
-        });
-        self.request_display(cx);
-        cx.emit(ImageEditorEvent::HistoryChanged);
-        cx.notify();
+        let canvas = canvas.clone();
+        self._transform = Some(cx.spawn(async move |this, cx| {
+            let after_base = cx
+                .background_spawn(async move { image::imageops::rotate90(&*base) })
+                .await;
+            this.update(cx, |doc, cx| {
+                let after_base = Arc::new(after_base);
+                doc.base = Some(after_base.clone());
+                doc.rebuild_annotations(&canvas, &rotated, cx);
+                doc.annotations = rotated.clone();
+                doc.history.record(EditOp {
+                    label: EditLabel::Rotate,
+                    before,
+                    after: DocSnapshot {
+                        base: after_base,
+                        filters: doc.filters,
+                        annotations: rotated,
+                    },
+                });
+                doc.request_display(cx);
+                cx.emit(ImageEditorEvent::HistoryChanged);
+                cx.notify();
+            })
+            .ok();
+        }));
     }
 
     pub(crate) fn apply_crop(
@@ -279,24 +290,17 @@ impl ImageEditorDocument {
         let Some(rect) = self.crop_rect else {
             return false;
         };
-        let (bw, bh) = base.dimensions();
-        let image_bounds = Bounds {
-            origin: Point::default(),
-            size: size(px(bw as f32), px(bh as f32)),
-        };
-        let clipped = rect.intersect(&image_bounds);
-        let x0 = clipped.origin.x.as_f32().floor().max(0.) as u32;
-        let y0 = clipped.origin.y.as_f32().floor().max(0.) as u32;
-        let x1 = clipped.bottom_right().x.as_f32().ceil().min(bw as f32) as u32;
-        let y1 = clipped.bottom_right().y.as_f32().ceil().min(bh as f32) as u32;
-        let (cw, ch) = (x1.saturating_sub(x0), y1.saturating_sub(y0));
-        if cw < MIN_CROP_PX.as_f32() as u32 || ch < MIN_CROP_PX.as_f32() as u32 {
+        let Some((x0, y0, cw, ch)) = clipped_crop(base.dimensions(), rect) else {
             return false;
-        }
+        };
         let before = self.snapshot();
         let crop_bounds = Bounds {
             origin: point(px(x0 as f32), px(y0 as f32)),
             size: size(px(cw as f32), px(ch as f32)),
+        };
+        let cropped_bounds = Bounds {
+            origin: Point::default(),
+            size: crop_bounds.size,
         };
         let survivors: AnnotationSnapshot = before
             .annotations
@@ -308,29 +312,38 @@ impl ImageEditorDocument {
             .map(|(id, shape)| {
                 let mut shape = shape.clone();
                 shape.translate(point(-crop_bounds.origin.x, -crop_bounds.origin.y));
-                (*id, shape)
+                (*id, clamp_shape(&shape, cropped_bounds))
             })
             .collect();
-        let after_base = DynamicImage::ImageRgba8((*base).clone())
-            .crop_imm(x0, y0, cw, ch)
-            .to_rgba8();
-        self.base = Some(Arc::new(after_base.clone()));
         self.crop_rect = None;
-        self.rebuild_annotations(canvas, &survivors, cx);
-        self.annotations = survivors.clone();
-        self.history.record(EditOp {
-            label: EditLabel::Crop,
-            before,
-            after: DocSnapshot {
-                base: Arc::new(after_base),
-                filters: self.filters,
-                annotations: survivors,
-            },
-        });
-        self.request_display(cx);
-        cx.emit(ImageEditorEvent::HistoryChanged);
         cx.emit(ImageEditorEvent::CropRectChanged);
-        cx.notify();
+        let canvas = canvas.clone();
+        self._transform = Some(cx.spawn(async move |this, cx| {
+            let after_base = cx
+                .background_spawn(async move {
+                    image::imageops::crop_imm(&*base, x0, y0, cw, ch).to_image()
+                })
+                .await;
+            this.update(cx, |doc, cx| {
+                let after_base = Arc::new(after_base);
+                doc.base = Some(after_base.clone());
+                doc.rebuild_annotations(&canvas, &survivors, cx);
+                doc.annotations = survivors.clone();
+                doc.history.record(EditOp {
+                    label: EditLabel::Crop,
+                    before,
+                    after: DocSnapshot {
+                        base: after_base,
+                        filters: doc.filters,
+                        annotations: survivors,
+                    },
+                });
+                doc.request_display(cx);
+                cx.emit(ImageEditorEvent::HistoryChanged);
+                cx.notify();
+            })
+            .ok();
+        }));
         true
     }
 
@@ -426,8 +439,10 @@ impl ImageEditorDocument {
         canvas: &Entity<CanvasState>,
         cx: &mut Context<Self>,
     ) {
-        let display_stale =
-            self.base.as_deref() != Some(snap.base.as_ref()) || self.filters != snap.filters;
+        // Snapshots only ever carry Arcs cloned from self.base, so pointer
+        // identity is sound and skips a whole-image content compare.
+        let display_stale = self.base.as_ref().map(Arc::as_ptr) != Some(Arc::as_ptr(&snap.base))
+            || self.filters != snap.filters;
         self.base = Some(snap.base.clone());
         self.filters = snap.filters;
         self.rebuild_annotations(canvas, &snap.annotations, cx);
@@ -466,20 +481,26 @@ impl ImageEditorDocument {
         let Some(base) = self.base.clone() else {
             return;
         };
-        self.display_request += 1;
-        let request = self.display_request;
+        let request = self.display_request.fetch_add(1, Ordering::SeqCst) + 1;
+        let generation = self.display_request.clone();
         let filters = self.filters;
         self._derive = Some(cx.spawn(async move |this, cx| {
             let derived = cx
-                .background_spawn(async move { apply_filters(&base, &filters) })
+                .background_spawn(async move {
+                    apply_filters_until(&base, &filters, &mut || {
+                        generation.load(Ordering::SeqCst) != request
+                    })
+                })
                 .await;
             this.update(cx, |doc, cx| {
-                if doc.display_request != request {
+                if doc.display_request.load(Ordering::SeqCst) != request {
                     return;
                 }
-                doc.display = Some(rgba_to_render(&derived));
-                cx.emit(ImageEditorEvent::DisplayChanged);
-                cx.notify();
+                if let Some(derived) = derived {
+                    doc.display = Some(rgba_to_render(derived));
+                    cx.emit(ImageEditorEvent::DisplayChanged);
+                    cx.notify();
+                }
             })
             .ok();
         }));
@@ -488,6 +509,56 @@ impl ImageEditorDocument {
 
 fn rotate_point(p: Point<Pixels>, old_height: f32) -> Point<Pixels> {
     point(px(old_height - p.y.as_f32()), p.x)
+}
+
+/// The crop rect clipped to the image, as integer pixel bounds, when the
+/// intersection still clears MIN_CROP_PX on both axes.
+fn clipped_crop((bw, bh): (u32, u32), rect: Bounds<Pixels>) -> Option<(u32, u32, u32, u32)> {
+    let image_bounds = Bounds {
+        origin: Point::default(),
+        size: size(px(bw as f32), px(bh as f32)),
+    };
+    let clipped = rect.intersect(&image_bounds);
+    let x0 = clipped.origin.x.as_f32().floor().max(0.) as u32;
+    let y0 = clipped.origin.y.as_f32().floor().max(0.) as u32;
+    let x1 = clipped.bottom_right().x.as_f32().ceil().min(bw as f32) as u32;
+    let y1 = clipped.bottom_right().y.as_f32().ceil().min(bh as f32) as u32;
+    let (cw, ch) = (x1.saturating_sub(x0), y1.saturating_sub(y0));
+    let min = MIN_CROP_PX.as_f32() as u32;
+    (cw >= min && ch >= min).then_some((x0, y0, cw, ch))
+}
+
+fn clamp_point(p: Point<Pixels>, bounds: Bounds<Pixels>) -> Point<Pixels> {
+    let max_x = bounds.origin.x + bounds.size.width;
+    let max_y = bounds.origin.y + bounds.size.height;
+    point(
+        p.x.max(bounds.origin.x).min(max_x),
+        p.y.max(bounds.origin.y).min(max_y),
+    )
+}
+
+/// Keeps crop survivors inside the cropped image so the canvas preview and
+/// the rasterized export render the same pixels.
+fn clamp_shape(shape: &CanvasShape, bounds: Bounds<Pixels>) -> CanvasShape {
+    match shape {
+        CanvasShape::Path { points, style } => CanvasShape::Path {
+            points: points.iter().map(|p| clamp_point(*p, bounds)).collect(),
+            style: style.clone(),
+        },
+        CanvasShape::Rect { bounds: b, style } => CanvasShape::Rect {
+            bounds: b.intersect(&bounds),
+            style: style.clone(),
+        },
+        CanvasShape::Ellipse { bounds: b, style } => CanvasShape::Ellipse {
+            bounds: b.intersect(&bounds),
+            style: style.clone(),
+        },
+        CanvasShape::Triangle { bounds: b, style } => CanvasShape::Triangle {
+            bounds: b.intersect(&bounds),
+            style: style.clone(),
+        },
+        CanvasShape::Text { .. } | CanvasShape::Image { .. } => shape.clone(),
+    }
 }
 
 fn rotate_shape(shape: &CanvasShape, old_height: f32) -> CanvasShape {

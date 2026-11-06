@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use collab_protocol::{ShapeKey, WireOp};
+use collab_protocol::{CursorMsg, ShapeKey, WireOp};
 use gpui_kit::prelude::*;
 use gpui_kit::{Bounds, Entity, Modifiers, MouseButton, TestAppContext, point, px, size};
 
@@ -197,6 +197,26 @@ fn select_drag_publishes_one_update_on_release(cx: &mut TestAppContext) {
     assert_eq!(board_lamport(&session, cx), seeded_lamport);
     assert_eq!(op_count(&link), seeded_ops);
 
+    // A second move pins the snapshot-restore semantics: translating the
+    // current shape instead would land at 220, not 180.
+    dispatch(&canvas, cx, Some(rect), event(200., 120.), "move");
+    let moved_again = cx.read(|cx| {
+        canvas
+            .read(cx)
+            .document()
+            .shape(rect)
+            .unwrap()
+            .doc_bounds()
+            .origin
+            .x
+            .as_f32()
+    });
+    assert!(
+        (moved_again - 180.).abs() < 0.01,
+        "each move rebuilds from the drag-start snapshot"
+    );
+    assert_eq!(op_count(&link), seeded_ops);
+
     dispatch(&canvas, cx, Some(rect), event(160., 120.), "up");
     assert_eq!(op_count(&link), seeded_ops + 1);
     let expected_key: ShapeKey = cx.read(|cx| session.read(cx).wire_key(rect).unwrap());
@@ -232,13 +252,23 @@ fn pointer_move_reports_own_cursor(cx: &mut TestAppContext) {
         state.set_tool(Box::new(PenTool::new(session.clone(), cx)), cx)
     });
 
-    dispatch(&canvas, cx, None, event(100., 100.), "down");
+    // No preceding down: pointer_down sends unthrottled, so it must not be
+    // able to satisfy this assertion on pointer_move's behalf.
     dispatch(&canvas, cx, None, event(150., 120.), "move");
-    dispatch(&canvas, cx, None, event(200., 140.), "up");
 
-    let sends = link.sends.lock().unwrap();
-    assert!(
-        sends.iter().any(|(event, _)| *event == "cursor"),
-        "pen moves must report the own cursor"
+    let cursors: Vec<serde_json::Value> = link
+        .sends
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(event, _)| *event == "cursor")
+        .map(|(_, payload)| payload.clone())
+        .collect();
+    assert_eq!(cursors.len(), 1, "one move reports the own cursor once");
+    let msg: CursorMsg = serde_json::from_value(cursors[0].clone()).unwrap();
+    assert_eq!(
+        msg.doc,
+        [150., 120.],
+        "the cursor message must carry the move position"
     );
 }

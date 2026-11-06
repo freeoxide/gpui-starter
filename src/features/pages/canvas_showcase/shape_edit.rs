@@ -4,7 +4,6 @@ use gpui_kit::component::{
 };
 use gpui_kit::{prelude::*, *};
 
-use crate::accessibility::A11yExt as _;
 use crate::ui::canvas::{Canvas, *};
 
 use super::geometry::{self, HANDLE_SIDE};
@@ -40,11 +39,6 @@ impl ShapesDemo {
 impl Render for ShapesDemo {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let selected = self.state.read(cx).selected_shape_ids().len();
-        let count = selected.to_string();
-        let readout = crate::i18n::localize_with_args(
-            "showcase_selected_count",
-            &[("count", count.as_str())],
-        );
         super::render_demo_shell(
             "shapes",
             crate::i18n::localize(super::CanvasDemo::Shapes.title_key()),
@@ -57,13 +51,7 @@ impl Render for ShapesDemo {
                     .label(crate::i18n::localize("showcase_reset"))
                     .on_click(cx.listener(|this, _, _, cx| this.reset(cx)))
                     .into_any_element(),
-                div()
-                    .id("shapes-selected-count")
-                    .a11y(Role::Status, readout.clone())
-                    .a11y_live(accesskit::Live::Polite)
-                    .text_color(cx.theme().muted_foreground)
-                    .child(readout)
-                    .into_any_element(),
+                super::selected_count_readout("shapes", selected, cx),
             ],
             Canvas::new("shapes-canvas", self.state.clone()),
             cx,
@@ -128,7 +116,8 @@ impl ShapeEditTool {
                         },
                     ),
                 ),
-            );
+            )
+            .expect("layer was just created");
             doc.add_shape(
                 content_layer,
                 CanvasShape::ellipse(
@@ -138,7 +127,8 @@ impl ShapeEditTool {
                     },
                     ShapeStyle::filled(accent.opacity(0.35)),
                 ),
-            );
+            )
+            .expect("layer was just created");
             doc.add_shape(
                 content_layer,
                 CanvasShape::triangle(
@@ -148,7 +138,8 @@ impl ShapeEditTool {
                     },
                     ShapeStyle::filled(secondary.opacity(0.35)),
                 ),
-            );
+            )
+            .expect("layer was just created");
             doc.add_shape(
                 content_layer,
                 CanvasShape::path(
@@ -164,7 +155,8 @@ impl ShapeEditTool {
                         dash: None,
                     },
                 ),
-            );
+            )
+            .expect("layer was just created");
         });
         Self {
             handles_layer,
@@ -217,7 +209,7 @@ impl ShapeEditTool {
                                         fill.clone(),
                                     ),
                                 )
-                                .unwrap_or_default();
+                                .expect("layer was just created");
                         }
                         ids
                     });

@@ -2,11 +2,16 @@ use std::io::Cursor;
 
 use gpui_kit::component::color_picker::ColorPickerEvent;
 use gpui_kit::component::slider::{SliderEvent, SliderValue};
-use gpui_kit::{DevicePixels, TestAppContext, VisualTestContext, hsla, px, size};
-use image::{DynamicImage, ImageFormat, RgbaImage};
+use gpui_kit::{
+    Bounds, DevicePixels, Modifiers, MouseButton, TestAppContext, VisualTestContext, hsla, point,
+    px, size,
+};
+use image::{DynamicImage, ImageFormat, ImageReader, RgbaImage};
 
-use super::{EditorTool, ImageEditorPage};
-use crate::ui::canvas::CanvasShape;
+use super::{EditorTool, ImageEditorPage, SaveState};
+use crate::ui::canvas::{
+    CanvasPointerEvent, CanvasShape, CanvasTool, CanvasTransform, StrokeStyle, ToolContext,
+};
 
 fn png_bytes(w: u32, h: u32) -> Vec<u8> {
     let img = RgbaImage::from_pixel(w, h, image::Rgba([120, 140, 160, 255]));
@@ -141,6 +146,57 @@ fn select_tool_swaps_the_active_editor_tool(cx: &mut TestAppContext) {
     });
 }
 
+/// Commits a brush tap through the mounted tool so tests can assert the
+/// StrokeStyle the page actually wired into it.
+fn commit_brush_tap(
+    page: &gpui_kit::Entity<ImageEditorPage>,
+    cx: &mut TestAppContext,
+    at: (f32, f32),
+) {
+    let canvas = cx.read(|cx| page.read(cx).canvas.clone());
+    let position = point(px(at.0), px(at.1));
+    let event = CanvasPointerEvent {
+        screen_position: position,
+        doc_position: position,
+        button: MouseButton::Left,
+        click_count: 1,
+        modifiers: Modifiers::default(),
+    };
+    let tool_ctx = ToolContext {
+        viewport: Bounds {
+            origin: point(px(0.), px(0.)),
+            size: size(px(64.), px(64.)),
+        },
+        transform: CanvasTransform::IDENTITY,
+        hit: None,
+    };
+    canvas.update(cx, |state, cx| {
+        state.dispatch_tool_event(cx, |tool, state, cx| {
+            tool.pointer_down(&event, &tool_ctx, state, cx);
+            tool.pointer_up(&event, &tool_ctx, state, cx);
+        });
+    });
+}
+
+fn committed_stroke(page: &gpui_kit::Entity<ImageEditorPage>, cx: &gpui_kit::App) -> StrokeStyle {
+    let view = page.read(cx);
+    let layer = view
+        .doc
+        .read(cx)
+        .annotation_layer()
+        .expect("annotation layer mounted");
+    view.canvas
+        .read(cx)
+        .document()
+        .layer(layer)
+        .and_then(|layer| layer.shapes().last())
+        .map(|(_, shape)| match shape {
+            CanvasShape::Path { style, .. } => style.clone(),
+            other => panic!("expected a committed path, got {other:?}"),
+        })
+        .expect("the brush tap committed a path")
+}
+
 #[gpui_kit::test]
 fn brush_size_release_updates_tool_params(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
@@ -158,9 +214,20 @@ fn brush_size_release_updates_tool_params(cx: &mut TestAppContext) {
         });
     });
     cx.run_until_parked();
-    page.update(cx, |page, cx| {
-        assert_eq!(page.canvas.read(cx).active_tool_id(), "image-brush");
-        assert_eq!(page.brush_value, 9.);
+    commit_brush_tap(&page, cx, (4., 4.));
+    cx.run_until_parked();
+    cx.read(|cx| {
+        assert_eq!(
+            page.read(cx).canvas.read(cx).active_tool_id(),
+            "image-brush"
+        );
+        assert_eq!(page.read(cx).brush_value, 9.);
+        let stroke = committed_stroke(&page, cx);
+        assert_eq!(
+            stroke.width,
+            px(9.),
+            "the remounted brush must stroke with the released width"
+        );
     });
 }
 
@@ -181,9 +248,230 @@ fn color_change_updates_tool_params(cx: &mut TestAppContext) {
             .update(cx, |_, cx| cx.emit(ColorPickerEvent::Change(Some(color))));
     });
     cx.run_until_parked();
+    commit_brush_tap(&page, cx, (4., 4.));
+    cx.run_until_parked();
+    cx.read(|cx| {
+        let view = page.read(cx);
+        assert_eq!(view.color_value, color);
+        assert_eq!(view.canvas.read(cx).active_tool_id(), "image-brush");
+        assert_eq!(
+            committed_stroke(&page, cx).color,
+            color,
+            "the remounted brush must stroke with the picked color"
+        );
+    });
+}
+
+#[gpui_kit::test]
+fn undo_resyncs_filter_controls_with_the_document(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::component::theme::init);
+    let (page, cx) = cx.add_window_view(|window, cx| ImageEditorPage::new(window, cx));
+    let canvas = page.update(cx, |page, _| page.canvas.clone());
     page.update(cx, |page, cx| {
-        assert_eq!(page.color_value, color);
-        assert_eq!(page.canvas.read(cx).active_tool_id(), "image-brush");
+        page.doc
+            .update(cx, |doc, cx| doc.open(png_bytes(16, 8), &canvas, cx));
+    });
+    cx.run_until_parked();
+
+    page.update(cx, |page, cx| {
+        page.doc.update(cx, |doc, cx| {
+            doc.set_filters(
+                crate::features::pages::image_editor::document::FilterSettings {
+                    grayscale: true,
+                    blur_sigma: 4.,
+                    brightness: 12,
+                    ..Default::default()
+                },
+                cx,
+            )
+        });
+    });
+    cx.run_until_parked();
+    page.update(cx, |page, cx| {
+        assert!(page.gray);
+        assert_eq!(page.blur.read(cx).value().start(), 4.);
+        assert_eq!(page.brightness.read(cx).value().start(), 12.);
+        page.doc.update(cx, |doc, cx| doc.undo(&canvas, cx));
+    });
+    cx.run_until_parked();
+    page.update(cx, |page, cx| {
+        assert!(!page.gray, "undo reverts the grayscale switch");
+        assert_eq!(page.blur.read(cx).value().start(), 0.);
+        assert_eq!(page.brightness.read(cx).value().start(), 0.);
+        page.gray = true;
+        page.apply_filters(cx);
+        let filters = page.doc.read(cx).filters();
+        assert_eq!(
+            filters.blur_sigma, 0.,
+            "the undone blur must not resurrect as a new op"
+        );
+        assert_eq!(filters.brightness, 0);
+        assert!(filters.grayscale);
+        assert_eq!(page.doc.read(cx).history_len(), 1);
+    });
+}
+
+#[gpui_kit::test]
+fn leaving_the_crop_tool_clears_the_crop_rect(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::component::theme::init);
+    let (page, cx) = cx.add_window_view(|window, cx| ImageEditorPage::new(window, cx));
+    let canvas = page.update(cx, |page, _| page.canvas.clone());
+    page.update(cx, |page, cx| {
+        page.doc
+            .update(cx, |doc, cx| doc.open(png_bytes(16, 8), &canvas, cx));
+    });
+    cx.run_until_parked();
+
+    page.update(cx, |page, cx| {
+        page.select_tool(EditorTool::Crop, cx);
+        page.doc.update(cx, |doc, cx| {
+            doc.set_crop_rect(
+                Some(Bounds::from_corners(
+                    point(px(1.), px(1.)),
+                    point(px(9.), px(7.)),
+                )),
+                cx,
+            )
+        });
+        assert!(page.doc.read(cx).crop_rect().is_some());
+        page.select_tool(EditorTool::Brush, cx);
+        assert!(
+            page.doc.read(cx).crop_rect().is_none(),
+            "switching tools must not keep an invisible crop rect"
+        );
+    });
+}
+
+#[gpui_kit::test]
+fn failed_apply_crop_drops_the_invalid_rect(cx: &mut TestAppContext) {
+    cx.update(gpui_kit::component::theme::init);
+    let (page, cx) = cx.add_window_view(|window, cx| ImageEditorPage::new(window, cx));
+    let canvas = page.update(cx, |page, _| page.canvas.clone());
+    page.update(cx, |page, cx| {
+        page.doc
+            .update(cx, |doc, cx| doc.open(png_bytes(16, 8), &canvas, cx));
+    });
+    cx.run_until_parked();
+
+    cx.update(|window, cx| {
+        page.update(cx, |page, cx| {
+            page.select_tool(EditorTool::Crop, cx);
+            page.doc.update(cx, |doc, cx| {
+                doc.set_crop_rect(
+                    // Entirely outside the 16x8 image: apply must reject it.
+                    Some(Bounds::from_corners(
+                        point(px(40.), px(40.)),
+                        point(px(60.), px(60.)),
+                    )),
+                    cx,
+                )
+            });
+            page.on_apply_crop(window, cx);
+            assert!(
+                page.doc.read(cx).crop_rect().is_none(),
+                "a rejected rect is dropped, not kept for a later apply"
+            );
+        });
+    });
+}
+
+#[gpui_kit::test]
+fn save_captures_edits_made_while_the_dialog_is_open(cx: &mut TestAppContext) {
+    let (page, mut cx) = open_page(cx);
+    cx.run_until_parked();
+
+    let file = std::env::temp_dir().join(format!(
+        "gpui-starter-image-editor-save-{}.png",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&file);
+    page.update(cx, |page, cx| {
+        let canvas = page.canvas.clone();
+        page.doc
+            .update(cx, |doc, cx| doc.open(png_bytes(24, 12), &canvas, cx));
+    });
+    cx.run_until_parked();
+
+    cx.update(|window, cx| {
+        page.update(cx, |page, cx| page.on_save(window, cx));
+    });
+    cx.run_until_parked();
+    assert!(
+        cx.read(|cx| matches!(page.read(cx).save_state, SaveState::Busy)),
+        "the guard is raised before the dialog resolves"
+    );
+
+    page.update(cx, |page, cx| {
+        page.doc.update(cx, |doc, cx| {
+            doc.set_filters(
+                crate::features::pages::image_editor::document::FilterSettings {
+                    grayscale: true,
+                    ..Default::default()
+                },
+                cx,
+            )
+        });
+    });
+    cx.run_until_parked();
+
+    let picked = file.clone();
+    cx.simulate_path_prompt_response(move |_options| Some(vec![picked]));
+    cx.run_until_parked();
+
+    let saved = ImageReader::open(&file)
+        .unwrap()
+        .decode()
+        .unwrap()
+        .to_rgba8();
+    let _ = std::fs::remove_file(&file);
+    page.update(cx, |page, cx| {
+        let doc = page.doc.read(cx);
+        let expected = super::bake::compose_export(
+            doc.base().unwrap(),
+            &doc.filters(),
+            &doc.annotation_shapes(),
+        );
+        assert_eq!(saved.dimensions(), expected.dimensions());
+        assert_eq!(
+            saved.as_raw(),
+            expected.as_raw(),
+            "the grayscale edit made during the dialog is exported"
+        );
+    });
+    assert!(cx.read(|cx| matches!(page.read(cx).save_state, SaveState::Done)));
+}
+
+/// A prompt path the encoder cannot write must land in Failed, not Done.
+#[gpui_kit::test]
+fn save_to_an_unwritable_path_reports_failed(cx: &mut TestAppContext) {
+    let (page, mut cx) = open_page(cx);
+    cx.run_until_parked();
+    page.update(cx, |page, cx| {
+        let canvas = page.canvas.clone();
+        page.doc
+            .update(cx, |doc, cx| doc.open(png_bytes(24, 12), &canvas, cx));
+    });
+    cx.run_until_parked();
+
+    cx.update(|window, cx| {
+        page.update(cx, |page, cx| page.on_save(window, cx));
+    });
+    cx.run_until_parked();
+    // No parent directory: File::create fails inside save_image.
+    let dir = std::env::temp_dir().join(format!(
+        "gpui-starter-image-editor-missing-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    let missing = dir.join("saved.png");
+    cx.simulate_path_prompt_response(move |_options| Some(vec![missing]));
+    cx.run_until_parked();
+
+    cx.read(|cx| match &page.read(cx).save_state {
+        SaveState::Failed(err) => {
+            assert!(!err.is_empty(), "the io error message must surface");
+        }
+        other => panic!("an unwritable save target must fail, got {other:?}"),
     });
 }
 

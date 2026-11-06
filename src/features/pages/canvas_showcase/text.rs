@@ -73,6 +73,7 @@ impl TextDemo {
                     theme.primary,
                 )
             };
+            let text_system = WindowTextSystem::new(cx.text_system().clone());
             s.edit_document(cx, |doc| {
                 doc.add_shape(
                     layer,
@@ -83,17 +84,26 @@ impl TextDemo {
                         },
                         ShapeStyle::filled(muted.opacity(0.5)),
                     ),
-                );
+                )
+                .expect("layer was just created");
                 for (text, (x, y), font_size, color) in TEXT_SEEDS {
                     let color = match color {
                         SeedColor::Foreground => foreground,
                         SeedColor::MutedForeground => muted_foreground,
                         SeedColor::Primary => primary,
                     };
+                    let font_size = px(font_size);
                     doc.add_shape(
                         layer,
-                        CanvasShape::text(point(px(x), px(y)), text, px(font_size), color),
-                    );
+                        CanvasShape::text(
+                            point(px(x), px(y)),
+                            text,
+                            font_size,
+                            color,
+                            measure_text(&text_system, text, font_size),
+                        ),
+                    )
+                    .expect("layer was just created");
                 }
             });
         });

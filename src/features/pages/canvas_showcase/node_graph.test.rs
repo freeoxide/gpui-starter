@@ -188,25 +188,32 @@ fn dragging_a_node_moves_its_shapes_and_resamples_its_edges(cx: &mut TestAppCont
         &pointer((150., 150.), MouseButton::Left, Modifiers::none()),
         &tool_ctx(Some(input_rect)),
     );
+    dispatch_move(
+        &state,
+        cx,
+        &pointer((170., 170.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(input_rect)),
+    );
+    // Two stops: the ratchet must accumulate to the total +60/+40 delta.
     let input_bounds = shape_bounds(cx, &state, input_rect);
-    assert_px_eq(input_bounds.origin.x, px(SEED_NODES[0].0 + 40.));
-    assert_px_eq(input_bounds.origin.y, px(SEED_NODES[0].1 + 20.));
+    assert_px_eq(input_bounds.origin.x, px(SEED_NODES[0].0 + 60.));
+    assert_px_eq(input_bounds.origin.y, px(SEED_NODES[0].1 + 40.));
     let label_position = cx.read(|cx| match state.read(cx).document().shape(input_label) {
         Some(CanvasShape::Text { position, .. }) => *position,
         _ => panic!("label stays text"),
     });
-    assert_px_eq(label_position.x, px(SEED_NODES[0].0 + 40. + 8.));
-    assert_px_eq(label_position.y, px(SEED_NODES[0].1 + 20. + 8.));
+    assert_px_eq(label_position.x, px(SEED_NODES[0].0 + 60. + 8.));
+    assert_px_eq(label_position.y, px(SEED_NODES[0].1 + 40. + 8.));
     let filter_bounds = shape_bounds(cx, &state, filter_rect);
     assert_px_eq(filter_bounds.origin.x, px(SEED_NODES[1].0));
     assert_px_eq(filter_bounds.origin.y, px(SEED_NODES[1].1));
     let first_edge = path_points_of(cx, &state, edge_zero);
-    assert_px_eq(first_edge[0].x, px(SEED_NODES[0].0 + 40. + NODE_W));
-    assert_px_eq(first_edge[0].y, px(SEED_NODES[0].1 + 20. + NODE_H / 2.));
+    assert_px_eq(first_edge[0].x, px(SEED_NODES[0].0 + 60. + NODE_W));
+    assert_px_eq(first_edge[0].y, px(SEED_NODES[0].1 + 40. + NODE_H / 2.));
     dispatch_up(
         &state,
         cx,
-        &pointer((150., 150.), MouseButton::Left, Modifiers::none()),
+        &pointer((170., 170.), MouseButton::Left, Modifiers::none()),
         &tool_ctx(Some(input_rect)),
     );
 }
@@ -223,13 +230,20 @@ fn each_node_drag_move_emits_exactly_one_document_change(cx: &mut TestAppContext
     );
     let (events, _subscription) = collect_events(cx, &state);
     events.borrow_mut().clear();
-    dispatch_move(
-        &state,
-        cx,
-        &pointer((120., 130.), MouseButton::Left, Modifiers::none()),
-        &tool_ctx(Some(input_rect)),
+    for stop in [(120., 130.), (135., 145.), (150., 160.)] {
+        dispatch_move(
+            &state,
+            cx,
+            &pointer(stop, MouseButton::Left, Modifiers::none()),
+            &tool_ctx(Some(input_rect)),
+        );
+    }
+    let expected = vec![CanvasEvent::DocumentChanged; 3];
+    assert_eq!(
+        &*events.borrow(),
+        &expected,
+        "one document change per move stop"
     );
-    assert_eq!(&*events.borrow(), &[CanvasEvent::DocumentChanged]);
 }
 
 #[gpui_kit::test]
@@ -241,24 +255,26 @@ fn rubber_band_selects_exactly_the_intersected_nodes(cx: &mut TestAppContext) {
         &pointer((90., 90.), MouseButton::Left, Modifiers::none()),
         &tool_ctx(None),
     );
+    // Ending at x=380 clips Filter's right edge (x 320..440): only partial
+    // overlap, so containment-only selection would drop it.
     dispatch_move(
         &state,
         cx,
-        &pointer((450., 200.), MouseButton::Left, Modifiers::none()),
+        &pointer((380., 200.), MouseButton::Left, Modifiers::none()),
         &tool_ctx(None),
     );
     assert!(cx.read(|cx| state.read(cx).tool_overlay().is_some()));
     dispatch_up(
         &state,
         cx,
-        &pointer((450., 200.), MouseButton::Left, Modifiers::none()),
+        &pointer((380., 200.), MouseButton::Left, Modifiers::none()),
         &tool_ctx(None),
     );
     let selected = cx.read(|cx| state.read(cx).selected_shape_ids().to_vec());
     assert_eq!(
         selected,
         vec![node_rect_id(cx, &state, 0), node_rect_id(cx, &state, 1)],
-        "Input and Filter in seed order"
+        "Input (fully inside) and Filter (partially clipped) in seed order"
     );
     assert!(cx.read(|cx| state.read(cx).tool_overlay().is_none()));
 }
@@ -266,20 +282,22 @@ fn rubber_band_selects_exactly_the_intersected_nodes(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn shift_band_adds_to_the_existing_selection(cx: &mut TestAppContext) {
     let state = mounted_demo(cx);
-    let filter_rect = node_rect_id(cx, &state, 1);
+    // Pre-select a node OUTSIDE the band: containment-only selection would
+    // leave it at two members instead of three.
+    let transform_rect = node_rect_id(cx, &state, 2);
     dispatch_down(
         &state,
         cx,
-        &pointer((330., 110.), MouseButton::Left, Modifiers::none()),
-        &tool_ctx(Some(filter_rect)),
+        &pointer((340., 270.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(transform_rect)),
     );
     dispatch_up(
         &state,
         cx,
-        &pointer((330., 110.), MouseButton::Left, Modifiers::none()),
-        &tool_ctx(Some(filter_rect)),
+        &pointer((340., 270.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(transform_rect)),
     );
-    assert!(cx.read(|cx| state.read(cx).selected_shape_ids() == &[filter_rect]));
+    assert!(cx.read(|cx| state.read(cx).selected_shape_ids() == &[transform_rect]));
     dispatch_down(
         &state,
         cx,
@@ -289,19 +307,20 @@ fn shift_band_adds_to_the_existing_selection(cx: &mut TestAppContext) {
     dispatch_move(
         &state,
         cx,
-        &pointer((450., 200.), MouseButton::Left, Modifiers::shift()),
+        &pointer((380., 200.), MouseButton::Left, Modifiers::shift()),
         &tool_ctx(None),
     );
     dispatch_up(
         &state,
         cx,
-        &pointer((450., 200.), MouseButton::Left, Modifiers::shift()),
+        &pointer((380., 200.), MouseButton::Left, Modifiers::shift()),
         &tool_ctx(None),
     );
     let selected = cx.read(|cx| state.read(cx).selected_shape_ids().to_vec());
-    assert_eq!(selected.len(), 2);
-    assert!(selected.contains(&filter_rect));
+    assert_eq!(selected.len(), 3, "pre-selection plus both band hits");
+    assert!(selected.contains(&transform_rect));
     assert!(selected.contains(&node_rect_id(cx, &state, 0)));
+    assert!(selected.contains(&node_rect_id(cx, &state, 1)));
 }
 
 #[gpui_kit::test]

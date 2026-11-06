@@ -4,7 +4,7 @@ use gpui_kit::{Bounds, Entity, TestAppContext, VisualTestContext, Window, div, p
 
 use super::InfiniteCanvasPage;
 use super::minimap::{
-    MiniProjection, fit_projection, project_doc_to_minimap, unproject_minimap_to_doc,
+    MiniProjection, fit_projection, minimap_probe, project_doc_to_minimap, unproject_minimap_to_doc,
 };
 
 fn rect(x: f32, y: f32, w: f32, h: f32) -> Bounds<gpui_kit::Pixels> {
@@ -125,6 +125,28 @@ fn clicking_an_interior_minimap_point_jumps_there(cx: &mut TestAppContext) {
     let click = project_doc_to_minimap(probe_doc, &fit_projection(span, minimap_bounds));
     cx.simulate_click(click, gpui_kit::Modifiers::none());
     assert_doc_at_local_center(&cx, &page, probe_doc);
+}
+
+/// Same count, new seed: the seed alone distinguishes the field, so a cache
+/// key that omits it would keep serving the pre-regenerate dots.
+#[gpui_kit::test]
+fn regenerate_re_rasterizes_the_minimap_dots(cx: &mut TestAppContext) {
+    let (page, mut cx) = mounted_host(cx);
+    minimap_probe::reset();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert_eq!(
+        minimap_probe::dot_anchor_passes(),
+        0,
+        "an unchanged field must reuse the cached dots"
+    );
+
+    page.update(&mut cx, |page, cx| page.regenerate(5_000, cx));
+    minimap_probe::reset();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    assert!(
+        minimap_probe::dot_anchor_passes() > 0,
+        "a regenerated field must re-rasterize the minimap dots"
+    );
 }
 
 #[test]

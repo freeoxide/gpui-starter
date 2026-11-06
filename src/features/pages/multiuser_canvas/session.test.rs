@@ -5,10 +5,11 @@ use collab_protocol::{
     ClientId, Peer, ShapeEntry, ShapeKey, SnapshotMsg, Version, WireColor, WireOp, WireShape,
 };
 use gpui_kit::prelude::*;
-use gpui_kit::{Entity, TestAppContext, point, px, size};
+use gpui_kit::{Entity, TestAppContext, WindowTextSystem, point, px, size};
 
 use super::super::fake::PEER_COUNT;
 use super::{CollabSession, InboundEvent, Mode, NetLink, Status};
+use crate::capabilities::Capability;
 use crate::platform::clock::Duration;
 use crate::ui::canvas::{CanvasShape, CanvasState, ShapeStyle};
 
@@ -93,7 +94,7 @@ fn capability_registered_at_construction(cx: &mut TestAppContext) {
     cx.read(|cx| {
         let snapshot = crate::capabilities::snapshot(cx);
         let status = snapshot
-            .get("collab_canvas")
+            .get(&Capability::COLLAB_CANVAS)
             .expect("collab_canvas capability registered");
         assert_eq!(status.supported, !cfg!(target_family = "wasm"));
     });
@@ -184,6 +185,7 @@ fn apply_snapshot_replaces_the_document_wholesale(cx: &mut TestAppContext) {
             },
             shape: wire_rect(30.),
         }],
+        tombstones: vec![],
     };
     session.update(cx, |s, cx| s.apply_snapshot(msg, cx));
     cx.read(|cx| {
@@ -209,6 +211,7 @@ fn snapshot_server_message_flips_status_and_populates_peers(cx: &mut TestAppCont
     let payload = serde_json::to_value(SnapshotMsg {
         peers: vec![remote_peer(5), remote_peer(6)],
         shapes: vec![],
+        tombstones: vec![],
     })
     .unwrap();
     session.update(cx, |s, cx| {
@@ -224,6 +227,58 @@ fn snapshot_server_message_flips_status_and_populates_peers(cx: &mut TestAppCont
         let session = session.read(cx);
         assert_eq!(session.status(), Status::Connected);
         assert_eq!(session.peers().count(), 2);
+    });
+}
+
+#[gpui_kit::test]
+fn consecutive_undecodable_messages_degrade_the_capability_until_one_decodes(
+    cx: &mut TestAppContext,
+) {
+    let (_, session) = new_session(cx);
+    session.update(cx, |s, cx| {
+        s.set_mode(Mode::Live, cx);
+        s.handle_net_event(InboundEvent::Connected, cx);
+    });
+    let bad_op = serde_json::json!({"bogus": true});
+    for _ in 0..3 {
+        session.update(cx, |s, cx| {
+            s.handle_net_event(
+                InboundEvent::ServerMessage {
+                    event: "op".into(),
+                    payload: bad_op.clone(),
+                },
+                cx,
+            )
+        });
+    }
+    cx.read(|cx| {
+        let status = crate::capabilities::snapshot(cx)
+            .get(&Capability::COLLAB_CANVAS)
+            .expect("collab_canvas capability registered");
+        assert!(
+            status.degraded,
+            "three undecodable ops in a row must degrade"
+        );
+        assert_eq!(session.read(cx).status(), Status::Connected);
+    });
+    let peer = serde_json::to_value(remote_peer(5)).unwrap();
+    session.update(cx, |s, cx| {
+        s.handle_net_event(
+            InboundEvent::ServerMessage {
+                event: "peer_join".into(),
+                payload: peer,
+            },
+            cx,
+        )
+    });
+    cx.read(|cx| {
+        let status = crate::capabilities::snapshot(cx)
+            .get(&Capability::COLLAB_CANVAS)
+            .expect("collab_canvas capability registered");
+        assert!(
+            !status.degraded,
+            "a decodable message must clear degradation"
+        );
     });
 }
 
@@ -322,7 +377,8 @@ fn triangle_round_trips_through_the_wire_format(cx: &mut TestAppContext) {
         let WireShape::Triangle { .. } = &wire else {
             panic!("wire triangle variant");
         };
-        let round_tripped = super::wire_shape_to_canvas(&wire);
+        let round_tripped =
+            super::wire_shape_to_canvas(&wire, &WindowTextSystem::new(cx.text_system().clone()));
         assert_eq!(round_tripped.doc_bounds(), canvas_shape.doc_bounds());
     });
 }

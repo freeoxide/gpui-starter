@@ -5,9 +5,11 @@ use std::rc::Rc;
 use gpui_kit::{AppContext, Bounds, Entity, Subscription, TestAppContext, point, px, size};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 
-use super::{FilterSettings, ImageEditorDocument, ImageEditorEvent, rgba_to_render};
+use super::{FilterSettings, ImageEditorDocument, ImageEditorEvent};
 use crate::features::pages::image_editor::history::{AnnotationSnapshot, EditLabel};
-use crate::ui::canvas::{CanvasShape, CanvasState, LayerId, ShapeId, ShapeStyle, StrokeStyle};
+use crate::ui::canvas::{
+    CanvasShape, CanvasState, LayerId, ShapeId, ShapeStyle, StrokeStyle, rgba_to_render,
+};
 
 fn png_bytes(w: u32, h: u32) -> Vec<u8> {
     let img = RgbaImage::from_pixel(w, h, image::Rgba([120, 140, 160, 255]));
@@ -69,10 +71,16 @@ fn collect_events(
 fn rgba_to_render_round_trips_dimensions_and_bytes(cx: &mut TestAppContext) {
     cx.update(|_| {
         let img = RgbaImage::from_pixel(16, 8, image::Rgba([1, 2, 3, 255]));
-        let render = rgba_to_render(&img);
+        let render = rgba_to_render(img);
         assert_eq!(render.size(0).width.0, 16);
         assert_eq!(render.size(0).height.0, 8);
         assert_eq!(render.as_bytes(0).map(<[u8]>::len), Some(16 * 8 * 4));
+
+        // The renderer consumes BGRA: a 1x1 RGBA [1,2,3,255] must land as
+        // [3,2,1,255], pinning the channel swap into_raw_bgra performs.
+        let img = RgbaImage::from_pixel(1, 1, image::Rgba([1, 2, 3, 255]));
+        let render = rgba_to_render(img);
+        assert_eq!(render.as_bytes(0), Some(&[3u8, 2, 1, 255][..]));
     });
 }
 
@@ -82,7 +90,7 @@ fn set_display_for_test_emits_exactly_one_display_changed(cx: &mut TestAppContex
     let (events, _subscription) = collect_events(cx, &doc);
     doc.update(cx, |doc, cx| {
         let img = RgbaImage::from_pixel(2, 2, image::Rgba([0, 0, 0, 255]));
-        doc.set_display_for_test(rgba_to_render(&img), cx)
+        doc.set_display_for_test(rgba_to_render(img), cx)
     });
     assert_eq!(events.borrow().len(), 1);
     assert_eq!(events.borrow()[0], ImageEditorEvent::DisplayChanged);
@@ -178,6 +186,38 @@ fn set_filters_with_identical_values_records_nothing(cx: &mut TestAppContext) {
     assert_eq!(cx.read(|cx| doc.read(cx).history_len()), 0);
 }
 
+#[gpui_kit::test]
+fn rapid_filter_changes_emit_one_display_update(cx: &mut TestAppContext) {
+    let (_canvas, doc) = opened_doc(cx);
+    let (events, _subscription) = collect_events(cx, &doc);
+    doc.update(cx, |doc, cx| {
+        doc.set_filters(
+            FilterSettings {
+                grayscale: true,
+                ..FilterSettings::default()
+            },
+            cx,
+        )
+    });
+    doc.update(cx, |doc, cx| {
+        doc.set_filters(
+            FilterSettings {
+                brightness: 60,
+                ..FilterSettings::default()
+            },
+            cx,
+        )
+    });
+    cx.executor().run_until_parked();
+    let display_changed = events
+        .borrow()
+        .iter()
+        .filter(|event| **event == ImageEditorEvent::DisplayChanged)
+        .count();
+    assert_eq!(display_changed, 1);
+    assert_eq!(cx.read(|cx| doc.read(cx).history_len()), 2);
+}
+
 fn seed_annotation(
     cx: &mut TestAppContext,
     canvas: &Entity<CanvasState>,
@@ -208,6 +248,7 @@ fn rotate90_swaps_dimensions_and_rotates_annotations(cx: &mut TestAppContext) {
     seed_annotation(cx, &canvas, &doc, layer, rect(0., 0., 2., 1.));
 
     doc.update(cx, |doc, cx| doc.rotate90(&canvas, cx));
+    cx.executor().run_until_parked();
 
     assert_eq!(cx.read(|cx| doc.read(cx).base_size()), Some((8, 16)));
     let shapes = layer_shapes(&canvas, layer, cx);
@@ -234,6 +275,7 @@ fn apply_crop_cuts_pixels_and_translates_annotations(cx: &mut TestAppContext) {
 
     let applied = doc.update(cx, |doc, cx| doc.apply_crop(&canvas, cx));
     assert!(applied);
+    cx.executor().run_until_parked();
     assert_eq!(cx.read(|cx| doc.read(cx).base_size()), Some((8, 8)));
     assert!(!cx.read(|cx| doc.read(cx).has_valid_crop()));
 
@@ -259,6 +301,56 @@ fn apply_crop_rejects_under_minimum_rect(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn apply_crop_rejects_rect_outside_the_image(cx: &mut TestAppContext) {
+    let (canvas, doc) = opened_doc(cx);
+    for crop in [
+        Bounds {
+            origin: point(px(20.), px(4.)),
+            size: size(px(8.), px(8.)),
+        },
+        Bounds {
+            origin: point(px(12.), px(0.)),
+            size: size(px(8.), px(8.)),
+        },
+    ] {
+        doc.update(cx, |doc, cx| doc.set_crop_rect(Some(crop), cx));
+        assert!(!cx.read(|cx| doc.read(cx).has_valid_crop()));
+        let applied = doc.update(cx, |doc, cx| doc.apply_crop(&canvas, cx));
+        assert!(!applied);
+        cx.executor().run_until_parked();
+        assert_eq!(cx.read(|cx| doc.read(cx).base_size()), Some((16, 8)));
+    }
+}
+
+#[gpui_kit::test]
+fn apply_crop_clamps_survivors_to_the_cropped_image(cx: &mut TestAppContext) {
+    let (canvas, doc) = opened_doc(cx);
+    let layer = cx.read(|cx| doc.read(cx).annotation_layer()).unwrap();
+    seed_annotation(cx, &canvas, &doc, layer, rect(10., 2., 6., 6.));
+
+    let crop = Bounds {
+        origin: point(px(4.), px(0.)),
+        size: size(px(8.), px(8.)),
+    };
+    doc.update(cx, |doc, cx| doc.set_crop_rect(Some(crop), cx));
+    let applied = doc.update(cx, |doc, cx| doc.apply_crop(&canvas, cx));
+    assert!(applied);
+    cx.executor().run_until_parked();
+    assert_eq!(cx.read(|cx| doc.read(cx).base_size()), Some((8, 8)));
+
+    let shapes = layer_shapes(&canvas, layer, cx);
+    assert_eq!(shapes.len(), 1);
+    let bounds = shapes[0].doc_bounds();
+    assert!((bounds.origin.x.as_f32() - 6.).abs() < 0.01, "{bounds:?}");
+    assert!((bounds.origin.y.as_f32() - 2.).abs() < 0.01, "{bounds:?}");
+    assert!((bounds.size.width.as_f32() - 2.).abs() < 0.01, "{bounds:?}");
+    assert!(
+        (bounds.size.height.as_f32() - 6.).abs() < 0.01,
+        "{bounds:?}"
+    );
+}
+
+#[gpui_kit::test]
 fn undo_after_crop_restores_the_full_image(cx: &mut TestAppContext) {
     let (canvas, doc) = opened_doc(cx);
     let crop = Bounds {
@@ -267,6 +359,7 @@ fn undo_after_crop_restores_the_full_image(cx: &mut TestAppContext) {
     };
     doc.update(cx, |doc, cx| doc.set_crop_rect(Some(crop), cx));
     doc.update(cx, |doc, cx| doc.apply_crop(&canvas, cx));
+    cx.executor().run_until_parked();
     assert_eq!(cx.read(|cx| doc.read(cx).base_size()), Some((10, 8)));
 
     doc.update(cx, |doc, cx| doc.undo(&canvas, cx));

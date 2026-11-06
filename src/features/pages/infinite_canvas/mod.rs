@@ -2,7 +2,7 @@
 //! `InfiniteCanvasPage` is the only public surface. Removal = delete this
 //! directory and revert its six seam touches: the `mod`/`pub use` lines in
 //! features/pages/mod.rs, the Page::InfiniteCanvas arms and all() entry in
-//! shell/sidebar.rs, the VALID_HOSTS entry in shell/route.rs, the AppRoot
+//! shell/page.rs, the VALID_HOSTS entry in shell/route.rs, the AppRoot
 //! wiring in shell/root/app_root/state.rs, the page count in
 //! tests/e2e_navigation.rs, and the nav_infinite_canvas/canvas_* keys in
 //! locales/en.yml and locales/zh-CN.yml.
@@ -234,6 +234,15 @@ fn icon_button(
 impl Render for InfiniteCanvasPage {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let started = crate::platform::clock::Instant::now();
+        // Colors bake into the document; rebuild once when the theme flips so
+        // notes and the minimap follow runtime theme switches.
+        let palette = note_palette(cx);
+        if palette != self.palette {
+            self.palette = palette;
+            self.layers = self
+                .state
+                .update(cx, |state, cx| build_field(state, &self.field, cx));
+        }
         let page = cx.entity();
         let (zoom, grid) = {
             let state = self.state.read(cx);

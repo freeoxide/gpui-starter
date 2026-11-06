@@ -3,7 +3,7 @@
 //! Removal = delete this directory and revert its seam touches: the `image`
 //! dependency in Cargo.toml (+ Cargo.lock), the `mod image_editor;`/`pub use`
 //! lines in features/pages/mod.rs, the Page::ImageEditor arms and all() entry
-//! in shell/sidebar.rs, the VALID_HOSTS entry in shell/route.rs, the AppRoot
+//! in shell/page.rs, the VALID_HOSTS entry in shell/route.rs, the AppRoot
 //! wiring in shell/root/app_root/state.rs, the page count in
 //! tests/e2e_navigation.rs, the image_editor capability in app/init.rs, and
 //! the nav_image_editor + image_editor_* keys in locales/en.yml and
@@ -24,6 +24,7 @@ mod image_editor_test;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState};
 use gpui_kit::component::slider::{Slider, SliderEvent, SliderState};
+#[cfg(not(target_family = "wasm"))]
 use gpui_kit::component::spinner::Spinner;
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{
@@ -35,7 +36,7 @@ use gpui_kit::{prelude::*, *};
 use crate::accessibility::A11yExt as _;
 use crate::ui::canvas::{Canvas, CanvasGrid, CanvasShape, CanvasState, CanvasTool, StrokeStyle};
 use document::{FilterSettings, ImageEditorDocument, ImageEditorEvent};
-use tools::{ArrowTool, BrushTool, CropTool, EllipseTool, EraserTool, RectTool};
+use tools::{BrushTool, DragTool, EraserTool};
 
 const BRUSH_SVG: &[u8] = include_bytes!("assets/brush.svg");
 const ERASER_SVG: &[u8] = include_bytes!("assets/eraser.svg");
@@ -57,8 +58,11 @@ enum EditorTool {
 #[derive(Clone, Debug, PartialEq)]
 enum SaveState {
     Idle,
+    #[cfg(not(target_family = "wasm"))]
     Busy,
+    #[cfg(not(target_family = "wasm"))]
     Done,
+    #[cfg(not(target_family = "wasm"))]
     Failed(String),
 }
 
@@ -148,10 +152,11 @@ impl ImageEditorPage {
                     this.pending_fit = true;
                     this.try_fit(cx);
                     this.mount_active_tool(cx);
-                    this.reset_filter_controls(cx);
+                    this.sync_filter_controls(cx);
                 }
                 ImageEditorEvent::DisplayChanged => this.update_base_shape(cx),
-                ImageEditorEvent::HistoryChanged | ImageEditorEvent::CropRectChanged => {}
+                ImageEditorEvent::HistoryChanged => this.sync_filter_controls(cx),
+                ImageEditorEvent::CropRectChanged => {}
             }),
             cx.subscribe(&brush_size, |this, _, event: &SliderEvent, cx| {
                 if let SliderEvent::Release(value) = event {
@@ -209,21 +214,30 @@ impl ImageEditorPage {
         }
     }
 
-    fn reset_filter_controls(&mut self, cx: &mut Context<Self>) {
-        self.gray = false;
+    fn sync_filter_controls(&mut self, cx: &mut Context<Self>) {
+        let filters = self.doc.read(cx).filters();
+        // Most history ops don't touch filters; skip the rebuild when the
+        // controls already match the document.
+        if self.gray == filters.grayscale
+            && self.blur.read(cx).value().start() == filters.blur_sigma
+            && self.brightness.read(cx).value().start() == filters.brightness as f32
+        {
+            return;
+        }
+        self.gray = filters.grayscale;
         self.blur = cx.new(|_| {
             SliderState::new()
                 .min(0.)
                 .max(20.)
                 .step(0.5)
-                .default_value(0.)
+                .default_value(filters.blur_sigma)
         });
         self.brightness = cx.new(|_| {
             SliderState::new()
                 .min(-100.)
                 .max(100.)
                 .step(1.)
-                .default_value(0.)
+                .default_value(filters.brightness as f32)
         });
         self._filter_subscriptions = vec![
             cx.subscribe(&self.blur, |this, _, event: &SliderEvent, cx| {
@@ -240,6 +254,11 @@ impl ImageEditorPage {
     }
 
     fn select_tool(&mut self, tool: EditorTool, cx: &mut Context<Self>) {
+        // The overlay dies with the tool switch; drop the stored rect too or
+        // Apply would crop to an invisible rect.
+        if self.tool == EditorTool::Crop && tool != EditorTool::Crop {
+            self.doc.update(cx, |doc, cx| doc.set_crop_rect(None, cx));
+        }
         self.tool = tool;
         self.mount_active_tool(cx);
     }
@@ -259,10 +278,10 @@ impl ImageEditorPage {
         let tool: Box<dyn CanvasTool> = match self.tool {
             EditorTool::Brush => Box::new(BrushTool::new(doc, layer, stroke)),
             EditorTool::Eraser => Box::new(EraserTool::new(doc, layer, eraser_radius)),
-            EditorTool::Rect => Box::new(RectTool::new(doc, layer, stroke)),
-            EditorTool::Ellipse => Box::new(EllipseTool::new(doc, layer, stroke)),
-            EditorTool::Arrow => Box::new(ArrowTool::new(doc, layer, stroke)),
-            EditorTool::Crop => Box::new(CropTool::new(doc, crop_color)),
+            EditorTool::Rect => Box::new(DragTool::rect(doc, layer, stroke)),
+            EditorTool::Ellipse => Box::new(DragTool::ellipse(doc, layer, stroke)),
+            EditorTool::Arrow => Box::new(DragTool::arrow(doc, layer, stroke)),
+            EditorTool::Crop => Box::new(DragTool::crop(doc, layer, crop_color)),
         };
         self.canvas.update(cx, |state, cx| state.set_tool(tool, cx));
         cx.notify();
@@ -348,9 +367,14 @@ impl ImageEditorPage {
 
     fn on_apply_crop(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let canvas = self.canvas.clone();
-        self.doc.update(cx, |doc, cx| doc.apply_crop(&canvas, cx));
+        self.doc.update(cx, |doc, cx| {
+            if !doc.apply_crop(&canvas, cx) {
+                doc.set_crop_rect(None, cx);
+            }
+        });
     }
 
+    #[cfg(not(target_family = "wasm"))]
     fn on_open(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.save_state = SaveState::Idle;
         let canvas = self.canvas.clone();
@@ -383,21 +407,34 @@ impl ImageEditorPage {
         if matches!(self.save_state, SaveState::Busy) || !self.doc.read(cx).has_image() {
             return;
         }
-        self.save_state = SaveState::Idle;
-        let Some(base) = self.doc.read(cx).base().cloned() else {
-            return;
-        };
-        let filters = self.doc.read(cx).filters();
-        let annotations = self.doc.read(cx).annotation_shapes();
+        // Busy before the dialog: a second click must not cancel the pending
+        // prompt task, and the export snapshot is re-read after it resolves.
+        self.save_state = SaveState::Busy;
+        cx.notify();
         self._save_task = Some(cx.spawn(async move |this, cx| {
             let Some(path) = crate::desktop_actions::save_file(cx).await else {
+                this.update(cx, |page, cx| {
+                    page.save_state = SaveState::Idle;
+                    cx.notify();
+                })
+                .ok();
                 return;
             };
-            this.update(cx, |page, cx| {
-                page.save_state = SaveState::Busy;
-                cx.notify();
-            })
-            .ok();
+            let export = this
+                .update(cx, |page, cx| {
+                    let doc = page.doc.read(cx);
+                    Some((doc.base().cloned()?, doc.filters(), doc.annotation_shapes()))
+                })
+                .ok()
+                .flatten();
+            let Some((base, filters, annotations)) = export else {
+                this.update(cx, |page, cx| {
+                    page.save_state = SaveState::Idle;
+                    cx.notify();
+                })
+                .ok();
+                return;
+            };
             let img = cx
                 .background_spawn(
                     async move { bake::compose_export(&base, &filters, &annotations) },
@@ -546,6 +583,7 @@ impl Render for ImageEditorPage {
 
         let save_status = match &self.save_state {
             SaveState::Idle => div().into_any_element(),
+            #[cfg(not(target_family = "wasm"))]
             SaveState::Busy => h_flex()
                 .id("image-editor-save-status")
                 .a11y_live(accesskit::Live::Polite)
@@ -559,6 +597,7 @@ impl Render for ImageEditorPage {
                         .child(crate::i18n::localize("image_editor_saving")),
                 )
                 .into_any_element(),
+            #[cfg(not(target_family = "wasm"))]
             SaveState::Done => div()
                 .id("image-editor-save-status")
                 .a11y_live(accesskit::Live::Polite)
@@ -566,6 +605,7 @@ impl Render for ImageEditorPage {
                 .text_color(cx.theme().muted_foreground)
                 .child(crate::i18n::localize("image_editor_saved"))
                 .into_any_element(),
+            #[cfg(not(target_family = "wasm"))]
             SaveState::Failed(err) => div()
                 .id("image-editor-save-status")
                 .a11y_live(accesskit::Live::Polite)

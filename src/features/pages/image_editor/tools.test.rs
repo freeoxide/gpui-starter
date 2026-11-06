@@ -6,10 +6,7 @@ use gpui_kit::{
 };
 use image::{DynamicImage, ImageFormat, RgbaImage};
 
-use super::{
-    ArrowTool, BrushTool, CropTool, EllipseTool, EraserTool, RectTool, arrow_segments,
-    bounds_from_corners,
-};
+use super::{BrushTool, DragTool, EraserTool, arrow_segments, bounds_from_corners};
 use crate::features::pages::image_editor::document::{ImageEditorDocument, capture_annotations};
 use crate::features::pages::image_editor::history::EditLabel;
 use crate::ui::canvas::{
@@ -65,7 +62,17 @@ type Phase = fn(
 );
 
 fn dispatch(canvas: &Entity<CanvasState>, cx: &mut TestAppContext, phase: Phase, at: (f32, f32)) {
-    let event = pointer(at, MouseButton::Left);
+    dispatch_button(canvas, cx, phase, at, MouseButton::Left);
+}
+
+fn dispatch_button(
+    canvas: &Entity<CanvasState>,
+    cx: &mut TestAppContext,
+    phase: Phase,
+    at: (f32, f32),
+    button: MouseButton,
+) {
+    let event = pointer(at, button);
     let tool_ctx = tool_ctx();
     canvas.update(cx, |state, cx| {
         state.dispatch_tool_event(cx, |tool, state, cx| {
@@ -187,7 +194,7 @@ fn brush_tap_commits_a_single_point_dot(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn rect_drag_commits_normalized_bounds(cx: &mut TestAppContext) {
     let (canvas, doc, layer) = harness(cx, |doc, layer| {
-        Box::new(RectTool::new(doc, layer, stroke()))
+        Box::new(DragTool::rect(doc, layer, stroke()))
     });
 
     dispatch(&canvas, cx, phase_down, (7., 5.));
@@ -212,7 +219,7 @@ fn rect_drag_commits_normalized_bounds(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn ellipse_drag_commits_corner_bounds(cx: &mut TestAppContext) {
     let (canvas, doc, layer) = harness(cx, |doc, layer| {
-        Box::new(EllipseTool::new(doc, layer, stroke()))
+        Box::new(DragTool::ellipse(doc, layer, stroke()))
     });
 
     dispatch(&canvas, cx, phase_down, (1., 1.));
@@ -236,7 +243,7 @@ fn ellipse_drag_commits_corner_bounds(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn arrow_drag_commits_three_matching_paths(cx: &mut TestAppContext) {
     let (canvas, doc, layer) = harness(cx, |doc, layer| {
-        Box::new(ArrowTool::new(doc, layer, stroke()))
+        Box::new(DragTool::arrow(doc, layer, stroke()))
     });
 
     dispatch(&canvas, cx, phase_down, (0., 0.));
@@ -317,7 +324,9 @@ fn eraser_miss_records_nothing(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn crop_drag_sets_crop_rect_without_history(cx: &mut TestAppContext) {
-    let (canvas, doc, _layer) = harness(cx, |doc, _| Box::new(CropTool::new(doc, black())));
+    let (canvas, doc, _layer) = harness(cx, |doc, layer| {
+        Box::new(DragTool::crop(doc, layer, black()))
+    });
 
     dispatch(&canvas, cx, phase_down, (9., 9.));
     dispatch(&canvas, cx, phase_move, (3., 1.));
@@ -332,6 +341,104 @@ fn crop_drag_sets_crop_rect_without_history(cx: &mut TestAppContext) {
     assert_px_eq(rect.size.width, 6.);
     assert_px_eq(rect.size.height, 8.);
     assert_eq!(cx.read(|cx| doc.read(cx).history_len()), 0);
+}
+
+#[gpui_kit::test]
+fn crop_click_keeps_the_stored_crop_rect(cx: &mut TestAppContext) {
+    let (canvas, doc, _layer) = harness(cx, |doc, layer| {
+        Box::new(DragTool::crop(doc, layer, black()))
+    });
+
+    dispatch(&canvas, cx, phase_down, (1., 1.));
+    dispatch(&canvas, cx, phase_move, (9., 9.));
+    dispatch(&canvas, cx, phase_up, (9., 9.));
+    let stored = cx
+        .read(|cx| doc.read(cx).crop_rect())
+        .expect("valid drag stored");
+
+    dispatch(&canvas, cx, phase_down, (4., 4.));
+    dispatch(&canvas, cx, phase_up, (4., 4.));
+    let after_click = cx
+        .read(|cx| doc.read(cx).crop_rect())
+        .expect("a plain click leaves the stored rect alone");
+    assert_px_eq(after_click.origin.x, stored.origin.x);
+    assert_px_eq(after_click.size.width, stored.size.width);
+
+    dispatch(&canvas, cx, phase_down, (2., 2.));
+    dispatch(&canvas, cx, phase_move, (5., 9.));
+    dispatch(&canvas, cx, phase_up, (5., 9.));
+    let after_small = cx
+        .read(|cx| doc.read(cx).crop_rect())
+        .expect("a sub-minimum drag leaves the stored rect alone");
+    assert_px_eq(after_small.size.width, stored.size.width);
+}
+
+#[gpui_kit::test]
+fn non_left_release_does_not_commit_a_brush_gesture(cx: &mut TestAppContext) {
+    let (canvas, doc, layer) = harness(cx, |doc, layer| {
+        Box::new(BrushTool::new(doc, layer, stroke()))
+    });
+
+    dispatch(&canvas, cx, phase_down, (2., 2.));
+    dispatch(&canvas, cx, phase_move, (6., 2.));
+    dispatch_button(&canvas, cx, phase_up, (6., 2.), MouseButton::Right);
+
+    assert_eq!(
+        layer_shapes(&canvas, layer, cx).len(),
+        0,
+        "a right release must not truncate the stroke"
+    );
+    assert_eq!(cx.read(|cx| doc.read(cx).history_len()), 0);
+
+    dispatch(&canvas, cx, phase_move, (10., 4.));
+    dispatch(&canvas, cx, phase_up, (10., 4.));
+    let shapes = layer_shapes(&canvas, layer, cx);
+    assert_eq!(shapes.len(), 1);
+    match &shapes[0] {
+        CanvasShape::Path { points, .. } => assert_eq!(points.len(), 3),
+        other => panic!("expected a path, got {other:?}"),
+    }
+    assert_eq!(cx.read(|cx| doc.read(cx).history_len()), 1);
+}
+
+#[gpui_kit::test]
+fn sub_pixel_drag_moves_keep_the_previous_overlay(cx: &mut TestAppContext) {
+    let (canvas, _doc, _layer) = harness(cx, |doc, layer| {
+        Box::new(DragTool::rect(doc, layer, stroke()))
+    });
+
+    dispatch(&canvas, cx, phase_down, (2., 2.));
+    dispatch(&canvas, cx, phase_move, (10., 10.));
+    dispatch(&canvas, cx, phase_move, (10.5, 10.4));
+
+    let overlay = cx
+        .read(|cx| canvas.read(cx).tool_overlay().cloned())
+        .expect("overlay built by the real move");
+    match overlay {
+        CanvasShape::Rect { bounds, .. } => {
+            assert_px_eq(bounds.size.width, 8.);
+            assert_px_eq(bounds.size.height, 8.);
+        }
+        other => panic!("expected a rect, got {other:?}"),
+    }
+}
+
+#[gpui_kit::test]
+fn non_left_release_does_not_commit_a_rect_gesture(cx: &mut TestAppContext) {
+    let (canvas, doc, layer) = harness(cx, |doc, layer| {
+        Box::new(DragTool::rect(doc, layer, stroke()))
+    });
+
+    dispatch(&canvas, cx, phase_down, (7., 5.));
+    dispatch(&canvas, cx, phase_move, (2., 2.));
+    dispatch_button(&canvas, cx, phase_up, (2., 2.), MouseButton::Right);
+
+    assert_eq!(layer_shapes(&canvas, layer, cx).len(), 0);
+    assert_eq!(cx.read(|cx| doc.read(cx).history_len()), 0);
+
+    dispatch(&canvas, cx, phase_up, (2., 2.));
+    assert_eq!(layer_shapes(&canvas, layer, cx).len(), 1);
+    assert_eq!(cx.read(|cx| doc.read(cx).history_len()), 1);
 }
 
 #[gpui_kit::test]
@@ -351,16 +458,16 @@ fn every_editor_tool_has_crosshair_cursor(cx: &mut TestAppContext) {
     let eraser = EraserTool::new(doc.clone(), layer, 12.);
     assert_eq!(eraser.id(), "image-eraser");
     assert_eq!(eraser.cursor(), CursorStyle::Crosshair);
-    let rect = RectTool::new(doc.clone(), layer, stroke());
+    let rect = DragTool::rect(doc.clone(), layer, stroke());
     assert_eq!(rect.id(), "image-rect");
     assert_eq!(rect.cursor(), CursorStyle::Crosshair);
-    let ellipse = EllipseTool::new(doc.clone(), layer, stroke());
+    let ellipse = DragTool::ellipse(doc.clone(), layer, stroke());
     assert_eq!(ellipse.id(), "image-ellipse");
     assert_eq!(ellipse.cursor(), CursorStyle::Crosshair);
-    let arrow = ArrowTool::new(doc.clone(), layer, stroke());
+    let arrow = DragTool::arrow(doc.clone(), layer, stroke());
     assert_eq!(arrow.id(), "image-arrow");
     assert_eq!(arrow.cursor(), CursorStyle::Crosshair);
-    let crop = CropTool::new(doc.clone(), black());
+    let crop = DragTool::crop(doc.clone(), layer, black());
     assert_eq!(crop.id(), "image-crop");
     assert_eq!(crop.cursor(), CursorStyle::Crosshair);
 }

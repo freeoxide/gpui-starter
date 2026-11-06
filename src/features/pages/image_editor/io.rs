@@ -4,18 +4,6 @@ use std::path::Path;
 use anyhow::Context as _;
 use image::{DynamicImage, ImageFormat, RgbaImage};
 
-#[cfg(test)]
-use image::ImageReader;
-
-#[cfg(test)]
-pub(crate) fn load_image(path: &Path) -> anyhow::Result<RgbaImage> {
-    let decoded = ImageReader::open(path)
-        .with_context(|| format!("open {}", path.display()))?
-        .decode()
-        .with_context(|| format!("decode {}", path.display()))?;
-    Ok(decoded.to_rgba8())
-}
-
 pub(crate) fn save_image(path: &Path, img: &RgbaImage) -> anyhow::Result<()> {
     let format = match path
         .extension()
