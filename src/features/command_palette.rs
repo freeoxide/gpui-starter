@@ -3,21 +3,29 @@
 //! [`crate::features::palette`].
 
 use gpui_kit::component::{
-    ActiveTheme as _, FocusTrapElement as _, Icon, IconName, IndexPath, Root, Sizable as _,
+    ActiveTheme as _, Disableable as _, FocusTrapElement as _, Icon, IconName, IndexPath, Root,
+    Sizable as _,
     command::{Command, CommandItem, CommandState},
-    h_flex, v_flex,
+    h_flex, kbd::Kbd, v_flex,
 };
 use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::commands::{self, CommandId};
-use crate::features::palette::{FuzzyMatchConfig, ItemFilter, PaletteEntry};
+use crate::features::palette::{ItemFilter, PaletteEntry};
+use crate::page::Page;
+use crate::root::NavigateToPage;
 
 const LOG: &str = "gpui_starter::launcher";
 
 // Prevents double-opening the launcher
 pub struct LauncherOpen(pub bool);
 impl Global for LauncherOpen {}
+
+/// The open launcher window; a dead handle (destroyed elsewhere) must read
+/// as closed, so toggle paths verify it against the live window list.
+pub struct LauncherWindow(pub AnyWindowHandle);
+impl Global for LauncherWindow {}
 
 #[derive(Clone, Copy, Debug)]
 pub enum LauncherActionKind {
@@ -74,17 +82,17 @@ impl Launcher {
             state,
             items,
             matches,
-            filter: ItemFilter::new(FuzzyMatchConfig::default()),
+            filter: ItemFilter::default(),
         }
     }
 
     fn make_items() -> Vec<LauncherItem> {
-        commands::registry()
-            .into_iter()
+        commands::REGISTRY
+            .iter()
             .map(|command| LauncherItem {
-                title: command.title,
-                subtitle: command.subtitle,
-                icon: command.icon,
+                title: crate::i18n::localize(command.title_key).into(),
+                subtitle: crate::i18n::localize(command.subtitle_key).into(),
+                icon: command.icon.clone(),
                 action: LauncherActionKind::Execute(command.id),
             })
             .collect()
@@ -137,14 +145,29 @@ impl Render for Launcher {
 
         let command = Command::new(&self.state)
             .items(rows.into_iter().map(|row| {
-                let icon = row.icon.clone();
-                let title = row.title;
-                let subtitle = row.subtitle;
-                CommandItem::new().label(title.clone()).child(
-                    move |_: &mut Window, cx: &mut App| {
-                        render_row(icon.clone(), title.clone(), subtitle.clone(), cx)
-                    },
-                )
+                let LauncherActionKind::Execute(command_id) = row.action;
+                let LauncherItem { title, subtitle, icon, .. } = row;
+                // Availability is read per render so rows track the same
+                // state the menus see (undo stack, sign-in, platform).
+                let availability = commands::availability(command_id, cx);
+                let subtitle = match &availability.disabled_reason {
+                    Some(reason) => format!("{} ({reason})", subtitle).into(),
+                    None => subtitle,
+                };
+                let binding = page_binding(command_id);
+                CommandItem::new()
+                    .label(title.clone())
+                    .disabled(!availability.enabled)
+                    .child(move |window: &mut Window, cx: &mut App| {
+                        render_row(
+                            icon.clone(),
+                            title.clone(),
+                            subtitle.clone(),
+                            binding.clone(),
+                            window,
+                            cx,
+                        )
+                    })
             }))
             .placeholder(crate::i18n::localize("palette_placeholder"))
             .filterable(false)
@@ -193,9 +216,36 @@ impl Render for Launcher {
     }
 }
 
-/// Row content (icon + two-line text); the palette component owns the row
-/// chrome, selection highlight, and trailing slot.
-fn render_row(icon: IconName, title: SharedString, subtitle: SharedString, cx: &App) -> Div {
+/// Binding hint: pages reachable from the sidebar answer to NavigateToPage,
+/// bound to secondary-1..9 over the first nine [`Page::all`] slots (AppRoot).
+fn page_binding(id: CommandId) -> Option<NavigateToPage> {
+    let page = match id {
+        CommandId::OpenHome => Page::Home,
+        CommandId::OpenForm => Page::Form,
+        CommandId::OpenSettings => Page::Settings,
+        CommandId::OpenNotifications => Page::Notifications,
+        CommandId::OpenDiagnostics => Page::Diagnostics,
+        CommandId::OpenAbout => Page::About,
+        CommandId::OpenSystemControls => Page::SystemControls,
+        CommandId::SignIn => Page::SignIn,
+        CommandId::OpenDesktopWidgets => Page::DesktopWidgets,
+        _ => return None,
+    };
+    let slot = Page::all().iter().position(|candidate| *candidate == page)?;
+    (slot < 9).then_some(NavigateToPage(slot))
+}
+
+/// Row content (icon + two-line text + binding hint); the palette component
+/// owns the row chrome and selection highlight.
+fn render_row(
+    icon: IconName,
+    title: SharedString,
+    subtitle: SharedString,
+    binding: Option<NavigateToPage>,
+    window: &mut Window,
+    cx: &App,
+) -> Div {
+    let kbd = binding.as_ref().and_then(|action| Kbd::binding_for_action(action, None, window));
     h_flex()
         .w_full()
         .gap_3()
@@ -230,6 +280,7 @@ fn render_row(icon: IconName, title: SharedString, subtitle: SharedString, cx: &
                         .child(subtitle),
                 ),
         )
+        .when_some(kbd, |row, kbd| row.child(kbd))
 }
 
 fn render_no_results(cx: &App) -> Stateful<Div> {
@@ -326,7 +377,7 @@ impl LauncherRoot {
         // Install Liquid Glass — creates NSGlassEffectView directly in the
         // native view hierarchy, no GPUI source patches needed.
         #[cfg(target_os = "macos")]
-        crate::platform::liquid_glass::LiquidGlass::install(window, &Default::default());
+        crate::platform::liquid_glass::LiquidGlass::install(window);
 
         let launcher = cx.new(|cx| Launcher::new(window, cx));
 
@@ -342,12 +393,24 @@ impl LauncherRoot {
                     tracing::info!(target: LOG, action = ?action, "LauncherRoot handling action");
                     match action {
                         LauncherActionKind::Execute(command_id) => {
-                            tracing::info!(
-                                target: LOG,
-                                command = ?command_id,
-                                "Executing command"
-                            );
-                            commands::execute(*command_id, cx);
+                            // Rows render disabled, but availability can move
+                            // while open; gate like the ExecuteCommand path.
+                            let availability = commands::availability(*command_id, cx);
+                            if availability.enabled {
+                                tracing::info!(
+                                    target: LOG,
+                                    command = ?command_id,
+                                    "Executing command"
+                                );
+                                commands::execute(*command_id, cx);
+                            } else {
+                                tracing::warn!(
+                                    target: LOG,
+                                    command = ?command_id,
+                                    reason = ?availability.disabled_reason,
+                                    "Command unavailable"
+                                );
+                            }
                         }
                     }
                 }
@@ -366,7 +429,7 @@ impl LauncherRoot {
         cx.observe_window_activation(window, |_, window, cx| {
             if !window.is_window_active() {
                 tracing::debug!(target: LOG, "Launcher window deactivated — closing");
-                cx.set_global(LauncherOpen(false));
+                forget_launcher(cx);
                 window.remove_window();
             }
         })
@@ -383,42 +446,47 @@ impl Render for LauncherRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.should_close {
             self.should_close = false;
-            cx.set_global(LauncherOpen(false));
+            forget_launcher(cx);
             tracing::info!(target: LOG, "Removing launcher window (deferred)");
-            #[cfg(target_os = "windows")]
-            {
+            window.defer(cx, |window, cx| {
                 // Hand OS focus to the main window before the popup leaves
-                // gpui's map, or later key-ups log "window not found".
-                let handle = window.window_handle();
-                cx.spawn(async move |_this, cx| {
-                    cx.update(|cx| {
-                        if let Some(root) = crate::app::window::root_window(cx) {
-                            let _ = root.update(cx, |_, window, _| window.activate_window());
-                        }
-                    });
-                    cx.background_executor()
-                        .timer(std::time::Duration::from_millis(50))
-                        .await;
-                    cx.update(|cx| {
-                        let _ = handle.update(cx, |_, window, _| window.remove_window());
-                    });
-                })
-                .detach();
-            }
-            #[cfg(not(target_os = "windows"))]
-            window.defer(cx, |window, _cx| {
+                // gpui's map, or in-flight key-ups log "window not found".
+                if let Some(root) = crate::app::window::root_window(cx) {
+                    let _ = root.update(cx, |_, window, _| window.activate_window());
+                }
                 window.remove_window();
             });
         }
 
-        div().size_full().child(self.launcher.clone())
+        div()
+            .size_full()
+            // The launcher window has no AppRoot; without its own handler
+            // the ToggleSearch binding cannot reach open_launcher to close.
+            .on_action(|_: &crate::app::ToggleSearch, _, cx| open_launcher(cx))
+            .child(self.launcher.clone())
     }
 }
 
 pub fn open_launcher(cx: &mut App) {
     if cx.try_global::<LauncherOpen>().is_some_and(|g| g.0) {
-        tracing::debug!(target: LOG, "Launcher already open — ignoring open request");
-        return;
+        match live_launcher_window(cx) {
+            // Toggle: a second request from any entry point (shortcut, IPC,
+            // hotkey) closes the live launcher instead of being swallowed.
+            Some(handle) => {
+                tracing::debug!(target: LOG, "Launcher open — closing (toggle)");
+                close_launcher(handle, cx);
+                return;
+            }
+            // Flag set but the tracked window is gone: destroyed without our
+            // close paths. Reset and fall through to open again.
+            None if cx.has_global::<LauncherWindow>() => {
+                cx.set_global(LauncherOpen(false));
+            }
+            None => {
+                tracing::debug!(target: LOG, "Launcher opening — ignoring open request");
+                return;
+            }
+        }
     }
     tracing::info!(target: LOG, "Opening launcher window");
     cx.set_global(LauncherOpen(true));
@@ -450,6 +518,9 @@ pub fn open_launcher(cx: &mut App) {
             kind: WindowKind::PopUp,
             is_movable: true,
             is_resizable: false,
+            // Same id as the main window (Wayland app_id / X11 WM_CLASS) so
+            // both windows group under the .desktop StartupWMClass entry.
+            app_id: Some("gpui-starter".to_string()),
             window_background: WindowBackgroundAppearance::Blurred,
             window_min_size: Some(Size {
                 width: window_w,
@@ -468,8 +539,17 @@ pub fn open_launcher(cx: &mut App) {
             .ok()
         else {
             tracing::error!("failed to open launcher window");
+            // The guard above would otherwise refuse every later open.
+            cx.update(|cx| {
+                cx.set_global(LauncherOpen(false));
+            });
             return Ok::<_, anyhow::Error>(());
         };
+
+        // Recorded so toggle paths can find the live window.
+        cx.update(|cx| {
+            cx.set_global(LauncherWindow(window.into()));
+        });
 
         window
             .update(cx, |_, window, _| {
@@ -484,3 +564,35 @@ pub fn open_launcher(cx: &mut App) {
     })
     .detach();
 }
+
+/// The tracked launcher window, but only while it is still listed as open;
+/// a dead handle reads as "no launcher".
+fn live_launcher_window(cx: &App) -> Option<AnyWindowHandle> {
+    let handle = cx.try_global::<LauncherWindow>()?.0;
+    cx.windows()
+        .iter()
+        .any(|open| open.window_id() == handle.window_id())
+        .then_some(handle)
+}
+
+/// Reset both open-state globals; every close path funnels through here.
+fn forget_launcher(cx: &mut App) {
+    cx.set_global(LauncherOpen(false));
+    if cx.has_global::<LauncherWindow>() {
+        cx.remove_global::<LauncherWindow>();
+    }
+}
+
+/// Clear open state and remove the launcher window, returning OS focus to
+/// the root window first so in-flight key-ups are not lost with the popup.
+fn close_launcher(handle: AnyWindowHandle, cx: &mut App) {
+    forget_launcher(cx);
+    if let Some(root) = crate::app::window::root_window(cx) {
+        let _ = root.update(cx, |_, window, _| window.activate_window());
+    }
+    let _ = handle.update(cx, |_, window, _| window.remove_window());
+}
+
+#[cfg(test)]
+#[path = "command_palette.test.rs"]
+mod command_palette_test;

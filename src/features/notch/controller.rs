@@ -4,18 +4,24 @@
 use gpui_kit::{App, Global};
 
 #[cfg(not(target_os = "macos"))]
-use crate::ui::floating::FloatingHandle;
+use crate::ui::floating::{FloatingHandle, FloatingWindowId};
 #[cfg(target_os = "macos")]
 use gpui_kit::AnyWindowHandle;
 
-use super::CAPABILITY_NOTCH_FLOATER;
+use crate::capabilities::Capability;
+
+#[cfg(not(target_os = "macos"))]
+const DEMO_FLOAT_ID: &str = "notch-floater-demo";
 
 #[derive(Clone)]
 pub(crate) enum NotchHandle {
     #[cfg(target_os = "macos")]
     Native(AnyWindowHandle),
     #[cfg(not(target_os = "macos"))]
-    Floating(FloatingHandle),
+    Floating {
+        id: FloatingWindowId,
+        handle: FloatingHandle,
+    },
 }
 
 #[derive(Default)]
@@ -92,18 +98,16 @@ fn open(cx: &mut App) -> anyhow::Result<()> {
         None,
         None,
     );
-    let spec = crate::ui::floating::FloatingSpec::new(
-        crate::ui::floating::FloatingWindowId("notch-floater-demo".into()),
-        demo_size,
-    )
-    .title(crate::i18n::localize("notch_window_title"))
-    .level(crate::ui::floating::FloatLevel::Floating)
-    .anchor(crate::ui::floating::FloatAnchor::Screen {
-        display: None,
-        placement: crate::ui::floating::Placement9::Top,
-        offset: point(px(0.), px(8.)),
-    })
-    .focus(false);
+    let id = crate::ui::floating::FloatingWindowId(DEMO_FLOAT_ID.into());
+    let spec = crate::ui::floating::FloatingSpec::new(id.clone(), demo_size)
+        .title(crate::i18n::localize("notch_window_title"))
+        .level(crate::ui::floating::FloatLevel::Floating)
+        .anchor(crate::ui::floating::FloatAnchor::Screen {
+            display: None,
+            placement: crate::ui::floating::Placement9::Top,
+            offset: point(px(0.), px(8.)),
+        })
+        .focus(false);
     let handle = crate::ui::floating::spawn_floating(
         spec,
         move |_, cx| {
@@ -112,7 +116,10 @@ fn open(cx: &mut App) -> anyhow::Result<()> {
         },
         cx,
     )?;
-    cx.set_global(NotchFloaterWindow(Some(NotchHandle::Floating(handle))));
+    cx.set_global(NotchFloaterWindow(Some(NotchHandle::Floating {
+        id,
+        handle,
+    })));
     Ok(())
 }
 
@@ -132,7 +139,7 @@ pub(crate) fn close(cx: &mut App) {
     let open = cx
         .try_global::<NotchFloaterWindow>()
         .and_then(|g| g.0.clone());
-    if let Some(NotchHandle::Floating(handle)) = open {
+    if let Some(NotchHandle::Floating { handle, .. }) = open {
         let _ = crate::ui::floating::close_floating(&handle, cx);
     }
     cx.set_global(NotchFloaterWindow(None));
@@ -157,10 +164,8 @@ fn install_float_registry_watch(cx: &mut App) {
         let ours = cx
             .try_global::<NotchFloaterWindow>()
             .and_then(|g| g.0.clone());
-        if matches!(ours, Some(NotchHandle::Floating(_)))
-            && !crate::ui::floating::floating_snapshot(cx)
-                .iter()
-                .any(|entry| entry.id.0 == "notch-floater-demo")
+        if let Some(NotchHandle::Floating { id, .. }) = ours
+            && !crate::ui::floating::is_open(&id, cx)
         {
             cx.set_global(NotchFloaterWindow(None));
         }
@@ -181,7 +186,7 @@ pub fn toggle(cx: &mut App) -> bool {
             Err(err) => {
                 tracing::warn!(target: super::LOG, error = %err, "notch floater open failed");
                 crate::capabilities::set(
-                    CAPABILITY_NOTCH_FLOATER,
+                    Capability::NOTCH_FLOATER,
                     crate::capabilities::CapabilityStatus::degraded(err),
                     cx,
                 );
@@ -197,7 +202,7 @@ pub fn init(cx: &mut App) {
     #[cfg(target_os = "macos")]
     {
         crate::capabilities::set(
-            CAPABILITY_NOTCH_FLOATER,
+            Capability::NOTCH_FLOATER,
             crate::capabilities::CapabilityStatus::supported_enabled(),
             cx,
         );
@@ -205,7 +210,7 @@ pub fn init(cx: &mut App) {
     }
     #[cfg(all(not(target_os = "macos"), not(target_family = "wasm")))]
     crate::capabilities::set(
-        CAPABILITY_NOTCH_FLOATER,
+        Capability::NOTCH_FLOATER,
         crate::capabilities::CapabilityStatus::degraded(
             "notch APIs are macOS-only; showing inset-anchored demo window",
         ),
@@ -213,7 +218,7 @@ pub fn init(cx: &mut App) {
     );
     #[cfg(target_family = "wasm")]
     crate::capabilities::set(
-        CAPABILITY_NOTCH_FLOATER,
+        Capability::NOTCH_FLOATER,
         crate::capabilities::CapabilityStatus::degraded(
             "native notch unavailable on wasm; showing in-window overlay demo",
         ),

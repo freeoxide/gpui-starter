@@ -1,6 +1,5 @@
 use gpui_kit::{App, Bounds, Pixels, point, px, size};
 
-use super::IconRect;
 use crate::ui::floating::{
     FloatAnchor, FloatLevel, FloatingSpec, FloatingWindowId, Placement9, close_floating,
     floating_snapshot, spawn_floating,
@@ -8,8 +7,8 @@ use crate::ui::floating::{
 
 const POPOVER_ID: &str = "menubar-charts";
 
-pub(crate) fn anchor(rect: IconRect, scale: f32, visible: Bounds<Pixels>) -> FloatAnchor {
-    let logical_x = px((rect.x / scale as f64) as f32);
+pub(crate) fn anchor(x: f64, scale: f32, visible: Bounds<Pixels>) -> FloatAnchor {
+    let logical_x = px((x / scale as f64) as f32);
     let offset = point(logical_x - visible.origin.x, px(0.));
     FloatAnchor::Screen {
         display: None,
@@ -20,10 +19,11 @@ pub(crate) fn anchor(rect: IconRect, scale: f32, visible: Bounds<Pixels>) -> Flo
 
 /// macOS path: toggle the anchored popover. Closes it if our id is in
 /// `floating_snapshot`; otherwise spawns at `FloatLevel::AlwaysOnTop`,
-/// `focus(false)`, anchored under `rect`. Returns false when the anchor or
-/// spawn fails (no root window for the scale factor, or `spawn_floating`
-/// errored).
-pub fn toggle_popover(rect: IconRect, cx: &mut App) -> bool {
+/// `focus(false)`, anchored under the tray icon's physical x (top-left
+/// origin, as delivered by TrayIconEvent::Click; macOS flips to top-left
+/// before to_physical). Returns false when the anchor or spawn fails (no
+/// root window for the scale factor, or `spawn_floating` errored).
+pub fn toggle_popover(x: f64, cx: &mut App) -> bool {
     if let Some(entry) = floating_snapshot(cx)
         .into_iter()
         .find(|entry| entry.id.0 == POPOVER_ID)
@@ -59,7 +59,7 @@ pub fn toggle_popover(rect: IconRect, cx: &mut App) -> bool {
     )
     .title(crate::i18n::localize("menubar_charts_title"))
     .level(FloatLevel::AlwaysOnTop)
-    .anchor(anchor(rect, scale, visible))
+    .anchor(anchor(x, scale, visible))
     .focus(false);
     match spawn_floating(
         spec,

@@ -1,3 +1,6 @@
+#[cfg(test)]
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use gpui_kit::component::{
     ActiveTheme as _,
     chart::{AreaChart, BarChart, LineChart},
@@ -9,6 +12,9 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 
 use super::metrics::{MetricsState, Sample};
 
+#[cfg(test)]
+static PANELS_BUILT: AtomicU64 = AtomicU64::new(0);
+
 const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
 
 pub(crate) struct ChartsPanel {
@@ -17,12 +23,21 @@ pub(crate) struct ChartsPanel {
 
 impl ChartsPanel {
     pub(crate) fn view(_window: &mut Window, cx: &mut App) -> Entity<Self> {
+        #[cfg(test)]
+        PANELS_BUILT.fetch_add(1, Ordering::SeqCst);
         let metrics = cx.new(|_| MetricsState::new());
         MetricsState::start(&metrics, cx);
         cx.new(|cx| {
             cx.observe(&metrics, |_, _, cx| cx.notify()).detach();
             Self { metrics }
         })
+    }
+
+    /// Panels built since process start. Sheets expose no readable identity,
+    /// so tests count builds to tell a no-op open from a replacement.
+    #[cfg(test)]
+    pub(crate) fn panels_built() -> u64 {
+        PANELS_BUILT.load(Ordering::SeqCst)
     }
 
     #[cfg(test)]
@@ -33,14 +48,14 @@ impl ChartsPanel {
 
 impl Render for ChartsPanel {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (samples, paused) = {
-            let state = self.metrics.read(cx);
-            (
-                state.samples().iter().cloned().collect::<Vec<Sample>>(),
-                state.is_paused(),
-            )
-        };
-        let last = samples.last().copied();
+        let state = self.metrics.read(cx);
+        let samples = state.samples();
+        let paused = state.is_paused();
+        let last = samples.back().copied();
+        let memory_bars = samples
+            .iter()
+            .skip(samples.len().saturating_sub(30))
+            .copied();
         let muted = cx.theme().muted_foreground;
         let spark_color = cx.theme().chart_2;
         let line_color = cx.theme().chart_4;
@@ -71,7 +86,7 @@ impl Render for ChartsPanel {
                     )
                     .child(
                         div().h_16().child(
-                            AreaChart::new(samples.clone())
+                            AreaChart::new(samples.iter().copied())
                                 .x(|s: &Sample| s.seq.to_string())
                                 .y(|s: &Sample| s.cpu_percent as f64)
                                 .stroke(spark_color)
@@ -91,7 +106,7 @@ impl Render for ChartsPanel {
             )
             .child(
                 div().min_h(rems(10.)).flex_1().child(
-                    LineChart::new(samples.clone())
+                    LineChart::new(samples.iter().copied())
                         .x(|s: &Sample| s.seq.to_string())
                         .y(|s: &Sample| s.cpu_percent as f64)
                         .y_domain(0., 100.)
@@ -106,23 +121,15 @@ impl Render for ChartsPanel {
             )
             .child(
                 div().flex_1().child(
-                    BarChart::new(
-                        samples
-                            .iter()
-                            .rev()
-                            .take(30)
-                            .rev()
-                            .cloned()
-                            .collect::<Vec<_>>(),
-                    )
-                    .band(|s: &Sample| s.seq.to_string())
-                    .value(|s: &Sample| s.mem_used_bytes as f64 / GIB)
-                    .name(crate::i18n::localize("menubar_charts_memory"))
-                    .fill(move |_, _, _, _| bar_color)
-                    .value_axis(true)
-                    .value_tick_count(3)
-                    .value_tick_format(|v| format!("{v:.0} GiB"))
-                    .id("menubar-charts-bar"),
+                    BarChart::new(memory_bars)
+                        .band(|s: &Sample| s.seq.to_string())
+                        .value(|s: &Sample| s.mem_used_bytes as f64 / GIB)
+                        .name(crate::i18n::localize("menubar_charts_memory"))
+                        .fill(move |_, _, _, _| bar_color)
+                        .value_axis(true)
+                        .value_tick_count(3)
+                        .value_tick_format(|v| format!("{v:.0} GiB"))
+                        .id("menubar-charts-bar"),
                 ),
             )
             .child(

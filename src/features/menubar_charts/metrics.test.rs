@@ -1,4 +1,5 @@
 use gpui_kit::AppContext as _;
+use gpui_kit::PlatformDispatcher as _;
 
 use super::*;
 
@@ -50,4 +51,53 @@ async fn ring_advances_on_tick_freezes_while_paused_and_caps(cx: &mut gpui_kit::
         state.update(cx, |this, cx| this.tick(cx));
     }
     assert_eq!(cx.read(|cx| state.read(cx).samples().len()), MAX_SAMPLES);
+    let (front, back) = cx.read(|cx| {
+        let samples = state.read(cx).samples();
+        (
+            samples.front().map(|sample| sample.seq),
+            samples.back().map(|sample| sample.seq),
+        )
+    });
+    assert_eq!(
+        front,
+        Some(5),
+        "the cap keeps the newest window: front is the 5th sample"
+    );
+    assert_eq!(
+        back,
+        Some(124),
+        "the cap drops the oldest samples: back is the newest"
+    );
+}
+
+#[gpui_kit::test]
+async fn sampling_loop_samples_while_alive_and_exits_on_release(cx: &mut gpui_kit::TestAppContext) {
+    let state = cx.new(|_| MetricsState::new());
+    cx.update(|cx| MetricsState::start(&state, cx));
+
+    cx.executor().advance_clock(INTERVAL);
+    cx.run_until_parked();
+    assert_eq!(
+        cx.read(|cx| state.read(cx).samples().len()),
+        1,
+        "the loop lands one sample per interval while the entity lives"
+    );
+
+    let weak = state.downgrade();
+    drop(state);
+    cx.executor().advance_clock(INTERVAL * 3);
+    cx.run_until_parked();
+    assert!(
+        weak.upgrade().is_none(),
+        "the loop must not keep the released entity alive"
+    );
+    assert!(
+        !cx.executor()
+            .dispatcher()
+            .as_test()
+            .expect("test dispatcher")
+            .scheduler()
+            .has_pending_tasks(),
+        "the detached loop must exit once the entity is released"
+    );
 }

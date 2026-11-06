@@ -108,16 +108,9 @@ impl NotchFloaterView {
     }
 
     fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        #[cfg(any(target_os = "macos", not(target_family = "wasm")))]
-        {
-            let _ = cx;
-            window.remove_window();
-        }
-        #[cfg(all(not(target_os = "macos"), target_family = "wasm"))]
-        {
-            let _ = window;
-            super::controller::close(cx);
-        }
+        // The click runs inside this window's dispatch lease; the controller
+        // re-leases the window to close it, so defer past the dispatch.
+        window.defer(cx, |_, cx| super::controller::close(cx));
     }
 
     fn render_expanded(&mut self, cx: &mut Context<Self>) -> impl IntoElement {

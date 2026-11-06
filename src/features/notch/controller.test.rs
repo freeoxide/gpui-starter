@@ -1,7 +1,7 @@
 use gpui_kit::TestAppContext;
 
 use super::{is_open, toggle};
-use crate::features::notch::CAPABILITY_NOTCH_FLOATER;
+use crate::capabilities::Capability;
 
 fn boot(cx: &mut gpui_kit::App) {
     gpui_kit::init(cx);
@@ -14,11 +14,17 @@ async fn init_registers_capability(cx: &TestAppContext) {
     cx.update(boot);
     let status = cx
         .read(|cx| crate::capabilities::snapshot(cx))
-        .get(CAPABILITY_NOTCH_FLOATER)
+        .get(&Capability::NOTCH_FLOATER)
         .cloned();
+    #[cfg(target_os = "macos")]
     assert!(
-        status.is_some_and(|status| status.supported),
-        "notch_floater must be registered as supported on every host"
+        status.is_some_and(|status| status.supported && !status.degraded),
+        "macOS must register the native notch floater as fully supported"
+    );
+    #[cfg(not(target_os = "macos"))]
+    assert!(
+        status.is_some_and(|status| status.degraded && status.reason.is_some()),
+        "non-macOS hosts must register the demo-window downgrade"
     );
 }
 

@@ -13,7 +13,4 @@ pub(crate) mod macos;
 
 pub use controller::{init, is_open, toggle};
 
-/// Capability-registry key for the notch floater.
-pub const CAPABILITY_NOTCH_FLOATER: &str = "notch_floater";
-
 pub(crate) const LOG: &str = "gpui_starter::features::notch";

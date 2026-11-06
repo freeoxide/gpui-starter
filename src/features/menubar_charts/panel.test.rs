@@ -3,9 +3,7 @@ use gpui_kit::{TestAppContext, WindowOptions};
 
 use super::ChartsPanel;
 use crate::app::window::RootWindow;
-use crate::features::menubar_charts::{
-    CAPABILITY_MENUBAR_CHARTS, CAPABILITY_MENUBAR_CHARTS_ANCHORED, open_sheet,
-};
+use crate::features::menubar_charts::open_sheet;
 
 fn boot(cx: &mut gpui_kit::App) {
     gpui_kit::init(cx);
@@ -51,15 +49,16 @@ async fn open_sheet_hosts_one_active_sheet_on_the_root_window(cx: &TestAppContex
             .unwrap()
     }));
 
+    let built = ChartsPanel::panels_built();
     assert!(
         cx.update(|cx| open_sheet(cx)),
         "a second open must no-op, not replace the active sheet"
     );
-    assert!(cx.update(|cx| {
-        handle
-            .update(cx, |_, window, cx| window.has_active_sheet(cx))
-            .unwrap()
-    }));
+    assert_eq!(
+        ChartsPanel::panels_built(),
+        built,
+        "a replacement would rebuild the sheet's panel; the no-op must not"
+    );
 }
 
 #[gpui_kit::test]
@@ -74,14 +73,14 @@ async fn init_registers_both_capability_rows(cx: &TestAppContext) {
     let snapshot = cx.read(|cx| crate::capabilities::snapshot(cx));
     assert_eq!(
         snapshot
-            .get(CAPABILITY_MENUBAR_CHARTS)
+            .get(&crate::capabilities::Capability::MENUBAR_CHARTS)
             .expect("menubar_charts row")
             .supported,
         cfg!(not(target_family = "wasm"))
     );
     assert_eq!(
         snapshot
-            .get(CAPABILITY_MENUBAR_CHARTS_ANCHORED)
+            .get(&crate::capabilities::Capability::MENUBAR_CHARTS_ANCHORED)
             .expect("menubar_charts_anchored row")
             .supported,
         cfg!(target_os = "macos")

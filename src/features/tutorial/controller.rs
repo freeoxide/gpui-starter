@@ -142,7 +142,7 @@ pub fn start(cx: &mut App) {
 
 /// Start `definition` in the root window; a logged no-op when the root
 /// window or the controller is not up yet.
-pub fn start_tour(definition: TourDefinition, cx: &mut App) {
+fn start_tour(definition: TourDefinition, cx: &mut App) {
     let Some(controller) = cx.try_global::<TourHandle>().map(|handle| handle.0.clone()) else {
         tracing::warn!(target: LOG, "tour requested before the root window exists");
         return;
@@ -153,19 +153,6 @@ pub fn start_tour(definition: TourDefinition, cx: &mut App) {
     };
     let _ = root.update(cx, |_, window, cx| {
         controller.update(cx, |tour, cx| tour.begin(definition, window, cx));
-    });
-}
-
-/// Close the active tour from App level (same path as Escape/Skip).
-pub fn dismiss(cx: &mut App) {
-    let Some(controller) = cx.try_global::<TourHandle>().map(|handle| handle.0.clone()) else {
-        return;
-    };
-    let Some(root) = crate::app::window::root_window(cx) else {
-        return;
-    };
-    let _ = root.update(cx, |_, window, cx| {
-        controller.update(cx, |tour, cx| tour.close(window, cx, "dismissed"));
     });
 }
 
