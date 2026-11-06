@@ -21,9 +21,9 @@ struct ServerState {
     sockets: HashMap<String, ClientId>,
 }
 
-pub(crate) fn build_router(state: ServerState) -> (Router, SocketIo) {
+pub(crate) fn build_router() -> Router {
     let (layer, io) = SocketIo::new_layer();
-    let shared = Arc::new(Mutex::new(state));
+    let shared = Arc::new(Mutex::new(ServerState::default()));
 
     io.ns("/", move |s: SocketRef, Data(hello): Data<Peer>| {
         let shared = shared.clone();
@@ -110,12 +110,9 @@ pub(crate) fn build_router(state: ServerState) -> (Router, SocketIo) {
         }
     });
 
-    (
-        Router::new()
-            .route("/healthz", get(|| async { "ok" }))
-            .layer(layer),
-        io,
-    )
+    Router::new()
+        .route("/healthz", get(|| async { "ok" }))
+        .layer(layer)
 }
 
 #[tokio::main]
@@ -134,7 +131,7 @@ async fn main() {
         .await
         .expect("bind collab-server port");
     tracing::info!(host, port, "collab-server listening");
-    let (router, _io) = build_router(ServerState::default());
+    let router = build_router();
     axum::serve(listener, router)
         .await
         .expect("collab-server serve");

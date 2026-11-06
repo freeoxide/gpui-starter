@@ -62,9 +62,9 @@ fn path_shape_json() -> serde_json::Value {
 
 fn sorted_state(board: &Board) -> (Vec<ShapeEntry>, Vec<(ShapeKey, Version)>) {
     let mut shapes: Vec<_> = board.shapes().cloned().collect();
-    shapes.sort_by(|a, b| (a.key.origin, a.key.seq).cmp(&(b.key.origin, b.key.seq)));
+    shapes.sort_by_key(|entry| (entry.key.origin, entry.key.seq));
     let mut tombstones: Vec<_> = board.tombstones().collect();
-    tombstones.sort_by(|a, b| (a.0.origin, a.0.seq).cmp(&(b.0.origin, b.0.seq)));
+    tombstones.sort_by_key(|(key, _)| (key.origin, key.seq));
     (shapes, tombstones)
 }
 

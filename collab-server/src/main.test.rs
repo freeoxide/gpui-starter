@@ -7,7 +7,7 @@ use futures_util::FutureExt;
 use rust_socketio::{Payload, TransportType, asynchronous::ClientBuilder};
 use tokio::sync::mpsc;
 
-use super::{ServerState, build_router};
+use super::build_router;
 
 fn peer(id: ClientId, name: &str) -> Peer {
     Peer {
@@ -111,7 +111,7 @@ async fn client(url: &str, hello: &Peer) -> (rust_socketio::asynchronous::Client
 async fn spawn_server() -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let (router, _io) = build_router(ServerState::default());
+    let router = build_router();
     tokio::spawn(async move { axum::serve(listener, router).await });
     format!("http://{addr}")
 }
