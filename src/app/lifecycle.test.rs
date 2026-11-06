@@ -46,18 +46,42 @@ fn crash_marker_roundtrip_in_data_dir() {
     let marker = test_data_dir().join("crash-marker");
     let _ = std::fs::remove_file(&marker);
 
+    #[cfg(target_family = "unix")]
+    {
+        // The write must replace a symlink planted on the marker path, never
+        // follow it into the target file.
+        let sentinel = test_data_dir().join("crash-marker.sentinel");
+        std::fs::write(&sentinel, "sentinel-payload").unwrap();
+        std::os::unix::fs::symlink(&sentinel, &marker).unwrap();
+    }
+
     write_crash_marker();
     #[cfg(target_family = "unix")]
     {
         use std::os::unix::fs::PermissionsExt as _;
+        let sentinel = test_data_dir().join("crash-marker.sentinel");
+        assert!(
+            !marker.symlink_metadata().unwrap().file_type().is_symlink(),
+            "planted symlink must be replaced by a regular marker file"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&sentinel).unwrap(),
+            "sentinel-payload",
+            "marker write must never follow a symlink on the path"
+        );
         let mode = std::fs::metadata(&marker).unwrap().permissions().mode();
         assert_eq!(mode & 0o777, 0o600, "marker must stay user-only");
     }
+
+    // Each startup rewrites over the previous run's marker; unlink-first is
+    // what lets create_new succeed against it.
+    std::fs::write(&marker, "stale marker from a previous run").unwrap();
+    write_crash_marker();
     let contents = check_previous_crash();
     assert!(contents.is_some(), "marker should exist after write");
     assert!(
         contents.unwrap().starts_with("pid="),
-        "marker should start with pid="
+        "rewrite must replace the stale marker, not leave it in place"
     );
 
     remove_crash_marker();

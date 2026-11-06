@@ -18,13 +18,18 @@ pub fn page(i: usize) -> String {
 /// KeyBinding for a `secondary-` or runtime-built keystroke. The 0.3.10
 /// KeyBinding::new only takes static strings with explicit modifiers, so
 /// secondary resolution and dynamic input route through load here.
+/// Panics if `keystrokes` or `context` fails to parse.
 pub fn binding<A: Action>(
     keystrokes: &str,
     action: A,
     context: Option<&str>,
     cx: &App,
 ) -> KeyBinding {
-    let context = context.map(|c| KeyBindingContextPredicate::parse(c).unwrap().into());
+    let context = context.map(|c| {
+        KeyBindingContextPredicate::parse(c)
+            .expect("invalid context constant")
+            .into()
+    });
     KeyBinding::load(keystrokes, Box::new(action), context, false, None, cx)
         .expect("invalid keystroke constant")
 }

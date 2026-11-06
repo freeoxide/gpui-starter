@@ -186,9 +186,9 @@ fn exec_reload(restart_history: &str) -> Result<()> {
     let exe = std::env::current_exe().context("failed to resolve current executable path")?;
 
     // Skip argv[0] (the program name) since Command::new already supplies
-    // argv[0] from `exe`.
+    // argv[0] from `exe`; args_os round-trips non-UTF8 argv where args() panics.
     let mut cmd = std::process::Command::new(&exe);
-    cmd.args(std::env::args().skip(1));
+    cmd.args(std::env::args_os().skip(1));
     cmd.env(RESTART_HISTORY_ENV, restart_history);
 
     let err = cmd.exec();

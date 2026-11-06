@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use gpui_kit::SharedString;
@@ -53,6 +54,47 @@ fn apply_config_resolves_chart_grid_for_every_embedded_theme() {
     }
 }
 
+// Every chart/danger/success/warning/info/sidebar fallback in kit
+// apply_config derives from these keys; miss one and the family renders
+// in kit Default colors instead of the theme's palette.
+const SEMANTIC_FALLBACK_FEEDS: &[&str] = &[
+    "background",
+    "border",
+    "foreground",
+    "primary.background",
+    "secondary.background",
+    "base.red",
+    "base.green",
+    "base.yellow",
+    "base.blue",
+    "base.cyan",
+];
+
+#[test]
+fn every_embedded_theme_sets_the_palette_semantic_families_derive_from() {
+    for (file, json) in crate::app::assets::embedded_themes() {
+        let set = serde_json::from_str::<serde_json::Value>(&json)
+            .unwrap_or_else(|err| panic!("{file}: {err}"));
+        let themes = set
+            .get("themes")
+            .and_then(|themes| themes.as_array())
+            .unwrap_or_else(|| panic!("{file}: no themes array"));
+        for theme in themes {
+            let name = theme.get("name").and_then(|name| name.as_str()).unwrap_or("");
+            let colors = theme
+                .get("colors")
+                .and_then(|colors| colors.as_object())
+                .unwrap_or_else(|| panic!("{file} {name}: no colors object"));
+            for key in SEMANTIC_FALLBACK_FEEDS {
+                assert!(
+                    colors.contains_key(*key),
+                    "{file} {name}: {key} unset, chart/danger/success/warning/info/sidebar fall back to the kit Default palette"
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn every_embedded_theme_registers_and_resolves_by_name() {
     let mut registry = gpui_kit::component::ThemeRegistry::default();
@@ -99,8 +141,9 @@ fn restore_reloads_every_embedded_file_into_a_cleared_registry() {
     // A kit watcher reload clears `themes` back to defaults + dir contents;
     // a bare registry is the post-clear state with an empty themes/ dir.
     let mut registry = gpui_kit::component::ThemeRegistry::default();
-    let restored = super::restore_embedded_themes(&mut registry);
-    assert_eq!(restored, crate::app::assets::embedded_themes().len());
+    let dropped = super::dropped_embedded_themes(&registry);
+    assert_eq!(dropped.len(), crate::app::assets::embedded_themes().len());
+    super::restore_embedded_themes(&mut registry, &dropped);
     for (file, names) in embedded_theme_names() {
         for name in names {
             assert!(
@@ -109,9 +152,8 @@ fn restore_reloads_every_embedded_file_into_a_cleared_registry() {
             );
         }
     }
-    assert_eq!(
-        super::restore_embedded_themes(&mut registry),
-        0,
+    assert!(
+        super::dropped_embedded_themes(&registry).is_empty(),
         "a full registry must not be touched again"
     );
 }
@@ -127,13 +169,59 @@ fn restore_reloads_only_files_with_missing_themes() {
             .unwrap_or_else(|err| panic!("{file}: {err}"));
     }
 
-    assert_eq!(super::restore_embedded_themes(&mut registry), tail.len());
+    let dropped = super::dropped_embedded_themes(&registry);
+    assert_eq!(dropped.len(), tail.len());
+    super::restore_embedded_themes(&mut registry, &dropped);
     for (file, names) in embedded_theme_names() {
         for name in names {
             assert!(
                 registry.themes().contains_key(&name),
                 "{file}: {name} missing after partial restore"
             );
+        }
+    }
+}
+
+/// Serde drops unknown `colors` keys and apply_config silently falls back
+/// to the default color, so a bad key or value in a shipped theme never shows.
+#[test]
+fn every_embedded_theme_color_is_a_known_key_and_parses() {
+    let default_config = gpui_kit::component::theme::ThemeConfigColors::default();
+    let known: HashSet<String> = serde_json::to_value(default_config)
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect();
+    assert!(!known.is_empty(), "an empty key set would pass every file");
+
+    for (file, json) in crate::app::assets::embedded_themes() {
+        let set = serde_json::from_str::<serde_json::Value>(&json)
+            .unwrap_or_else(|err| panic!("{file}: {err}"));
+        let themes = set
+            .get("themes")
+            .and_then(|themes| themes.as_array())
+            .unwrap_or_else(|| panic!("{file}: no themes array"));
+        for theme in themes {
+            let name = theme.get("name").and_then(|name| name.as_str()).unwrap_or("");
+            let colors = theme
+                .get("colors")
+                .and_then(|colors| colors.as_object())
+                .unwrap_or_else(|| panic!("{file} {name}: no colors object"));
+            for (key, value) in colors {
+                assert!(
+                    known.contains(key),
+                    "{file} {name}: colors key {key} matches no ThemeConfigColors field"
+                );
+                let color = value
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{file} {name}: {key} is not a string"));
+                assert!(
+                    gpui_kit::component::theme::try_parse_color(color).is_ok(),
+                    "{file} {name}: {key} {color} is not a color"
+                );
+            }
         }
     }
 }

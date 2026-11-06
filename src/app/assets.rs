@@ -1,6 +1,8 @@
 //! Project assets win on lookup, shadowing same-named component assets.
 
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::collections::{HashSet, VecDeque};
 
 use gpui_kit::{AssetSource, Result, SharedString};
 
@@ -10,12 +12,33 @@ use gpui_kit::{AssetSource, Result, SharedString};
 #[folder = "themes"]
 struct ProjectAssets;
 
-/// Wasm-only embedded assets (fonts, default icons): browser tabs have no
-/// system fonts and no icon CDN, so the icon set is embedded for parity.
+/// Wasm-only fonts, icon SVGs, and the 64px PNG the favicon canvas draws
+/// (`document_meta::BASE_ICON_PATH`); other app icons and licenses stay out.
 #[cfg(target_family = "wasm")]
 #[derive(rust_embed::RustEmbed)]
 #[folder = "assets"]
+#[include = "app-icon/hicolor/64x64/apps/gpui-starter.png"]
+#[include = "fonts/*.ttf"]
+#[include = "fonts/*.otf"]
+#[include = "icons/*.svg"]
 struct WasmAssets;
+
+// Icons the app uses but the wasm icon folder does not embed; the five
+// outside the kit's default bundle resolve nowhere natively without this.
+gpui_kit::assets::icon_assets!(
+    AppIcons,
+    [
+        AtSign,
+        Ban,
+        ChartNoAxesCombined,
+        Image,
+        Mic,
+        RefreshCw,
+        Save,
+        Sparkles,
+        Square
+    ]
+);
 
 /// Branded app-icon PNGs for surfaces with no icon-theme fallback: the
 /// Windows tray and the X11 window icon (the macOS tray stays a template
@@ -103,12 +126,35 @@ impl AssetSource for CombinedAssets {
         if let Some(file) = ProjectAssets::get(path) {
             return Ok(Some(file.data));
         }
+        // Before the kit source: its fallback errors on a miss instead of
+        // returning None, so untried overlay icons would never load.
+        if let Some(bytes) = AppIcons.load(path)? {
+            return Ok(Some(bytes));
+        }
         // Wasm: embedded fonts + icons, checked before the CDN fallback.
         #[cfg(target_family = "wasm")]
         if let Some(file) = WasmAssets::get(path) {
             return Ok(Some(file.data));
         }
-        self.component.load(path)
+        // A miss is reported once per path: GPUI probes paths it may not
+        // need, so a miss stays Ok(None) instead of failing the render.
+        match self.component.load(path) {
+            Ok(Some(bytes)) => Ok(Some(bytes)),
+            Ok(None) => {
+                report_missing(path);
+                Ok(None)
+            }
+            // Native fallback: its only error is "not found".
+            #[cfg(not(target_family = "wasm"))]
+            Err(_) => {
+                report_missing(path);
+                Ok(None)
+            }
+            // Wasm fallback errors while a CDN download is pending; GPUI
+            // retries on the error, so it propagates.
+            #[cfg(target_family = "wasm")]
+            Err(err) => Err(err),
+        }
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
@@ -125,6 +171,52 @@ impl AssetSource for CombinedAssets {
     }
 }
 
-#[cfg(all(test, any(target_os = "windows", target_os = "linux")))]
+const MAX_REPORTED_MISSING_ASSETS: usize = 256;
+
+#[derive(Default)]
+struct MissingAssetReports {
+    paths: HashSet<String>,
+    order: VecDeque<String>,
+}
+
+impl MissingAssetReports {
+    fn insert(&mut self, path: String) -> bool {
+        if self.paths.contains(&path) {
+            return false;
+        }
+        if self.paths.len() == MAX_REPORTED_MISSING_ASSETS
+            && let Some(oldest) = self.order.pop_front()
+        {
+            self.paths.remove(&oldest);
+        }
+        self.order.push_back(path.clone());
+        self.paths.insert(path)
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.paths.len()
+    }
+
+    #[cfg(test)]
+    fn contains(&self, path: &str) -> bool {
+        self.paths.contains(path)
+    }
+}
+
+thread_local! {
+    static REPORTED_MISSING: RefCell<MissingAssetReports> =
+        RefCell::new(MissingAssetReports::default());
+}
+
+fn report_missing(path: &str) {
+    let first_time =
+        REPORTED_MISSING.with(|reported| reported.borrow_mut().insert(path.to_owned()));
+    if first_time {
+        tracing::warn!("asset `{path}` is served by no asset source");
+    }
+}
+
+#[cfg(test)]
 #[path = "assets.test.rs"]
 mod assets_test;

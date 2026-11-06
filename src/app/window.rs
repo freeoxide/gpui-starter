@@ -1,7 +1,7 @@
 use gpui_kit::component::TitleBar;
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext as _, Bounds, Focusable as _, Global, QuitMode, SharedString,
-    Size, WindowBounds, WindowId, WindowKind, WindowOptions, point, px, size,
+    AnyWindowHandle, App, AppContext as _, Bounds, DisplayId, Focusable as _, Global, QuitMode,
+    SharedString, Size, WindowBounds, WindowId, WindowKind, WindowOptions, point, px, size,
 };
 
 /// The main app window, recorded at creation so code off the OS-input path
@@ -41,12 +41,22 @@ fn forget_root_window(window_id: WindowId, cx: &mut App) {
         return;
     }
     cx.remove_global::<RootWindow>();
-    // Float-only sessions must outlive the root; a normal session still
-    // ends when the root is the last window to close.
+    // Float-only sessions must outlive the root; a normal session ends via
+    // the Quit action so the drain-then-flush shutdown runs on this path.
     #[cfg(not(target_os = "macos"))]
     if cx.windows().is_empty() {
-        cx.quit();
+        cx.dispatch_action(&crate::app::Quit);
     }
+}
+
+/// macOS hides instead of closing so the root (and its tray/quit routing)
+/// survives a red-button click; cmd-Q still quits, the Dock icon restores.
+fn should_close_root_window(cx: &App) -> bool {
+    if cfg!(target_os = "macos") {
+        cx.hide();
+        return false;
+    }
+    true
 }
 
 /// Dispatch Quit at the recorded root window, falling back to app-level
@@ -65,6 +75,33 @@ pub fn dispatch_quit(cx: &mut App) {
     }
 }
 
+/// Restored placement for saved bounds: size clamped to the window minimum,
+/// origin honored only on a live containing display; Linux always centers.
+fn restored_bounds(
+    persisted: &crate::app_state::PersistedWindowBounds,
+    cx: &App,
+) -> (WindowBounds, Option<DisplayId>) {
+    let restored_size = size(px(persisted.width.max(480.0)), px(persisted.height.max(320.0)));
+    let display = persisted.display_id.as_deref().and_then(|wanted| {
+        cx.displays()
+            .into_iter()
+            .find(|display| display.uuid().ok().is_some_and(|uuid| uuid.to_string() == wanted))
+    });
+    let at = point(px(persisted.x), px(persisted.y));
+    let bounds = match &display {
+        Some(display) if !cfg!(target_os = "linux") && display.bounds().contains(&at) => {
+            Bounds::new(at, restored_size)
+        }
+        _ => Bounds::centered(display.as_ref().map(|display| display.id()), restored_size, cx),
+    };
+    let window_bounds = match persisted.state {
+        crate::app_state::PersistedWindowState::Windowed => WindowBounds::Windowed(bounds),
+        crate::app_state::PersistedWindowState::Maximized => WindowBounds::Maximized(bounds),
+        crate::app_state::PersistedWindowState::Fullscreen => WindowBounds::Fullscreen(bounds),
+    };
+    (window_bounds, display.map(|display| display.id()))
+}
+
 pub fn create_new_window(title: &str, cx: &mut App) {
     let mut window_size = size(px(1400.0), px(900.0));
     if let Some(display) = cx.primary_display() {
@@ -72,20 +109,16 @@ pub fn create_new_window(title: &str, cx: &mut App) {
         window_size.width = window_size.width.min(display_size.width * 0.85);
         window_size.height = window_size.height.min(display_size.height * 0.85);
     }
-    let persisted_bounds = crate::app_state::config(cx).window_bounds;
-    let window_bounds = if let Some(bounds) = persisted_bounds {
-        Bounds {
-            origin: point(px(bounds.x), px(bounds.y)),
-            size: size(px(bounds.width), px(bounds.height)),
-        }
-    } else {
-        Bounds::centered(None, window_size, cx)
+    let (window_bounds, display_id) = match crate::app_state::config(cx).window_bounds.as_ref() {
+        Some(persisted) => restored_bounds(persisted, cx),
+        None => (WindowBounds::Windowed(Bounds::centered(None, window_size, cx)), None),
     };
     let title: SharedString = title.into();
 
     cx.spawn(async move |cx| {
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(window_bounds)),
+            window_bounds: Some(window_bounds),
+            display_id,
             titlebar: Some(TitleBar::title_bar_options()),
             window_min_size: Some(Size {
                 width: px(480.),
@@ -113,6 +146,7 @@ pub fn create_new_window(title: &str, cx: &mut App) {
         let Some((window, _root_view)) = cx
             .update(|cx| {
                 gpui_kit::open_window(options, cx, |window, cx| {
+                    window.on_window_should_close(cx, |_, cx| should_close_root_window(cx));
                     let root_view =
                         cx.new(|cx| crate::root::AppRoot::new(title.clone(), window, cx));
 
