@@ -87,7 +87,10 @@ fn run_migrations_with(conn: &Connection, migrations: &[Migration]) -> Result<u3
 
     let current_version = schema_version(conn)?;
 
-    let latest = migrations.last().map(|migration| migration.version).unwrap_or(0);
+    let latest = migrations
+        .last()
+        .map(|migration| migration.version)
+        .unwrap_or(0);
     if current_version > latest {
         bail!(
             "schema version {current_version} is newer than the newest migration ({latest}); \

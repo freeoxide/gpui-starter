@@ -26,7 +26,7 @@ pub use email::{
 };
 pub use error::AuthError;
 #[cfg(feature = "mock-provider")]
-pub use mock::{MockProvider, MOCK_PROVIDER_ID};
+pub use mock::{MOCK_PROVIDER_ID, MockProvider};
 pub use pkce::{PkcePair, authorize_challenge, random_state};
 pub use provider::{AuthIo, AuthProvider, FlowLaunch, RedirectParams, RefreshPolicy};
 pub use store::{InMemoryStore, TokenStore};

@@ -38,10 +38,13 @@ impl ProbeServer {
         let origin = format!("http://127.0.0.1:{port}");
         let hits = Arc::new(AtomicUsize::new(0));
         let responses = Arc::new(AtomicUsize::new(0));
-        let reason = if status == 200 { "OK" } else { "Internal Server Error" };
-        let body = format!(
-            "HTTP/1.1 {status} {reason}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-        );
+        let reason = if status == 200 {
+            "OK"
+        } else {
+            "Internal Server Error"
+        };
+        let body =
+            format!("HTTP/1.1 {status} {reason}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         let _guard = rt.enter();
         let listener = tokio::net::TcpListener::from_std(std_listener).expect("tokio listener");
         let task_hits = hits.clone();
@@ -105,7 +108,9 @@ async fn stale_probe_result_cannot_clobber_a_fresher_one(cx: &mut TestAppContext
     });
     cx.update(|cx| check_now(cx));
 
-    wait_until(cx, |cx| cx.update(|cx| snapshot(cx).state == ConnectivityState::Online));
+    wait_until(cx, |cx| {
+        cx.update(|cx| snapshot(cx).state == ConnectivityState::Online)
+    });
     release.send(()).expect("release the stale probe");
     wait_until(cx, |_| stale.responses.load(Ordering::SeqCst) == 1);
     for _ in 0..10 {

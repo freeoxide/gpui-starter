@@ -234,7 +234,9 @@ impl Board {
     }
 
     pub fn tombstones(&self) -> impl Iterator<Item = (ShapeKey, Version)> + '_ {
-        self.tombstones.iter().map(|(key, version)| (*key, *version))
+        self.tombstones
+            .iter()
+            .map(|(key, version)| (*key, *version))
     }
 
     /// Swap the whole board for a snapshot's contents. The lamport clock

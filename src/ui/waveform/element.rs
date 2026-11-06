@@ -359,12 +359,7 @@ impl Element for WaveformElement {
                                 match state.channel_view(ch, columns) {
                                     WaveformSamples::Envelope(cols) => {
                                         paint_lane_envelope(
-                                            lane,
-                                            columns,
-                                            color,
-                                            scale,
-                                            cols,
-                                            window,
+                                            lane, columns, color, scale, cols, window,
                                         );
                                     }
                                     WaveformSamples::Line(samples) => {

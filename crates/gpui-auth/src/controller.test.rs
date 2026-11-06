@@ -417,7 +417,10 @@ async fn duplicate_sign_up_and_bad_credentials_error_out(cx: &mut TestAppContext
         )
     });
     let state = current_state(cx, &fixture.controller);
-    assert!(matches!(state, AuthState::Error(AuthError::InvalidCredentials)));
+    assert!(matches!(
+        state,
+        AuthState::Error(AuthError::InvalidCredentials)
+    ));
     assert_eq!(fixture.store.load("email").await.unwrap(), None);
 }
 
@@ -605,7 +608,10 @@ async fn refresh_if_needed_with_a_dead_refresh_token_errors(cx: &mut TestAppCont
         controller.refresh_if_needed(120, cx)
     });
     let state = current_state(cx, &fixture.controller);
-    assert!(matches!(state, AuthState::Error(AuthError::RefreshRejected)));
+    assert!(matches!(
+        state,
+        AuthState::Error(AuthError::RefreshRejected)
+    ));
 }
 
 #[gpui::test]

@@ -8,8 +8,8 @@ use crate::app_state::{
     install_for_tests,
 };
 use gpui_kit::{
-    AnyWindowHandle, AppContext as _, Bounds, Context, IntoElement, Render, TestAppContext,
-    Window, WindowBounds, div, point, px, size,
+    AnyWindowHandle, AppContext as _, Bounds, Context, IntoElement, Render, TestAppContext, Window,
+    WindowBounds, div, point, px, size,
 };
 
 #[test]

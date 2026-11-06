@@ -70,5 +70,8 @@ async fn execute_refuses_commands_the_runtime_cannot_run(cx: &mut TestAppContext
     });
     cx.update(|cx| execute(CommandId::CopyDiagnostics, cx));
     let latest = cx.update(|cx| crate::error_surface::latest(cx));
-    assert!(latest.is_none(), "an unavailable command must not report a failure: {latest:?}");
+    assert!(
+        latest.is_none(),
+        "an unavailable command must not report a failure: {latest:?}"
+    );
 }

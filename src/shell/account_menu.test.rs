@@ -75,7 +75,10 @@ async fn sign_out_action_flips_the_menu_back_to_signed_out(cx: &mut TestAppConte
 
     cx.update(|window, cx| window.dispatch_action(Box::new(AccountSignOut), cx));
     cx.run_until_parked();
-    assert_eq!(cx.read(|cx| crate::auth_ui::snapshot(cx).state), AuthState::SignedOut);
+    assert_eq!(
+        cx.read(|cx| crate::auth_ui::snapshot(cx).state),
+        AuthState::SignedOut
+    );
     cx.update(|window, cx| window.draw(cx).clear(cx));
 }
 

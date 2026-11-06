@@ -80,7 +80,10 @@ fn every_embedded_theme_sets_the_palette_semantic_families_derive_from() {
             .and_then(|themes| themes.as_array())
             .unwrap_or_else(|| panic!("{file}: no themes array"));
         for theme in themes {
-            let name = theme.get("name").and_then(|name| name.as_str()).unwrap_or("");
+            let name = theme
+                .get("name")
+                .and_then(|name| name.as_str())
+                .unwrap_or("");
             let colors = theme
                 .get("colors")
                 .and_then(|colors| colors.as_object())
@@ -204,7 +207,10 @@ fn every_embedded_theme_color_is_a_known_key_and_parses() {
             .and_then(|themes| themes.as_array())
             .unwrap_or_else(|| panic!("{file}: no themes array"));
         for theme in themes {
-            let name = theme.get("name").and_then(|name| name.as_str()).unwrap_or("");
+            let name = theme
+                .get("name")
+                .and_then(|name| name.as_str())
+                .unwrap_or("");
             let colors = theme
                 .get("colors")
                 .and_then(|colors| colors.as_object())

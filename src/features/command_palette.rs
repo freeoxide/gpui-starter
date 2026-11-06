@@ -6,7 +6,9 @@ use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, FocusTrapElement as _, Icon, IconName, IndexPath, Root,
     Sizable as _,
     command::{Command, CommandItem, CommandState},
-    h_flex, kbd::Kbd, v_flex,
+    h_flex,
+    kbd::Kbd,
+    v_flex,
 };
 use gpui_kit::{prelude::*, *};
 
@@ -146,7 +148,12 @@ impl Render for Launcher {
         let command = Command::new(&self.state)
             .items(rows.into_iter().map(|row| {
                 let LauncherActionKind::Execute(command_id) = row.action;
-                let LauncherItem { title, subtitle, icon, .. } = row;
+                let LauncherItem {
+                    title,
+                    subtitle,
+                    icon,
+                    ..
+                } = row;
                 // Availability is read per render so rows track the same
                 // state the menus see (undo stack, sign-in, platform).
                 let availability = commands::availability(command_id, cx);
@@ -231,7 +238,9 @@ fn page_binding(id: CommandId) -> Option<NavigateToPage> {
         CommandId::OpenDesktopWidgets => Page::DesktopWidgets,
         _ => return None,
     };
-    let slot = Page::all().iter().position(|candidate| *candidate == page)?;
+    let slot = Page::all()
+        .iter()
+        .position(|candidate| *candidate == page)?;
     (slot < 9).then_some(NavigateToPage(slot))
 }
 
@@ -245,7 +254,9 @@ fn render_row(
     window: &mut Window,
     cx: &App,
 ) -> Div {
-    let kbd = binding.as_ref().and_then(|action| Kbd::binding_for_action(action, None, window));
+    let kbd = binding
+        .as_ref()
+        .and_then(|action| Kbd::binding_for_action(action, None, window));
     h_flex()
         .w_full()
         .gap_3()

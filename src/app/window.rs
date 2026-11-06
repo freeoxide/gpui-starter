@@ -81,18 +81,28 @@ fn restored_bounds(
     persisted: &crate::app_state::PersistedWindowBounds,
     cx: &App,
 ) -> (WindowBounds, Option<DisplayId>) {
-    let restored_size = size(px(persisted.width.max(480.0)), px(persisted.height.max(320.0)));
+    let restored_size = size(
+        px(persisted.width.max(480.0)),
+        px(persisted.height.max(320.0)),
+    );
     let display = persisted.display_id.as_deref().and_then(|wanted| {
-        cx.displays()
-            .into_iter()
-            .find(|display| display.uuid().ok().is_some_and(|uuid| uuid.to_string() == wanted))
+        cx.displays().into_iter().find(|display| {
+            display
+                .uuid()
+                .ok()
+                .is_some_and(|uuid| uuid.to_string() == wanted)
+        })
     });
     let at = point(px(persisted.x), px(persisted.y));
     let bounds = match &display {
         Some(display) if !cfg!(target_os = "linux") && display.bounds().contains(&at) => {
             Bounds::new(at, restored_size)
         }
-        _ => Bounds::centered(display.as_ref().map(|display| display.id()), restored_size, cx),
+        _ => Bounds::centered(
+            display.as_ref().map(|display| display.id()),
+            restored_size,
+            cx,
+        ),
     };
     let window_bounds = match persisted.state {
         crate::app_state::PersistedWindowState::Windowed => WindowBounds::Windowed(bounds),
@@ -111,7 +121,10 @@ pub fn create_new_window(title: &str, cx: &mut App) {
     }
     let (window_bounds, display_id) = match crate::app_state::config(cx).window_bounds.as_ref() {
         Some(persisted) => restored_bounds(persisted, cx),
-        None => (WindowBounds::Windowed(Bounds::centered(None, window_size, cx)), None),
+        None => (
+            WindowBounds::Windowed(Bounds::centered(None, window_size, cx)),
+            None,
+        ),
     };
     let title: SharedString = title.into();
 
