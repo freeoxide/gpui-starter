@@ -125,9 +125,11 @@ fn vs_main(@builtin(instance_index) ii: u32,
     let p = particles_draw[ii];
     let clip = params.mvp * vec4<f32>(p.pos.xyz, 1.0);
     let ndc = clip.xyz / clip.w;
-    let size = p.pos.w * params.misc.z / max(ndc.z, 0.1);
+    // clip.w is the view depth, so quads shrink with distance; misc.w
+    // (height/width) cancels the viewport's aspect so quads stay square.
+    let size = p.pos.w * params.misc.z / max(clip.w, 0.1);
     var out: VOut;
-    let offset = corners[vi] * size;
+    let offset = vec2<f32>(corners[vi].x * size * params.misc.w, corners[vi].y * size);
     out.pos = vec4<f32>((ndc.xy + offset) * clip.w, clip.z, clip.w);
     out.speed = length(p.vel.xyz);
     return out;
@@ -211,24 +213,25 @@ fn fs_main(@builtin(position) frag: vec4<f32>) -> @location(0) vec4<f32> {
 }
 "#;
 
-#[cfg(test)]
-pub(in crate::features::wgpu) fn wgsl_modules() -> [(&'static str, String); 5] {
+/// The (label, source) pairs the renderer compiles; the naga tests consume
+/// this same table, so they validate exactly what the driver compiles.
+fn shader_modules() -> [(&'static str, String); 5] {
     [
         (
-            "particles-compute",
+            "wgpu-particles-compute",
             [FRAME_PARAMS_WGSL, PARTICLES_COMPUTE_WGSL].concat(),
         ),
         (
-            "particles-draw",
+            "wgpu-particles-draw",
             [FRAME_PARAMS_WGSL, PARTICLES_DRAW_WGSL].concat(),
         ),
-        ("mesh", [FRAME_PARAMS_WGSL, MESH_WGSL].concat()),
+        ("wgpu-mesh", [FRAME_PARAMS_WGSL, MESH_WGSL].concat()),
         (
-            "output-identity",
+            "wgpu-output-identity",
             [FRAME_PARAMS_WGSL, OUTPUT_VS_WGSL, OUTPUT_IDENTITY_WGSL].concat(),
         ),
         (
-            "output-post",
+            "wgpu-output-post",
             [FRAME_PARAMS_WGSL, OUTPUT_VS_WGSL, OUTPUT_POST_WGSL].concat(),
         ),
     ]
@@ -327,6 +330,73 @@ fn scene_entries<'a>(
     ]
 }
 
+fn particles_groups(
+    device: &wgpu::Device,
+    frame_params: &wgpu::Buffer,
+    attractor: &wgpu::Buffer,
+    particles: &wgpu::Buffer,
+    compute_layout: &wgpu::BindGroupLayout,
+    draw_layout: &wgpu::BindGroupLayout,
+) -> (wgpu::BindGroup, wgpu::BindGroup) {
+    (
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("wgpu-particles-compute-group"),
+            layout: compute_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer_resource(frame_params),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: buffer_resource(particles),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: buffer_resource(attractor),
+                },
+            ],
+        }),
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("wgpu-particles-draw-group"),
+            layout: draw_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: buffer_resource(frame_params),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: buffer_resource(particles),
+                },
+            ],
+        }),
+    )
+}
+
+fn output_groups(
+    device: &wgpu::Device,
+    frame_params: &wgpu::Buffer,
+    scene_view: &wgpu::TextureView,
+    scene_sampler: &wgpu::Sampler,
+    output_layout: &wgpu::BindGroupLayout,
+) -> (wgpu::BindGroup, wgpu::BindGroup) {
+    // One entries array serves both groups: they differ only in pipeline.
+    let entries = scene_entries(frame_params, scene_view, scene_sampler);
+    (
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("wgpu-output-identity-group"),
+            layout: output_layout,
+            entries: &entries,
+        }),
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("wgpu-output-post-group"),
+            layout: output_layout,
+            entries: &entries,
+        }),
+    )
+}
+
 fn color_attachment<'a>(
     view: &'a wgpu::TextureView,
     clear: wgpu::Color,
@@ -385,11 +455,24 @@ impl SceneRenderer {
         initial: &RenderJob,
     ) -> Result<Self> {
         let device = engine.device();
-        let module = |label: &str, source: String| {
-            device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some(label),
-                source: wgpu::ShaderSource::Wgsl(source.into()),
+        let modules: Vec<(&str, wgpu::ShaderModule)> = shader_modules()
+            .into_iter()
+            .map(|(label, source)| {
+                (
+                    label,
+                    device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                        label: Some(label),
+                        source: wgpu::ShaderSource::Wgsl(source.into()),
+                    }),
+                )
             })
+            .collect();
+        let module = |label: &str| {
+            let (_, module) = modules
+                .iter()
+                .find(|(name, _)| *name == label)
+                .unwrap_or_else(|| panic!("shader table must cover {label}"));
+            module.clone()
         };
         let layout = |label: &str, entries: &[wgpu::BindGroupLayoutEntry]| {
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -426,10 +509,7 @@ impl SceneRenderer {
                 uniform_entry(2, wgpu::ShaderStages::COMPUTE),
             ],
         );
-        let compute_module = module(
-            "wgpu-particles-compute",
-            [FRAME_PARAMS_WGSL, PARTICLES_COMPUTE_WGSL].concat(),
-        );
+        let compute_module = module("wgpu-particles-compute");
         let particles_compute_pipeline =
             device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some("wgpu-particles-compute-pipeline"),
@@ -450,10 +530,7 @@ impl SceneRenderer {
                 storage_entry(1, wgpu::ShaderStages::VERTEX, true),
             ],
         );
-        let draw_module = module(
-            "wgpu-particles-draw",
-            [FRAME_PARAMS_WGSL, PARTICLES_DRAW_WGSL].concat(),
-        );
+        let draw_module = module("wgpu-particles-draw");
         let particles_draw_pipeline =
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("wgpu-particles-draw-pipeline"),
@@ -495,7 +572,7 @@ impl SceneRenderer {
                 sampler_entry(2),
             ],
         );
-        let mesh_module = module("wgpu-mesh", [FRAME_PARAMS_WGSL, MESH_WGSL].concat());
+        let mesh_module = module("wgpu-mesh");
         let (mesh_vertex_bytes, mesh_indices) = math::sphere_mesh(24, 36);
         let index_count = mesh_indices.len() as u32;
         let mesh_index_bytes: Vec<u8> = mesh_indices
@@ -637,10 +714,7 @@ impl SceneRenderer {
             ],
         );
         let output_pipeline_layout = pipeline_layout("wgpu-output-layout-object", &output_layout);
-        let identity_module = module(
-            "wgpu-output-identity",
-            [FRAME_PARAMS_WGSL, OUTPUT_VS_WGSL, OUTPUT_IDENTITY_WGSL].concat(),
-        );
+        let identity_module = module("wgpu-output-identity");
         let output_identity_pipeline =
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("wgpu-output-identity-pipeline"),
@@ -667,10 +741,7 @@ impl SceneRenderer {
                 multiview_mask: None,
                 cache: None,
             });
-        let post_module = module(
-            "wgpu-output-post",
-            [FRAME_PARAMS_WGSL, OUTPUT_VS_WGSL, OUTPUT_POST_WGSL].concat(),
-        );
+        let post_module = module("wgpu-output-post");
         let output_post_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("wgpu-output-post-pipeline"),
             layout: Some(&output_pipeline_layout),
@@ -699,38 +770,14 @@ impl SceneRenderer {
         let scene_sampler = linear_sampler("wgpu-scene-sampler");
 
         let particles = particle_buffers(&engine, initial.particle_count);
-        let particles_compute_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("wgpu-particles-compute-group"),
-            layout: &compute_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: buffer_resource(&frame_params),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: buffer_resource(&particles),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: buffer_resource(&attractor),
-                },
-            ],
-        });
-        let particles_draw_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("wgpu-particles-draw-group"),
-            layout: &draw_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: buffer_resource(&frame_params),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: buffer_resource(&particles),
-                },
-            ],
-        });
+        let (particles_compute_group, particles_draw_group) = particles_groups(
+            device,
+            &frame_params,
+            &attractor,
+            &particles,
+            &compute_layout,
+            &draw_layout,
+        );
 
         let targets = create_targets(
             device,
@@ -738,23 +785,13 @@ impl SceneRenderer {
             initial.height,
             spec_for(initial.demo).uses_mesh,
         );
-        let (output_identity_group, output_post_group) = {
-            let identity_entries =
-                scene_entries(&frame_params, &targets.scene_view, &scene_sampler);
-            let post_entries = scene_entries(&frame_params, &targets.scene_view, &scene_sampler);
-            (
-                device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("wgpu-output-identity-group"),
-                    layout: &output_layout,
-                    entries: &identity_entries,
-                }),
-                device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("wgpu-output-post-group"),
-                    layout: &output_layout,
-                    entries: &post_entries,
-                }),
-            )
-        };
+        let (output_identity_group, output_post_group) = output_groups(
+            device,
+            &frame_params,
+            &targets.scene_view,
+            &scene_sampler,
+            &output_layout,
+        );
 
         Ok(Self {
             engine,
@@ -787,41 +824,18 @@ impl SceneRenderer {
         if count == self.particle_count {
             return;
         }
-        let device = self.engine.device();
         self.particles = particle_buffers(&self.engine, count);
         self.particle_count = count;
-        self.particles_compute_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("wgpu-particles-compute-group"),
-            layout: &self.compute_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: buffer_resource(&self.frame_params),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: buffer_resource(&self.particles),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: buffer_resource(&self.attractor),
-                },
-            ],
-        });
-        self.particles_draw_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("wgpu-particles-draw-group"),
-            layout: &self.draw_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: buffer_resource(&self.frame_params),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: buffer_resource(&self.particles),
-                },
-            ],
-        });
+        let (compute_group, draw_group) = particles_groups(
+            self.engine.device(),
+            &self.frame_params,
+            &self.attractor,
+            &self.particles,
+            &self.compute_layout,
+            &self.draw_layout,
+        );
+        self.particles_compute_group = compute_group;
+        self.particles_draw_group = draw_group;
     }
 
     pub(in crate::features::wgpu) fn reconfigure(
@@ -837,27 +851,15 @@ impl SceneRenderer {
             return;
         }
         self.targets = create_targets(self.engine.device(), job_width, job_height, needs_depth);
-        let device = self.engine.device();
-        let identity_entries = scene_entries(
+        let (identity_group, post_group) = output_groups(
+            self.engine.device(),
             &self.frame_params,
             &self.targets.scene_view,
             &self.scene_sampler,
+            &self.output_layout,
         );
-        self.output_identity_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("wgpu-output-identity-group"),
-            layout: &self.output_layout,
-            entries: &identity_entries,
-        });
-        let post_entries = scene_entries(
-            &self.frame_params,
-            &self.targets.scene_view,
-            &self.scene_sampler,
-        );
-        self.output_post_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("wgpu-output-post-group"),
-            layout: &self.output_layout,
-            entries: &post_entries,
-        });
+        self.output_identity_group = identity_group;
+        self.output_post_group = post_group;
     }
 
     /// Renders one frame and reads it back as tightly packed BGRA bytes.
@@ -882,7 +884,14 @@ impl SceneRenderer {
         let projection = math::perspective(FRAC_PI_4, aspect, 0.1, 100.0);
         let mvp = math::mat4_mul(&projection, &math::mat4_mul(&view, &model));
         let light_dir = [0.6f32, 1.0, 0.4, 0.0];
-        let misc = [job.dt, job.elapsed, 0.02, 0.0];
+        // misc.z sizes billboards; misc.w must be the viewport's
+        // height/width or quads stretch on wide viewports.
+        let misc = [
+            job.dt,
+            job.elapsed,
+            0.06,
+            job.height as f32 / job.width as f32,
+        ];
         let attractor = [
             (job.elapsed * 0.7).sin() * 0.5,
             (job.elapsed * 1.1).sin() * 0.3,

@@ -1,4 +1,6 @@
+use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -31,12 +33,49 @@ fn set_init_seam(seam: InitSeam) {
     INIT_SEAM.with(|slot| slot.set(seam));
 }
 
+/// Device-wide error state installed once per engine. Without these
+/// callbacks wgpu's default turns uncaptured errors into panics and device
+/// loss surfaces only as an unexplained hang on the next driver call.
+#[derive(Default)]
+struct DeviceErrors {
+    lost: AtomicBool,
+    last: Mutex<Option<String>>,
+}
+
+impl DeviceErrors {
+    fn install(device: &wgpu::Device) -> Arc<Self> {
+        let errors = Arc::new(Self::default());
+        let lost_state = errors.clone();
+        device.set_device_lost_callback(move |reason, message| {
+            tracing::error!(target: LOG, reason = ?reason, "wgpu device lost: {message}");
+            if !matches!(reason, wgpu::DeviceLostReason::Destroyed) {
+                lost_state.lost.store(true, Ordering::Release);
+            }
+        });
+        let uncaptured = errors.clone();
+        device.on_uncaptured_error(Arc::new(move |error| {
+            tracing::error!(target: LOG, "wgpu uncaptured error: {error}");
+            *uncaptured.last.lock().expect("wgpu device error state") = Some(error.to_string());
+        }));
+        errors
+    }
+
+    fn device_lost(&self) -> bool {
+        self.lost.load(Ordering::Acquire)
+    }
+
+    fn last_error(&self) -> Option<String> {
+        self.last.lock().expect("wgpu device error state").clone()
+    }
+}
+
 /// Headless wgpu device shared by this feature and future consumers.
 /// `Send + Sync`; every handle wraps the same underlying device.
 pub struct WgpuEngine {
     device: wgpu::Device,
     queue: wgpu::Queue,
     adapter_label: String,
+    errors: Arc<DeviceErrors>,
     readback: Mutex<Option<(u64, wgpu::Buffer)>>,
     fence: EngineFence,
 }
@@ -70,11 +109,13 @@ impl WgpuEngine {
             .request_device(&wgpu::DeviceDescriptor::default())
             .await
             .context("requesting wgpu device")?;
+        let errors = DeviceErrors::install(&device);
         tracing::debug!(target: LOG, "wgpu device acquired");
         Ok(Self {
             device,
             queue,
             adapter_label,
+            errors,
             readback: Mutex::new(None),
             fence: EngineFence::new(),
         })
@@ -171,6 +212,19 @@ impl WgpuEngine {
         self.fence.poisoned()
     }
 
+    /// Fails with a distinct cause once the device is lost, so the error
+    /// panel can tell a driver loss from a render failure.
+    fn ensure_device_alive(&self) -> Result<()> {
+        if !self.errors.device_lost() {
+            return Ok(());
+        }
+        let detail = self
+            .errors
+            .last_error()
+            .unwrap_or_else(|| "no uncaptured error recorded".to_string());
+        anyhow::bail!("wgpu device lost ({detail}); rebuild the engine to retry")
+    }
+
     /// Reads a COPY_SRC RGBA8 2D texture as tightly packed rows (width*4
     /// per row). BLOCKING: submits, maps, and polls; background thread
     /// only. The readback buffer is reused per size, so calls on one
@@ -181,9 +235,13 @@ impl WgpuEngine {
         width: u32,
         height: u32,
     ) -> Result<Vec<u8>> {
+        self.ensure_device_alive()?;
         let padded = padded_bytes_per_row(width);
         let size = (padded * height as usize) as u64;
-        let mut slot = self.readback.lock().expect("wgpu readback cache");
+        let mut slot = self
+            .readback
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let buffer = match slot.take() {
             Some((cached_size, buffer)) if cached_size == size => buffer,
             _ => self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -229,6 +287,7 @@ impl WgpuEngine {
                 timeout: Some(Duration::from_secs(30)),
             })
             .context("polling wgpu device during readback")?;
+        self.ensure_device_alive()?;
         rx.recv_timeout(Duration::from_secs(30))
             .context("waiting for wgpu readback map")?
             .map_err(anyhow::Error::msg)

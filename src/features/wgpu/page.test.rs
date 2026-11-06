@@ -185,9 +185,36 @@ async fn hung_init_times_out_into_the_error_panel_and_retry_re_enters(cx: &mut T
 }
 
 #[gpui_kit::test]
+async fn a_failed_init_lands_its_cause_in_the_error_panel(cx: &mut TestAppContext) {
+    let _seam = SeamGuard::arm(super::InitSeam::Fail);
+    let (page, host, mut cx) = open_hosted_page(cx);
+    host.update(&mut cx, |host, cx| {
+        host.visited = true;
+        cx.notify();
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.run_until_parked();
+
+    let expected = "wgpu init seam failure".to_string();
+    assert_eq!(
+        runtime_error(&page, &cx),
+        Some(expected.clone()),
+        "the landed failure must name its cause, not a generic outcome"
+    );
+
+    // The watchdog stays silent once an attempt has landed, whatever it said.
+    cx.executor().advance_clock(Duration::from_secs(16));
+    cx.run_until_parked();
+    assert_eq!(
+        runtime_error(&page, &cx),
+        Some(expected),
+        "the watchdog must not overwrite a landed failure"
+    );
+}
+
+#[gpui_kit::test]
+#[ignore = "needs a working wgpu adapter (GPU or lavapipe); run with --ignored locally"]
 async fn success_after_the_timeout_clears_the_error_panel(cx: &mut TestAppContext) {
-    // Late Ok must clear the timeout panel; a late Err (adapter-less hosts)
-    // replaces it with the real cause.
     let _seam = SeamGuard::arm(super::InitSeam::Delay(
         super::INIT_TIMEOUT + Duration::from_secs(5),
     ));
@@ -208,7 +235,7 @@ async fn success_after_the_timeout_clears_the_error_panel(cx: &mut TestAppContex
     );
     assert_eq!(
         runtime_error(&page, &cx),
-        Some(timeout_message.clone()),
+        Some(timeout_message),
         "the watchdog must fire while the attempt is still delayed"
     );
 
@@ -221,17 +248,48 @@ async fn success_after_the_timeout_clears_the_error_panel(cx: &mut TestAppContex
             page_view.state.read(cx).runtime_error().map(str::to_string),
         )
     });
-    assert_ne!(
-        error.as_deref(),
-        Some(timeout_message.as_str()),
-        "a landed attempt must replace or clear the stale timeout error"
+    assert!(engine, "this test requires a working wgpu adapter");
+    assert!(
+        error.is_none(),
+        "a late success must clear the timeout error panel"
     );
-    if engine {
-        assert!(
-            error.is_none(),
-            "a late success must clear the timeout error panel"
-        );
-    }
+}
+
+#[gpui_kit::test]
+async fn a_landed_frame_re_renders_the_page_without_a_manual_notify(cx: &mut TestAppContext) {
+    let (page, host, mut cx) = open_hosted_page(cx);
+    host.update(&mut cx, |host, cx| {
+        host.visited = true;
+        cx.notify();
+    });
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    cx.run_until_parked();
+
+    let state = cx.read(|cx| page.read(cx).state.clone());
+    let repaints = std::rc::Rc::new(std::cell::Cell::new(0usize));
+    let counter = repaints.clone();
+    cx.update(|cx| {
+        cx.observe(&page, move |_, _| counter.set(counter.get() + 1))
+            .detach();
+    });
+    cx.run_until_parked();
+    let before = repaints.get();
+
+    // Only the state notifies here; the page's own subscription must carry
+    // it into a repaint, or landed frames never reach the screen.
+    let image = super::super::frame::bgra_to_render_image(1, 1, vec![10, 10, 10, 255]);
+    cx.update(|cx| {
+        state.update(cx, |s, cx| {
+            s.frame_done(crate::platform::clock::Instant::now(), image, 5.0, cx);
+        })
+    });
+    cx.run_until_parked();
+
+    assert_eq!(
+        repaints.get(),
+        before + 1,
+        "a landed frame must notify the page so the display updates"
+    );
 }
 
 #[gpui_kit::test]

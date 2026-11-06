@@ -73,9 +73,7 @@ impl WgpuPageState {
 
     pub(in crate::features::wgpu) fn toggle_playing(&mut self, cx: &mut Context<Self>) {
         self.playing = !self.playing;
-        if !self.playing {
-            self.frame_in_flight = false;
-        } else {
+        if self.playing {
             self.next_frame_at = None;
         }
         cx.notify();
@@ -133,6 +131,9 @@ impl WgpuPageState {
         cx: &mut Context<Self>,
     ) {
         if !self.playing {
+            // Pause must not reopen the kick gate while the task is still
+            // in flight; the landing task releases it here instead.
+            self.frame_in_flight = false;
             return;
         }
         if let Some(previous) = self.displayed.take() {

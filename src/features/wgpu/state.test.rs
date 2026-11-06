@@ -25,7 +25,7 @@ async fn viewport_sizes_quantize_to_sixteen_pixel_steps(cx: &mut TestAppContext)
 }
 
 #[gpui_kit::test]
-async fn pausing_while_in_flight_clears_the_flag(cx: &mut TestAppContext) {
+async fn pausing_while_in_flight_keeps_the_gate_closed(cx: &mut TestAppContext) {
     let state = cx.new(|cx| WgpuPageState::new(cx));
 
     cx.update(|cx| {
@@ -36,7 +36,9 @@ async fn pausing_while_in_flight_clears_the_flag(cx: &mut TestAppContext) {
     });
 
     assert!(!cx.update(|cx| state.read(cx).is_playing()));
-    assert!(!cx.update(|cx| state.read(cx).is_frame_in_flight()));
+    // Reopening the gate here would let a quick resume start a second
+    // concurrent frame task; the landing task releases the gate instead.
+    assert!(cx.update(|cx| state.read(cx).is_frame_in_flight()));
 }
 
 #[gpui_kit::test]
@@ -177,7 +179,7 @@ async fn pacing_accumulates_from_the_previous_deadline(cx: &mut TestAppContext) 
 }
 
 #[gpui_kit::test]
-async fn frame_dt_spans_the_paced_period_not_the_kick_gap(cx: &mut TestAppContext) {
+async fn frame_dt_measures_from_the_previous_frame_start(cx: &mut TestAppContext) {
     let state = cx.new(|cx| WgpuPageState::new(cx));
     let kick = Instant::now();
 
