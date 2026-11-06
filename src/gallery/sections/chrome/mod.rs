@@ -1,7 +1,6 @@
 //! Chrome-area sections, ported from the upstream stories and examples:
 //! Sidebar, StatusBar, TitleBar, and NavStack.
 
-mod demo;
 mod nav_stack;
 mod sidebar;
 mod status_bar;

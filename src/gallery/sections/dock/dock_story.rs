@@ -5,11 +5,8 @@
 use std::rc::Rc;
 
 use gpui_kit::component::{
-    ActiveTheme as _,
     button::{Button, DropdownButton},
-    dock::{
-        BasePanel, DockArea, DockLayout, DockPlacement, DockSkin, Panel, PanelEvent, panel_handle,
-    },
+    dock::{DockArea, DockLayout, DockPlacement, DockSkin, panel_handle},
     h_flex, v_flex,
 };
 use gpui_kit::*;
@@ -17,7 +14,8 @@ use serde::Deserialize;
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use super::demo::{DemoPanel, PanelSpec};
+use crate::gallery::demo::section;
 
 /// Knob of the `DockStory` options menu.
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -26,64 +24,31 @@ pub(crate) enum DockOption {
     TabCloseButtons,
 }
 
-struct DemoPanel {
-    name: &'static str,
-    title: SharedString,
-    body: SharedString,
-    focus_handle: FocusHandle,
-    closable: bool,
-}
-
-impl DemoPanel {
-    fn new(
-        name: &'static str,
-        title: &'static str,
-        body: &'static str,
-        cx: &mut App,
-    ) -> Entity<Self> {
-        cx.new(|cx| Self {
-            name,
-            title: title.into(),
-            body: body.into(),
-            focus_handle: cx.focus_handle(),
-            closable: true,
-        })
-    }
-}
-
-impl EventEmitter<PanelEvent> for DemoPanel {}
-
-impl Focusable for DemoPanel {
-    fn focus_handle(&self, _: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl BasePanel for DemoPanel {
-    fn panel_name(&self) -> &'static str {
-        self.name
-    }
-
-    fn closable(&self, _: &App) -> bool {
-        self.closable
-    }
-}
-
-impl Panel for DemoPanel {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        self.title.clone()
-    }
-}
-
-impl Render for DemoPanel {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .size_full()
-            .p_4()
-            .text_color(cx.theme().foreground)
-            .child(self.body.clone())
-    }
-}
+const EXPLORER: PanelSpec = PanelSpec {
+    name: "DockStoryExplorer",
+    title: "Explorer",
+    body: "Drag this tab into another group.",
+};
+const SEARCH: PanelSpec = PanelSpec {
+    name: "DockStorySearch",
+    title: "Search",
+    body: "Two panels can share one tab group.",
+};
+const EDITOR: PanelSpec = PanelSpec {
+    name: "DockStoryEditor",
+    title: "Editor",
+    body: "Drop a tab near an edge to split this group.",
+};
+const TERMINAL: PanelSpec = PanelSpec {
+    name: "DockStoryTerminal",
+    title: "Terminal",
+    body: "The bottom dock shares the workspace column.",
+};
+const PROBLEMS: PanelSpec = PanelSpec {
+    name: "DockStoryProblems",
+    title: "Problems",
+    body: "No problems detected.",
+};
 
 pub struct DockSection {
     dock_area: Entity<DockArea>,
@@ -94,32 +59,12 @@ pub struct DockSection {
 impl DockSection {
     pub fn view(window: &mut Window, cx: &mut App) -> Entity<Self> {
         let (dock_area, skin) = DockSkin::dock_area("dock-story", Some(1), window, cx);
-        let explorer = DemoPanel::new(
-            "DockStoryExplorer",
-            "Explorer",
-            "Drag this tab into another group.",
-            cx,
-        );
-        let search = DemoPanel::new(
-            "DockStorySearch",
-            "Search",
-            "Two panels can share one tab group.",
-            cx,
-        );
-        let editor = DemoPanel::new(
-            "DockStoryEditor",
-            "Editor",
-            "Drop a tab near an edge to split this group.",
-            cx,
-        );
-        editor.update(cx, |editor, _| editor.closable = false);
-        let terminal = DemoPanel::new(
-            "DockStoryTerminal",
-            "Terminal",
-            "The bottom dock shares the workspace column.",
-            cx,
-        );
-        let problems = DemoPanel::new("DockStoryProblems", "Problems", "No problems detected.", cx);
+        let explorer = DemoPanel::new(&EXPLORER, cx);
+        let search = DemoPanel::new(&SEARCH, cx);
+        let editor = DemoPanel::new(&EDITOR, cx);
+        editor.update(cx, |editor, _| editor.set_closable(false));
+        let terminal = DemoPanel::new(&TERMINAL, cx);
+        let problems = DemoPanel::new(&PROBLEMS, cx);
 
         dock_area.update(cx, |area, cx| {
             area.set_center(

@@ -4,7 +4,7 @@ use gpui_kit::component::{
     WindowExt, clipboard::Clipboard, h_flex, input::Input, input::InputState, label::Label, v_flex,
 };
 use gpui_kit::*;
-use gpui_kit::{Entity, SharedString, rems};
+use gpui_kit::{Entity, rems};
 
 use crate::gallery::registry::GallerySection;
 
@@ -12,7 +12,6 @@ use super::demo::section;
 
 pub struct ClipboardSection {
     url_state: Entity<InputState>,
-    masked: bool,
 }
 
 impl ClipboardSection {
@@ -21,10 +20,7 @@ impl ClipboardSection {
             let url_state =
                 cx.new(|cx| InputState::new(window, cx).default_value("https://github.com"));
 
-            Self {
-                url_state,
-                masked: false,
-            }
+            Self { url_state }
         })
     }
 }
@@ -47,15 +43,7 @@ impl Render for ClipboardSection {
                             .child(Label::new("A clipboard button"))
                             .child(
                                 Clipboard::new("clipboard-value")
-                                    .value_fn({
-                                        let view = cx.entity().clone();
-                                        move |_, cx| {
-                                            SharedString::from(format!(
-                                                "masked: {}",
-                                                view.read(cx).masked
-                                            ))
-                                        }
-                                    })
+                                    .value("app-supplied value")
                                     .on_copied(|value, window, cx| {
                                         window.push_notification(
                                             format!("Copied value: {}", value),

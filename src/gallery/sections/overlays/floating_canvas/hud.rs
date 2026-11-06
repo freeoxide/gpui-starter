@@ -25,6 +25,7 @@ pub(crate) fn sample_value(tick: u64) -> f32 {
 pub(crate) struct HudMetrics {
     samples: Vec<f32>,
     tick: u64,
+    open_huds: usize,
 }
 
 impl HudMetrics {
@@ -41,10 +42,20 @@ impl HudMetrics {
         Self {
             samples: Vec::new(),
             tick: 0,
+            open_huds: 0,
         }
     }
 
+    // The ticker idles while no HUD consumes the samples; the owning section
+    // keeps this count current from the floating registry.
+    pub(crate) fn set_open_huds(&mut self, open_huds: usize) {
+        self.open_huds = open_huds;
+    }
+
     pub(crate) fn tick(&mut self, cx: &mut Context<Self>) {
+        if self.open_huds == 0 {
+            return;
+        }
         self.tick += 1;
         self.samples.push(sample_value(self.tick));
         if self.samples.len() > HUD_SAMPLE_CAP {

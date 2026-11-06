@@ -88,6 +88,30 @@ fn hud_start_feeds_the_waveform_and_stop_clears_the_source(cx: &mut TestAppConte
         assert!(!waveform.read(cx).has_source());
         assert!(!hud.read(cx).is_listening());
     });
+
+    // A restart must reset the elapsed time and re-attach one fresh source.
+    hud.update(cx, |hud, cx| hud.set_listening(true, cx));
+    cx.update(|cx| {
+        assert!(
+            hud.read(cx).listened() < Duration::from_millis(100),
+            "restart must reset the elapsed time"
+        )
+    });
+    cx.executor().advance_clock(Duration::from_millis(200));
+    cx.run_until_parked();
+    cx.update(|cx| {
+        assert!(hud.read(cx).is_listening());
+        let waveform = hud.read(cx).waveform.clone();
+        assert!(waveform.read(cx).has_source());
+        assert!(
+            waveform.read(cx).spectrum().is_some(),
+            "the restarted producer must feed the display path"
+        );
+        assert!(
+            hud.read(cx).listened() > Duration::ZERO,
+            "the restarted task accumulates elapsed time again"
+        );
+    });
 }
 
 #[gpui_kit::test]

@@ -16,7 +16,7 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 const START_MINUTES: u32 = 8 * 60;
 const END_MINUTES: u32 = 20 * 60;
@@ -78,6 +78,10 @@ pub struct MotionSection {
     present: bool,
     stagger_generation: usize,
     sequence_generation: usize,
+    /// Built once: the keyframes demo re-renders at refresh rate while it is
+    /// shown, so its track is cloned from here, not revalidated per frame.
+    keyframe_track: Keyframes<f32>,
+    stagger_track: Keyframes<f32>,
 }
 
 impl MotionSection {
@@ -91,6 +95,15 @@ impl MotionSection {
             present: true,
             stagger_generation: 0,
             sequence_generation: 0,
+            keyframe_track: Keyframes::try_new([
+                Keyframe::new(0., 0.),
+                Keyframe::new(0.35, 1.).ease(Easing::EaseOut),
+                Keyframe::new(0.7, 0.),
+                Keyframe::new(1., 0.),
+            ])
+            .expect("static keyframes are valid"),
+            stagger_track: Keyframes::try_new([Keyframe::new(0., 0.), Keyframe::new(1., 1.)])
+                .expect("static keyframes are valid"),
         })
     }
 
@@ -101,7 +114,15 @@ impl MotionSection {
         }
         if self.minutes == END_MINUTES {
             self.minutes = START_MINUTES;
-            self.digit_targets = [0., 8., 0., 0.];
+            // rolling_digit only renders forward rolls, so replay wraps the
+            // targets ahead instead of resetting them to the start values.
+            for (target, digit) in self
+                .digit_targets
+                .iter_mut()
+                .zip(time_digits(START_MINUTES))
+            {
+                *target = advance_digit(*target, digit);
+            }
         }
         self.playback = Some(cx.spawn(async move |this, cx: &mut AsyncApp| {
             loop {
@@ -207,7 +228,7 @@ impl MotionSection {
         let x = spring(
             "motion-selector-indicator",
             if self.spring_selected { 120. } else { 0. },
-            Spring::new(Duration::from_millis(420)).with_damping(0.68),
+            Spring::new(Duration::from_millis(420)),
             window,
             cx,
         );
@@ -252,13 +273,7 @@ impl MotionSection {
     }
 
     fn keyframes_demo(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let frames = Keyframes::try_new([
-            Keyframe::new(0., 0.),
-            Keyframe::new(0.35, 1.).ease(Easing::EaseOut),
-            Keyframe::new(0.7, 0.),
-            Keyframe::new(1., 0.),
-        ])
-        .expect("static keyframes are valid");
+        let frames = self.keyframe_track.clone();
         div()
             .w(rems(20.))
             .h(rems(8.25))
@@ -369,8 +384,7 @@ impl MotionSection {
     fn stagger_demo(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let stagger = Stagger::new(Duration::from_millis(90), StaggerOrigin::First);
         let generation = self.stagger_generation;
-        let frames = Keyframes::try_new([Keyframe::new(0., 0.), Keyframe::new(1., 1.)])
-            .expect("static keyframes are valid");
+        let frames = self.stagger_track.clone();
         div()
             .w(rems(23.75))
             .flex()
@@ -646,3 +660,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
         MotionSection::view(window, cx),
     ));
 }
+
+#[cfg(test)]
+#[path = "demos.test.rs"]
+mod demos_test;

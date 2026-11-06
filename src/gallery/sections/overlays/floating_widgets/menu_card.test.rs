@@ -1,9 +1,12 @@
-use gpui_kit::{App, Modifiers, TestAppContext, VisualTestContext, point, px, size};
+use gpui_kit::test::TestWindowExt as _;
+use gpui_kit::{App, TestAppContext, VisualTestContext, px, size};
 
 use crate::ui::floating::{FloatAnchor, floating_snapshot, init};
 
 use super::super::{ID_PREFIX, dictation::DICTATION_ID, sketch::SKETCH_ID};
-use super::{MENU_ID, MenuCard, menu_rows, menu_spec, spawn_menu_card};
+use super::{
+    MENU_ID, MenuCard, ROW_CLOSE, ROW_DICTATION, ROW_SKETCH, menu_rows, menu_spec, spawn_menu_card,
+};
 
 fn example_count(cx: &App) -> usize {
     floating_snapshot(cx)
@@ -58,7 +61,7 @@ async fn row_clicks_dispatch_their_actions_and_close_all_clears_the_examples(
     let mut cx = VisualTestContext::from_window(window.into(), cx);
     cx.update(|window, cx| window.draw(cx).clear(cx));
 
-    click_row(&mut cx, 6..30);
+    cx.update(|window, cx| window.click(ROW_DICTATION, cx));
     let dictation = cx.update(|_, cx| {
         floating_snapshot(cx)
             .iter()
@@ -66,7 +69,7 @@ async fn row_clicks_dispatch_their_actions_and_close_all_clears_the_examples(
     });
     assert!(dictation, "row one must spawn the dictation HUD");
 
-    click_row(&mut cx, 36..60);
+    cx.update(|window, cx| window.click(ROW_SKETCH, cx));
     let sketch = cx.update(|_, cx| {
         floating_snapshot(cx)
             .iter()
@@ -74,13 +77,7 @@ async fn row_clicks_dispatch_their_actions_and_close_all_clears_the_examples(
     });
     assert!(sketch, "row two must spawn the sketch pad");
 
-    click_row(&mut cx, 66..90);
+    cx.update(|window, cx| window.click(ROW_CLOSE, cx));
     let open = cx.update(|_, cx| example_count(cx));
     assert_eq!(open, 0, "close-all must close every spawned example float");
-}
-
-fn click_row(cx: &mut VisualTestContext, band: std::ops::Range<usize>) {
-    for y in band.clone().step_by(4) {
-        cx.simulate_click(point(px(120.), px(y as f32)), Modifiers::none());
-    }
 }

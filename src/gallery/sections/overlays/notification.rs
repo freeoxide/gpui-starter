@@ -325,7 +325,13 @@ impl Render for NotificationSection {
                                         window.push_notification("on_click fired.", cx);
                                     })
                                     .on_close(|window, cx| {
-                                        window.push_notification("on_close fired.", cx);
+                                        // on_close fires inside the
+                                        // NotificationList's own update; a
+                                        // synchronous push re-enters that
+                                        // entity and panics.
+                                        window.defer(cx, |window, cx| {
+                                            window.push_notification("on_close fired.", cx);
+                                        });
                                     }),
                                     cx,
                                 )
@@ -351,7 +357,10 @@ impl Render for NotificationSection {
                     })),
             )
             .child({
-                struct SystemNotificationKind;
+                // Distinct marker types: one id would let the system-only
+                // push strand the in-app toast instead of replacing it.
+                struct SystemOnlyKind;
+                struct InAppAndSystemKind;
 
                 section("notification-system", "System notification")
                     .description(
@@ -369,7 +378,7 @@ impl Render for NotificationSection {
                                     Notification::info(
                                         "Delivered straight to the notification center.",
                                     )
-                                    .id::<SystemNotificationKind>()
+                                    .id::<SystemOnlyKind>()
                                     .title("Build finished")
                                     .system(),
                                     cx,
@@ -385,7 +394,7 @@ impl Render for NotificationSection {
                                     Notification::info(
                                         "Shown as a toast and in the notification center.",
                                     )
-                                    .id::<SystemNotificationKind>()
+                                    .id::<InAppAndSystemKind>()
                                     .title("Build finished")
                                     .in_app_and_system()
                                     .autohide(false),

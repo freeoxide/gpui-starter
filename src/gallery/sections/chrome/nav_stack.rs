@@ -12,7 +12,7 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 /// One page of the stack. A page knows its depth and holds the stack it lives
 /// in, so its own buttons can push over it, replace it, or pop it.

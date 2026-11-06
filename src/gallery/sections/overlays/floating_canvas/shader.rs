@@ -1,9 +1,13 @@
+use std::time::Duration;
+
 use gpui_kit::component::{
     ActiveTheme as _, Sizable as _,
     button::{Button, Toggle, ToggleGroup},
     h_flex, v_flex,
 };
 use gpui_kit::{prelude::*, *};
+
+use crate::platform::clock::Instant;
 
 pub(crate) const SHADER_ID: &str = "canvas-shader-toy";
 
@@ -60,19 +64,29 @@ pub(crate) fn grid_cell_bounds(
 }
 
 pub(crate) struct ShaderPanel {
-    frame: usize,
     playing: bool,
     cell: Pixels,
+    // Wall-clock playhead so pause freezes the field: repaints while paused
+    // re-derive the same t instead of advancing it.
+    playhead: Duration,
+    resumed_at: Option<Instant>,
 }
 
 impl ShaderPanel {
     pub(crate) fn new_view(_window: &mut Window, cx: &mut App) -> AnyView {
         cx.new(|_| Self {
-            frame: 0,
             playing: true,
             cell: CELL_SIZES[1],
+            playhead: Duration::ZERO,
+            resumed_at: Some(Instant::now()),
         })
         .into()
+    }
+
+    fn fold_playhead(&mut self) {
+        if let Some(since) = self.resumed_at.take() {
+            self.playhead += since.elapsed();
+        }
     }
 }
 
@@ -81,8 +95,11 @@ impl Render for ShaderPanel {
         if self.playing && !cx.reduce_motion() {
             window.request_animation_frame();
         }
-        self.frame += 1;
-        let t = self.frame as f32 / 60.;
+        let t = (self.playhead
+            + self
+                .resumed_at
+                .map_or(Duration::ZERO, |since| since.elapsed()))
+        .as_secs_f32();
         let cell = self.cell;
         v_flex()
             .size_full()
@@ -98,6 +115,11 @@ impl Render for ShaderPanel {
                             .label(if self.playing { "Pause" } else { "Play" })
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.playing = !this.playing;
+                                if this.playing {
+                                    this.resumed_at = Some(Instant::now());
+                                } else {
+                                    this.fold_playhead();
+                                }
                                 cx.notify();
                             })),
                     )

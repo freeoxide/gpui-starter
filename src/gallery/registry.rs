@@ -1,19 +1,5 @@
-//! Registration seam between the gallery page and content sections.
-//!
-//! A content area owns `src/gallery/sections/<name>/` and hooks in with two
-//! mechanical lines (Rust has no module autodiscovery and no linkme-style
-//! registry dep is allowed here):
-//!
-//! 1. `pub mod <name>;` in `src/gallery/sections/mod.rs`
-//! 2. `sections::<name>::register(&mut sections, window, cx);` below.
-//!
-//! Contract for every section module: expose
-//! `pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window,
-//! cx: &mut App)` that pushes its sections. Each section is a GPUI entity
-//! (`Render`) constructed once at page build; state lives in entities, never
-//! in render locals. Section `id`s and titles must be unique gallery-wide:
-//! titles are the sidebar labels, titles and descriptions are the search
-//! corpus, ids namespace element ids.
+//! Gallery section registry; section ids and titles are unique
+//! gallery-wide, and state lives in entities, never render locals.
 
 use gpui_kit::{AnyView, App, SharedString, Window};
 
@@ -22,6 +8,9 @@ pub(crate) struct GallerySection {
     id: SharedString,
     title: SharedString,
     description: SharedString,
+    // Search corpus, lowercased once here so keystroke filtering never reallocates.
+    title_lower: String,
+    description_lower: String,
     view: AnyView,
 }
 
@@ -38,6 +27,8 @@ impl GallerySection {
             id: id.into(),
             title: title.into(),
             description: description.into(),
+            title_lower: title.to_lowercase(),
+            description_lower: description.to_lowercase(),
             view: view.into(),
         }
     }
@@ -52,6 +43,10 @@ impl GallerySection {
 
     pub(crate) fn description(&self) -> &str {
         &self.description
+    }
+
+    pub(crate) fn matches_query(&self, query: &str) -> bool {
+        self.title_lower.contains(query) || self.description_lower.contains(query)
     }
 
     pub(crate) fn view(&self) -> AnyView {

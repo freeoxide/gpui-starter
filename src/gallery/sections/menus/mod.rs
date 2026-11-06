@@ -2,7 +2,6 @@
 //! and Command.
 
 mod command;
-mod demo;
 mod menu;
 mod native_menu;
 

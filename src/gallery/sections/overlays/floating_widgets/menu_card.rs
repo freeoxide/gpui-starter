@@ -9,7 +9,6 @@ use gpui_kit::{prelude::*, *};
 
 use crate::ui::floating::{
     FloatAnchor, FloatLevel, FloatingHandle, FloatingSpec, FloatingWindowId, Placement9,
-    spawn_screen_floating,
 };
 
 pub(crate) const MENU_ID: &str = "chromeless-menu";
@@ -130,10 +129,7 @@ pub(crate) fn menu_spec() -> FloatingSpec {
 
 /// Open the menu card as a screen float; idempotent per id.
 pub fn spawn_menu_card(cx: &mut App) -> anyhow::Result<FloatingHandle> {
-    if let Some(handle) = super::entry_handle(MENU_ID, cx) {
-        return Ok(handle);
-    }
-    spawn_screen_floating(menu_spec(), MenuCard::new_view, cx)
+    super::spawn_idempotent(MENU_ID, menu_spec(), MenuCard::new_view, cx)
 }
 
 #[cfg(test)]

@@ -18,7 +18,7 @@ use gpui_kit::*;
 use crate::app::keys::binding;
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 actions!(
     gallery_menus_command,
@@ -347,16 +347,17 @@ impl CommandSection {
                             search.read(cx).focus_handle(cx).focus(window, cx);
                         });
                     }
+                    // Command consumes its entries when rendered, so each
+                    // dialog redraw needs a fresh clone of the owner's rows.
                     let entries = story
-                        .read_with(cx, |story, _| {
-                            stock_entries_for_render(&story.stock_entries)
-                        })
+                        .read_with(cx, |story, _| story.stock_entries.clone())
                         .unwrap_or_default();
                     let query_owner = story.clone();
                     let confirm_owner = story.clone();
                     content.child(with_entries(
                         Command::new(&search)
                             .bordered(false)
+                            .filterable(false)
                             .placeholder("Search stocks…")
                             .empty(|_, _, cx| {
                                 v_flex()
@@ -369,8 +370,10 @@ impl CommandSection {
                                     .child(Icon::new(IconName::Search).size_8())
                                     .child("No stock found.")
                             })
-                            .min_h(rems(20.))
-                            .max_h(rems(20.))
+                            // Command::max_h is inherent and caps the list,
+                            // not this frame; a fixed frame height is what
+                            // keeps the dialog from jumping as results arrive.
+                            .h(rems(20.))
                             .on_query(move |query, window, cx| {
                                 _ = query_owner.update(cx, |story, cx| {
                                     story.on_stock_query(query, window, cx);
@@ -477,12 +480,6 @@ fn popular_entries() -> Vec<CommandEntry> {
             .items(STOCKS.iter().take(5).map(|stock| stock_item(*stock)))
             .into(),
     ]
-}
-
-/// `Command` consumes its entries when rendered. Rebuild the stock rows from
-/// the owner-held result identities so a dialog redraw never drains the owner.
-fn stock_entries_for_render(entries: &[CommandEntry]) -> Vec<CommandEntry> {
-    entries.to_vec()
 }
 
 /// A two-line search result: symbol and name on the left, quote on the right.
@@ -689,8 +686,8 @@ impl Render for CommandSection {
             .child(
                 section("command-search-panel-box", "Search panel")
                     .description(
-                        "A palette used as a search panel whose custom filter checks symbols \
-                         before company names; try \"a\", \"hk\", or \"tesla\".",
+                        "A palette used as a search panel whose async source answers the query \
+                         itself; try \"a\", \"hk\", or \"tesla\".",
                     )
                     .child(
                         Button::new("command-search-stocks")

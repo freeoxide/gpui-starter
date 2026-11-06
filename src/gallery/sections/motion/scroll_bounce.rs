@@ -7,7 +7,7 @@ use gpui_kit::*;
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 const ROWS: usize = 120;
 
@@ -302,3 +302,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
         ScrollBounceSection::view(window, cx),
     ));
 }
+
+#[cfg(test)]
+#[path = "scroll_bounce.test.rs"]
+mod scroll_bounce_test;

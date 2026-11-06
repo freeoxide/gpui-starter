@@ -8,9 +8,9 @@ use gpui_kit::component::{
 };
 use gpui_kit::{prelude::*, *};
 
+use crate::platform::clock::Instant;
 use crate::ui::floating::{
     FloatAnchor, FloatLevel, FloatingHandle, FloatingSpec, FloatingWindowId, Placement9,
-    spawn_screen_floating,
 };
 use crate::ui::waveform::{DEFAULT_RETENTION, SampleProducer, Waveform, WaveformState};
 
@@ -58,7 +58,10 @@ pub(crate) struct DictationHud {
     producer: Option<SampleProducer>,
     push_task: Option<Task<()>>,
     listening: bool,
-    listened: Duration,
+    // Wall-clock listening time: tick sums undercount behind coalesced timers,
+    // and the waveform's own refresh observer already re-renders the HUD.
+    listened_base: Duration,
+    listened_since: Option<Instant>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -75,7 +78,8 @@ impl DictationHud {
             producer: None,
             push_task: None,
             listening: false,
-            listened: Duration::ZERO,
+            listened_base: Duration::ZERO,
+            listened_since: None,
             _subscriptions: vec![subscription],
         }
     }
@@ -85,7 +89,10 @@ impl DictationHud {
     }
 
     pub(crate) fn listened(&self) -> Duration {
-        self.listened
+        self.listened_base
+            + self
+                .listened_since
+                .map_or(Duration::ZERO, |since| since.elapsed())
     }
 
     pub(crate) fn set_listening(&mut self, listening: bool, cx: &mut Context<Self>) {
@@ -94,7 +101,8 @@ impl DictationHud {
         }
         self.listening = listening;
         if listening {
-            self.listened = Duration::ZERO;
+            self.listened_base = Duration::ZERO;
+            self.listened_since = Some(Instant::now());
             let producer = self.waveform.update(cx, |state, cx| {
                 state.attach_source(SAMPLE_RATE, 1, DEFAULT_RETENTION, cx)
             });
@@ -105,11 +113,9 @@ impl DictationHud {
                 loop {
                     cx.background_executor().timer(PUSH_TICK).await;
                     let frames = synth.chunk();
-                    let keep_going = this.update(cx, |hud, cx| {
+                    let keep_going = this.update(cx, |hud, _| {
                         if let Some(producer) = hud.producer.as_mut() {
                             producer.push_interleaved(&frames);
-                            hud.listened += PUSH_TICK;
-                            cx.notify();
                         }
                         hud.listening
                     });
@@ -119,6 +125,9 @@ impl DictationHud {
                 }
             }));
         } else {
+            if let Some(since) = self.listened_since.take() {
+                self.listened_base += since.elapsed();
+            }
             self.push_task = None;
             self.producer = None;
             self.waveform
@@ -195,10 +204,7 @@ pub(crate) fn dictation_spec() -> FloatingSpec {
 
 /// Open the dictation HUD as a screen float; idempotent per id.
 pub fn spawn_dictation(cx: &mut App) -> anyhow::Result<FloatingHandle> {
-    if let Some(handle) = super::entry_handle(DICTATION_ID, cx) {
-        return Ok(handle);
-    }
-    spawn_screen_floating(dictation_spec(), DictationHud::new_view, cx)
+    super::spawn_idempotent(DICTATION_ID, dictation_spec(), DictationHud::new_view, cx)
 }
 
 #[cfg(test)]

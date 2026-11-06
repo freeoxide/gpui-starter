@@ -20,7 +20,7 @@ use gpui_kit::{
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 #[derive(Clone, Debug)]
 struct Stroke {
@@ -47,6 +47,10 @@ pub struct BrushSection {
     brush_opacity: Entity<SliderState>,
     brush_color: Hsla,
     strokes: Rc<Vec<Stroke>>,
+    /// Tessellated committed strokes at a zero origin, rebuilt only when the
+    /// stroke set changes, then translated to the canvas origin per paint.
+    stroke_paths: Rc<Vec<(Path<Pixels>, Hsla)>>,
+    stroke_paths_source: Rc<Vec<Stroke>>,
     current_stroke: Option<Stroke>,
     is_drawing: bool,
     show_grid: bool,
@@ -80,6 +84,8 @@ impl BrushSection {
             brush_opacity,
             brush_color: black(),
             strokes: Rc::new(vec![]),
+            stroke_paths: Rc::new(vec![]),
+            stroke_paths_source: Rc::new(vec![]),
             current_stroke: None,
             is_drawing: false,
             show_grid: false,
@@ -123,56 +129,87 @@ impl BrushSection {
         _: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.is_drawing {
-            if let Some(ref mut stroke) = self.current_stroke {
-                let local_pos = if let Some(bounds) = self.canvas_bounds {
-                    Point::new(
-                        event.position.x - bounds.origin.x,
-                        event.position.y - bounds.origin.y,
-                    )
+        if !self.is_drawing {
+            return;
+        }
+        // Releasing the button outside the canvas never delivers mouse-up.
+        if !event.dragging() {
+            self.finish_stroke(cx);
+            return;
+        }
+        if let Some(ref mut stroke) = self.current_stroke {
+            let local_pos = if let Some(bounds) = self.canvas_bounds {
+                Point::new(
+                    event.position.x - bounds.origin.x,
+                    event.position.y - bounds.origin.y,
+                )
+            } else {
+                event.position
+            };
+
+            let should_add = if let Some(last) = stroke.points.last() {
+                let dx_px = local_pos.x - last.x;
+                let dy_px = local_pos.y - last.y;
+
+                let dx_abs = if dx_px < px(0.0) {
+                    px(0.0) - dx_px
                 } else {
-                    event.position
+                    dx_px
                 };
-
-                let should_add = if let Some(last) = stroke.points.last() {
-                    let dx_px = local_pos.x - last.x;
-                    let dy_px = local_pos.y - last.y;
-
-                    let dx_abs = if dx_px < px(0.0) {
-                        px(0.0) - dx_px
-                    } else {
-                        dx_px
-                    };
-                    let dy_abs = if dy_px < px(0.0) {
-                        px(0.0) - dy_px
-                    } else {
-                        dy_px
-                    };
-                    dx_abs >= px(1.0) || dy_abs >= px(1.0)
+                let dy_abs = if dy_px < px(0.0) {
+                    px(0.0) - dy_px
                 } else {
-                    true
+                    dy_px
                 };
+                dx_abs >= px(1.0) || dy_abs >= px(1.0)
+            } else {
+                true
+            };
 
-                if should_add {
-                    stroke.points.push(local_pos);
-                    cx.notify();
-                }
+            if should_add {
+                stroke.points.push(local_pos);
+                cx.notify();
             }
         }
     }
 
     fn handle_mouse_up(&mut self, _event: &MouseUpEvent, _: &mut Window, cx: &mut Context<Self>) {
-        if self.is_drawing {
-            self.is_drawing = false;
-            if let Some(stroke) = self.current_stroke.take() {
-                if stroke.points.len() > 1 {
-                    let mut new_strokes = (*self.strokes).clone();
-                    new_strokes.push(stroke);
-                    self.strokes = Rc::new(new_strokes);
-                }
-            }
-            cx.notify();
+        self.finish_stroke(cx);
+    }
+
+    // Also reached from mouse-move when no button is held, so a release
+    // outside the canvas cannot leave a stroke dangling.
+    fn finish_stroke(&mut self, cx: &mut Context<Self>) {
+        if !self.is_drawing {
+            return;
         }
+        self.is_drawing = false;
+        if let Some(stroke) = self.current_stroke.take() {
+            // Even a one-point stroke is a mark: a click leaves a dot.
+            if !stroke.points.is_empty() {
+                let mut new_strokes = (*self.strokes).clone();
+                new_strokes.push(stroke);
+                self.strokes = Rc::new(new_strokes);
+            }
+        }
+        cx.notify();
+    }
+
+    /// Rebuild the tessellated paths only when the committed stroke set
+    /// changed; repaints then translate them instead of re-tessellating.
+    fn refresh_stroke_paths(&mut self) {
+        if Rc::ptr_eq(&self.stroke_paths_source, &self.strokes) {
+            return;
+        }
+        let paths = self
+            .strokes
+            .iter()
+            .filter_map(|stroke| {
+                build_stroke_path(stroke, Point::default()).map(|path| (path, stroke.color))
+            })
+            .collect();
+        self.stroke_paths = Rc::new(paths);
+        self.stroke_paths_source = self.strokes.clone();
     }
 
     fn clear_canvas(&mut self, cx: &mut Context<Self>) {
@@ -212,12 +249,12 @@ impl BrushSection {
     fn render_canvas(&mut self, cx: &Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
 
-        let strokes_for_prepaint = self.strokes.clone();
         let current_stroke_for_prepaint = self.current_stroke.clone();
         let show_grid_for_prepaint = self.show_grid;
         let theme_for_prepaint = theme.clone();
 
         let state_entity = cx.entity().clone();
+        let canvas_entity = state_entity.clone();
 
         div()
             .id("brush-canvas")
@@ -231,6 +268,9 @@ impl BrushSection {
             .on_mouse_down(MouseButton::Left, cx.listener(Self::handle_mouse_down))
             .on_mouse_move(cx.listener(Self::handle_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::handle_mouse_up))
+            // on_mouse_up fires only while hovered, so a release outside the
+            // canvas needs its own binding to end and commit the stroke.
+            .on_mouse_up_out(MouseButton::Left, cx.listener(Self::handle_mouse_up))
             .on_prepaint(move |bounds, _window, cx| {
                 state_entity.update(cx, |state, _| {
                     state.canvas_bounds = Some(bounds);
@@ -238,59 +278,55 @@ impl BrushSection {
             })
             .child(
                 canvas(
-                    move |bounds, _window, _cx| {
+                    move |_, _window, cx| {
+                        let paths = canvas_entity.update(cx, |state, _| {
+                            state.refresh_stroke_paths();
+                            state.stroke_paths.clone()
+                        });
                         (
-                            strokes_for_prepaint,
+                            paths,
                             current_stroke_for_prepaint,
                             show_grid_for_prepaint,
                             theme_for_prepaint,
-                            bounds,
                         )
                     },
-                    move |_bounds,
-                          (strokes, current_stroke, show_grid, theme, prepaint_bounds),
-                          window,
-                          _cx| {
-                        let origin = prepaint_bounds.origin;
-                        let size = prepaint_bounds.size;
+                    move |bounds, (paths, current_stroke, show_grid, theme), window, _| {
+                        let origin = bounds.origin;
+                        let size = bounds.size;
 
                         if show_grid {
                             let grid_color = theme.border.opacity(0.2);
                             let grid_size = 40.0;
 
+                            // One subpath per line, so the whole grid
+                            // tessellates into a single painted path.
+                            let mut builder = PathBuilder::stroke(px(1.0));
                             let mut x = 0.0;
                             while px(x) <= size.width {
-                                let mut builder = PathBuilder::stroke(px(1.0));
                                 builder.move_to(Point::new(origin.x + px(x), origin.y));
                                 builder
                                     .line_to(Point::new(origin.x + px(x), origin.y + size.height));
-                                if let Ok(path) = builder.build() {
-                                    window.paint_path(path, grid_color);
-                                }
                                 x += grid_size;
                             }
 
                             let mut y = 0.0;
                             while px(y) <= size.height {
-                                let mut builder = PathBuilder::stroke(px(1.0));
                                 builder.move_to(Point::new(origin.x, origin.y + px(y)));
                                 builder
                                     .line_to(Point::new(origin.x + size.width, origin.y + px(y)));
-                                if let Ok(path) = builder.build() {
-                                    window.paint_path(path, grid_color);
-                                }
                                 y += grid_size;
+                            }
+                            if let Ok(path) = builder.build() {
+                                window.paint_path(path, grid_color);
                             }
                         }
 
-                        for stroke in strokes.iter() {
-                            if let Some(path) = build_stroke_path(stroke, &prepaint_bounds) {
-                                window.paint_path(path, stroke.color);
-                            }
+                        for (path, color) in paths.iter() {
+                            window.paint_path(translated(path, origin), *color);
                         }
 
                         if let Some(ref stroke) = current_stroke {
-                            if let Some(path) = build_stroke_path(stroke, &prepaint_bounds) {
+                            if let Some(path) = build_stroke_path(stroke, origin) {
                                 window.paint_path(path, stroke.color);
                             }
                         }
@@ -302,22 +338,42 @@ impl BrushSection {
     }
 }
 
-fn build_stroke_path(stroke: &Stroke, bounds: &Bounds<Pixels>) -> Option<Path<Pixels>> {
-    if stroke.points.len() < 2 {
-        return None;
+/// `path` moved by `offset`: a finished path is only its bounds and vertices,
+/// so shifting them costs a copy, not a re-tessellation.
+fn translated(path: &Path<Pixels>, offset: Point<Pixels>) -> Path<Pixels> {
+    let mut path = path.clone();
+    path.bounds.origin = path.bounds.origin + offset;
+    for vertex in &mut path.vertices {
+        vertex.xy_position = vertex.xy_position + offset;
     }
+    path
+}
+
+fn build_stroke_path(stroke: &Stroke, origin: Point<Pixels>) -> Option<Path<Pixels>> {
+    let Some(first) = stroke.points.first() else {
+        return None;
+    };
 
     let mut builder = PathBuilder::stroke(px(stroke.size));
 
-    let first_point = Point::new(
-        bounds.origin.x + stroke.points[0].x,
-        bounds.origin.y + stroke.points[0].y,
-    );
-    builder.move_to(first_point);
+    // A click without movement still leaves a mark: the short centered
+    // segment strokes into a dot.
+    if stroke.points.len() == 1 {
+        let radius = stroke.size / 2.0;
+        builder.move_to(Point::new(
+            origin.x + first.x - px(radius),
+            origin.y + first.y,
+        ));
+        builder.line_to(Point::new(
+            origin.x + first.x + px(radius),
+            origin.y + first.y,
+        ));
+        return builder.build().ok();
+    }
 
+    builder.move_to(origin + *first);
     for point in stroke.points.iter().skip(1) {
-        let abs_point = Point::new(bounds.origin.x + point.x, bounds.origin.y + point.y);
-        builder.line_to(abs_point);
+        builder.line_to(origin + *point);
     }
 
     builder.build().ok()

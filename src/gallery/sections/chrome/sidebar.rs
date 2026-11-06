@@ -23,7 +23,7 @@ use serde::Deserialize;
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 /// Payload of the header company dropdown (upstream `SelectCompany`).
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -415,6 +415,8 @@ impl Render for SidebarSection {
         let modes_collapsible = self.modes_collapsible;
         let modes_collapsed = self.modes_collapsed;
         let modes_icon_collapsed = modes_collapsed && modes_collapsible == SidebarCollapsible::Icon;
+        let modes_toggle_collapsed =
+            modes_collapsed && modes_collapsible != SidebarCollapsible::None;
         let modes_show_toggle = modes_collapsible != SidebarCollapsible::None;
         let company = self.company.clone();
 
@@ -774,6 +776,7 @@ impl Render for SidebarSection {
                                                                 |this, _, _, cx| {
                                                                     this.last_active_item =
                                                                         Item::Playground;
+                                                                    this.active_subitem = None;
                                                                     cx.notify();
                                                                 },
                                                             ),
@@ -885,7 +888,7 @@ impl Render for SidebarSection {
                                             .when(modes_show_toggle, |this| {
                                                 this.child(
                                                     SidebarToggleButton::new()
-                                                        .collapsed(modes_icon_collapsed)
+                                                        .collapsed(modes_toggle_collapsed)
                                                         .on_click(cx.listener(
                                                             |this, _, _, cx| {
                                                                 this.modes_collapsed =

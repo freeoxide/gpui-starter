@@ -27,6 +27,7 @@ pub struct FormSection {
     bio_input: Entity<TextareaState>,
     color_state: Entity<ColorPickerState>,
     subscribe_email: bool,
+    use_color_for_events: bool,
     date: Entity<DatePickerState>,
     layout: Axis,
     size: Size,
@@ -74,6 +75,7 @@ impl FormSection {
             date,
             color_state,
             subscribe_email: false,
+            use_color_for_events: false,
             layout: Axis::Vertical,
             size: Size::default(),
             columns: 1,
@@ -213,9 +215,9 @@ impl Render for FormSection {
                                 Checkbox::new("form-future-events")
                                     .with_size(self.size)
                                     .label("Use this color for future events")
-                                    .checked(self.subscribe_email)
+                                    .checked(self.use_color_for_events)
                                     .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                        this.subscribe_email = *checked;
+                                        this.use_color_for_events = *checked;
                                         cx.notify();
                                     })),
                             ),

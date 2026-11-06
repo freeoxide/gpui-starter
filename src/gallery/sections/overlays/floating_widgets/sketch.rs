@@ -8,7 +8,6 @@ use gpui_kit::{prelude::*, *};
 use crate::ui::canvas::{BrushConfig, BuiltinTool, Canvas, CanvasGrid, CanvasState};
 use crate::ui::floating::{
     FloatAnchor, FloatLevel, FloatingHandle, FloatingSpec, FloatingWindowId, Placement9,
-    spawn_screen_floating,
 };
 
 pub(crate) const SKETCH_ID: &str = "chromeless-sketch";
@@ -120,10 +119,7 @@ pub(crate) fn sketch_spec() -> FloatingSpec {
 
 /// Open the sketch pad as a screen float; idempotent per id.
 pub fn spawn_sketch(cx: &mut App) -> anyhow::Result<FloatingHandle> {
-    if let Some(handle) = super::entry_handle(SKETCH_ID, cx) {
-        return Ok(handle);
-    }
-    spawn_screen_floating(sketch_spec(), SketchPad::new_view, cx)
+    super::spawn_idempotent(SKETCH_ID, sketch_spec(), SketchPad::new_view, cx)
 }
 
 #[cfg(test)]

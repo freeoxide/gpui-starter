@@ -13,7 +13,7 @@ use serde::Deserialize;
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 /// Dispatched by native menu items; "Word Wrap" updates its checked state.
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]

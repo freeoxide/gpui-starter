@@ -17,8 +17,9 @@ use gpui_kit::{prelude::*, *};
 use crate::gallery::registry::GallerySection;
 use crate::ui::canvas::{Canvas, CanvasState};
 use crate::ui::floating::{
-    FloatAnchor, FloatLevel, FloatingHandle, FloatingSpec, FloatingWindowId, Placement9,
-    close_floating, floating_snapshot, respawn_floating, spawn_floating,
+    FloatAnchor, FloatLevel, FloatingHandle, FloatingSpec, FloatingWindowId,
+    FloatingWindowRegistry, Placement9, close_floating, floating_snapshot, respawn_floating,
+    spawn_floating,
 };
 
 use super::demo::section;
@@ -43,12 +44,29 @@ impl FloatingCanvasSection {
         let subscriptions = vec![
             cx.observe(&paint_canvas, |_, _, cx| cx.notify()),
             cx.observe(&metrics, |_, _, cx| cx.notify()),
+            // Registry mutations include floats closed by their own window
+            // chrome, so open counts and disabled state recompute from it.
+            cx.observe_global::<FloatingWindowRegistry>(|this, cx| {
+                this.sync_hud_demand(cx);
+            }),
         ];
-        Self {
+        let mut this = Self {
             paint_canvas,
             metrics,
             _subscriptions: subscriptions,
-        }
+        };
+        this.sync_hud_demand(cx);
+        this
+    }
+
+    fn sync_hud_demand(&mut self, cx: &mut Context<Self>) {
+        let open_huds = floating_snapshot(cx)
+            .iter()
+            .filter(|entry| entry.id.0.starts_with(HUD_ID_PREFIX))
+            .count();
+        self.metrics
+            .update(cx, |metrics, _| metrics.set_open_huds(open_huds));
+        cx.notify();
     }
 
     pub(crate) fn detach_paint(&mut self, cx: &mut Context<Self>) {

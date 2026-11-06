@@ -20,7 +20,7 @@ use gpui_kit::{
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 /// One todo row. `id` is the stable domain identity, never a position.
 struct Todo {

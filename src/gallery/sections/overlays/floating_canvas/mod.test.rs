@@ -5,7 +5,10 @@ use gpui_kit::{
 };
 
 use crate::ui::canvas::{CanvasPointerEvent, CanvasState, ToolContext};
-use crate::ui::floating::{close_floating, floating_snapshot, init};
+use crate::ui::floating::{
+    FloatAnchor, FloatLevel, FloatingSpec, FloatingWindowId, Placement9, close_floating,
+    floating_snapshot, init, spawn_floating,
+};
 
 use super::hud::HUD_ID_PREFIX;
 use super::paint::MINI_PAINT_ID;
@@ -186,6 +189,25 @@ fn close_ours_closes_only_this_sections_floats(cx: &mut TestAppContext) {
     let mut cx = VisualTestContext::from_window(window.into(), cx);
     let section = cx.update(super::FloatingCanvasSection::view);
 
+    // A sibling section's float shares the registry and must survive the
+    // close, so the is_ours filter is exercised against a foreign id.
+    let foreign_spec = FloatingSpec::new(
+        FloatingWindowId("window-shims-demo".into()),
+        size(px(320.), px(180.)),
+    )
+    .title("Foreign float")
+    .level(FloatLevel::Floating)
+    .anchor(FloatAnchor::Screen {
+        display: None,
+        placement: Placement9::Center,
+        offset: point(px(0.), px(0.)),
+    })
+    .focus(false);
+    let foreign_spawned = cx.update(|_, cx| {
+        spawn_floating(foreign_spec, |_, cx| cx.new(|_| StubView).into(), cx).is_ok()
+    });
+    assert!(foreign_spawned, "foreign float must spawn");
+
     cx.update(|_, cx| {
         section.update(cx, |this, cx| {
             this.detach_paint(cx);
@@ -193,15 +215,21 @@ fn close_ours_closes_only_this_sections_floats(cx: &mut TestAppContext) {
             this.open_shader(cx);
         })
     });
+    let ids_before = cx.update(|_, cx| floating_snapshot(cx).len());
+    assert_eq!(ids_before, 4, "three canvas floats plus the foreign one");
+
     let closed = cx.update(|_, cx| section.update(cx, |this, cx| this.close_ours(cx)));
     assert_eq!(closed, 3);
-    let ours = cx.update(|_, cx| {
-        floating_snapshot(cx)
-            .into_iter()
-            .filter(|entry| entry.id.0.starts_with("canvas-"))
-            .count()
-    });
-    assert_eq!(ours, 0);
+    let remaining: Vec<_> = cx
+        .update(|_, cx| floating_snapshot(cx))
+        .into_iter()
+        .map(|entry| entry.id.0.to_string())
+        .collect();
+    assert_eq!(
+        remaining,
+        vec!["window-shims-demo".to_string()],
+        "only the foreign float survives"
+    );
     let idle = cx.update(|_, cx| section.update(cx, |this, cx| this.close_ours(cx)));
     assert_eq!(idle, 0);
 }

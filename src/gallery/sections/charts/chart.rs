@@ -201,10 +201,13 @@ pub(crate) struct ChartData {
     tsla_statements: Vec<(SharedString, Vec<TslaNode>, Vec<SankeyLink>)>,
 }
 
-/// `1234` as `1.2K`, `1234567` as `1.2M`; smaller numbers keep their digits.
+/// `1234` as `1.2K`, `1234567` as `1.2M`, `1.2e9` as `1.2B`; smaller numbers
+/// keep their digits.
 pub(crate) fn compact(value: f64) -> String {
     let magnitude = value.abs();
-    if magnitude >= 1_000_000. {
+    if magnitude >= 1_000_000_000. {
+        format!("{:.1}B", value / 1_000_000_000.)
+    } else if magnitude >= 1_000_000. {
         format!("{:.1}M", value / 1_000_000.)
     } else if magnitude >= 10_000. {
         format!("{:.0}K", value / 1_000.)
@@ -1341,7 +1344,10 @@ impl ChartCard {
                         .value_label(|d, _| format!("${:.2}B", d.value / 1_000_000_000.).into())
                 };
 
-                let revenue = nodes.first();
+                let revenue = nodes
+                    .iter()
+                    .find(|node| node.name.as_ref() == "Total Revenue")
+                    .or_else(|| nodes.first());
                 Card::new("TSLA Income Statement", period.clone())
                     .chart(chart)
                     .headline(match revenue {
