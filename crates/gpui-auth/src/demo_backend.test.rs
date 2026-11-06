@@ -236,17 +236,11 @@ fn expired_sessions_are_rejected_swept_and_purged_from_by_access() {
     // touch the still-live session.
     backend.revoke_impl(stale.tokens.access_token.expose());
     let live = backend
-        .refresh_impl(
-            fresh.tokens.refresh_token.as_ref().unwrap().expose(),
-            late,
-        )
+        .refresh_impl(fresh.tokens.refresh_token.as_ref().unwrap().expose(), late)
         .unwrap();
     backend.revoke_impl(live.access_token.expose());
     assert!(matches!(
-        backend.refresh_impl(
-            fresh.tokens.refresh_token.as_ref().unwrap().expose(),
-            late
-        ),
+        backend.refresh_impl(fresh.tokens.refresh_token.as_ref().unwrap().expose(), late),
         Err(AuthError::RefreshRejected)
     ));
     assert!(

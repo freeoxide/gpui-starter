@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use crate::error::AuthError;
-use crate::provider::AuthProvider;
+use crate::provider::{AuthProvider, FlowLaunch, RedirectParams};
 use crate::token::{RefreshPolicy, SecretString, TokenSet};
 
 /// Provider id for the email+password flow; also the store key.
@@ -105,18 +105,15 @@ impl AuthProvider for EmailPasswordProvider {
         RefreshPolicy::ReuseUntilDead
     }
 
-    async fn start_flow(
-        &self,
-        _http: reqwest::Client,
-    ) -> Result<crate::provider::FlowLaunch, AuthError> {
+    async fn start_flow(&self, _http: reqwest::Client) -> Result<FlowLaunch, AuthError> {
         Err(AuthError::NoBrowserFlow)
     }
 
     async fn complete_callback(
         &self,
         _http: reqwest::Client,
-        _redirect: crate::provider::RedirectParams,
-        _launch: &crate::provider::FlowLaunch,
+        _redirect: RedirectParams,
+        _launch: &FlowLaunch,
     ) -> Result<TokenSet, AuthError> {
         Err(AuthError::NoBrowserFlow)
     }

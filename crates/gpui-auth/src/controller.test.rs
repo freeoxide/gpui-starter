@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use gpui::{AppContext as _, Entity, Subscription, TestAppContext};
 
@@ -542,10 +543,9 @@ async fn refresh_if_needed_respects_the_margin_and_the_clock(cx: &mut TestAppCon
         )
     });
 
-    fixture.clock.store(
-        EMAIL_IAT + TEST_TTL_SECS - 121,
-        std::sync::atomic::Ordering::SeqCst,
-    );
+    fixture
+        .clock
+        .store(EMAIL_IAT + TEST_TTL_SECS - 121, Ordering::SeqCst);
     drive(&fixture, cx, |controller, cx| {
         controller.refresh_if_needed(120, cx)
     });
@@ -553,10 +553,9 @@ async fn refresh_if_needed_respects_the_margin_and_the_clock(cx: &mut TestAppCon
     assert_eq!(stored.access_token.expose(), "test-access-0");
     assert!(fixture.backend.refresh_seen().is_empty());
 
-    fixture.clock.store(
-        EMAIL_IAT + TEST_TTL_SECS - 120,
-        std::sync::atomic::Ordering::SeqCst,
-    );
+    fixture
+        .clock
+        .store(EMAIL_IAT + TEST_TTL_SECS - 120, Ordering::SeqCst);
     drive(&fixture, cx, |controller, cx| {
         controller.refresh_if_needed(120, cx)
     });
@@ -600,10 +599,9 @@ async fn refresh_if_needed_with_a_dead_refresh_token_errors(cx: &mut TestAppCont
         )
     });
     fixture.backend.reject_refresh();
-    fixture.clock.store(
-        EMAIL_IAT + TEST_TTL_SECS,
-        std::sync::atomic::Ordering::SeqCst,
-    );
+    fixture
+        .clock
+        .store(EMAIL_IAT + TEST_TTL_SECS, Ordering::SeqCst);
     drive(&fixture, cx, |controller, cx| {
         controller.refresh_if_needed(120, cx)
     });
@@ -688,7 +686,7 @@ async fn sign_out_contacts_revoke_and_survives_a_revoke_failure(cx: &mut TestApp
 }
 
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize};
 
 /// Provider whose `start_flow`/`refresh` futures park on a channel gate so
 /// tests can act while a provider call is in flight.
@@ -696,7 +694,7 @@ struct GatedProvider {
     start_gate: Mutex<Option<tokio::sync::mpsc::Receiver<()>>>,
     refresh_gate: Mutex<Option<tokio::sync::mpsc::Receiver<()>>>,
     counter: AtomicU64,
-    refresh_calls: std::sync::atomic::AtomicUsize,
+    refresh_calls: AtomicUsize,
 }
 
 impl GatedProvider {
@@ -708,7 +706,7 @@ impl GatedProvider {
             start_gate: Mutex::new(start_gate),
             refresh_gate: Mutex::new(refresh_gate),
             counter: AtomicU64::new(0),
-            refresh_calls: std::sync::atomic::AtomicUsize::new(0),
+            refresh_calls: AtomicUsize::new(0),
         }
     }
 
