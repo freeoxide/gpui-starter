@@ -1,5 +1,5 @@
 use gpui_kit::prelude::*;
-use gpui_kit::{AnyView, TestAppContext, div, px, size};
+use gpui_kit::{AnyView, TestAppContext, Window, div, px, size};
 
 struct Blank;
 

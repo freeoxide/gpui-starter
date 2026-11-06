@@ -1,5 +1,6 @@
 // No `use super::*`: mod.rs globs `gpui_kit::*`, dragging the kit `test`
 // macro in and making `#[test]` resolve to it recursively.
+use gpui_kit::AppContext as _;
 use gpui_kit::TestAppContext;
 
 use super::ErrorPlaygroundPage;

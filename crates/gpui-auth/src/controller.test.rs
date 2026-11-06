@@ -713,7 +713,9 @@ impl GatedProvider {
     }
 
     async fn wait_for(gate: &Mutex<Option<tokio::sync::mpsc::Receiver<()>>>) {
-        if let Some(receiver) = gate.lock().expect("gate lock").take() {
+        // Rebind so the MutexGuard drops before the await; the guard is not Send.
+        let receiver = gate.lock().expect("gate lock").take();
+        if let Some(mut receiver) = receiver {
             let _ = receiver.recv().await;
         }
     }
