@@ -1,42 +1,7 @@
 use gpui_kit::{App, BorrowAppContext as _, Global, SharedString};
 
-// Native: variants carry the underlying `keyring::Error`. Wasm: keyring does
-// not exist, so the same variant names carry the error message string —
-// callers only ever `Display` the error.
-#[cfg(not(target_family = "wasm"))]
-#[derive(Debug, thiserror::Error)]
-pub enum SecureStorageError {
-    #[error("entry creation failed for '{service}/{key}': {source}")]
-    EntryCreation {
-        service: String,
-        key: String,
-        #[source]
-        source: keyring::Error,
-    },
-    #[error("failed to set secret for '{service}/{key}': {source}")]
-    SetFailed {
-        service: String,
-        key: String,
-        #[source]
-        source: keyring::Error,
-    },
-    #[error("failed to get secret for '{service}/{key}': {source}")]
-    GetFailed {
-        service: String,
-        key: String,
-        #[source]
-        source: keyring::Error,
-    },
-    #[error("failed to delete secret for '{service}/{key}': {source}")]
-    DeleteFailed {
-        service: String,
-        key: String,
-        #[source]
-        source: keyring::Error,
-    },
-}
-
-#[cfg(target_family = "wasm")]
+// Reasons are strings, not `keyring::Error`, so the enum compiles on wasm,
+// where the keyring crate does not exist.
 #[derive(Debug, thiserror::Error)]
 pub enum SecureStorageError {
     #[error("entry creation failed for '{service}/{key}': {reason}")]
@@ -95,7 +60,7 @@ pub fn initialize(cx: &mut App) {
                 .unwrap_or("secure storage unavailable"),
         )
     };
-    crate::capabilities::set("secure_storage", status, cx);
+    crate::capabilities::set(crate::capabilities::Capability::SECURE_STORAGE, status, cx);
 }
 
 /// Wasm: no OS keyring exists — report the backend as unavailable so the
@@ -108,7 +73,7 @@ pub fn initialize(cx: &mut App) {
     };
     cx.set_global(snapshot.clone());
     crate::capabilities::set(
-        "secure_storage",
+        crate::capabilities::Capability::SECURE_STORAGE,
         crate::capabilities::CapabilityStatus::error(WASM_UNAVAILABLE),
         cx,
     );
@@ -130,40 +95,38 @@ fn entry(service: &str, key: &str) -> Result<keyring::Entry, SecureStorageError>
         SecureStorageError::EntryCreation {
             service: service.to_string(),
             key: key.to_string(),
-            source: err,
+            reason: err.to_string(),
         }
     })
 }
 
+/// cx-free core of [`set_secret`]; performs the real (blocking) keyring
+/// write, so call it only from a spawned task.
 #[cfg(not(target_family = "wasm"))]
-pub fn set_secret(
+pub(crate) fn set_secret_blocking(
     service: &str,
     key: &str,
     value: &str,
-    cx: &mut App,
 ) -> Result<(), SecureStorageError> {
-    let entry = entry(service, key)?;
-    entry.set_password(value).map_err(|err| {
+    entry(service, key)?.set_password(value).map_err(|err| {
         tracing::error!(target: "gpui_starter::secure_storage", service, key, "set_password failed: {err}");
-        update_last_error(Some(err.to_string()), cx);
-        SecureStorageError::SetFailed { service: service.to_string(), key: key.to_string(), source: err }
+        SecureStorageError::SetFailed { service: service.to_string(), key: key.to_string(), reason: err.to_string() }
     })?;
     tracing::info!(target: "gpui_starter::secure_storage", service, key, "secret written");
-    update_last_error(None, cx);
     Ok(())
 }
 
+/// cx-free core of [`get_secret`]; performs the real (blocking) keyring
+/// read, so call it only from a spawned task.
 #[cfg(not(target_family = "wasm"))]
-pub fn get_secret(
+pub(crate) fn get_secret_blocking(
     service: &str,
     key: &str,
-    cx: &mut App,
 ) -> Result<Option<SharedString>, SecureStorageError> {
     let entry = entry(service, key)?;
     match entry.get_password() {
         Ok(value) => {
             tracing::info!(target: "gpui_starter::secure_storage", service, key, "secret read");
-            update_last_error(None, cx);
             Ok(Some(value.into()))
         }
         Err(keyring::Error::NoEntry) => {
@@ -175,23 +138,73 @@ pub fn get_secret(
             Err(SecureStorageError::GetFailed {
                 service: service.to_string(),
                 key: key.to_string(),
-                source: err,
+                reason: err.to_string(),
+            })
+        }
+    }
+}
+
+/// cx-free core of [`delete_secret`]; performs the real (blocking) keyring
+/// delete, so call it only from a spawned task.
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn delete_secret_blocking(service: &str, key: &str) -> Result<(), SecureStorageError> {
+    let entry = entry(service, key)?;
+    match entry.delete_credential() {
+        Ok(()) => {
+            tracing::info!(target: "gpui_starter::secure_storage", service, key, "secret deleted");
+            Ok(())
+        }
+        Err(keyring::Error::NoEntry) => {
+            tracing::warn!(target: "gpui_starter::secure_storage", service, key, "no entry to delete");
+            Ok(())
+        }
+        Err(err) => {
+            tracing::error!(target: "gpui_starter::secure_storage", service, key, "delete failed: {err}");
+            Err(SecureStorageError::DeleteFailed {
+                service: service.to_string(),
+                key: key.to_string(),
+                reason: err.to_string(),
             })
         }
     }
 }
 
 #[cfg(not(target_family = "wasm"))]
+pub fn set_secret(
+    service: &str,
+    key: &str,
+    value: &str,
+    cx: &mut App,
+) -> Result<(), SecureStorageError> {
+    let result = set_secret_blocking(service, key, value);
+    match &result {
+        Ok(()) => update_last_error(None, cx),
+        Err(err) => update_last_error(Some(err.to_string()), cx),
+    }
+    result
+}
+
+#[cfg(not(target_family = "wasm"))]
+pub fn get_secret(
+    service: &str,
+    key: &str,
+    cx: &mut App,
+) -> Result<Option<SharedString>, SecureStorageError> {
+    let result = get_secret_blocking(service, key);
+    if result.is_ok() {
+        update_last_error(None, cx);
+    }
+    result
+}
+
+#[cfg(not(target_family = "wasm"))]
 pub fn delete_secret(service: &str, key: &str, cx: &mut App) -> Result<(), SecureStorageError> {
-    let entry = entry(service, key)?;
-    entry.delete_credential().map_err(|err| {
-        tracing::error!(target: "gpui_starter::secure_storage", service, key, "delete failed: {err}");
-        update_last_error(Some(err.to_string()), cx);
-        SecureStorageError::DeleteFailed { service: service.to_string(), key: key.to_string(), source: err }
-    })?;
-    tracing::info!(target: "gpui_starter::secure_storage", service, key, "secret deleted");
-    update_last_error(None, cx);
-    Ok(())
+    let result = delete_secret_blocking(service, key);
+    match &result {
+        Ok(()) => update_last_error(None, cx),
+        Err(err) => update_last_error(Some(err.to_string()), cx),
+    }
+    result
 }
 
 #[cfg(target_family = "wasm")]
@@ -233,7 +246,8 @@ pub fn delete_secret(service: &str, key: &str, cx: &mut App) -> Result<(), Secur
     })
 }
 
-fn update_last_error(last_error: Option<String>, cx: &mut App) {
+/// Writes the secure-storage snapshot's `last_error`; pass `None` to clear.
+pub(crate) fn update_last_error(last_error: Option<String>, cx: &mut App) {
     cx.update_global::<SecureStorageSnapshot, _>(|state, _cx| {
         state.last_error = last_error;
     });

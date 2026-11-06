@@ -106,6 +106,10 @@ fn complete_callback_exchanges_and_builds_the_profile() {
         assert!(exchange[0].body.contains("code=gh-code"));
         assert!(exchange[0].body.contains("client_id=gh-client"));
         assert!(exchange[0].body.contains("client_secret=gh-secret"));
+        assert!(
+            exchange[0].body.contains("code_verifier="),
+            "the PKCE verifier travels with the exchange"
+        );
     });
 }
 
@@ -176,6 +180,32 @@ fn revoke_deletes_with_basic_auth() {
         let authorization = revocations[0].authorization.as_deref().expect("basic auth");
         assert!(authorization.starts_with("Basic "));
         assert!(revocations[0].body.contains("gh-access-1"));
+    });
+}
+
+#[test]
+fn revoke_failure_status_maps_to_provider_denied() {
+    let rt = scratch_runtime();
+    rt.block_on(async {
+        let fake = FakeIdP::spawn(rt.handle());
+        let mut provider = GitHubProvider::new(&github_config(), RedirectMode::Loopback);
+        let origin = fake.origin();
+        provider.set_endpoints(
+            &format!("{origin}/login/oauth/authorize"),
+            &format!("{origin}/login/oauth/access_token"),
+            &format!("{origin}/missing"),
+        );
+        let error = provider
+            .revoke(reqwest::Client::new(), "gh-access-1")
+            .await
+            .expect_err("unrouted revoke endpoint");
+        assert!(
+            matches!(
+                error,
+                gpui_auth::AuthError::ProviderDenied { ref error, .. } if error.contains("404")
+            ),
+            "got: {error:?}"
+        );
     });
 }
 

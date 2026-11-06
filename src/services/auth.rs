@@ -9,13 +9,14 @@
 
 use std::sync::Arc;
 
+#[cfg(not(target_family = "wasm"))]
+use async_trait::async_trait;
 #[cfg(target_family = "wasm")]
 use gpui_auth::MockProvider;
 #[cfg(not(target_family = "wasm"))]
-use gpui_auth::{AuthBackend, DemoBackend, EmailPasswordProvider};
+use gpui_auth::{AuthBackend, AuthError, DemoBackend, EmailPasswordProvider, TokenSet};
 use gpui_auth::{
-    AuthController, AuthError, AuthEvent, AuthIo, AuthProvider, AuthState, PasswordAuth, TokenSet,
-    TokenStore,
+    AuthController, AuthEvent, AuthIo, AuthProvider, AuthState, PasswordAuth, TokenStore,
 };
 use gpui_kit::{App, AppContext as _, AsyncApp, Entity, Global, Subscription};
 
@@ -26,19 +27,23 @@ const KEYRING_SERVICE: &str = "gpui-starter.auth";
 /// App-side [`TokenStore`] over `secure_storage`: service
 /// `gpui-starter.auth`, key = provider id, value = serde_json(`TokenSet`).
 /// A corrupt row reads as a miss (signed out), never a hard failure.
+/// Native-only: wasm installs `InMemoryStore` instead.
+#[cfg(not(target_family = "wasm"))]
 pub struct KeyringStore;
 
+#[cfg(not(target_family = "wasm"))]
+#[async_trait]
 impl TokenStore for KeyringStore {
-    fn save(&self, provider_id: &str, tokens: &TokenSet, cx: &mut App) -> Result<(), AuthError> {
+    async fn save(&self, provider_id: &str, tokens: &TokenSet) -> Result<(), AuthError> {
         let json =
             serde_json::to_string(tokens).map_err(|err| AuthError::Storage(err.to_string()))?;
-        crate::services::secure_storage::set_secret(KEYRING_SERVICE, provider_id, &json, cx)
+        crate::services::secure_storage::set_secret_blocking(KEYRING_SERVICE, provider_id, &json)
             .map_err(|err| AuthError::Storage(err.to_string()))
     }
 
-    fn load(&self, provider_id: &str, cx: &mut App) -> Result<Option<TokenSet>, AuthError> {
+    async fn load(&self, provider_id: &str) -> Result<Option<TokenSet>, AuthError> {
         let Some(json) =
-            crate::services::secure_storage::get_secret(KEYRING_SERVICE, provider_id, cx)
+            crate::services::secure_storage::get_secret_blocking(KEYRING_SERVICE, provider_id)
                 .map_err(|err| AuthError::Storage(err.to_string()))?
         else {
             return Ok(None);
@@ -57,9 +62,9 @@ impl TokenStore for KeyringStore {
         }
     }
 
-    #[cfg(not(target_family = "wasm"))]
-    fn delete(&self, provider_id: &str, cx: &mut App) -> Result<(), AuthError> {
-        match crate::services::secure_storage::delete_secret(KEYRING_SERVICE, provider_id, cx) {
+    async fn delete(&self, provider_id: &str) -> Result<(), AuthError> {
+        match crate::services::secure_storage::delete_secret_blocking(KEYRING_SERVICE, provider_id)
+        {
             Ok(()) => Ok(()),
             // Typed miss detection: the Display text never spells "NoEntry"
             // (keyring-3.6.3/src/error.rs:68), so string matching cannot see it.
@@ -69,12 +74,6 @@ impl TokenStore for KeyringStore {
             }) => Ok(()),
             Err(err) => Err(AuthError::Storage(err.to_string())),
         }
-    }
-
-    #[cfg(target_family = "wasm")]
-    fn delete(&self, provider_id: &str, cx: &mut App) -> Result<(), AuthError> {
-        crate::services::secure_storage::delete_secret(KEYRING_SERVICE, provider_id, cx)
-            .map_err(|err| AuthError::Storage(err.to_string()))
     }
 }
 
@@ -87,6 +86,18 @@ struct AuthHandleInner {
 pub struct AuthHandle(AuthHandleInner);
 
 impl Global for AuthHandle {}
+
+// Mirrors the client built in `tokio_runtime::new`: reqwest's default client
+// has no request timeout, and a hung token endpoint would wedge the flow.
+#[cfg(not(target_family = "wasm"))]
+fn fallback_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .cookie_store(true)
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("failed to build reqwest client")
+}
 
 /// Boot wiring: globals must already be up (tokio runtime, secure storage,
 /// session). Idempotent; a second call replaces the handle.
@@ -103,7 +114,7 @@ pub fn install(cx: &mut App) {
                 "tokio runtime global absent; auth provider futures run on the GPUI executor"
             );
             AuthIo {
-                http: reqwest::Client::new(),
+                http: fallback_http_client(),
                 runtime: None,
             }
         }
@@ -149,13 +160,11 @@ pub(crate) fn install_with(
     let session_observer = cx.observe(&controller, |controller, cx| {
         let mapped = match controller.read(cx).state() {
             AuthState::SignedOut => SessionState::SignedOut,
-            AuthState::SigningIn | AuthState::SigningUp | AuthState::AwaitingChallenge { .. } => {
-                SessionState::SigningIn
-            }
+            AuthState::SigningIn | AuthState::SigningUp => SessionState::SigningIn,
             AuthState::SignedIn { account_label } => SessionState::SignedIn {
                 account_label: account_label.clone(),
             },
-            AuthState::Error(message) => SessionState::Error(message.clone()),
+            AuthState::Error(error) => SessionState::Error(error.to_string()),
         };
         crate::services::session::set_state(mapped, cx);
     });
@@ -207,8 +216,8 @@ pub(crate) fn install_with(
     })
     .detach();
     set_capabilities(cx);
-    // After the wiring above: restore's notify must reach the session
-    // observer, and it flushes at this update's boundary.
+    // Restore loads in a spawned task; its notify reaches the session
+    // observer when the load lands.
     controller.update(cx, |controller, cx| controller.restore(cx));
 }
 
@@ -225,10 +234,10 @@ fn set_capabilities(cx: &mut App) {
         ),
         last_error: None,
     };
-    crate::capabilities::set("auth_email", email, cx);
+    crate::capabilities::set(crate::capabilities::Capability::AUTH_EMAIL, email, cx);
     #[cfg(target_family = "wasm")]
     crate::capabilities::set(
-        "auth_social",
+        crate::capabilities::Capability::AUTH_SOCIAL,
         crate::capabilities::CapabilityStatus {
             supported: false,
             enabled: true,

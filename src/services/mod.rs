@@ -25,3 +25,7 @@ pub mod telemetry;
 pub mod tokio_runtime;
 pub mod undo_stack;
 pub mod updater;
+
+#[cfg(test)]
+#[path = "globals_budget.test.rs"]
+mod globals_budget_test;

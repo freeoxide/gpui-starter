@@ -12,11 +12,34 @@ pub struct TokioRuntime {
 #[cfg(not(target_family = "wasm"))]
 impl TokioRuntime {
     pub fn new() -> Self {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
+        let runtime = match tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .thread_name("gpui-io")
             .build()
-            .expect("failed to create tokio runtime");
+        {
+            Ok(runtime) => Arc::new(runtime),
+            Err(err) => {
+                tracing::warn!(
+                    target: "gpui_starter::tokio_runtime",
+                    error = %err,
+                    "multi-thread runtime unavailable; falling back to a current-thread runtime"
+                );
+                // An undriven current-thread runtime would strand every
+                // spawned task, so park one named thread on block_on.
+                let fallback = Arc::new(
+                    tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .expect("failed to create tokio runtime"),
+                );
+                let driver = fallback.clone();
+                std::thread::Builder::new()
+                    .name("gpui-io".into())
+                    .spawn(move || driver.block_on(std::future::pending::<()>()))
+                    .expect("failed to spawn tokio driver thread");
+                fallback
+            }
+        };
         tracing::info!(target: "gpui_starter::tokio_runtime", "tokio runtime created");
 
         // Build the reqwest client inside the runtime context so the connector
@@ -30,7 +53,7 @@ impl TokioRuntime {
             .expect("failed to build reqwest client");
 
         Self {
-            runtime: Arc::new(runtime),
+            runtime,
             http_client,
         }
     }

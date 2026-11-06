@@ -10,11 +10,10 @@ use crate::notifications::{
     ACTION_OPEN, ACTION_REPLY, ACTION_SNOOZE, CATEGORY_ACTIONS, CATEGORY_REPLY,
 };
 use crate::notifications::{
-    NotificationBackendKind, NotificationCapabilities, NotificationPermissionState,
-    NotificationRequest,
+    DESKTOP_ENTRY_ID, NotificationBackendKind, NotificationCapabilities,
+    NotificationPermissionState, NotificationRequest,
 };
 
-const APP_ID: &str = "com.gpui-starter.app";
 const LOG: &str = "gpui_starter::notifications::user_notify";
 
 pub struct UserNotifyBackend {
@@ -28,7 +27,7 @@ pub struct UserNotifyBackend {
 
 impl UserNotifyBackend {
     pub fn new() -> anyhow::Result<Self> {
-        tracing::info!(target: LOG, app_id = APP_ID, "initializing user-notify backend");
+        tracing::info!(target: LOG, app_id = DESKTOP_ENTRY_ID, "initializing user-notify backend");
 
         if let Err(reason) = platform_primary_runtime_status() {
             tracing::warn!(target: LOG, reason, "user-notify backend unavailable");
@@ -38,7 +37,9 @@ impl UserNotifyBackend {
         // Windows silently drops toasts whose AUMID has no Start Menu
         // shortcut; failure is logged, never fatal to the backend.
         #[cfg(target_os = "windows")]
-        if let Err(reason) = crate::platform::toast_identity::ensure_toast_identity(APP_ID) {
+        if let Err(reason) =
+            crate::platform::toast_identity::ensure_toast_identity(DESKTOP_ENTRY_ID)
+        {
             tracing::warn!(target: LOG, reason, "toast identity setup failed");
         }
 
@@ -61,7 +62,7 @@ impl UserNotifyBackend {
 
         #[cfg(target_os = "macos")]
         let manager = {
-            let manager = user_notify::get_notification_manager(APP_ID.to_string(), None);
+            let manager = user_notify::get_notification_manager(DESKTOP_ENTRY_ID.to_string(), None);
             if let Err(err) = manager.register(
                 Box::new(|response| {
                     tracing::info!(

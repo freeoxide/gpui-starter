@@ -12,7 +12,7 @@ use oauth2::{
 };
 use serde::Deserialize;
 
-use super::{PendingRedirect, start_redirect, token_set};
+use super::{PendingRedirect, revoke_denied, start_redirect, token_set};
 use crate::services::auth_social::{ProviderConfig, ProviderKind, RedirectMode};
 
 const DEFAULT_AUTHORIZE_URL: &str = "https://github.com/login/oauth/authorize";
@@ -333,10 +333,9 @@ impl AuthProvider for GitHubProvider {
             .await
             .map_err(|err| AuthError::Network(err.to_string()))?;
         if !response.status().is_success() {
-            return Err(AuthError::Network(format!(
-                "token revocation returned {}",
-                response.status()
-            )));
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(revoke_denied(status, body));
         }
         Ok(())
     }

@@ -1,20 +1,13 @@
-//! Removable system controls feature. The `system_controls` service and
-//! `SystemControlsPage` are the only public surfaces. Removal = delete this
-//! directory, src/platform/system_controls/, and src/features/pages/
-//! system_controls.rs, then revert the seam touches: the pub mod lines in
-//! services/mod.rs, platform/mod.rs, and features/pages/mod.rs, the
-//! system_controls entry in lib.rs's services re-export, the initialize call
-//! in app/init.rs, the Page::SystemControls arms and all() entry in
-//! shell/sidebar.rs, the VALID_HOSTS entry in shell/route.rs, the AppRoot
-//! wiring in shell/root/app_root/state.rs, the OpenSystemControls command and
-//! its three arms in services/commands.rs, the page count in
-//! tests/e2e_navigation.rs, the system_controls_* + nav_system_controls +
-//! command_system_controls* keys in locales/en.yml and locales/zh-CN.yml, the
-//! starship-battery/zbus/libpulse-binding/brightness/objc2 lines and
-//! regenerated Cargo.lock in Cargo.toml, and libpulse-dev in
-//! scripts/install-linux-deps.sh.
+//! System controls service (battery, volume, brightness, bluetooth); a
+//! self-contained feature removed with its platform twin and page.
 
+#[cfg(not(target_family = "wasm"))]
+use crate::platform::system_controls::SystemOp;
+#[cfg(not(target_family = "wasm"))]
+use gpui_kit::Task;
 use gpui_kit::{App, Global, SharedString};
+
+use crate::capabilities::Capability;
 #[cfg(not(target_family = "wasm"))]
 use gpui_kit::{AppContext as _, BorrowAppContext as _};
 #[cfg(not(target_family = "wasm"))]
@@ -137,7 +130,7 @@ impl BluetoothAccess {
         match state {
             ControlState::Ready(_) => BluetoothAccess::Active,
             ControlState::Unsupported { reason_key } => BluetoothAccess::Denied {
-                reason: reason_literal(*reason_key).into(),
+                reason: crate::i18n::localize(*reason_key).into(),
             },
             ControlState::Unavailable { error } => BluetoothAccess::Denied {
                 reason: error.clone(),
@@ -181,7 +174,7 @@ pub(crate) fn web_unsupported_snapshot() -> SystemControlsSnapshot {
             reason_key: REASON_WEB,
         },
         bluetooth_access: BluetoothAccess::Denied {
-            reason: reason_literal(REASON_WEB).into(),
+            reason: crate::i18n::localize(REASON_WEB).into(),
         },
     }
 }
@@ -231,17 +224,41 @@ pub fn initialize(cx: &mut App) {
         write_capabilities(&snapshot, cx);
     }
     #[cfg(not(target_family = "wasm"))]
-    initialize_with(Readers::platform(), cx);
+    {
+        initialize_with(Readers::platform(), cx);
+        start_poller(cx);
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// The one periodic refresh loop, shared by every page and widget; it reads
+/// only while an app window is focused (nobody watches a backgrounded app).
+#[cfg(not(target_family = "wasm"))]
+fn start_poller(cx: &mut App) {
+    cx.spawn(async move |cx| {
+        loop {
+            cx.background_executor().timer(POLL_INTERVAL).await;
+            cx.update(|cx| {
+                if cx.active_window().is_some() {
+                    refresh(cx);
+                }
+            });
+        }
+    })
+    .detach();
 }
 
 #[cfg(not(target_family = "wasm"))]
 fn initialize_with(readers: Readers, cx: &mut App) {
     let snapshot = pending_snapshot();
+    cx.set_global(readers.clone());
     cx.set_global(snapshot.clone());
     write_capabilities(&snapshot, cx);
-    refresh_with(readers.clone(), cx);
+    refresh_with(readers, cx);
     if crate::app_state::with_config(cx, |config| config.bluetooth_monitoring_enabled) {
-        enable_with(readers, cx);
+        enable_with(seam(cx), cx);
     }
 }
 
@@ -255,19 +272,24 @@ pub fn snapshot(cx: &App) -> SystemControlsSnapshot {
 /// the gate is Active; Global swap, capability write; no-op on wasm.
 pub fn refresh(cx: &mut App) {
     #[cfg(not(target_family = "wasm"))]
-    refresh_with(Readers::platform(), cx);
+    refresh_with(seam(cx), cx);
     #[cfg(target_family = "wasm")]
     let _ = cx;
 }
 
-/// Platform read seam; Arc'd so tests can substitute counting mocks (the
-/// real Bluetooth reader fires the TCC prompt on first call).
+/// Platform read/apply seam; Arc'd so tests can substitute counting mocks
+/// (the real Bluetooth reader fires the TCC prompt on first call, the real
+/// applier writes to the OS).
 #[cfg(not(target_family = "wasm"))]
 #[derive(Clone)]
 struct Readers {
     read_core: Arc<dyn Fn() -> CoreControlsSnapshot + Send + Sync>,
     read_bluetooth: Arc<dyn Fn() -> ControlState<BluetoothStatus> + Send + Sync>,
+    apply_op: Arc<dyn Fn(SystemOp) -> Result<(), String> + Send + Sync>,
 }
+
+#[cfg(not(target_family = "wasm"))]
+impl Global for Readers {}
 
 #[cfg(not(target_family = "wasm"))]
 impl Readers {
@@ -275,16 +297,47 @@ impl Readers {
         Self {
             read_core: Arc::new(crate::platform::system_controls::read_core),
             read_bluetooth: Arc::new(crate::platform::system_controls::read_bluetooth),
+            apply_op: Arc::new(crate::platform::system_controls::apply),
         }
     }
 }
 
+/// The installed seam; production installs the platform readers at
+/// initialize, tests substitute mocks so no test touches the OS.
+#[cfg(not(target_family = "wasm"))]
+fn seam(cx: &App) -> Readers {
+    cx.try_global::<Readers>()
+        .cloned()
+        .unwrap_or_else(Readers::platform)
+}
+
+/// Single-flight for refreshes plus read ordering: the task slot keeps
+/// refreshes from overlapping, and the generation counters drop reads
+/// superseded by a write or a newer handshake while they were in flight.
+#[cfg(not(target_family = "wasm"))]
+#[derive(Default)]
+struct ControlGate {
+    task: Option<Task<()>>,
+    refresh_generation: u64,
+    handshake_generation: u64,
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl Global for ControlGate {}
+
 #[cfg(not(target_family = "wasm"))]
 fn refresh_with(readers: Readers, cx: &mut App) {
+    if cx
+        .try_global::<ControlGate>()
+        .is_some_and(|gate| gate.task.is_some())
+    {
+        return;
+    }
     let include_bluetooth = cx
         .try_global::<SystemControlsSnapshot>()
         .is_some_and(|snapshot| snapshot.bluetooth_access.polls_bluetooth());
-    cx.spawn(async move |cx| {
+    let generation = cx.default_global::<ControlGate>().refresh_generation;
+    let task = cx.spawn(async move |cx| {
         let core_readers = readers.clone();
         let core = cx
             .background_spawn(async move { (core_readers.read_core)() })
@@ -297,29 +350,40 @@ fn refresh_with(readers: Readers, cx: &mut App) {
         } else {
             None
         };
-        cx.update(|cx| {
+        let _ = cx.update(|cx| {
+            let current_generation = cx
+                .try_global::<ControlGate>()
+                .map_or(0, |gate| gate.refresh_generation);
             let snapshot = cx.update_global::<SystemControlsSnapshot, _>(|global, _| {
                 // A disable that landed while the read was in flight owns the
                 // gate; the closed gate keeps its gated row.
                 let bluetooth = bluetooth.filter(|_| global.bluetooth_access.polls_bluetooth());
-                *global = merge_refresh(global, core, bluetooth);
+                *global = merge_refresh(global, generation, current_generation, core, bluetooth);
                 global.clone()
             });
             write_capabilities(&snapshot, cx);
-        })
-    })
-    .detach();
+            cx.global_mut::<ControlGate>().task = None;
+        });
+    });
+    cx.default_global::<ControlGate>().task = Some(task);
 }
 
 /// Fold a platform read into the Global: core tracks always replace, the
-/// Bluetooth track only when the read included it (gate Active). The
+/// Bluetooth track only when the read included it (gate Active). A read
+/// whose captured generation was superseded by a write while it was in
+/// flight is dropped, so it cannot revert the just-written value. The
 /// access state belongs to the handshake and is never changed here, so a
 /// runtime poll failure degrades the row without stopping the poller.
 fn merge_refresh(
     current: &SystemControlsSnapshot,
+    captured_generation: u64,
+    current_generation: u64,
     core: CoreControlsSnapshot,
     bluetooth: Option<ControlState<BluetoothStatus>>,
 ) -> SystemControlsSnapshot {
+    if captured_generation != current_generation {
+        return current.clone();
+    }
     let mut next = current.clone();
     next.battery = core.battery;
     next.volume = core.volume;
@@ -336,7 +400,7 @@ fn merge_refresh(
 /// the gate is already Active.
 pub fn enable_bluetooth(cx: &mut App) {
     #[cfg(not(target_family = "wasm"))]
-    enable_with(Readers::platform(), cx);
+    enable_with(seam(cx), cx);
     #[cfg(target_family = "wasm")]
     let _ = cx;
 }
@@ -354,6 +418,11 @@ fn enable_with(readers: Readers, cx: &mut App) {
     if busy {
         return;
     }
+    let generation = {
+        let gate = cx.default_global::<ControlGate>();
+        gate.handshake_generation += 1;
+        gate.handshake_generation
+    };
     let snapshot = cx.update_global::<SystemControlsSnapshot, _>(|global, _| {
         global.bluetooth_access = BluetoothAccess::Requesting;
         global.bluetooth = requesting_bluetooth();
@@ -366,10 +435,13 @@ fn enable_with(readers: Readers, cx: &mut App) {
             .background_spawn(async move { (readers.read_bluetooth)() })
             .await;
         cx.update(|cx| {
+            let current_generation = cx
+                .try_global::<ControlGate>()
+                .map_or(0, |gate| gate.handshake_generation);
             let snapshot = cx.update_global::<SystemControlsSnapshot, _>(|global, _| {
-                // A disable that landed while the read was in flight owns the
-                // gate; commit only while this handshake is still pending.
-                if matches!(global.bluetooth_access, BluetoothAccess::Requesting) {
+                // A disable or re-enable that landed while the read was in
+                // flight owns the gate; only the newest handshake commits.
+                if current_generation == generation {
                     global.bluetooth = state.clone();
                     global.bluetooth_access = BluetoothAccess::from_read(&state);
                 }
@@ -387,6 +459,8 @@ fn enable_with(readers: Readers, cx: &mut App) {
 pub fn disable_bluetooth(cx: &mut App) {
     #[cfg(not(target_family = "wasm"))]
     {
+        // Any handshake read still in flight belongs to a superseded gate.
+        cx.default_global::<ControlGate>().handshake_generation += 1;
         let snapshot = cx.update_global::<SystemControlsSnapshot, _>(|global, _| {
             global.bluetooth_access = BluetoothAccess::NotRequested;
             global.bluetooth = gated_bluetooth();
@@ -404,16 +478,17 @@ pub fn set_volume(level: f32, cx: &mut App) {
     #[cfg(not(target_family = "wasm"))]
     {
         let level = clamp01(level);
+        let mut wrote = false;
         cx.update_global::<SystemControlsSnapshot, _>(|global, _| {
             if let ControlState::Ready(volume) = &mut global.volume {
                 volume.level = level;
+                wrote = true;
             }
         });
-        apply_and_refresh(
-            crate::platform::system_controls::SystemOp::SetVolume { level },
-            "system_controls_volume",
-            cx,
-        );
+        if wrote {
+            bump_refresh_generation(cx);
+        }
+        apply_and_refresh(SystemOp::SetVolume { level }, "system_controls_volume", cx);
     }
     #[cfg(target_family = "wasm")]
     let _ = (level, cx);
@@ -423,13 +498,18 @@ pub fn set_volume(level: f32, cx: &mut App) {
 pub fn set_volume_muted(muted: bool, cx: &mut App) {
     #[cfg(not(target_family = "wasm"))]
     {
+        let mut wrote = false;
         cx.update_global::<SystemControlsSnapshot, _>(|global, _| {
             if let ControlState::Ready(volume) = &mut global.volume {
                 volume.muted = muted;
+                wrote = true;
             }
         });
+        if wrote {
+            bump_refresh_generation(cx);
+        }
         apply_and_refresh(
-            crate::platform::system_controls::SystemOp::SetVolumeMuted { muted },
+            SystemOp::SetVolumeMuted { muted },
             "system_controls_mute",
             cx,
         );
@@ -457,8 +537,9 @@ pub fn set_brightness(level: f32, cx: &mut App) {
             );
             return;
         }
+        bump_refresh_generation(cx);
         apply_and_refresh(
-            crate::platform::system_controls::SystemOp::SetBrightness { level },
+            SystemOp::SetBrightness { level },
             "system_controls_brightness",
             cx,
         );
@@ -489,8 +570,9 @@ pub fn set_bluetooth_powered(powered: bool, cx: &mut App) {
             );
             return;
         }
+        bump_refresh_generation(cx);
         apply_and_refresh(
-            crate::platform::system_controls::SystemOp::SetBluetoothPowered { powered },
+            SystemOp::SetBluetoothPowered { powered },
             "system_controls_powered",
             cx,
         );
@@ -499,16 +581,18 @@ pub fn set_bluetooth_powered(powered: bool, cx: &mut App) {
     let _ = (powered, cx);
 }
 
+/// Every optimistic mirror write bumps the refresh generation so a read
+/// that was already in flight cannot merge the pre-write value over it.
 #[cfg(not(target_family = "wasm"))]
-fn apply_and_refresh(
-    op: crate::platform::system_controls::SystemOp,
-    label_key: &'static str,
-    cx: &mut App,
-) {
+fn bump_refresh_generation(cx: &mut App) {
+    cx.default_global::<ControlGate>().refresh_generation += 1;
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn apply_and_refresh(op: SystemOp, label_key: &'static str, cx: &mut App) {
+    let applier = seam(cx).apply_op;
     cx.spawn(async move |cx| {
-        let result = cx
-            .background_spawn(async move { crate::platform::system_controls::apply(op) })
-            .await;
+        let result = cx.background_spawn(async move { applier(op) }).await;
         cx.update(|cx| {
             if let Err(error) = result {
                 tracing::warn!(
@@ -536,18 +620,22 @@ fn apply_and_refresh(
 }
 
 fn write_capabilities(snapshot: &SystemControlsSnapshot, cx: &mut App) {
-    write_capability("system_controls_battery", &snapshot.battery, cx);
+    write_capability(Capability::SYSTEM_CONTROLS_BATTERY, &snapshot.battery, cx);
     crate::capabilities::set(
-        "system_controls_bluetooth",
+        Capability::SYSTEM_CONTROLS_BLUETOOTH,
         bluetooth_capability(&snapshot.bluetooth_access, &snapshot.bluetooth),
         cx,
     );
-    write_capability("system_controls_volume", &snapshot.volume, cx);
-    write_capability("system_controls_brightness", &snapshot.brightness, cx);
+    write_capability(Capability::SYSTEM_CONTROLS_VOLUME, &snapshot.volume, cx);
+    write_capability(
+        Capability::SYSTEM_CONTROLS_BRIGHTNESS,
+        &snapshot.brightness,
+        cx,
+    );
 }
 
-fn write_capability<T>(name: &str, state: &ControlState<T>, cx: &mut App) {
-    crate::capabilities::set(name, control_capability(state), cx);
+fn write_capability<T>(capability: Capability, state: &ControlState<T>, cx: &mut App) {
+    crate::capabilities::set(capability, control_capability(state), cx);
 }
 
 fn control_capability<T>(state: &ControlState<T>) -> crate::capabilities::CapabilityStatus {
@@ -557,7 +645,7 @@ fn control_capability<T>(state: &ControlState<T>) -> crate::capabilities::Capabi
             supported: false,
             enabled: false,
             degraded: false,
-            reason: Some(reason_literal(*reason_key).into()),
+            reason: Some(crate::i18n::localize(*reason_key).into()),
             last_error: None,
         },
         ControlState::Unavailable { error } => {
@@ -617,20 +705,6 @@ fn bluetooth_capability(
                 }
             }
         }
-    }
-}
-
-fn reason_literal(reason_key: &'static str) -> &'static str {
-    if reason_key == REASON_WEB {
-        "not available on the web build"
-    } else if reason_key == REASON_MACOS_BRIGHTNESS {
-        "macOS has no public brightness API"
-    } else if reason_key == REASON_WINDOWS_BLUETOOTH {
-        "no supported bluetooth backend for Windows"
-    } else if reason_key == REASON_MACOS_BLUETOOTH_POWER {
-        "bluetooth power can only be changed in system settings"
-    } else {
-        reason_key
     }
 }
 

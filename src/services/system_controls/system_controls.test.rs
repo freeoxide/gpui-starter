@@ -1,5 +1,7 @@
 use super::*;
 #[cfg(not(target_family = "wasm"))]
+use crate::platform::system_controls::SystemOp;
+#[cfg(not(target_family = "wasm"))]
 use std::sync::{Arc, Mutex};
 
 #[cfg(not(target_family = "wasm"))]
@@ -40,7 +42,7 @@ fn bluetooth_access_from_read_maps_each_track_result() {
     assert_eq!(
         BluetoothAccess::from_read(&unsupported),
         BluetoothAccess::Denied {
-            reason: "no supported bluetooth backend for Windows".into(),
+            reason: crate::i18n::localize(REASON_WINDOWS_BLUETOOTH).into(),
         }
     );
 
@@ -81,7 +83,7 @@ fn snapshots_start_not_requested_and_web_denied() {
     assert_eq!(
         web_unsupported_snapshot().bluetooth_access,
         BluetoothAccess::Denied {
-            reason: "not available on the web build".into()
+            reason: crate::i18n::localize(REASON_WEB).into()
         }
     );
 }
@@ -92,7 +94,7 @@ fn merge_refresh_replaces_core_and_preserves_the_gated_track() {
     current.bluetooth_access = BluetoothAccess::Active;
     current.bluetooth = ready_bluetooth();
 
-    let core_only = merge_refresh(&current, ready_core(), None);
+    let core_only = merge_refresh(&current, 0, 0, ready_core(), None);
     assert!(core_only.battery.is_ready());
     assert!(
         core_only.bluetooth.is_ready(),
@@ -102,6 +104,8 @@ fn merge_refresh_replaces_core_and_preserves_the_gated_track() {
 
     let failed = merge_refresh(
         &current,
+        0,
+        0,
         ready_core(),
         Some(ControlState::Unavailable {
             error: "dbus hiccup".into(),
@@ -113,6 +117,37 @@ fn merge_refresh_replaces_core_and_preserves_the_gated_track() {
         BluetoothAccess::Active,
         "a runtime poll failure degrades the row without stopping the poller"
     );
+}
+
+#[test]
+fn a_superseded_read_cannot_revert_a_fresh_write() {
+    let mut current = pending_snapshot();
+    current.volume = ControlState::Ready(VolumeStatus {
+        level: 0.25,
+        muted: false,
+    });
+    // The write landed after the read was spawned: mirror plus bump.
+    let mut written = current.clone();
+    written.volume = ControlState::Ready(VolumeStatus {
+        level: 0.8,
+        muted: false,
+    });
+    let stale = ready_core();
+
+    let dropped = merge_refresh(&written, 0, 1, stale, None);
+    assert_eq!(
+        dropped.volume, written.volume,
+        "a read superseded by a write must be dropped, not merged"
+    );
+
+    let reconciled = ControlState::Ready(VolumeStatus {
+        level: 0.9,
+        muted: false,
+    });
+    let mut fresh = ready_core();
+    fresh.volume = reconciled.clone();
+    let merged = merge_refresh(&written, 1, 1, fresh, None);
+    assert_eq!(merged.volume, reconciled);
 }
 
 #[test]
@@ -167,6 +202,7 @@ fn mock_readers(bluetooth: ControlState<BluetoothStatus>) -> (Readers, Arc<Mutex
             *counted.lock().unwrap() += 1;
             bluetooth.clone()
         }),
+        apply_op: Arc::new(|_| Ok(())),
     };
     (readers, calls)
 }
@@ -174,6 +210,39 @@ fn mock_readers(bluetooth: ControlState<BluetoothStatus>) -> (Readers, Arc<Mutex
 #[cfg(not(target_family = "wasm"))]
 fn current_snapshot(cx: &TestAppContext) -> SystemControlsSnapshot {
     cx.read(|cx| cx.global::<SystemControlsSnapshot>().clone())
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn ready_snapshot() -> SystemControlsSnapshot {
+    let core = ready_core();
+    SystemControlsSnapshot {
+        battery: core.battery,
+        bluetooth: ControlState::Ready(BluetoothStatus {
+            powered: Some(false),
+            devices: Vec::new(),
+        }),
+        volume: core.volume,
+        brightness: core.brightness,
+        bluetooth_access: BluetoothAccess::Active,
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn write_seam(
+    core: CoreControlsSnapshot,
+    result: Result<(), String>,
+) -> (Readers, Arc<Mutex<Vec<SystemOp>>>) {
+    let ops = Arc::new(Mutex::new(Vec::new()));
+    let recorded = ops.clone();
+    let readers = Readers {
+        read_core: Arc::new(move || core.clone()),
+        read_bluetooth: Arc::new(ready_bluetooth),
+        apply_op: Arc::new(move |op| {
+            recorded.lock().unwrap().push(op);
+            result.clone()
+        }),
+    };
+    (readers, ops)
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -324,6 +393,50 @@ async fn inflight_handshake_read_cannot_reactivate_a_disabled_gate(cx: &TestAppC
 
 #[cfg(not(target_family = "wasm"))]
 #[gpui_kit::test]
+async fn the_newest_handshake_owns_the_gate_after_a_reenable(cx: &TestAppContext) {
+    let _guard = debounce_test_lock();
+    cx.update(|cx| install_for_tests(AppConfig::default(), cx));
+    let reads = Arc::new(Mutex::new(0usize));
+    let counted = reads.clone();
+    let readers = Readers {
+        read_core: Arc::new(ready_core),
+        read_bluetooth: Arc::new(move || {
+            let call = {
+                let mut count = counted.lock().unwrap();
+                *count += 1;
+                *count
+            };
+            // The first prompt fails; the re-enable's prompt passes.
+            if call == 1 {
+                ControlState::Unavailable {
+                    error: "first prompt denied".into(),
+                }
+            } else {
+                ready_bluetooth()
+            }
+        }),
+        apply_op: Arc::new(|_| Ok(())),
+    };
+    cx.update(|cx| cx.set_global(pending_snapshot()));
+
+    cx.update(|cx| enable_with(readers.clone(), cx));
+    cx.update(disable_bluetooth);
+    cx.update(|cx| enable_with(readers, cx));
+    cx.executor().run_until_parked();
+
+    assert_eq!(*reads.lock().unwrap(), 2, "both handshakes ran their read");
+    let snapshot = current_snapshot(cx);
+    assert_eq!(
+        snapshot.bluetooth_access,
+        BluetoothAccess::Active,
+        "the newer handshake's result owns the gate, not whichever read lands first"
+    );
+    assert!(snapshot.bluetooth.is_ready());
+    cx.update(force_save);
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
 async fn inflight_poll_read_cannot_restore_the_gated_bluetooth_row(cx: &TestAppContext) {
     let _guard = debounce_test_lock();
     cx.update(|cx| install_for_tests(AppConfig::default(), cx));
@@ -395,6 +508,207 @@ async fn launch_handshake_reruns_only_with_a_persisted_optin(cx: &TestAppContext
         BluetoothAccess::Active
     );
     cx.update(force_save);
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
+async fn set_volume_clamps_mirrors_then_reconciles(cx: &TestAppContext) {
+    cx.update(|cx| install_for_tests(AppConfig::default(), cx));
+    let reconciled = CoreControlsSnapshot {
+        volume: ControlState::Ready(VolumeStatus {
+            level: 0.6,
+            muted: true,
+        }),
+        ..ready_core()
+    };
+    let (readers, ops) = write_seam(reconciled, Ok(()));
+    cx.update(|cx| {
+        cx.set_global(readers);
+        cx.set_global(ready_snapshot());
+    });
+
+    cx.update(|cx| set_volume(1.7, cx));
+    assert_eq!(
+        current_snapshot(cx).volume,
+        ControlState::Ready(VolumeStatus {
+            level: 1.0,
+            muted: false,
+        }),
+        "the optimistic mirror writes the clamped level before the apply lands"
+    );
+    assert_eq!(
+        cx.read(|cx| cx.global::<ControlGate>().refresh_generation),
+        1,
+        "every mirror write bumps the refresh generation"
+    );
+    cx.executor().run_until_parked();
+
+    let recorded = ops.lock().unwrap().clone();
+    assert_eq!(recorded.len(), 1);
+    assert!(matches!(recorded[0], SystemOp::SetVolume { level } if level == 1.0));
+    assert_eq!(
+        current_snapshot(cx).volume,
+        ControlState::Ready(VolumeStatus {
+            level: 0.6,
+            muted: true,
+        }),
+        "the post-apply refresh reconciles from the re-read"
+    );
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
+async fn set_volume_applies_even_without_a_ready_mirror(cx: &TestAppContext) {
+    cx.update(|cx| install_for_tests(AppConfig::default(), cx));
+    let (readers, ops) = write_seam(ready_core(), Ok(()));
+    cx.update(|cx| {
+        cx.set_global(readers);
+        let mut snapshot = ready_snapshot();
+        snapshot.volume = ControlState::Unavailable {
+            error: "pending first read".into(),
+        };
+        cx.set_global(snapshot);
+    });
+
+    cx.update(|cx| set_volume(0.5, cx));
+    cx.executor().run_until_parked();
+
+    let recorded = ops.lock().unwrap().clone();
+    assert_eq!(recorded.len(), 1, "volume applies unconditionally");
+    assert!(matches!(recorded[0], SystemOp::SetVolume { level } if level == 0.5));
+    assert!(
+        current_snapshot(cx).volume.is_ready(),
+        "the reconciling read brings the track back Ready"
+    );
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
+async fn set_volume_muted_mirrors_the_switch_and_applies(cx: &TestAppContext) {
+    cx.update(|cx| install_for_tests(AppConfig::default(), cx));
+    let (readers, ops) = write_seam(ready_core(), Ok(()));
+    cx.update(|cx| {
+        cx.set_global(readers);
+        cx.set_global(ready_snapshot());
+    });
+
+    cx.update(|cx| set_volume_muted(true, cx));
+    assert_eq!(
+        current_snapshot(cx).volume,
+        ControlState::Ready(VolumeStatus {
+            level: 0.25,
+            muted: true,
+        })
+    );
+    cx.executor().run_until_parked();
+
+    let recorded = ops.lock().unwrap().clone();
+    assert_eq!(recorded.len(), 1);
+    assert!(matches!(
+        recorded[0],
+        SystemOp::SetVolumeMuted { muted: true }
+    ));
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
+async fn set_brightness_waits_for_a_ready_control(cx: &TestAppContext) {
+    cx.update(|cx| install_for_tests(AppConfig::default(), cx));
+    let (readers, ops) = write_seam(ready_core(), Ok(()));
+    cx.update(|cx| {
+        cx.set_global(readers);
+        let mut snapshot = ready_snapshot();
+        snapshot.brightness = ControlState::Unavailable {
+            error: "pending first read".into(),
+        };
+        cx.set_global(snapshot);
+    });
+
+    cx.update(|cx| set_brightness(0.9, cx));
+    cx.executor().run_until_parked();
+    assert!(
+        ops.lock().unwrap().is_empty(),
+        "no apply while the control is not ready"
+    );
+    assert!(!current_snapshot(cx).brightness.is_ready());
+
+    cx.update(|cx| cx.set_global(ready_snapshot()));
+    cx.update(|cx| set_brightness(1.2, cx));
+    assert_eq!(
+        current_snapshot(cx).brightness,
+        ControlState::Ready(BrightnessStatus { level: 1.0 }),
+        "the mirror clamps before the apply lands"
+    );
+    cx.executor().run_until_parked();
+
+    let recorded = ops.lock().unwrap().clone();
+    assert_eq!(recorded.len(), 1);
+    assert!(matches!(recorded[0], SystemOp::SetBrightness { level } if level == 1.0));
+    assert_eq!(
+        current_snapshot(cx).brightness,
+        ControlState::Ready(BrightnessStatus { level: 0.75 }),
+        "the post-apply refresh reconciles from the re-read"
+    );
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
+async fn set_bluetooth_powered_applies_through_an_open_gate(cx: &TestAppContext) {
+    cx.update(|cx| install_for_tests(AppConfig::default(), cx));
+    let (readers, ops) = write_seam(ready_core(), Ok(()));
+    cx.update(|cx| {
+        cx.set_global(readers);
+        cx.set_global(ready_snapshot());
+    });
+
+    cx.update(|cx| set_bluetooth_powered(true, cx));
+    assert_eq!(
+        current_snapshot(cx).bluetooth,
+        ControlState::Ready(BluetoothStatus {
+            powered: Some(true),
+            devices: Vec::new(),
+        })
+    );
+    cx.executor().run_until_parked();
+
+    let recorded = ops.lock().unwrap().clone();
+    assert_eq!(recorded.len(), 1);
+    assert!(matches!(
+        recorded[0],
+        SystemOp::SetBluetoothPowered { powered: true }
+    ));
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
+async fn a_failed_apply_reports_to_the_error_surface(cx: &TestAppContext) {
+    cx.update(|cx| install_for_tests(AppConfig::default(), cx));
+    cx.update(|cx| crate::error_surface::initialize(cx));
+    let (readers, ops) = write_seam(ready_core(), Err("no mixer".to_string()));
+    cx.update(|cx| {
+        cx.set_global(readers);
+        cx.set_global(ready_snapshot());
+    });
+
+    cx.update(|cx| set_volume(0.5, cx));
+    cx.executor().run_until_parked();
+
+    assert_eq!(ops.lock().unwrap().len(), 1);
+    let message = cx
+        .read(|cx| crate::error_surface::latest_message(cx))
+        .expect("the failed apply reaches the error surface");
+    assert!(
+        message.contains("no mixer"),
+        "the OS error text survives into the message: {message}"
+    );
+    assert_eq!(
+        current_snapshot(cx).volume,
+        ControlState::Ready(VolumeStatus {
+            level: 0.25,
+            muted: false,
+        }),
+        "the trailing refresh still reconciles after a failure"
+    );
 }
 
 #[test]

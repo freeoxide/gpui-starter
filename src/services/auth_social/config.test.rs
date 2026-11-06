@@ -182,6 +182,47 @@ async fn env_var_override_points_load_at_the_given_file(cx: &mut gpui_kit::TestA
     drop(dir);
 }
 
+#[gpui_kit::test]
+async fn default_path_reads_config_dir_auth_providers_json(cx: &mut gpui_kit::TestAppContext) {
+    let _guard = super::super::ENV_OVERRIDE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let dir = TempDir::new().expect("tempdir");
+    write_config(
+        &dir.path().join("auth-providers.json"),
+        r#"{ "github": { "client_id": "default-path-id" } }"#,
+    );
+    let previous_auth = std::env::var_os("GPUI_AUTH_PROVIDERS");
+    let previous_home = std::env::var_os("GPUI_STARTER_HOME");
+    // paths() without an AppState global resolves via GPUI_STARTER_HOME;
+    // serialized with the other env-swapping tests by ENV_OVERRIDE_LOCK.
+    unsafe {
+        std::env::remove_var("GPUI_AUTH_PROVIDERS");
+        std::env::set_var("GPUI_STARTER_HOME", dir.path());
+    }
+    let config = cx.read(|cx| load(cx));
+    unsafe {
+        match previous_auth {
+            Some(value) => std::env::set_var("GPUI_AUTH_PROVIDERS", value),
+            None => std::env::remove_var("GPUI_AUTH_PROVIDERS"),
+        }
+        match previous_home {
+            Some(value) => std::env::set_var("GPUI_STARTER_HOME", value),
+            None => std::env::remove_var("GPUI_STARTER_HOME"),
+        }
+    }
+    assert_eq!(
+        config.0.github.expect("github section").client_id,
+        "default-path-id"
+    );
+    assert!(
+        config.1.is_empty(),
+        "chmod-600 file lints clean: {:?}",
+        config.1
+    );
+    drop(dir);
+}
+
 #[test]
 fn effective_redirect_truth_table() {
     let mut config = SocialConfig::default();

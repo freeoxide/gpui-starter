@@ -6,8 +6,8 @@
 //! availability arm in services/commands.rs, and the account menu + sign-in
 //! page reads (see their own headers).
 
-use gpui_auth::{AuthEvent, AuthState, TokenStore as _};
-use gpui_kit::{App, BorrowAppContext as _, Global, Subscription};
+use gpui_auth::{AuthEvent, AuthState};
+use gpui_kit::{App, BorrowAppContext as _, Entity, Global, Subscription};
 
 pub const STORE_BACKEND_KEYRING: &str = "OS keyring (gpui-starter.auth)";
 pub const STORE_BACKEND_MEMORY: &str = "in-memory (session only)";
@@ -110,7 +110,10 @@ pub fn complete_demo_sign_in(cx: &mut App) -> bool {
     let Some(state) = url.strip_prefix(MOCK_AUTHORIZER_PREFIX) else {
         return false;
     };
-    let link = format!("gpui-starter://auth/callback?code=demo&state={state}");
+    let link = format!(
+        "{}://auth/callback?code=demo&state={state}",
+        crate::routes::APP_URL_SCHEME
+    );
     crate::services::auth::handle_callback_link(&link, cx)
 }
 
@@ -146,7 +149,7 @@ fn next_snapshot(cx: &mut App) -> Option<AuthUiSnapshot> {
     };
     let (account_label, account_email, expires_at) = match &state {
         AuthState::SignedIn { account_label } => {
-            let (email, expires_at) = read_account_facts(&provider_id, cx);
+            let (email, expires_at) = read_account_facts(&entity, cx);
             (Some(account_label.clone()), email, expires_at)
         }
         _ => (None, None, None),
@@ -162,27 +165,13 @@ fn next_snapshot(cx: &mut App) -> Option<AuthUiSnapshot> {
     })
 }
 
-fn read_account_facts(provider_id: &str, cx: &mut App) -> (Option<String>, Option<i64>) {
-    let store = crate::services::auth::KeyringStore;
-    match store.load(provider_id, cx) {
-        Ok(Some(tokens)) => (
-            tokens
-                .account
-                .as_ref()
-                .and_then(|account| account.email.clone()),
-            tokens.expires_at,
-        ),
-        Ok(None) => (None, None),
-        Err(err) => {
-            tracing::debug!(
-                target: "gpui_starter::auth_ui",
-                provider_id,
-                error = %err,
-                "token store read failed; expiry stays unknown"
-            );
-            (None, None)
-        }
-    }
+/// Account facts come from the controller's cached token set: reading the
+/// keyring here would put OS round trips back on the UI thread.
+fn read_account_facts(
+    controller: &Entity<gpui_auth::AuthController>,
+    cx: &App,
+) -> (Option<String>, Option<i64>) {
+    controller.read(cx).account_facts()
 }
 
 #[cfg(test)]

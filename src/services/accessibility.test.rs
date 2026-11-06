@@ -1,5 +1,5 @@
 use super::*;
-use gpui_kit::{Role, accesskit::Live, div, prelude::*};
+use gpui_kit::{Role, accesskit::Live, accesskit::Node, div, prelude::*};
 
 #[test]
 fn default_snapshot_matches_compiled_bridge() {
@@ -54,11 +54,18 @@ fn capability_status_reflects_bridge_availability() {
 
 #[test]
 fn element_helpers_chain_on_stateful_divs() {
-    // Compile-shape guard: the helpers resolve on Stateful<Div> and stay
-    // chainable with gpui's own aria builders.
-    let _element = div()
+    // a11y_live's callback only runs through gpui's crate-private subtree
+    // builder, so its wiring stays compile-guarded; the rest asserts on the node.
+    let element = div()
         .id("save")
         .a11y(Role::Button, "Save")
         .aria_description("Stores the current form")
         .a11y_live(Live::Polite);
+
+    assert_eq!(element.a11y_role(), Some(Role::Button));
+
+    let mut node = Node::new(Role::Button);
+    element.write_a11y_info(&mut node);
+    assert_eq!(node.label(), Some("Save"));
+    assert_eq!(node.description(), Some("Stores the current form"));
 }

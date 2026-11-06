@@ -37,6 +37,14 @@ pub(crate) fn map_token_error(error: impl std::fmt::Display) -> AuthError {
     AuthError::InvalidTokenResponse(error.to_string())
 }
 
+/// A revocation endpoint's HTTP-level rejection; the network itself worked.
+pub(crate) fn revoke_denied(status: reqwest::StatusCode, body: String) -> AuthError {
+    AuthError::ProviderDenied {
+        error: format!("revocation endpoint returned {status}"),
+        description: (!body.is_empty()).then_some(body),
+    }
+}
+
 pub(crate) struct PendingRedirect {
     #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) port: Option<u16>,

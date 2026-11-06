@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
 use super::*;
 
 fn scratch_runtime() -> tokio::runtime::Runtime {
@@ -96,6 +98,49 @@ fn error_redirects_carry_the_error_query_through() {
         let url = format!("http://127.0.0.1:{}/?error=access_denied", handle.port);
         let response = reqwest::get(&url).await.expect("get error redirect");
         assert_eq!(response.status(), reqwest::StatusCode::OK);
+        let raw = tokio::time::timeout(Duration::from_secs(1), handle.wait)
+            .await
+            .expect("capture resolves")
+            .expect("sender alive");
+        assert_eq!(raw, url);
+    });
+}
+
+#[test]
+fn garbage_requests_get_a_404_and_the_listener_survives() {
+    let rt = scratch_runtime();
+    rt.block_on(async {
+        let handle = LoopbackServer::spawn(rt.handle()).expect("spawn loopback");
+
+        // Exactly the 8 KiB header cap, with no terminator: rejected, 404.
+        let mut oversized = tokio::net::TcpStream::connect(("127.0.0.1", handle.port))
+            .await
+            .expect("connect oversized");
+        oversized
+            .write_all(&[b'G'; 8 * 1024])
+            .await
+            .expect("write capped request");
+        let mut response = Vec::new();
+        oversized
+            .read_to_end(&mut response)
+            .await
+            .expect("read 404 response");
+        let response = String::from_utf8_lossy(&response);
+        assert!(response.contains("404 Not Found"), "{response}");
+
+        // A connection dying mid-request-line must not kill the listener.
+        let mut aborted = tokio::net::TcpStream::connect(("127.0.0.1", handle.port))
+            .await
+            .expect("connect aborted");
+        aborted
+            .write_all(b"GET /callback?code=ha")
+            .await
+            .expect("write partial request line");
+        drop(aborted);
+
+        let url = format!("http://127.0.0.1:{}/?code=survivor&state=s", handle.port);
+        let capture = reqwest::get(&url).await.expect("capture after garbage");
+        assert_eq!(capture.status(), reqwest::StatusCode::OK);
         let raw = tokio::time::timeout(Duration::from_secs(1), handle.wait)
             .await
             .expect("capture resolves")

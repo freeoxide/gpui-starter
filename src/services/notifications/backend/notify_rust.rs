@@ -29,10 +29,16 @@ impl NotifyRustBackend {
 
 #[cfg(target_os = "linux")]
 fn resolve_app_icon() -> String {
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(probe_app_icon))
-        .unwrap_or_else(|| APP_ICON_NAME.to_string())
+    // Invariant for the process: probe the filesystem once, not per send.
+    static RESOLVED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    RESOLVED
+        .get_or_init(|| {
+            std::env::current_exe()
+                .ok()
+                .and_then(|exe| exe.parent().map(probe_app_icon))
+                .unwrap_or_else(|| APP_ICON_NAME.to_string())
+        })
+        .clone()
 }
 
 #[cfg(target_os = "linux")]
@@ -64,6 +70,43 @@ fn icon_candidates(exe_dir: &Path) -> Vec<PathBuf> {
     }
     candidates.push(exe_dir.join(format!("resources/{APP_ICON_NAME}.png")));
     candidates
+}
+
+/// Full Linux wiring (appname, entry hint, icon, urgency); extracted so tests
+/// can assert the hint set without a D-Bus daemon.
+#[cfg(target_os = "linux")]
+fn notify_rust_notification(request: &NotificationRequest) -> notify_rust::Notification {
+    let mut notification = notify_rust::Notification::new();
+    notification
+        .appname(APP_DISPLAY_NAME)
+        .summary(&request.title)
+        .body(&request.body);
+
+    // Tells the daemon which .desktop entry we are so it can resolve icon
+    // and app name (`.appname` alone is freeform, never looked up).
+    notification.hint(notify_rust::Hint::DesktopEntry(
+        DESKTOP_ENTRY_ID.to_string(),
+    ));
+
+    // The hint brands installs only; portable runs (tarball, un-integrated
+    // AppImage) need an explicit path or the theme name.
+    notification.icon(&resolve_app_icon());
+
+    // GNOME suppresses Normal urgency under DND/mute/busy/fullscreen; only
+    // Critical pierces those gates (GNOME Shell js/ui/messageTray.js).
+    notification.urgency(match request.importance {
+        crate::notifications::NotificationImportance::BackgroundWorthy => {
+            notify_rust::Urgency::Critical
+        }
+        crate::notifications::NotificationImportance::ForegroundOnly => {
+            notify_rust::Urgency::Normal
+        }
+    });
+
+    if request.play_sound {
+        notification.sound_name("default");
+    }
+    notification
 }
 
 #[async_trait]
@@ -98,39 +141,20 @@ impl NotificationBackend for NotifyRustBackend {
             "sending notification through notify-rust"
         );
 
-        let mut notification = notify_rust::Notification::new();
-        notification
-            .appname(APP_DISPLAY_NAME)
-            .summary(&request.title)
-            .body(&request.body);
-
-        // Tells the daemon which .desktop entry we are so it can resolve icon
-        // and app name (`.appname` alone is freeform, never looked up).
         #[cfg(target_os = "linux")]
-        notification.hint(notify_rust::Hint::DesktopEntry(
-            DESKTOP_ENTRY_ID.to_string(),
-        ));
-
-        // The hint brands installs only; portable runs (tarball, un-integrated
-        // AppImage) need an explicit path or the theme name.
-        #[cfg(target_os = "linux")]
-        notification.icon(&resolve_app_icon());
-
-        // GNOME suppresses Normal urgency under DND/mute/busy/fullscreen; only
-        // Critical pierces those gates (GNOME Shell js/ui/messageTray.js).
-        #[cfg(target_os = "linux")]
-        notification.urgency(match request.importance {
-            crate::notifications::NotificationImportance::BackgroundWorthy => {
-                notify_rust::Urgency::Critical
+        let notification = notify_rust_notification(request);
+        #[cfg(not(target_os = "linux"))]
+        let notification = {
+            let mut notification = notify_rust::Notification::new();
+            notification
+                .appname(APP_DISPLAY_NAME)
+                .summary(&request.title)
+                .body(&request.body);
+            if request.play_sound {
+                notification.sound_name("default");
             }
-            crate::notifications::NotificationImportance::ForegroundOnly => {
-                notify_rust::Urgency::Normal
-            }
-        });
-
-        if request.play_sound {
-            notification.sound_name("default");
-        }
+            notification
+        };
 
         #[cfg(target_os = "linux")]
         {

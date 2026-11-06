@@ -89,3 +89,27 @@ fn probe_falls_back_to_theme_name_when_nothing_is_bundled() {
 
     assert_eq!(probe_app_icon(&exe_dir), APP_ICON_NAME);
 }
+
+#[test]
+fn background_worthy_maps_to_critical_urgency_and_entry_hint() {
+    let request = NotificationRequest::background_worthy("title", "body");
+
+    let notification = notify_rust_notification(&request);
+
+    // Swapped urgency arms ship silently otherwise: only Critical pierces
+    // GNOME's DND/mute/fullscreen gates.
+    let critical = notify_rust::Hint::Urgency(notify_rust::Urgency::Critical);
+    assert!(notification.hints.contains(&critical));
+    let entry = notify_rust::Hint::DesktopEntry(DESKTOP_ENTRY_ID.to_string());
+    assert!(notification.hints.contains(&entry));
+}
+
+#[test]
+fn foreground_only_maps_to_normal_urgency() {
+    let request = NotificationRequest::foreground("title", "body");
+
+    let notification = notify_rust_notification(&request);
+
+    let normal = notify_rust::Hint::Urgency(notify_rust::Urgency::Normal);
+    assert!(notification.hints.contains(&normal));
+}

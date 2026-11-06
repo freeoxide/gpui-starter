@@ -10,16 +10,14 @@ pub const ACTION_OPEN: &str = "settings.open";
 pub const ACTION_SNOOZE: &str = "settings.snooze";
 pub const ACTION_REPLY: &str = "settings.reply";
 
-// App identity: three DISTINCT ids — display name, desktop-entry/bundle id,
-// X11 WM_CLASS (must equal .desktop StartupWMClass).
+// App identity: display name, desktop-entry/bundle id and icon-theme name
+// are DISTINCT ids — never reuse one for another.
 
 /// Display name shown verbatim by the daemon (notify-rust `.appname`).
 pub const APP_DISPLAY_NAME: &str = "GPUI Starter";
 /// Reverse-DNS desktop-entry id: the `.desktop` filename, notify-rust
 /// `Hint::DesktopEntry`, and the Wayland app_id. (Also the macOS bundle id.)
 pub const DESKTOP_ENTRY_ID: &str = "com.gpui-starter.app";
-/// X11 WM_CLASS value (binary basename) — must equal `.desktop` StartupWMClass.
-pub const WM_CLASS: &str = "gpui-starter";
 /// Icon-theme name: the hicolor install filename and the desktop entry's
 /// `Icon=` value, used when no bundled PNG path is handed to the daemon.
 pub const APP_ICON_NAME: &str = "gpui-starter";
