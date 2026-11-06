@@ -27,9 +27,9 @@ fn parse_catalog(text: &str, path: &str) -> BTreeSet<String> {
             continue;
         }
         let line = raw_line.trim();
-        let colon = line.find(':').unwrap_or_else(|| {
-            panic!("{path}:{line_number}: missing key colon: {raw_line}")
-        });
+        let colon = line
+            .find(':')
+            .unwrap_or_else(|| panic!("{path}:{line_number}: missing key colon: {raw_line}"));
         let name = &line[..colon];
         if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
             panic!("{path}:{line_number}: malformed key {name:?}: {raw_line}");
@@ -258,7 +258,10 @@ fn locale_catalogs_carry_identical_key_sets() {
 fn catalog_values_allow_trailing_comments() {
     let text = "form:\n  title: \"Hi\" # note\nplain: \"a\"  # another\n";
     let keys = parse_catalog(text, "mem");
-    assert_eq!(keys, BTreeSet::from(["form.title".to_string(), "plain".to_string()]));
+    assert_eq!(
+        keys,
+        BTreeSet::from(["form.title".to_string(), "plain".to_string()])
+    );
 }
 
 #[test]
@@ -269,7 +272,8 @@ fn catalog_rejects_junk_after_quoted_scalar() {
 
 #[test]
 fn localize_literals_scans_raw_string_keys() {
-    let content = "let a = localize_with_args(r#\"nav.home\"#, &[]);\nlet b = localize(\"about_title\");\n";
+    let content =
+        "let a = localize_with_args(r#\"nav.home\"#, &[]);\nlet b = localize(\"about_title\");\n";
     let found = localize_literals(content);
     let keys: Vec<&str> = found.iter().map(|(_, key)| key.as_str()).collect();
     assert_eq!(keys, ["nav.home", "about_title"]);
