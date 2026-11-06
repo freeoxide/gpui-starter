@@ -289,28 +289,19 @@ impl ModelViewerPage {
                     ),
             );
 
-        let stats = if !has_model {
-            crate::i18n::localize_with_args(
-                "model_viewer_stats",
-                &[
-                    (
-                        "name",
-                        crate::i18n::localize("model_viewer_default_name").as_str(),
-                    ),
-                    ("tris", mesh_stats.triangles.to_string().as_str()),
-                    ("verts", mesh_stats.vertices.to_string().as_str()),
-                ],
-            )
+        let display_name = if has_model {
+            mesh_name
         } else {
-            crate::i18n::localize_with_args(
-                "model_viewer_stats",
-                &[
-                    ("name", mesh_name.as_str()),
-                    ("tris", mesh_stats.triangles.to_string().as_str()),
-                    ("verts", mesh_stats.vertices.to_string().as_str()),
-                ],
-            )
+            crate::i18n::localize("model_viewer_default_name")
         };
+        let stats = crate::i18n::localize_with_args(
+            "model_viewer_stats",
+            &[
+                ("name", display_name.as_str()),
+                ("tris", mesh_stats.triangles.to_string().as_str()),
+                ("verts", mesh_stats.vertices.to_string().as_str()),
+            ],
+        );
         let stats_row = div()
             .text_sm()
             .text_color(cx.theme().muted_foreground)

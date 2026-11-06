@@ -28,7 +28,7 @@ pub(crate) struct ChannelRow {
 
 /// Sessions summed over every channel of one page: the unit a per-page chart
 /// bands on, where a raw row would collide with its sibling channels.
-#[derive(Clone, Deserialize)]
+#[derive(Clone)]
 pub(crate) struct PageSessions {
     pub(crate) page: SharedString,
     pub(crate) sessions: f64,

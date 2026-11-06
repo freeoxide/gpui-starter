@@ -27,9 +27,8 @@ impl ResultMsg {
     }
 }
 
-/// `id` keys the card elements; `title`/`description` are localized and would
-/// re-key them on every locale switch. Vertical card: action rows flow under
-/// the header so text never competes with fixed-width buttons for row width.
+/// `id` keys the card (localized text would re-key it per locale). Actions sit
+/// under the header so text never competes with fixed-width buttons for width.
 pub(crate) fn test_card(
     id: &str,
     title: &str,
@@ -100,14 +99,12 @@ pub(crate) fn test_card(
         )
 }
 
-pub(crate) fn action_row(_cx: &App) -> Div {
+pub(crate) fn action_row() -> Div {
     h_flex().gap_2().flex_wrap().items_center().px_4().py_3()
 }
 
-/// Inline result text chip, keyed by `id` (the owning card's call-site key:
-/// the result text changes as an operation progresses and would re-key the
-/// chip mid-flight). Announced as a live region so async outcomes are spoken
-/// when they land.
+/// Inline result chip keyed by the owning card's `id`, since its text changes
+/// mid-operation; a live region, so async outcomes are spoken when they land.
 pub(crate) fn result_inline(id: &str, msg: &ResultMsg, cx: &App) -> Stateful<Div> {
     let theme = cx.theme();
     let color = if msg.is_error {

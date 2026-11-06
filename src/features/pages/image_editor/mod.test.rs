@@ -476,8 +476,6 @@ fn save_to_an_unwritable_path_reports_failed(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn reopening_an_image_resets_filter_controls(cx: &mut TestAppContext) {
-    use gpui_kit::component::slider::SliderValue;
-
     cx.update(gpui_kit::component::theme::init);
     let (page, cx) = cx.add_window_view(ImageEditorPage::new);
     let canvas = page.update(cx, |page, _| page.canvas.clone());
@@ -529,13 +527,6 @@ fn reopening_an_image_resets_filter_controls(cx: &mut TestAppContext) {
         });
     });
     cx.run_until_parked();
-    page.update(cx, |page, cx| {
-        assert_eq!(
-            page.doc.read(cx).filters().blur_sigma,
-            5.,
-            "rebuilt slider subscription still applies filters"
-        );
-    });
     page.update(cx, |page, cx| {
         assert_eq!(
             page.doc.read(cx).filters().blur_sigma,

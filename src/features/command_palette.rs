@@ -20,7 +20,7 @@ use crate::root::NavigateToPage;
 
 const LOG: &str = "gpui_starter::launcher";
 
-// Prevents double-opening the launcher
+/// Prevents double-opening the launcher.
 pub struct LauncherOpen(pub bool);
 impl Global for LauncherOpen {}
 

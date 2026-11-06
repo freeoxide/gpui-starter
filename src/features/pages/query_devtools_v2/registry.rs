@@ -252,7 +252,6 @@ pub(super) fn render_query_registry(
                 .child(registry_empty),
         )
     } else {
-        let scroll_handle = scroll_handle.clone();
         let rows = queries.clone();
         let expanded = expanded_key.clone();
 
@@ -262,7 +261,7 @@ pub(super) fn render_query_registry(
             item_sizes,
             list_h,
             px(REGISTRY_LIST_GAP),
-            &scroll_handle,
+            scroll_handle,
             true,
             move |_this, range, _window, cx| {
                 range
@@ -342,10 +341,6 @@ pub(super) fn render_query_registry(
         .child(header)
         .child(registry_content)
 }
-
-#[cfg(test)]
-#[path = "registry.test.rs"]
-mod registry_test;
 
 fn query_row(
     row: &RegistryRow,
@@ -509,3 +504,7 @@ fn query_expanded_detail(row: &RegistryRow, radius: Pixels, secondary: Hsla) -> 
             )
         }))
 }
+
+#[cfg(test)]
+#[path = "registry.test.rs"]
+mod registry_test;

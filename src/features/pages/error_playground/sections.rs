@@ -11,9 +11,8 @@ use super::helpers::{ResultMsg, action_row, result_inline, test_card};
 /// The fs card's read target; guaranteed absent, so the read must fail.
 pub(super) const FS_CHECK_PATH: &str = "/tmp/gpui-error-playground-nonexistent.txt";
 
-/// Parameter bundle for the unified HTTP/timeout error block renderer. The
-/// `*_key` fields are catalog keys; all fields are `Copy`, so one value can be
-/// captured by the click closure.
+/// Parameters for `render_error_block`; `*_key` fields are catalog keys. Every
+/// field is `Copy`, so one value can be captured by the click closure.
 #[derive(Clone, Copy)]
 struct ErrorBlockCtx {
     id: &'static str,
@@ -39,7 +38,7 @@ impl ErrorPlaygroundPage {
         let error_msg = error_message.to_string();
         let button_id = SharedString::from(format!("ep-{id}"));
         test_card(id, &title, &description, true, cx).child(
-            action_row(cx).child(
+            action_row().child(
                 Button::new(button_id)
                     .primary()
                     .label(button_label)
@@ -69,7 +68,7 @@ impl ErrorPlaygroundPage {
 
         card.child(
             v_flex().gap_2().px_4().pb_3().child(
-                action_row(cx)
+                action_row()
                     .child(
                         Button::new("ep-bg-panic")
                             .primary()
@@ -130,7 +129,7 @@ impl ErrorPlaygroundPage {
 
         card.child(
             v_flex().gap_2().px_4().pb_3().child(
-                action_row(cx)
+                action_row()
                     .child(
                         Button::new("ep-fs-error")
                             .primary()
@@ -206,7 +205,7 @@ impl ErrorPlaygroundPage {
 
         card.child(
             v_flex().gap_2().px_4().pb_3().child(
-                action_row(cx)
+                action_row()
                     .child(
                         Button::new(SharedString::from(format!("ep-{}", ctx.id)))
                             .primary()
@@ -341,7 +340,7 @@ impl ErrorPlaygroundPage {
         );
 
         card.child(
-            action_row(cx).child(
+            action_row().child(
                 Button::new("ep-clear")
                     .outline()
                     .label(crate::i18n::localize("error_playground_clear_button"))

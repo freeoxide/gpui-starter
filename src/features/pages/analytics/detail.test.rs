@@ -2,10 +2,10 @@ use std::rc::Rc;
 
 use gpui_kit::TestAppContext;
 
-use super::super::model::{Segment, WorkspaceData};
+use super::super::model::{ChannelRow, Segment, WorkspaceData};
 use super::ChannelDetail;
 
-fn first_social_row(data: &WorkspaceData) -> super::super::model::ChannelRow {
+fn first_social_row(data: &WorkspaceData) -> ChannelRow {
     data.channels(Segment::Social)
         .into_iter()
         .next()

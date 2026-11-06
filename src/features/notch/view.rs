@@ -182,11 +182,8 @@ impl Render for NotchFloaterView {
             } else {
                 div()
                     .size_full()
-                    .on_mouse_down(MouseButton::Left, {
-                        let entity = entity.clone();
-                        move |_, window, cx| {
-                            entity.update(cx, |this, cx| this.toggle_pinned(window, cx));
-                        }
+                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                        entity.update(cx, |this, cx| this.toggle_pinned(window, cx));
                     })
                     .child(widgets::collapsed_pill(&self.minute, cx))
                     .into_any_element()

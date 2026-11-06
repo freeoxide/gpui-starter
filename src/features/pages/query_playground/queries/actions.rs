@@ -137,10 +137,9 @@ impl QueryPlaygroundPage {
         self.log("LatestWins: spamming 5 fetches");
         for i in 0..5 {
             let label = format!("attempt-{}", i);
-            let e = entity.clone();
             let exec = exec.clone();
             fetch_query_with_signal(
-                &e,
+                &entity,
                 move |_signal| {
                     let l = label.clone();
                     let exec = exec.clone();
@@ -164,10 +163,9 @@ impl QueryPlaygroundPage {
         self.log("IgnoreWhileLoading: spamming 5 fetches");
         for i in 0..5 {
             let label = format!("attempt-{}", i);
-            let e = entity.clone();
             let exec = exec.clone();
             fetch_query_with_signal(
-                &e,
+                &entity,
                 move |_signal| {
                     let l = label.clone();
                     let exec = exec.clone();

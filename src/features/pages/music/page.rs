@@ -6,7 +6,7 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
-use gpui_kit::{StyledImage as _, prelude::*, *};
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::ui::widgets::{
@@ -281,7 +281,6 @@ impl MusicPage {
             DetailSource::Album(id) => id.0,
             DetailSource::Playlist(id) => id.0,
         };
-        let scroll_handle = self.detail_scroll.clone();
 
         v_flex()
             .gap_4()
@@ -335,7 +334,7 @@ impl MusicPage {
                         item_sizes,
                         list_height,
                         px(0.),
-                        &scroll_handle,
+                        &self.detail_scroll,
                         true,
                         move |this: &mut Self, visible, _window, cx| {
                             let order = this.detail_order();

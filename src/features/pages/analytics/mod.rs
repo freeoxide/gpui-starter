@@ -34,6 +34,7 @@ use serde::Deserialize;
 use crate::accessibility::A11yExt as _;
 use crate::i18n::{localize, localize_with_args};
 
+use self::detail::ChannelDetail;
 use self::model::{ChannelKey, DateRange, Density, Segment, WorkspaceData};
 use self::table::ChannelTableDelegate;
 
@@ -68,8 +69,6 @@ where
 fn mark<E>(_name: &'static str, el: E) -> E {
     el
 }
-
-use detail::ChannelDetail;
 
 actions!(analytics, [OpenChannelDetails]);
 
@@ -139,9 +138,8 @@ pub struct AnalyticsPage {
 }
 
 impl AnalyticsPage {
-    /// Full analytics workspace view. Parses the fixture JSON once (panics on
-    /// malformed fixtures, same contract as the gallery `fixture()` helper),
-    /// starts in the Initial skeleton phase, and kicks the first reload.
+    /// Builds the workspace in its Initial skeleton phase and kicks the first
+    /// reload. Panics on a malformed fixture, like the gallery `fixture()` helper.
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let data = Rc::new(WorkspaceData::load());
 
@@ -822,9 +820,8 @@ impl AnalyticsPage {
                     .x_tick_count(4)
                     .id("analytics-revenue");
 
-                // ScaleBand keys bands by page, so two rows of one page would
-                // draw into the same band and overpaint each other; feed one
-                // aggregated row per page.
+                // ScaleBand keys bands by page, so rows sharing a page would
+                // overpaint one band; top_pages holds one aggregated row per page.
                 let top_pages = self.top_pages.clone();
                 let sessions_total: f64 = self.top_pages.iter().map(|row| row.sessions).sum();
                 let sessions_fill = theme.chart_2;

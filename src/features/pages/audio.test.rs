@@ -86,10 +86,7 @@ fn loaded_page_attaches_the_live_monitor(cx: &mut TestAppContext) {
     cx.read(|cx| {
         let page = page.read(cx);
         assert!(page.waveform.read(cx).has_source());
-        assert_eq!(
-            page.engine.read(cx).status(),
-            Some(crate::audio::PlaybackStatus::Stopped)
-        );
+        assert_eq!(page.engine.read(cx).status(), Some(PlaybackStatus::Stopped));
         assert_eq!(
             page.engine.read(cx).duration(),
             Some(Duration::from_secs(1))

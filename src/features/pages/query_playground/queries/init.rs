@@ -9,9 +9,8 @@ use gpui_query::hook::{
 use super::super::{PlaygroundPage, PlaygroundUser, QueryPlaygroundPage};
 use super::actions::{fabricate_page, fetch_select_roster};
 
-/// Skeleton for the standard `ensure_*` factories: early-return when
-/// populated, then create the entity without fetching — every section fetches
-/// on click — and arm its retry policy.
+/// Shared `ensure_*` body: early-return when populated, else create the entity
+/// unfetched (every section fetches on click) and arm its retry policy.
 macro_rules! ensure_query {
     (
         $self:ident . $field:ident,

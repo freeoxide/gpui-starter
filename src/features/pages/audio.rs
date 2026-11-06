@@ -167,9 +167,9 @@ impl AudioPage {
             &device_select,
             |this, _, event: &SelectEvent<Vec<String>>, cx| {
                 let SelectEvent::Confirm(value) = event;
-                if let Some(name) = value.clone() {
+                if let Some(name) = value {
                     this.engine
-                        .update(cx, |engine, cx| engine.select_device(&name, cx));
+                        .update(cx, |engine, cx| engine.select_device(name, cx));
                 }
             },
         ));
@@ -336,14 +336,12 @@ impl AudioPage {
     }
 
     fn render_overview(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let engine = self.engine.clone();
-        let position = engine.read(cx).position();
+        let position = self.engine.read(cx).position();
         let bounds_cell = self.overview_bounds.clone();
         let canvas_bounds_cell = self.overview_bounds.clone();
         let paint_engine = self.engine.clone();
         let toggle_engine = self.engine.clone();
         let seek_engine = self.engine.clone();
-        let drag_engine = self.engine.clone();
         let drag_bounds_cell = self.overview_bounds.clone();
         let expected_id = self.engine.entity_id();
 
@@ -392,7 +390,7 @@ impl AudioPage {
                         cx.new(|_| drag.clone())
                     })
                     .on_drag_move(window.listener_for(
-                        &drag_engine,
+                        &self.engine,
                         move |engine, event: &DragMoveEvent<DragSeek>, _, cx| {
                             let DragSeek(id) = event.drag(cx);
                             if *id == expected_id

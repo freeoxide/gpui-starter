@@ -5,7 +5,7 @@ use gpui_kit::component::{
     slider::{Slider, SliderEvent, SliderState},
     v_flex,
 };
-use gpui_kit::{StyledImage as _, prelude::*, *};
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 

@@ -156,7 +156,6 @@ impl ItemFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::palette::items::PaletteEntry;
 
     struct Entry {
         name: &'static str,

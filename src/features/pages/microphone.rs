@@ -25,7 +25,6 @@ pub struct MicrophonePage {
     device_select: Entity<SelectState<Vec<DeviceOption>>>,
     gain_slider: Entity<SliderState>,
     device_ids: Vec<String>,
-    _subscriptions: Vec<Subscription>,
 }
 
 impl MicrophonePage {
@@ -73,7 +72,6 @@ impl MicrophonePage {
             device_select,
             gain_slider,
             device_ids,
-            _subscriptions: Vec::new(),
         }
     }
 }

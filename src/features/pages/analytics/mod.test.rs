@@ -248,9 +248,8 @@ async fn preview_toggle_maps_onto_the_preview_state(cx: &TestAppContext) {
     }
 }
 
-/// Pins the `region_view` precedence: preview states override committed
-/// data (Loading falls back to skeletons on a committed page), and Live
-/// renders the committed content.
+/// Pins `region_view` precedence: preview states override committed data
+/// (Loading skeletons a committed page); Live renders the committed content.
 #[gpui_kit::test]
 async fn committed_page_renders_each_region_state_shape(cx: &TestAppContext) {
     let (handle, page) = open_page_sized(cx, 1512., 982.);
@@ -368,12 +367,12 @@ fn paint_regions(
     handle: &AnyWindowHandle,
 ) -> Vec<(&'static str, Bounds<Pixels>)> {
     super::LAYOUT_PROBE.with_borrow_mut(|rows| rows.clear());
-    let mut cx = VisualTestContext::from_window(handle.clone(), cx);
+    let mut cx = VisualTestContext::from_window(*handle, cx);
     cx.update(|window, cx| window.draw(cx).clear(cx));
     super::LAYOUT_PROBE.with_borrow(|rows| rows.clone())
 }
 
-fn all<'a>(regions: &'a [(&'static str, Bounds<Pixels>)], name: &str) -> Vec<Bounds<Pixels>> {
+fn all(regions: &[(&'static str, Bounds<Pixels>)], name: &str) -> Vec<Bounds<Pixels>> {
     regions
         .iter()
         .filter(|(n, _)| *n == name)
@@ -394,18 +393,16 @@ fn distinct(bounds: &[Bounds<Pixels>]) -> Vec<Bounds<Pixels>> {
     seen
 }
 
-/// Pins the rebuilt structure: every key region resolves to definite bounds,
-/// the four KPI cards form one aligned row of equal cards, and the paired
-/// chart cards share a top and bottom line above the full-width sessions card.
+/// Key regions resolve to definite bounds, the KPI cards form one row of equal
+/// cards, and the paired chart cards share top and bottom lines above sessions.
 #[gpui_kit::test]
 async fn layout_keeps_regions_definite_and_columns_aligned(cx: &TestAppContext) {
     let (handle, page) = open_page_sized(cx, 1512., 982.);
     commit_first_reload(cx, &page);
     let regions = paint_regions(cx, &handle);
 
-    // The toolbar carries no probe (a measuring child would change how its
-    // wrap row resolves under taffy 0.15), so its height is pinned through
-    // the next section's offset: 24 padding + toolbar + 24 gap.
+    // The toolbar carries no probe (see render_toolbar), so the kpis offset
+    // pins its height: 24 padding + toolbar + 24 gap.
     let kpis = all(&regions, "kpis");
     assert!(!kpis.is_empty(), "kpis section must render");
     let kpis_y = kpis[kpis.len() - 1].origin.y;
@@ -438,7 +435,7 @@ async fn layout_keeps_regions_definite_and_columns_aligned(cx: &TestAppContext) 
 
     let cards = distinct(&all(&regions, "chart-card"));
     assert_eq!(cards.len(), 3, "three chart cards, got {cards:?}");
-    let mut by_y = cards.clone();
+    let mut by_y = cards;
     by_y.sort_by_key(|b| b.origin.y.as_f32() as i32);
     let peers = &by_y[..2];
     assert!(

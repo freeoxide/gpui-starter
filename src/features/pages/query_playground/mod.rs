@@ -224,7 +224,6 @@ impl QueryPlaygroundPage {
 
     pub(super) fn log(&mut self, msg: impl Into<String>) {
         self.activity_log.push(msg.into());
-        // Cap at 30 entries to limit DOM overhead.
         if self.activity_log.len() > 30 {
             self.activity_log.drain(0..self.activity_log.len() - 30);
         }

@@ -15,9 +15,8 @@ pub enum TransportStatus {
     Paused,
 }
 
-/// Simulated playback engine; the simulated clock is the source of truth for
-/// position. Every state-changing mutator notifies exactly once; the
-/// documented no-ops return without notifying. Consumers observe the entity.
+/// Simulated playback engine; its clock is the source of truth for position.
+/// Every state-changing mutator notifies exactly once; documented no-ops never do.
 pub struct PlayerEngine {
     library: Arc<Library>,
     queue: Vec<TrackId>,
@@ -92,9 +91,8 @@ impl PlayerEngine {
         }
     }
 
-    /// Advances; at the end of the queue the engine stops (position 0,
-    /// `Stopped`, current stays on the last index). `next`/`previous` keep
-    /// a Paused status Paused.
+    /// Advances; past the last track it stops at position 0 with `current` left
+    /// on the last index. `next`/`previous` keep a Paused status Paused.
     pub fn next(&mut self, cx: &mut Context<Self>) {
         self.advance_to_end_of_track(cx);
     }

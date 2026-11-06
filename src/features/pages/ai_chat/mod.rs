@@ -36,8 +36,7 @@ impl ChatTurn {
     }
 }
 
-/// `messages` is the full
-/// transcript; the returned stream yields the reply as string chunks.
+/// `messages` is the full transcript; the returned stream yields the reply as string chunks.
 pub trait ChatStreamSource {
     /// Error produced by individual stream items; rendered via `Display`.
     type Error: std::fmt::Display + Send + 'static;

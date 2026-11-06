@@ -16,7 +16,6 @@ impl QueryPlaygroundPage {
     pub(in super::super) fn render_activity_log(&mut self, cx: &mut Context<Self>) -> Div {
         let has_logs = !self.activity_log.is_empty();
         let log_count = self.activity_log.len();
-        let scroll_handle = self.log_scroll_handle.clone();
 
         let card = section_card(
             "activity-log",
@@ -74,7 +73,6 @@ impl QueryPlaygroundPage {
                 div()
                     .px_4()
                     .max_h(px(LOG_LIST_H))
-                    // Block scroll events from bubbling to the outer page scroll.
                     .on_scroll(|_, _, cx| {
                         cx.stop_propagation();
                     })
@@ -84,7 +82,7 @@ impl QueryPlaygroundPage {
                         item_sizes,
                         px(LOG_LIST_H),
                         px(0.),
-                        &scroll_handle,
+                        &self.log_scroll_handle,
                         false,
                         move |this: &mut Self, visible_range, _window, cx| {
                             // Render entries in reverse (newest first).

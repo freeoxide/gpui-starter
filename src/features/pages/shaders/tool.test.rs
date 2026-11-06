@@ -5,9 +5,7 @@ use gpui_kit::{
 use super::RippleTool;
 use crate::features::pages::shaders::demos::{DemoId, demo};
 use crate::features::pages::shaders::state::ShaderState;
-use crate::ui::canvas::{
-    CanvasPointerEvent, CanvasState, CanvasTransform, ToolContext,
-};
+use crate::ui::canvas::{CanvasPointerEvent, CanvasState, CanvasTransform, ToolContext};
 
 fn pointer_at(doc: (f32, f32)) -> CanvasPointerEvent {
     let doc_position = point(px(doc.0), px(doc.1));

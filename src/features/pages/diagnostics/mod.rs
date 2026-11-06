@@ -16,8 +16,6 @@ pub struct DiagnosticsPage {
     _subscriptions: Vec<Subscription>,
 }
 
-/// Every tracked global means "re-render the page"; this collapses the
-/// otherwise thirteen-times-duplicated observe-and-notify closure.
 fn track<T: Global>(window: &mut Window, cx: &mut Context<DiagnosticsPage>) -> Subscription {
     cx.observe_global_in::<T>(window, |_, _, cx| cx.notify())
 }

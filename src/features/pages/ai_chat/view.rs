@@ -282,8 +282,7 @@ where
     S: ChatStreamSource,
     F: FnMut(&mut E, &str) + Send + 'static,
 {
-    let messages: Vec<ChatTurn> = view.turns().to_vec();
-    let stream = source.stream(&messages, cx);
+    let stream = source.stream(view.turns(), cx);
 
     let (producer, rx) = crate::services::streaming::spawn_token_stream(cx, stream);
 

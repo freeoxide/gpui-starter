@@ -6,16 +6,13 @@ use gpui_kit::prelude::*;
 use gpui_kit::{Axis, Entity, TestAppContext, VisualTestContext, Window, point, px, size};
 
 use super::NowPlayingBar;
-use crate::features::pages::music::{Library, PlayerEngine, TransportStatus};
+use crate::features::pages::music::{Library, PlayerEngine, Track, TrackId, TransportStatus};
 
-const T0: crate::features::pages::music::TrackId = crate::features::pages::music::TrackId(0);
-const T1: crate::features::pages::music::TrackId = crate::features::pages::music::TrackId(1);
+const T0: TrackId = TrackId(0);
+const T1: TrackId = TrackId(1);
 
-fn fixture_track(
-    id: crate::features::pages::music::TrackId,
-    duration_ms: u64,
-) -> crate::features::pages::music::Track {
-    crate::features::pages::music::Track {
+fn fixture_track(id: TrackId, duration_ms: u64) -> Track {
+    Track {
         id,
         title: format!("Track {}", id.0).into(),
         artist: "Fixture".into(),
@@ -76,7 +73,7 @@ fn slider_point_at(
 #[gpui_kit::test]
 fn bar_draws_idle_without_touching_the_engine(cx: &mut TestAppContext) {
     let engine = two_track_engine(cx);
-    let (bar, cx) = open_bar_window(cx, engine.clone());
+    let (bar, cx) = open_bar_window(cx, engine);
     cx.read(|cx| {
         let bar = bar.read(cx);
         assert!(bar.scrub.is_none());
