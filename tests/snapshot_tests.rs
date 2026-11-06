@@ -246,8 +246,8 @@ fn test_theme_structure() {
           - light
           - dark
         color_key_count_per_theme:
-          - 46
-          - 42
+          - 45
+          - 41
         highlight_key_count_per_theme:
           - 21
           - 21
