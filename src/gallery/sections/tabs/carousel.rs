@@ -320,8 +320,7 @@ impl Render for CarouselSection {
                                 Button::new("carousel-first").label("Go to first").on_click(
                                     cx.listener(|this, _, _, cx| {
                                         this.controlled_index = 0;
-                                        let controlled = this.controlled.clone();
-                                        controlled.update(cx, |state, cx| {
+                                        this.controlled.update(cx, |state, cx| {
                                             state.set_selected_index(0, cx);
                                         });
                                         cx.notify();
@@ -332,8 +331,7 @@ impl Render for CarouselSection {
                                 Button::new("carousel-last").label("Go to last").on_click(
                                     cx.listener(|this, _, _, cx| {
                                         this.controlled_index = 2;
-                                        let controlled = this.controlled.clone();
-                                        controlled.update(cx, |state, cx| {
+                                        this.controlled.update(cx, |state, cx| {
                                             state.set_selected_index(2, cx);
                                         });
                                         cx.notify();

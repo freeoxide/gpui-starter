@@ -1,6 +1,9 @@
 //! Calendar section, ported from the upstream `CalendarStory`.
 
-use gpui_kit::component::{calendar::Calendar, calendar::CalendarState, v_flex};
+use gpui_kit::component::{
+    calendar::{Calendar, CalendarState},
+    v_flex,
+};
 use gpui_kit::*;
 
 use crate::gallery::registry::GallerySection;

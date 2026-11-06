@@ -8,8 +8,8 @@ use crate::ui::floating::{
 
 use super::{
     INDEPENDENT_ID, OFF_WINDOW_ID, close_all_examples, dictation::DICTATION_ID, entry_handle,
-    independent_spec, off_window_spec, sketch::SKETCH_ID, spawn_dictation,
-    spawn_independent, spawn_menu_card, spawn_off_window, spawn_sketch,
+    independent_spec, off_window_spec, sketch::SKETCH_ID, spawn_dictation, spawn_independent,
+    spawn_menu_card, spawn_off_window, spawn_sketch,
 };
 
 struct Blank;

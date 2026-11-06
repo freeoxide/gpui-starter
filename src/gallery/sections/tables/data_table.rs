@@ -232,7 +232,6 @@ fn regenerate_stocks(size: usize) -> Vec<Stock> {
 }
 
 fn random_stocks(size: usize) -> Vec<Stock> {
-    // Incremental ID with size.
     let start = {
         let mut id_lock = INCREMENT_ID.lock().unwrap();
         let start = *id_lock;
@@ -996,7 +995,8 @@ impl DataTableSection {
                         delegate.stocks[start..end].iter_mut().enumerate().for_each(
                             |(i, stock)| {
                                 let n = rng_usize(3, 10);
-                                // update 30% of the stocks
+                                // A random modulus, so a different fraction of
+                                // rows ticks each frame.
                                 if i % n == 0 {
                                     stock.random_update();
                                 }

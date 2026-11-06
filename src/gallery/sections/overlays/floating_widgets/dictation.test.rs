@@ -196,8 +196,7 @@ async fn the_toggle_button_flips_listening_inside_the_hud(cx: &mut TestAppContex
         }
     }
     assert!(toggled, "the primary button must start listening");
-    cx.executor()
-        .advance_clock(core::time::Duration::from_millis(200));
+    cx.executor().advance_clock(Duration::from_millis(200));
     cx.run_until_parked();
     let (listening, listened, has_source) = cx.read(|cx| {
         let hud = window.read(cx).unwrap();

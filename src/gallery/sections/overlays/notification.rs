@@ -325,10 +325,8 @@ impl Render for NotificationSection {
                                         window.push_notification("on_click fired.", cx);
                                     })
                                     .on_close(|window, cx| {
-                                        // on_close fires inside the
-                                        // NotificationList's own update; a
-                                        // synchronous push re-enters that
-                                        // entity and panics.
+                                        // on_close fires inside the NotificationList's own update;
+                                        // a synchronous push re-enters that entity and panics.
                                         window.defer(cx, |window, cx| {
                                             window.push_notification("on_close fired.", cx);
                                         });

@@ -128,7 +128,7 @@ impl ThemeColorsSection {
         let active_theme_name = cx.theme().theme_name().clone();
         let items: Vec<ThemeItem> = theme_items(cx);
 
-        let current_theme = active_theme_name.clone();
+        let current_theme = active_theme_name;
         let selected_index = items.iter().position(|item| item.name == current_theme);
         let selected_path = selected_index.map(|idx| IndexPath::default().row(idx));
         let select_state = cx.new(|cx| SelectState::new(items, selected_path, window, cx));

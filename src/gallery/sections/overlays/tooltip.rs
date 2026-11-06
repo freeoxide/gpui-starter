@@ -181,9 +181,8 @@ impl Render for TooltipSection {
                     .relative()
                     .min_h(rems(6.))
                     .w_full()
-                    // Tall enough that it cannot fit between the trigger and
-                    // the window top while this section is near the pane top,
-                    // so the Placement::Top fallback genuinely flips below.
+                    // Too tall to fit between the trigger and the window top while this
+                    // section is near the pane top, so the Placement::Top fallback flips below.
                     .child(
                         div().absolute().top_0().left_6().child(
                             Button::new("tooltip-top-edge-trigger")

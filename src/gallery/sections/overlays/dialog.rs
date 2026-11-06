@@ -186,7 +186,6 @@ impl DialogSection {
                     .close_button(self.close_button)
                     .overlay_closable(overlay_closable)
                     .on_ok({
-                        let view = view.clone();
                         let input1 = input1.clone();
                         let date = date.clone();
                         move |_, window, cx| {

@@ -33,9 +33,8 @@ impl NumberInputSection {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // Opt out of internal stepping via `set_step(None)`, so the
-        // NumberInput emits NumberInputEvent::Step and this section is
-        // responsible for updating the value.
+        // `set_step(None)` opts out of internal stepping, so this section
+        // applies the values the NumberInputEvent::Step events carry.
         let number_input1_value = 1;
         let number_input1 = cx.new(|cx| {
             InputState::new(window, cx)

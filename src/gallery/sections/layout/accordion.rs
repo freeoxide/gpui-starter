@@ -262,7 +262,6 @@ impl Render for AccordionSection {
                 section("accordion-custom-style", "Custom style")
                     .w(rems(30.))
                     .child(
-                        // A tinted frame around the card.
                         div()
                             .w_full()
                             .p_1()

@@ -30,7 +30,6 @@ pub(super) struct StackedBarChart {
 
 impl StackedBarChart {
     pub(super) fn new(data: Vec<DailyDevice>) -> Self {
-        // 1. Calculate the stacked data
         let series = Stack::new()
             .data(data.clone())
             .keys(vec!["desktop", "mobile", "tablet", "watch"])
@@ -77,7 +76,6 @@ impl Plot for StackedBarChart {
         let width = bounds.size.width.as_f32();
         let height = bounds.size.height.as_f32() - axis_gap();
 
-        // 2. Calculate X/Y scales
         let x = self.band_scale(width);
         let band_width = x.band_width();
 
@@ -89,7 +87,6 @@ impl Plot for StackedBarChart {
 
         let y = ScaleLinear::new(vec![0., max], [height, 10.]);
 
-        // 3. Draw X axis labels
         let x_label = self.data.iter().filter_map(|d| {
             x.tick(&d.date.clone()).map(|x_tick| {
                 AxisText::new(
@@ -106,18 +103,15 @@ impl Plot for StackedBarChart {
             .stroke(cx.theme().border)
             .paint(&bounds, window, cx);
 
-        // 4. Setup color scale
         let ordinal = self.color_scale(cx);
 
-        // 5. Draw grid lines
         Grid::new()
             .y((0..=3).map(|i| height * i as f32 / 4.0))
             .stroke(cx.theme().border)
             .dash_array(&[px(4.), px(2.)])
             .paint(&bounds, window);
 
-        // 6. Draw stacked bars. Columns grow out of the zero line as the
-        // chart appears.
+        // Columns grow out of the zero line as the chart appears.
         let appear = self.appear.progress();
         for series in self.series.iter() {
             let x = x.clone();
@@ -192,8 +186,8 @@ impl Plot for StackedBarChart {
         let d = self.data.get(state.index)?;
         let ordinal = self.color_scale(cx);
 
-        // Highlight the hovered column with a translucent band the width of the bars,
-        // confined to the plot height so it doesn't cover the x-axis labels.
+        // The band is confined to the plot height so it doesn't cover the
+        // x-axis labels.
         let band_width = self.band_scale(bounds.size.width.as_f32()).band_width();
 
         // The overlay fades in and out with the hover, and the band glides

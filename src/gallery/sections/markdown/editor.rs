@@ -726,7 +726,6 @@ impl MarkdownSection {
             text_view,
             preview_zoom: 1.0,
             input_state,
-            // Default to horizontal scrolling for tables.
             table_wrap: false,
             selection_format: SelectionFormat::Plain,
             find_state,
@@ -839,7 +838,6 @@ impl MarkdownSection {
                     .gap_1()
                     .child(Clipboard::new("markdown-copy-code").value(code.clone()))
                     .when_some(lang, |this, lang| {
-                        // Only show run terminal button for certain languages
                         if lang.as_ref() == "rust" || lang.as_ref() == "python" {
                             this.child(
                                 Button::new("markdown-run-terminal")
@@ -936,8 +934,6 @@ impl MarkdownSection {
                     cx.open_url(url);
                 }
             })
-            // Tables scroll horizontally by default; the status bar toggle
-            // switches to wrapping.
             .style(self.text_view_style())
             .text_size(rems(self.preview_zoom))
             .flex_none()

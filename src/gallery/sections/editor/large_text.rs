@@ -27,7 +27,6 @@ impl LargeTextSection {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // 10K lines
         let text = "这是一个中文演示段落，用于展示更多的 [Markdown GFM] 内容。您可以在此尝试使用使用**粗体**、*斜体*和`代码`等样式。これは日本語のデモ段落です。Markdown の多言語サポートを示すためのテキストが含まれています。例えば、、**ボールド**、_イタリック_、および`コード`のスタイルなどを試すことができます。\n".repeat(10000);
 
         let editor = cx.new(|cx| {

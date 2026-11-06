@@ -141,7 +141,6 @@ impl EditorWorkspaceSection {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // 11 copies of the Rust sample, ~1K lines
         let default_source = SAMPLES
             .iter()
             .find(|sample| sample.file == "test.rs")
