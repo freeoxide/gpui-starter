@@ -366,23 +366,18 @@ impl CompanyListDelegate {
             return None;
         }
 
-        let Some(original) = self
+        let original = self
             .matched_companies
             .get_mut(from.section)
             .filter(|companies| from.row < companies.len())
-            .map(|companies| companies.remove(from.row))
-        else {
-            return None;
-        };
+            .map(|companies| companies.remove(from.row))?;
 
         let mut row = position.gap(to.row);
         if from.section == to.section && from.row < row {
             row -= 1;
         }
 
-        let Some(target) = self.matched_companies.get_mut(to.section) else {
-            return None;
-        };
+        let target = self.matched_companies.get_mut(to.section)?;
         let row = row.min(target.len());
 
         // A cross-section move re-groups the company under the target

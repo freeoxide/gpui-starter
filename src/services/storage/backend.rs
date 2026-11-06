@@ -114,9 +114,9 @@ impl StorageBackend for SqliteStorage {
         error: &crate::error_surface::ErrorRecord,
     ) -> Result<(), StorageError> {
         let conn = self.conn();
-        let severity = serde_json::to_value(&error.severity)
+        let severity = serde_json::to_value(error.severity)
             .map_err(encode_failure("persist_error_record"))?;
-        let category = serde_json::to_value(&error.category)
+        let category = serde_json::to_value(error.category)
             .map_err(encode_failure("persist_error_record"))?;
         let actions_json = serde_json::to_string(&error.actions)
             .map_err(encode_failure("persist_error_record"))?;

@@ -342,17 +342,15 @@ impl BrushSection {
 /// so shifting them costs a copy, not a re-tessellation.
 fn translated(path: &Path<Pixels>, offset: Point<Pixels>) -> Path<Pixels> {
     let mut path = path.clone();
-    path.bounds.origin = path.bounds.origin + offset;
+    path.bounds.origin += offset;
     for vertex in &mut path.vertices {
-        vertex.xy_position = vertex.xy_position + offset;
+        vertex.xy_position += offset;
     }
     path
 }
 
 fn build_stroke_path(stroke: &Stroke, origin: Point<Pixels>) -> Option<Path<Pixels>> {
-    let Some(first) = stroke.points.first() else {
-        return None;
-    };
+    let first = stroke.points.first()?;
 
     let mut builder = PathBuilder::stroke(px(stroke.size));
 
