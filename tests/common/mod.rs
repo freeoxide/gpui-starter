@@ -1,6 +1,5 @@
-//! Shared helpers for the integration-test targets under tests/. Each
-//! target compiles this module separately and uses a subset of it, hence
-//! the `#[allow(dead_code)]` on every `mod common;` declaration.
+//! Shared helpers for the tests/ targets. Each target uses a subset,
+//! hence the `#[allow(dead_code)]` on every `mod common;` declaration.
 
 use std::path::{Path, PathBuf};
 

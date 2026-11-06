@@ -61,8 +61,8 @@ fn parse_catalog(text: &str, path: &str) -> BTreeSet<String> {
     keys
 }
 
-// Catalog values are double-quoted scalars; YAML permits a trailing comment
-// after the closing quote, so the scan finds that quote instead of trimming.
+// YAML permits a trailing comment after the closing quote, so the scan
+// finds that quote instead of trimming the value.
 fn assert_quoted_scalar(value: &str, location: &str, raw_line: &str) {
     assert!(
         value.starts_with('"'),
@@ -127,9 +127,8 @@ fn localize_literals(content: &str) -> Vec<(usize, String)> {
     found
 }
 
-// Contents of a plain or raw string literal starting at `cursor`, else None.
-// Raw strings must scan too, or `localize(r"key")` would silently skip the
-// catalog check this file exists to enforce.
+// Contents of a plain or raw string literal at `cursor`, else None.
+// Raw strings must scan or `localize(r"key")` skips the catalog check.
 fn scan_string_literal(bytes: &[u8], cursor: &mut usize) -> Option<String> {
     let raw_hashes = match bytes.get(*cursor) {
         Some(b'"') => {

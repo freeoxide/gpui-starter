@@ -15,10 +15,6 @@ use gpui_starter::services::updater::{
     PlatformAsset, UpdateManifest, UpdateSnapshot, UpdateStatus,
 };
 
-// ---------------------------------------------------------------------------
-// 1. Default AppConfig serialisation
-// ---------------------------------------------------------------------------
-
 #[test]
 fn test_config_default_serialization() {
     let config = AppConfig::default();
@@ -52,10 +48,6 @@ fn test_config_default_serialization() {
         "#
         );
 }
-
-// ---------------------------------------------------------------------------
-// 2. AppConfig round-trip (serialize -> deserialize -> compare)
-// ---------------------------------------------------------------------------
 
 #[test]
 fn test_config_roundtrip() {
@@ -141,10 +133,6 @@ fn test_config_roundtrip() {
         );
 }
 
-// ---------------------------------------------------------------------------
-// 2a. Minimal v1 config (fields predating the serde(default) additions) loads
-// ---------------------------------------------------------------------------
-
 #[test]
 fn test_config_minimal_v1_json_deserializes_with_defaults() {
     // A v1 file written before any serde(default) field existed; later fields
@@ -177,10 +165,6 @@ fn test_config_minimal_v1_json_deserializes_with_defaults() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// 2b. PersistedWindowBounds loads from the pre-display_id schema unchanged
-// ---------------------------------------------------------------------------
-
 #[test]
 fn test_window_bounds_old_schema_deserializes_with_defaults() {
     let json = r#"{"x":100.0,"y":200.0,"width":800.0,"height":600.0}"#;
@@ -189,10 +173,6 @@ fn test_window_bounds_old_schema_deserializes_with_defaults() {
     assert_eq!(bounds.state, PersistedWindowState::Windowed);
 }
 
-// ---------------------------------------------------------------------------
-// 3. Theme file structure (keys / values)
-// ---------------------------------------------------------------------------
-
 #[test]
 fn test_theme_structure() {
     let theme_path = manifest_path("themes/gruvbox.json");
@@ -200,7 +180,7 @@ fn test_theme_structure() {
     let value: serde_json::Value =
         serde_json::from_str(&raw).expect("theme file must be valid JSON");
 
-    // Extract top-level keys and the name of each sub-theme for a stable snapshot.
+    // Names and counts only, so color-value tweaks don't churn the snapshot.
     #[derive(serde::Serialize)]
     struct ThemeSummary {
         name: String,
@@ -275,10 +255,6 @@ fn test_theme_structure() {
         );
 }
 
-// ---------------------------------------------------------------------------
-// 4. UpdateManifest serialization
-// ---------------------------------------------------------------------------
-
 #[test]
 fn test_update_manifest_serialization() {
     let mut platforms = std::collections::HashMap::new();
@@ -326,10 +302,6 @@ fn test_update_manifest_serialization() {
     });
 }
 
-// ---------------------------------------------------------------------------
-// 5. UpdateStatus serialization
-// ---------------------------------------------------------------------------
-
 #[test]
 fn test_update_status_serialization() {
     #[derive(serde::Serialize)]
@@ -367,10 +339,6 @@ fn test_update_status_serialization() {
         "#
         );
 }
-
-// ---------------------------------------------------------------------------
-// 6. UpdateSnapshot serialization
-// ---------------------------------------------------------------------------
 
 #[test]
 fn test_update_snapshot_serialization() {

@@ -1,30 +1,20 @@
-//! macOS bundle packaging invariants: every Info.plist-producing script must
-//! stamp the TCC usage-description keys for capabilities the app touches
-//! today (Bluetooth, microphone). A missing key makes tccd kill the app on
-//! first access instead of showing the permission prompt (RCA §2).
+//! Every Info.plist producer must stamp TCC usage keys for the capabilities
+//! the app touches (Bluetooth, microphone), or tccd kills it on first use.
 
 #[allow(dead_code)]
 mod common;
 
 use common::{manifest_path, read_file, repo_file};
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 /// Returns the `<<PLIST` heredoc body a script cats into Info.plist, so
 /// assertions target the emitted plist rather than incidental mentions.
 fn plist_heredoc(script: &str) -> String {
     let source = repo_file(script);
     let mut lines = source.lines();
-    let start = lines
-        .position(|l| l.contains("<<PLIST"))
-        .unwrap_or_else(|| panic!("{script} has no <<PLIST heredoc"));
-    let body: Vec<&str> = source
-        .lines()
-        .skip(start + 1)
-        .take_while(|l| *l != "PLIST")
-        .collect();
+    if lines.position(|l| l.contains("<<PLIST")).is_none() {
+        panic!("{script} has no <<PLIST heredoc");
+    }
+    let body: Vec<&str> = lines.take_while(|l| *l != "PLIST").collect();
     assert!(
         !body.is_empty(),
         "{script} has a <<PLIST heredoc but no terminating PLIST line"
@@ -84,10 +74,6 @@ fn infoplist_writers() -> Vec<String> {
 
 const PLIST_SCRIPTS: [&str; 2] = ["scripts/create-release-app.sh", "scripts/macos-dev-app.sh"];
 
-// ---------------------------------------------------------------------------
-// 1. TCC usage descriptions
-// ---------------------------------------------------------------------------
-
 #[test]
 fn app_plists_carry_bluetooth_usage_description() {
     for script in PLIST_SCRIPTS {
@@ -127,10 +113,6 @@ fn app_plists_skip_unused_tcc_keys() {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// 2. Bundle completeness
-// ---------------------------------------------------------------------------
 
 /// Every script that writes an Info.plist must stamp both TCC keys; this
 /// catches future bundle paths, not just the two known scripts.

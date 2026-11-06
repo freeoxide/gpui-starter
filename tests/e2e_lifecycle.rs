@@ -3,19 +3,15 @@ mod tests {
     /// Smoke test for the init sequence minus the GPUI event loop.
     #[test]
     fn test_app_initializes() {
-        // Mirrors the `app::init` first step.
         gpui_starter::lifecycle::install_panic_hook();
 
-        // Marker under a throwaway data dir, as `app::init` installs.
         let data_dir = tempfile::tempdir().expect("tempdir");
         gpui_starter::lifecycle::set_app_data_dir(data_dir.path().to_path_buf());
 
-        // Crash marker write + read (mirrors startup crash detection).
         gpui_starter::lifecycle::write_crash_marker();
         let marker = gpui_starter::lifecycle::check_previous_crash();
         assert!(marker.is_some(), "crash marker should exist after write");
 
-        // Clean removal (mirrors clean shutdown).
         gpui_starter::lifecycle::remove_crash_marker();
         assert!(
             gpui_starter::lifecycle::check_previous_crash().is_none(),
@@ -53,8 +49,7 @@ mod tests {
             "the first instance must hold the lock, or the second is not refused"
         );
 
-        // Mutual exclusion: while the first runtime holds the lock, a second
-        // preflight must take the Busy path and refuse to start.
+        // The second preflight must hit the Busy path while the first holds the lock.
         let second = gpui_starter::single_instance::preflight();
         assert!(
             !second.should_start,
@@ -62,10 +57,8 @@ mod tests {
         );
     }
 
-    /// Explorer launches protocol URLs via the registry command
-    /// `"...gpui-starter.exe" "gpui-starter://settings"`; the preflight argv
-    /// scan must pick the URL out of that quoted shape and never mistake
-    /// argv[0] (the exe path) for a link.
+    /// The argv scan must pick the URL out of Explorer's quoted launch
+    /// shape and never mistake argv[0] (the exe path) for a link.
     #[test]
     fn test_preflight_argv_accepts_quoted_command_line() {
         let args = vec![
@@ -94,7 +87,6 @@ mod tests {
 
         let config = AppConfig::default();
 
-        // normalized() must not mutate valid defaults.
         let mut normalized = config.clone();
         normalized.normalized();
         assert_eq!(config, normalized);

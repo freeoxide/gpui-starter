@@ -1,6 +1,5 @@
-//! Accessibility contracts that hold without a live window: capability
-//! registration truthfulness, snapshot semantics, the public element-helper
-//! surface, checklist claims, and runtime-proven rules, all anchored in code.
+//! Accessibility contracts that hold without a live window, each pinned
+//! against code or docs rather than a running UI.
 
 #[allow(dead_code)]
 mod common;
@@ -10,10 +9,6 @@ use gpui_kit::{Role, accesskit::Live, div, prelude::*};
 
 use gpui_starter::accessibility::{A11yExt, AccessibilitySnapshot, capability_status};
 use gpui_starter::ui::widgets::virtual_list_item;
-
-// ---------------------------------------------------------------------------
-// Capability registration truthfulness
-// ---------------------------------------------------------------------------
 
 /// `initialize` registers exactly `capability_status(snapshot.accesskit_linked)`,
 /// so these pin what that registration may claim.
@@ -46,10 +41,6 @@ fn capability_without_bridge_is_unsupported_not_degraded() {
     assert!(!status.degraded);
 }
 
-// ---------------------------------------------------------------------------
-// Snapshot semantics
-// ---------------------------------------------------------------------------
-
 #[test]
 fn default_snapshot_reflects_compiled_bridge_without_windows() {
     let snap = AccessibilitySnapshot::default();
@@ -61,10 +52,6 @@ fn default_snapshot_reflects_compiled_bridge_without_windows() {
     assert_eq!(snap.total_windows, 0);
     assert!(!snap.status.is_empty());
 }
-
-// ---------------------------------------------------------------------------
-// Element helper surface
-// ---------------------------------------------------------------------------
 
 // A11y nodes are only observable through a live window with assistive tech
 // attached, so these pin the public surface and its gpui interop.
@@ -83,10 +70,6 @@ fn virtual_list_item_chains_with_selection_state() {
     let _row = virtual_list_item("row-0", "gpx-fetch 200 1h ago", 0).aria_selected(true);
 }
 
-// ---------------------------------------------------------------------------
-// Checklist claims must match code
-// ---------------------------------------------------------------------------
-
 #[test]
 fn checklist_documents_the_real_bridge() {
     let content = repo_file("docs/accessibility-checklist.md");
@@ -96,7 +79,7 @@ fn checklist_documents_the_real_bridge() {
     assert!(normalized.contains("live region"));
     assert!(normalized.contains("wasm"));
     assert!(normalized.contains("diagnostics"));
-    // The bridge is real; the old aspirational wording must stay gone.
+    // The old aspirational checklist wording must not return.
     assert!(!normalized.contains("track accesskit integration points"));
 }
 
@@ -124,10 +107,6 @@ fn checklist_bridge_claims_anchor_in_code() {
         "virtual list rows must be list items as documented"
     );
 }
-
-// ---------------------------------------------------------------------------
-// Runtime-verified rules must match code
-// ---------------------------------------------------------------------------
 
 // Keyed ids prevent the duplicate-a11y-node-id panic; virtual_list's anchors
 // pin the 0-based position contract. Both need a live window (see header).

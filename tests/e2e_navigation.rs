@@ -4,10 +4,6 @@
 use gpui_starter::page::Page;
 use gpui_starter::routes::AppRoute;
 
-// ---------------------------------------------------------------------------
-// Sidebar pages
-// ---------------------------------------------------------------------------
-
 #[test]
 fn test_sidebar_pages_exist() {
     // Every page variant that AppRoot::active_page_view matches on must be
@@ -66,13 +62,9 @@ fn test_sidebar_pages_exist() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Route parsing (deep links)
-// ---------------------------------------------------------------------------
-
 #[test]
 fn test_route_parsing() {
-    // --- Top-level page routes -------------------------------------------
+    // Top-level page routes
     let cases = &[
         ("gpui-starter://home", AppRoute::Page(Page::Home)),
         ("gpui-starter://form", AppRoute::Page(Page::Form)),
@@ -133,7 +125,7 @@ fn test_route_parsing() {
         );
     }
 
-    // --- Round-trip: parse → to_url → parse ------------------------------
+    // Round-trip: parse → to_url → parse
     for (url, _expected) in cases {
         let route = AppRoute::parse_deep_link(url).unwrap();
         let serialized = route.to_url();
@@ -144,7 +136,7 @@ fn test_route_parsing() {
         );
     }
 
-    // --- Invalid inputs --------------------------------------------------
+    // Invalid inputs
     let bad = &[
         "https://example.com",
         "gpui-starter://missing-page",
@@ -162,10 +154,6 @@ fn test_route_parsing() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// View construction
-// ---------------------------------------------------------------------------
-
 /// SettingsPage is exported with the expected constructor; full construction
 /// needs GPUI globals this test deliberately avoids.
 #[test]
@@ -174,7 +162,6 @@ fn test_settings_page_route_and_constructor() {
     assert_eq!(route, AppRoute::Page(Page::Settings));
     assert_eq!(route.page_for_render(), Page::Settings);
 
-    // Compile-time check of the constructor signature only.
     let _: fn(
         &mut gpui_kit::Window,
         &mut gpui_kit::Context<gpui_starter::features::pages::SettingsPage>,

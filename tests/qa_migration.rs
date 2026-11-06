@@ -1,7 +1,5 @@
-//! Kit 0.8.1 migration invariants the compiler cannot check: manifest pins,
-//! the single-kit lock graph (the round-1 links-conflict failure mode), the
-//! gpui-form re-pin to the migrated freeoxide repo, and the kit-facade
-//! import surface.
+//! Kit 0.8.1 migration invariants the compiler cannot check: manifest
+//! pins, the single-kit lock graph, the gpui-form re-pin, and the facade.
 
 #[allow(dead_code)]
 mod common;
@@ -9,10 +7,6 @@ mod common;
 use std::path::PathBuf;
 
 use common::{read_file, repo_file};
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /// Returns every `[[package]]` block whose package name matches.
 fn lock_blocks<'a>(lock: &'a str, package: &str) -> Vec<&'a str> {
@@ -34,12 +28,8 @@ fn block_name(block: &str) -> &str {
         .unwrap_or_default()
 }
 
-/// Returns every `.rs` file the root crate compiles or runs as a test
-/// target — the src/ tree, build.rs when present, and the tests/ tree —
-/// minus this file, whose own assertions spell the banned paths they check
-/// for. Workspace members (crates/gpui-auth, collab-*) keep their own
-/// gpui dependency and are not policed. Sorted so failures name files
-/// stably.
+/// Every `.rs` the root crate compiles (src/, tests/, build.rs) minus
+/// this file. Workspace members keep their own gpui dep; not policed.
 fn app_sources() -> Vec<(String, String)> {
     let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let mut files = Vec::new();
@@ -83,10 +73,6 @@ fn assert_single_version(lock: &str, package: &str, version: &str) {
     );
 }
 
-// ---------------------------------------------------------------------------
-// 1. Manifest pins
-// ---------------------------------------------------------------------------
-
 #[test]
 fn manifest_declares_only_justified_kit_deps() {
     let manifest = repo_file("Cargo.toml");
@@ -112,10 +98,6 @@ fn manifest_declares_only_justified_kit_deps() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// 2. Single-kit lock graph
-// ---------------------------------------------------------------------------
-
 #[test]
 fn lock_graph_holds_one_kit_family() {
     let lock = committed_file("Cargo.lock");
@@ -133,9 +115,8 @@ fn lock_graph_holds_one_kit_family() {
     }
 }
 
-/// Reads a file from the committed HEAD blob. Cargo rewrites a stale
-/// working-tree Cargo.lock during dependency resolution, so only the
-/// committed copy shows what a `cargo build --locked` of this commit sees.
+/// Reads the HEAD blob. Cargo rewrites a stale working-tree Cargo.lock
+/// during resolution; only the committed copy reflects a --locked build.
 fn committed_file(path: &str) -> String {
     let dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let output = std::process::Command::new("git")
@@ -201,10 +182,6 @@ fn gpui_pre_snapshot_family_is_unified() {
         );
     }
 }
-
-// ---------------------------------------------------------------------------
-// 3. gpui-form re-pin (freeoxide git rev, resolved unpatched)
-// ---------------------------------------------------------------------------
 
 #[test]
 fn gpui_form_pins_migrated_freeoxide_repo() {
@@ -366,10 +343,6 @@ fn gpui_form_resolves_from_freeoxide_git_unpatched() {
         "gpui-form must resolve from the freeoxide git source at the pinned rev"
     );
 }
-
-// ---------------------------------------------------------------------------
-// 4. Kit facade import surface
-// ---------------------------------------------------------------------------
 
 /// A line reduced to code: string literals blanked and the trailing `//`
 /// comment cut. A `'"'` char literal blanks the rest of its line.
