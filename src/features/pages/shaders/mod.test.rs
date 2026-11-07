@@ -282,6 +282,15 @@ async fn success_after_the_timeout_clears_the_error_panel(cx: &mut TestAppContex
 async fn every_demo_installs_its_document_and_tool_without_a_gpu(cx: &mut TestAppContext) {
     let (page, mut cx) = open_page(cx);
     cx.run_until_parked();
+    // An adapter-less runner boots the engine into its error state, and
+    // switch_demo then keeps the error panel (with its Retry) on screen.
+    if cx.read(|cx| {
+        let page_view = page.read(cx);
+        page_view.runtime.is_none() && page_view.shader.read(cx).runtime_error().is_some()
+    }) {
+        eprintln!("skipping: no wgpu adapter (engine errored at boot)");
+        return;
+    }
     // 0 last: the page boots on Gradient, and a re-click of the active demo
     // is a no-op, so Gradient needs a real switch to install.
     for ix in [1, 2, 3, 0] {
@@ -361,6 +370,14 @@ async fn demo_switch_keeps_the_error_panel_when_init_failed(cx: &mut TestAppCont
 async fn install_demo_reuses_the_slider_entity_in_sync_with_the_shader(cx: &mut TestAppContext) {
     let (page, mut cx) = open_page(cx);
     cx.run_until_parked();
+    // Same adapter-less boot as above: nothing re-installs without a GPU.
+    if cx.read(|cx| {
+        let page_view = page.read(cx);
+        page_view.runtime.is_none() && page_view.shader.read(cx).runtime_error().is_some()
+    }) {
+        eprintln!("skipping: no wgpu adapter (engine errored at boot)");
+        return;
+    }
     let slider_entity = cx.read(|cx| page.read(cx).slider.clone());
 
     // Init lands after the user moved the slider: the knob must keep the

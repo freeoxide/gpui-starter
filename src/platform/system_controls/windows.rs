@@ -54,12 +54,15 @@ impl ComApartment {
     fn new() -> Option<Self> {
         // SAFETY: plain COM init; no pointers escape.
         unsafe {
-            // windows-rs 0.61 returns a raw HRESULT here, not Result.
+            // windows-rs 0.61 returns a raw HRESULT here; ok() yields a
+            // Result, so test the HRESULT directly.
             let result = CoInitializeEx(None, COINIT_MULTITHREADED);
             if result == RPC_E_CHANGED_MODE {
                 Some(ComApartment::Foreign)
+            } else if result.is_ok() {
+                Some(ComApartment::Owned)
             } else {
-                result.ok().map(|()| ComApartment::Owned)
+                None
             }
         }
     }

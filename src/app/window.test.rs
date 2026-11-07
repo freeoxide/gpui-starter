@@ -51,6 +51,8 @@ fn quit_dispatch_counter(cx: &mut TestAppContext) -> Rc<Cell<usize>> {
 }
 
 #[gpui_kit::test]
+// The macOS test platform does not implement window removal.
+#[cfg(not(target_os = "macos"))]
 async fn closing_the_recorded_root_clears_the_global(cx: &mut TestAppContext) {
     cx.update(gpui_kit::init);
     cx.update(install_close_tracker);
@@ -274,6 +276,8 @@ async fn restored_bounds_reuses_the_saved_origin_only_where_the_wm_allows_it(
 }
 
 #[gpui_kit::test]
+// The macOS test platform does not implement window removal.
+#[cfg(not(target_os = "macos"))]
 async fn os_close_requests_on_the_root_are_allowed_off_macos(cx: &mut TestAppContext) {
     let allowed = cx.update(|cx| should_close_root_window(cx));
     assert!(
