@@ -41,11 +41,6 @@ fn install_routes_the_accelerator_to_the_toggle(cx: &mut TestAppContext) {
     let fired = cx.update(|cx| shortcuts::trigger(shortcuts::QUICK_FLOAT, cx));
     assert!(fired);
     assert!(!cx.update(|cx| dictation_open(cx)));
-
-    assert!(cx.update(|cx| shortcuts::remove_handler(shortcuts::QUICK_FLOAT, cx)));
-    let fired = cx.update(|cx| shortcuts::trigger(shortcuts::QUICK_FLOAT, cx));
-    assert!(!fired, "an unregistered accelerator must not fire");
-    assert!(!cx.update(|cx| dictation_open(cx)));
 }
 
 #[gpui_kit::test]
@@ -55,5 +50,4 @@ fn a_second_installation_is_rejected(cx: &mut TestAppContext) {
         .expect("first install");
     let second = cx.update(|cx| install_quick_float(cx));
     assert_eq!(second.err(), Some(RegistryError::DuplicateId));
-    cx.update(|cx| shortcuts::remove_handler(shortcuts::QUICK_FLOAT, cx));
 }

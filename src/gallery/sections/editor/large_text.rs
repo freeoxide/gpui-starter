@@ -6,11 +6,12 @@ use gpui_kit::component::{
     ActiveTheme as _, Selectable as _, Sizable as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
     h_flex,
-    input::{self, Input, InputEvent, InputState, TabSize, Textarea, TextareaState},
+    input::{Input, InputState, TabSize, Textarea, TextareaState},
     v_flex,
 };
 use gpui_kit::*;
 
+use super::parse_go_to_line;
 use crate::gallery::registry::GallerySection;
 
 pub struct LargeTextSection {
@@ -26,7 +27,6 @@ impl LargeTextSection {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        // 10K lines
         let text = "这是一个中文演示段落，用于展示更多的 [Markdown GFM] 内容。您可以在此尝试使用使用**粗体**、*斜体*和`代码`等样式。これは日本語のデモ段落です。Markdown の多言語サポートを示すためのテキストが含まれています。例えば、、**ボールド**、_イタリック_、および`コード`のスタイルなどを試すことができます。\n".repeat(10000);
 
         let editor = cx.new(|cx| {
@@ -41,7 +41,9 @@ impl LargeTextSection {
         });
         let go_to_line_state = cx.new(|cx| InputState::new(window, cx));
 
-        let _subscribes = vec![cx.subscribe(&editor, |_, _, _: &InputEvent, cx| {
+        // Cursor moves emit no InputEvent; observing catches them so the
+        // readout tracks the caret.
+        let _subscribes = vec![cx.observe(&editor, |_, _, cx| {
             cx.notify();
         })];
 
@@ -60,8 +62,10 @@ impl LargeTextSection {
         window.open_dialog(cx, move |dialog, window, cx| {
             input_state.update(cx, |state, cx| {
                 let position = editor.read(cx).cursor_position();
+                // 1-based like the parser, so typing the hint verbatim stays
+                // at the cursor.
                 state.set_placeholder(
-                    format!("{}:{}", position.line, position.character),
+                    format!("{}:{}", position.line + 1, position.character + 1),
                     window,
                     cx,
                 );
@@ -76,23 +80,12 @@ impl LargeTextSection {
                     let input_state = input_state.clone();
                     move |_, window, cx| {
                         let query = input_state.read(cx).value();
-                        let mut parts = query
-                            .split(':')
-                            .map(|s| s.trim().parse::<usize>().ok())
-                            .collect::<Vec<_>>()
-                            .into_iter();
-                        let Some(line) = parts.next().and_then(|l| l) else {
+                        let Some(position) = parse_go_to_line(&query) else {
                             return false;
                         };
-                        let line = line.saturating_sub(1);
-                        let column = parts.next().and_then(|c| c).unwrap_or(1).saturating_sub(1);
 
                         editor.update(cx, |state, cx| {
-                            state.set_cursor_position(
-                                input::Position::new(line as u32, column as u32),
-                                window,
-                                cx,
-                            );
+                            state.set_cursor_position(position, window, cx);
                         });
 
                         true
@@ -141,7 +134,12 @@ impl Render for LargeTextSection {
                             Button::new("large-text-line-column")
                                 .ghost()
                                 .xsmall()
-                                .label(format!("{}:{} ({} c)", loc.line, loc.character, cursor))
+                                .label(format!(
+                                    "{}:{} ({} byte)",
+                                    loc.line + 1,
+                                    loc.character + 1,
+                                    cursor
+                                ))
                                 .on_click(cx.listener(Self::go_to_line))
                         }),
                 ),

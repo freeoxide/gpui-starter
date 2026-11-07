@@ -4,7 +4,6 @@ use gpui_kit::component::{
 };
 use gpui_kit::{prelude::*, *};
 
-use crate::accessibility::A11yExt as _;
 use crate::ui::canvas::{Canvas, *};
 
 use super::geometry::{rect_from_corners, sample_cubic_bezier};
@@ -43,11 +42,6 @@ impl NodeGraphDemo {
 impl Render for NodeGraphDemo {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let selected = self.state.read(cx).selected_shape_ids().len();
-        let count = selected.to_string();
-        let readout = crate::i18n::localize_with_args(
-            "showcase_selected_count",
-            &[("count", count.as_str())],
-        );
         super::render_demo_shell(
             "nodes",
             crate::i18n::localize(super::CanvasDemo::Nodes.title_key()),
@@ -60,13 +54,7 @@ impl Render for NodeGraphDemo {
                     .label(crate::i18n::localize("showcase_reset"))
                     .on_click(cx.listener(|this, _, _, cx| this.reset(cx)))
                     .into_any_element(),
-                div()
-                    .id("nodes-selected-count")
-                    .a11y(Role::Status, readout.clone())
-                    .a11y_live(accesskit::Live::Polite)
-                    .text_color(cx.theme().muted_foreground)
-                    .child(readout)
-                    .into_any_element(),
+                super::selected_count_readout("nodes", selected, cx),
             ],
             Canvas::new("nodes-canvas", self.state.clone()),
             cx,
@@ -133,6 +121,7 @@ impl NodeGraphTool {
         let mut nodes = Vec::new();
         let edge_seeds: [(usize, usize); 4] = [(0, 1), (0, 2), (1, 3), (2, 3)];
         let mut edges = Vec::new();
+        let text_system = WindowTextSystem::new(cx.text_system().clone());
         state.edit_document(cx, |doc| {
             for (title, (x, y)) in seeds {
                 let bounds = Bounds {
@@ -154,7 +143,7 @@ impl NodeGraphTool {
                             ),
                         ),
                     )
-                    .unwrap_or_default();
+                    .expect("layer was just created");
                 let label_id = doc
                     .add_shape(
                         nodes_layer,
@@ -163,9 +152,10 @@ impl NodeGraphTool {
                             title,
                             px(14.),
                             foreground,
+                            measure_text(&text_system, title, px(14.)),
                         ),
                     )
-                    .unwrap_or_default();
+                    .expect("layer was just created");
                 nodes.push(NodeCell {
                     bounds,
                     rect_id,
@@ -185,7 +175,7 @@ impl NodeGraphTool {
                             },
                         ),
                     )
-                    .unwrap_or_default();
+                    .expect("layer was just created");
                 edges.push(EdgeCell { from, to, path_id });
             }
         });
@@ -279,21 +269,10 @@ impl CanvasTool for NodeGraphTool {
         if let Some(drag) = self.node_drag.as_mut() {
             let delta = event.doc_position - drag.origin;
             drag.origin = event.doc_position;
-            let node = &mut self.nodes[drag.node_ix];
-            node.bounds.origin += delta;
             let node_ix = drag.node_ix;
-            let resampled: Vec<(ShapeId, Vec<Point<Pixels>>)> = self
-                .edges
-                .iter()
-                .filter(|edge| edge.from == node_ix || edge.to == node_ix)
-                .map(|edge| {
-                    (
-                        edge.path_id,
-                        edge_points(&self.nodes[edge.from], &self.nodes[edge.to]),
-                    )
-                })
-                .collect();
+            self.nodes[node_ix].bounds.origin += delta;
             let nodes = &self.nodes;
+            let edges = &self.edges;
             state.edit_document(cx, |doc| {
                 let node = &nodes[node_ix];
                 doc.update_shape(node.rect_id, |shape| {
@@ -306,10 +285,14 @@ impl CanvasTool for NodeGraphTool {
                         *position = node.bounds.origin + point(px(8.), px(8.));
                     }
                 });
-                for (path_id, points) in &resampled {
-                    doc.update_shape(*path_id, |shape| {
+                for edge in edges
+                    .iter()
+                    .filter(|edge| edge.from == node_ix || edge.to == node_ix)
+                {
+                    let points = edge_points(&nodes[edge.from], &nodes[edge.to]);
+                    doc.update_shape(edge.path_id, |shape| {
                         if let CanvasShape::Path { points: p, .. } = shape {
-                            *p = points.clone();
+                            *p = points;
                         }
                     });
                 }

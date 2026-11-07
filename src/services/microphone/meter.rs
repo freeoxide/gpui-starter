@@ -2,9 +2,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 const SCALE: f32 = 1_048_576.;
 
-/// Lock-free level meter shared between the audio side and render. rms is
-/// the most recent callback's RMS; peak accumulates via fetch_max until
-/// [`LevelMeter::read`] resets it.
+/// Lock-free meter shared by the audio side and render: rms is the latest callback's,
+/// peak accumulates via fetch_max until [`LevelMeter::read`] resets it.
 pub struct LevelMeter {
     rms: AtomicU32,
     peak: AtomicU32,

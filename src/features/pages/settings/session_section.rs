@@ -37,7 +37,7 @@ pub(super) fn render_session_section(cx: &mut Context<super::SettingsPage>) -> i
                 },
             ))
             .into_any_element(),
-        AuthState::SigningIn | AuthState::SigningUp | AuthState::AwaitingChallenge { .. } => div()
+        AuthState::SigningIn | AuthState::SigningUp => div()
             .id("settings-auth-signing-in")
             .a11y(
                 Role::Paragraph,
@@ -66,7 +66,7 @@ pub(super) fn render_session_section(cx: &mut Context<super::SettingsPage>) -> i
                     .on_click(|_, _, cx| {
                         crate::events::emit(
                             crate::events::AppEventKind::Navigate(crate::routes::AppRoute::page(
-                                crate::sidebar::Page::SignIn,
+                                crate::page::Page::SignIn,
                             )),
                             cx,
                         );
@@ -81,23 +81,26 @@ pub(super) fn render_session_section(cx: &mut Context<super::SettingsPage>) -> i
 
     crate::features::tutorial::target(
         "settings-account",
-        super::dev_sections::settings_card_base(cx)
-            .child(super::dev_sections::section_heading(
+        super::rows::settings_card_base(cx)
+            .child(super::rows::section_heading(
                 "settings-account-title",
                 crate::i18n::localize("settings_auth_title"),
             ))
             .child(state_row)
-            .child(super::notifications_section::status_row(
+            .child(super::rows::status_row(
+                "settings-status",
                 "auth-provider",
                 crate::i18n::localize("settings_auth_provider"),
-                snapshot.provider_id.clone(),
+                snapshot.provider_id,
             ))
-            .child(super::notifications_section::status_row(
+            .child(super::rows::status_row(
+                "settings-status",
                 "auth-store",
                 crate::i18n::localize("settings_auth_store"),
                 snapshot.store_backend,
             ))
-            .child(super::notifications_section::status_row(
+            .child(super::rows::status_row(
+                "settings-status",
                 "auth-expires",
                 crate::i18n::localize("settings_auth_expires"),
                 expiry,

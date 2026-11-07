@@ -25,9 +25,8 @@ fn with_ex_bits(current: u32, bits: u32, enable: bool) -> u32 {
 
 pub(crate) fn set_click_through(handle: &Win32WindowHandle, enabled: bool) -> bool {
     let hwnd = HWND(handle.hwnd.get() as *mut _);
-    // SAFETY: hwnd is this window's own handle from gpui's
-    // HasWindowHandle impl; the call runs on the thread that owns the
-    // window, the documented safe context for SetWindowLongPtrW.
+    // SAFETY: hwnd is this window's own handle from gpui's HasWindowHandle impl, used on
+    // its owning thread, the documented safe context for SetWindowLongPtrW.
     let current = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) } as u32;
     let next = with_ex_bits(current, CLICK_THROUGH_BITS.0, enabled);
     // SAFETY: same hwnd ownership; GWL_EXSTYLE with a plain style word.

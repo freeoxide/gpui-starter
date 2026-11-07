@@ -277,7 +277,7 @@ impl TableDelegate for ChannelTableDelegate {
         window: &mut Window,
         _: &mut Context<TableState<Self>>,
     ) -> Option<Pixels> {
-        let col = self.columns.get(col_ix)?.clone();
+        let col = self.columns.get(col_ix)?;
         let rem = window.rem_size();
         let font_size = match self.size {
             Size::XSmall => rem * 0.75,
@@ -307,7 +307,7 @@ impl TableDelegate for ChannelTableDelegate {
         let cells = self
             .rows
             .iter()
-            .map(|row| text_width(&Self::cell_text(row, &col)))
+            .map(|row| text_width(&Self::cell_text(row, col)))
             .fold(px(0.), Pixels::max);
         let sort_icon = rem * 0.75 + px(4.);
         let header = text_width(col.name.as_ref()) + sort_icon;

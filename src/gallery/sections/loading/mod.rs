@@ -1,7 +1,6 @@
 //! Loading sections, ported from the upstream stories: Skeleton, Shimmer, and
 //! Empty.
 
-mod demo;
 mod empty;
 mod shimmer;
 mod skeleton;

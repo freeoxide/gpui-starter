@@ -4,6 +4,7 @@ use gpui_kit::{
 };
 
 use super::*;
+use crate::ui::floating::WidgetLayer;
 
 fn anchor() -> Bounds<Pixels> {
     Bounds {
@@ -62,10 +63,12 @@ fn offset_applies_after_placement() {
 }
 
 #[test]
-fn clamps_origin_into_the_clamp_rect_at_each_edge() {
-    let tight = Bounds {
-        origin: point(px(0.), px(0.)),
-        size: size(px(50.), px(50.)),
+fn clamps_each_placement_at_the_clamp_rect_edges() {
+    // A mostly-offscreen window anchor: every placement resolves past the
+    // 1000x1000 clamp's bottom-right corner, so the max edge must bite.
+    let offscreen = Bounds {
+        origin: point(px(980.), px(990.)),
+        size: size(px(300.), px(200.)),
     };
     for placement in [
         Placement9::TopLeft,
@@ -78,16 +81,56 @@ fn clamps_origin_into_the_clamp_rect_at_each_edge() {
         Placement9::Bottom,
         Placement9::BottomRight,
     ] {
-        let bounds = resolve_bounds(tight, tight, float_size(), placement, Point::default());
-        assert!(
-            bounds.origin.x >= px(0.) && bounds.origin.x + bounds.size.width <= px(50.),
-            "x clamped for {placement:?}"
+        let bounds = resolve_bounds(
+            offscreen,
+            clamp(),
+            float_size(),
+            placement,
+            Point::default(),
         );
-        assert!(
-            bounds.origin.y >= px(0.) && bounds.origin.y + bounds.size.height <= px(50.),
-            "y clamped for {placement:?}"
+        assert_eq!(
+            bounds.origin,
+            point(px(960.), px(980.)),
+            "the max edge clamps every placement, {placement:?}"
         );
     }
+
+    // The same anchor with a negative offset past the top-left corner: the
+    // min edge must bite on the axes it applies to and leave the rest alone.
+    let offset = point(px(-1010.), px(-1075.));
+    let cases: [(Placement9, f32, f32); 9] = [
+        (Placement9::TopLeft, 0., 0.),
+        (Placement9::Top, 100., 0.),
+        (Placement9::TopRight, 230., 0.),
+        (Placement9::Left, 0., 5.),
+        (Placement9::Center, 100., 5.),
+        (Placement9::Right, 230., 5.),
+        (Placement9::BottomLeft, 0., 95.),
+        (Placement9::Bottom, 100., 95.),
+        (Placement9::BottomRight, 230., 95.),
+    ];
+    for (placement, x, y) in cases {
+        let bounds = resolve_bounds(offscreen, clamp(), float_size(), placement, offset);
+        assert_eq!(
+            bounds.origin,
+            point(px(x), px(y)),
+            "the min edge clamps per placement, {placement:?}"
+        );
+    }
+}
+
+#[test]
+fn clamps_after_the_offset_not_before() {
+    // A Center origin inside the clamp, pushed off-edge by the offset: the
+    // clamp must see the offset origin and pull it back (960, 980).
+    let bounds = resolve_bounds(
+        anchor(),
+        clamp(),
+        float_size(),
+        Placement9::Center,
+        point(px(900.), px(900.)),
+    );
+    assert_eq!(bounds.origin, point(px(960.), px(980.)));
 }
 
 #[test]
@@ -174,11 +217,10 @@ fn click_through_builder_round_trips() {
 fn layer_shell_builder_round_trips() {
     let spec = FloatingSpec::new(FloatingWindowId("demo".into()), float_size());
     assert!(spec.layer_shell_spec().is_none());
-    let spec = spec.layer_shell(LayerShellSpec::new().namespace("widgets.local"));
+    let spec = spec.layer_shell(LayerShellSpec::new().layer(WidgetLayer::Background));
     assert_eq!(
-        spec.layer_shell_spec()
-            .map(|ls| ls.requested_namespace().to_string()),
-        Some("widgets.local".to_string())
+        spec.layer_shell_spec().map(|ls| ls.requested_layer()),
+        Some(WidgetLayer::Background)
     );
 }
 
@@ -260,7 +302,7 @@ async fn window_is_open_stays_true_while_dispatching_and_false_after_close(
     }
 
     let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
-    let handle: gpui_kit::AnyWindowHandle = window.into();
+    let handle: AnyWindowHandle = window.into();
     let mid_dispatch = cx.update(|cx| {
         handle
             .update(cx, |_, _, cx| window_is_open(&handle, cx))
@@ -285,7 +327,7 @@ async fn resolve_anchor_separates_dispatch_block_from_real_failures(cx: &mut Tes
     }
 
     let window = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
-    let handle: gpui_kit::AnyWindowHandle = window.into();
+    let handle: AnyWindowHandle = window.into();
     let blocked = cx.update(|cx| {
         handle.update(cx, |_, _, cx| {
             resolve_anchor(

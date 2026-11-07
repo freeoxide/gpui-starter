@@ -54,7 +54,7 @@ Text lines are kept whole; the photo above is cut on the box edge instead, so
 the preview never holds blank space it could have filled."#;
 
 const SHORT_MARKDOWN: &str = "A **short** note that fits inside the cap, so it renders at its natural \
-     height and no button appears.";
+    height and no button appears.";
 
 pub struct TextViewSection {
     long: Entity<TextViewState>,
@@ -73,13 +73,6 @@ impl TextViewSection {
     fn new(cx: &mut Context<Self>) -> Self {
         let long = cx.new(|cx| TextViewState::markdown(LONG_MARKDOWN, cx));
         let short = cx.new(|cx| TextViewState::markdown(SHORT_MARKDOWN, cx));
-        // `is_clamped` is written while the view paints; observe the states so
-        // the button follows it without the caller measuring the text again.
-        let mut _subscriptions = vec![
-            cx.observe(&long, |_, _, cx| cx.notify()),
-            cx.observe(&short, |_, _, cx| cx.notify()),
-        ];
-
         let slider = cx.new(|_| {
             SliderState::new()
                 .min(1.)
@@ -87,12 +80,18 @@ impl TextViewSection {
                 .step(1.)
                 .default_value(DEFAULT_MAX_LINES as f32)
         });
-        _subscriptions.push(cx.subscribe(&slider, |this, _, event, cx| {
-            if let SliderEvent::Change(value) = event {
-                this.max_lines = value.start() as usize;
-                cx.notify();
-            }
-        }));
+        // `is_clamped` is written while the view paints; observe the states so
+        // the button follows it without the caller measuring the text again.
+        let _subscriptions = vec![
+            cx.observe(&long, |_, _, cx| cx.notify()),
+            cx.observe(&short, |_, _, cx| cx.notify()),
+            cx.subscribe(&slider, |this, _, event, cx| {
+                if let SliderEvent::Change(value) = event {
+                    this.max_lines = value.start() as usize;
+                    cx.notify();
+                }
+            }),
+        ];
 
         Self {
             long,

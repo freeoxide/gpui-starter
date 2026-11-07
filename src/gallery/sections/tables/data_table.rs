@@ -215,6 +215,16 @@ fn compact(val: f64) -> String {
         .unwrap_or_else(|| format!("{val:.2}"))
 }
 
+/// A signed percentage as the percent cells and their export share.
+fn percent_text(val: f64) -> String {
+    format!("{:+.2}%", val * 100.)
+}
+
+/// A signed change as the change cells and their export share.
+fn change_text(val: f64) -> String {
+    format!("{val:+.2}")
+}
+
 /// Restarts ids from zero and builds a fresh set of rows.
 fn regenerate_stocks(size: usize) -> Vec<Stock> {
     *INCREMENT_ID.lock().unwrap() = 0;
@@ -222,7 +232,6 @@ fn regenerate_stocks(size: usize) -> Vec<Stock> {
 }
 
 fn random_stocks(size: usize) -> Vec<Stock> {
-    // Incremental ID with size.
     let start = {
         let mut id_lock = INCREMENT_ID.lock().unwrap();
         let start = *id_lock;
@@ -446,7 +455,7 @@ impl StockTableDelegate {
             .when_some(change_colors(val, cx), |this, (foreground, background)| {
                 this.text_color(foreground).bg(background.alpha(0.05))
             })
-            .child(format!("{:+.2}%", val * 100.))
+            .child(percent_text(val))
             .into_any_element()
     }
 
@@ -456,8 +465,62 @@ impl StockTableDelegate {
             .when_some(change_colors(val, cx), |this, (foreground, _)| {
                 this.text_color(foreground)
             })
-            .child(format!("{val:+.2}"))
+            .child(change_text(val))
             .into_any_element()
+    }
+
+    /// The text one cell shows, so the renderer and the CSV export cannot
+    /// drift apart. `None` marks a column with no data (the extra columns).
+    fn cell_string(&self, stock: &Stock, key: &str) -> Option<String> {
+        match key {
+            "id" => stock.id.to_string(),
+            "market" => stock.counter.market.to_string(),
+            "symbol" => stock.counter.symbol_code().to_string(),
+            "name" => stock.counter.name.to_string(),
+            "price" => format!("{:.2}", stock.price),
+            "change" => change_text(stock.change),
+            "change_percent" => percent_text(stock.change_percent),
+            "volume" => compact(stock.volume),
+            "turnover" => compact(stock.turnover),
+            "market_cap" => compact(stock.market_cap),
+            "ttm" => compact(stock.ttm),
+            "five_mins_ranking" => format!("{:.0}", stock.five_mins_ranking),
+            "th60_days_ranking" => format!("{:.0}", stock.th60_days_ranking),
+            "year_change_percent" => percent_text(stock.year_change_percent),
+            "bid" => format!("{:.2}", stock.bid),
+            "bid_volume" => compact(stock.bid_volume),
+            "ask" => format!("{:.2}", stock.ask),
+            "ask_volume" => compact(stock.ask_volume),
+            "open" => format!("{:.2}", stock.open),
+            "prev_close" => format!("{:.2}", stock.prev_close),
+            "high" => format!("{:.2}", stock.high),
+            "low" => format!("{:.2}", stock.low),
+            "turnover_rate" => format!("{:.2}%", stock.turnover_rate * 100.),
+            "rise_rate" => format!("{:.2}%", stock.rise_rate * 100.),
+            "amplitude" => format!("{:.2}%", stock.amplitude * 100.),
+            "pe_status" => format!("{:.2}", stock.pe_status),
+            "pb_status" => format!("{:.2}", stock.pb_status),
+            "volume_ratio" => format!("{:.2}", stock.volume_ratio),
+            "bid_ask_ratio" => format!("{:.2}", stock.bid_ask_ratio),
+            "latest_pre_close" => format!("{:.2}", stock.latest_pre_close),
+            "latest_post_close" => format!("{:.2}", stock.latest_post_close),
+            "pre_market_cap" => compact(stock.pre_market_cap),
+            "pre_market_percent" => percent_text(stock.pre_market_percent),
+            "pre_market_change" => change_text(stock.pre_market_change),
+            "post_market_cap" => compact(stock.post_market_cap),
+            "post_market_percent" => percent_text(stock.post_market_percent),
+            "post_market_change" => change_text(stock.post_market_change),
+            "float_cap" => compact(stock.float_cap),
+            "shares" => compact(stock.shares as f64),
+            "shares_float" => compact(stock.shares_float as f64),
+            "day_5_ranking" => format!("{:.0}", stock.day_5_ranking),
+            "day_10_ranking" => format!("{:.0}", stock.day_10_ranking),
+            "day_30_ranking" => format!("{:.0}", stock.day_30_ranking),
+            "day_120_ranking" => format!("{:.0}", stock.day_120_ranking),
+            "day_250_ranking" => format!("{:.0}", stock.day_250_ranking),
+            _ => return None,
+        }
+        .into()
     }
 }
 
@@ -642,6 +705,7 @@ impl TableDelegate for StockTableDelegate {
             return div().child("--").into_any_element();
         };
 
+        // Decoration only: every column's text comes from cell_string.
         match col.key.as_ref() {
             "id" => self
                 .value_cell(&col)
@@ -669,66 +733,28 @@ impl TableDelegate for StockTableDelegate {
                 .value_cell(&col)
                 .child(div().truncate().child(stock.counter.name.clone()))
                 .into_any_element(),
-            "price" => self
-                .value_cell(&col)
-                .font_semibold()
-                .child(format!("{:.2}", stock.price))
-                .into_any_element(),
+            "price" => {
+                let text = self.cell_string(stock, &col.key).unwrap_or_default();
+                self.value_cell(&col)
+                    .font_semibold()
+                    .child(text)
+                    .into_any_element()
+            }
             "change" => self.render_change(&col, stock.change, cx),
             "change_percent" => self.render_percent(&col, stock.change_percent, cx),
-            "volume" => self.render_number(&col, compact(stock.volume)),
-            "turnover" => self.render_number(&col, compact(stock.turnover)),
-            "market_cap" => self.render_number(&col, compact(stock.market_cap)),
-            "ttm" => self.render_number(&col, compact(stock.ttm)),
-            "five_mins_ranking" => {
-                self.render_number(&col, format!("{:.0}", stock.five_mins_ranking))
-            }
-            "th60_days_ranking" => {
-                self.render_number(&col, format!("{:.0}", stock.th60_days_ranking))
-            }
             "year_change_percent" => self.render_percent(&col, stock.year_change_percent, cx),
-            "bid" => self.render_number(&col, format!("{:.2}", stock.bid)),
-            "bid_volume" => self.render_number(&col, compact(stock.bid_volume)),
-            "ask" => self.render_number(&col, format!("{:.2}", stock.ask)),
-            "ask_volume" => self.render_number(&col, compact(stock.ask_volume)),
-            "open" => self.render_number(&col, format!("{:.2}", stock.open)),
-            "prev_close" => self.render_number(&col, format!("{:.2}", stock.prev_close)),
-            "high" => self.render_number(&col, format!("{:.2}", stock.high)),
-            "low" => self.render_number(&col, format!("{:.2}", stock.low)),
-            "turnover_rate" => {
-                self.render_number(&col, format!("{:.2}%", stock.turnover_rate * 100.))
-            }
-            "rise_rate" => self.render_number(&col, format!("{:.2}%", stock.rise_rate * 100.)),
-            "amplitude" => self.render_number(&col, format!("{:.2}%", stock.amplitude * 100.)),
-            "pe_status" => self.render_number(&col, format!("{:.2}", stock.pe_status)),
-            "pb_status" => self.render_number(&col, format!("{:.2}", stock.pb_status)),
-            "volume_ratio" => self.render_number(&col, format!("{:.2}", stock.volume_ratio)),
-            "bid_ask_ratio" => self.render_number(&col, format!("{:.2}", stock.bid_ask_ratio)),
-            "latest_pre_close" => {
-                self.render_number(&col, format!("{:.2}", stock.latest_pre_close))
-            }
-            "latest_post_close" => {
-                self.render_number(&col, format!("{:.2}", stock.latest_post_close))
-            }
-            "pre_market_cap" => self.render_number(&col, compact(stock.pre_market_cap)),
             "pre_market_percent" => self.render_percent(&col, stock.pre_market_percent, cx),
             "pre_market_change" => self.render_change(&col, stock.pre_market_change, cx),
-            "post_market_cap" => self.render_number(&col, compact(stock.post_market_cap)),
             "post_market_percent" => self.render_percent(&col, stock.post_market_percent, cx),
             "post_market_change" => self.render_change(&col, stock.post_market_change, cx),
-            "float_cap" => self.render_number(&col, compact(stock.float_cap)),
-            "shares" => self.render_number(&col, compact(stock.shares as f64)),
-            "shares_float" => self.render_number(&col, compact(stock.shares_float as f64)),
-            "day_5_ranking" => self.render_number(&col, format!("{:.0}", stock.day_5_ranking)),
-            "day_10_ranking" => self.render_number(&col, format!("{:.0}", stock.day_10_ranking)),
-            "day_30_ranking" => self.render_number(&col, format!("{:.0}", stock.day_30_ranking)),
-            "day_120_ranking" => self.render_number(&col, format!("{:.0}", stock.day_120_ranking)),
-            "day_250_ranking" => self.render_number(&col, format!("{:.0}", stock.day_250_ranking)),
-            _ => self
-                .value_cell(&col)
-                .text_color(cx.theme().muted_foreground)
-                .child("--")
-                .into_any_element(),
+            _ => match self.cell_string(stock, &col.key) {
+                Some(text) => self.render_number(&col, text),
+                None => self
+                    .value_cell(&col)
+                    .text_color(cx.theme().muted_foreground)
+                    .child("--")
+                    .into_any_element(),
+            },
         }
     }
 
@@ -739,7 +765,13 @@ impl TableDelegate for StockTableDelegate {
         _: &mut Window,
         _: &mut Context<TableState<Self>>,
     ) {
+        // Drag indices cover the synthesized extra columns, which have no
+        // entry in this vec; a base column dropped among them lands at the end.
+        if col_ix >= self.columns.len() {
+            return;
+        }
         let col = self.columns.remove(col_ix);
+        let to_ix = to_ix.min(self.columns.len());
         self.columns.insert(to_ix, col);
     }
 
@@ -758,12 +790,28 @@ impl TableDelegate for StockTableDelegate {
                 }),
                 "symbol" => self.stocks.sort_by(|a, b| match sort {
                     ColumnSort::Descending => b.counter.symbol.cmp(&a.counter.symbol),
+                    ColumnSort::Ascending => a.counter.symbol.cmp(&b.counter.symbol),
                     _ => a.id.cmp(&b.id),
                 }),
-                "change" | "change_percent" => self.stocks.sort_by(|a, b| match sort {
+                "change" => self.stocks.sort_by(|a, b| match sort {
                     ColumnSort::Descending => b
                         .change
                         .partial_cmp(&a.change)
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                    ColumnSort::Ascending => a
+                        .change
+                        .partial_cmp(&b.change)
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                    _ => a.id.cmp(&b.id),
+                }),
+                "change_percent" => self.stocks.sort_by(|a, b| match sort {
+                    ColumnSort::Descending => b
+                        .change_percent
+                        .partial_cmp(&a.change_percent)
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                    ColumnSort::Ascending => a
+                        .change_percent
+                        .partial_cmp(&b.change_percent)
                         .unwrap_or(std::cmp::Ordering::Equal),
                     _ => a.id.cmp(&b.id),
                 }),
@@ -797,16 +845,19 @@ impl TableDelegate for StockTableDelegate {
         }
 
         self.loading = true;
+        cx.notify();
 
         self._load_task = cx.spawn(async move |view, cx| {
-            // Simulate network request, delay 1s to load data.
+            // Stands in for a network fetch; the delay makes the loading state visible.
             cx.background_executor().timer(Duration::from_secs(1)).await;
 
             _ = cx.update(|cx| {
-                let _ = view.update(cx, |view, _| {
+                let _ = view.update(cx, |view, cx| {
                     view.delegate_mut().stocks.extend(random_stocks(200));
                     view.delegate_mut().loading = false;
                     view.delegate_mut().eof = view.delegate().stocks.len() >= 6000;
+                    // Entity updates do not notify on their own.
+                    cx.notify();
                 });
             });
         });
@@ -838,54 +889,7 @@ impl TableDelegate for StockTableDelegate {
             return String::new();
         };
 
-        match col.key.as_ref() {
-            "id" => stock.id.to_string(),
-            "market" => stock.counter.market.to_string(),
-            "symbol" => stock.counter.symbol_code().to_string(),
-            "name" => stock.counter.name.to_string(),
-            "price" => format!("{:.3}", stock.price),
-            "change" => format!("{:.3}", stock.change),
-            "change_percent" => format!("{:.2}%", stock.change_percent * 100.),
-            "volume" => format!("{:.3}", stock.volume),
-            "turnover" => format!("{:.3}", stock.turnover),
-            "market_cap" => format!("{:.3}", stock.market_cap),
-            "ttm" => format!("{:.3}", stock.ttm),
-            "five_mins_ranking" => format!("{:.3}", stock.five_mins_ranking),
-            "th60_days_ranking" => stock.th60_days_ranking.floor().to_string(),
-            "year_change_percent" => format!("{:.2}%", stock.year_change_percent * 100.),
-            "bid" => format!("{:.3}", stock.bid),
-            "bid_volume" => format!("{:.3}", stock.bid_volume),
-            "ask" => format!("{:.3}", stock.ask),
-            "ask_volume" => format!("{:.3}", stock.ask_volume),
-            "open" => format!("{:.3}", stock.open),
-            "prev_close" => format!("{:.3}", stock.prev_close),
-            "high" => format!("{:.3}", stock.high),
-            "low" => format!("{:.3}", stock.low),
-            "turnover_rate" => format!("{:.0}", stock.turnover_rate * 100.),
-            "rise_rate" => format!("{:.0}", stock.rise_rate * 100.),
-            "amplitude" => format!("{:.0}", stock.amplitude * 100.),
-            "pe_status" => stock.pe_status.floor().to_string(),
-            "pb_status" => stock.pb_status.floor().to_string(),
-            "volume_ratio" => format!("{:.3}", stock.volume_ratio),
-            "bid_ask_ratio" => format!("{:.3}", stock.bid_ask_ratio),
-            "latest_pre_close" => stock.latest_pre_close.floor().to_string(),
-            "latest_post_close" => stock.latest_post_close.floor().to_string(),
-            "pre_market_cap" => stock.pre_market_cap.floor().to_string(),
-            "pre_market_percent" => format!("{:.2}%", stock.pre_market_percent * 100.),
-            "pre_market_change" => stock.pre_market_change.floor().to_string(),
-            "post_market_cap" => stock.post_market_cap.floor().to_string(),
-            "post_market_percent" => format!("{:.2}%", stock.post_market_percent * 100.),
-            "post_market_change" => stock.post_market_change.floor().to_string(),
-            "float_cap" => stock.float_cap.floor().to_string(),
-            "shares" => stock.shares.to_string(),
-            "shares_float" => stock.shares_float.to_string(),
-            "day_5_ranking" => stock.day_5_ranking.floor().to_string(),
-            "day_10_ranking" => stock.day_10_ranking.floor().to_string(),
-            "day_30_ranking" => stock.day_30_ranking.floor().to_string(),
-            "day_120_ranking" => stock.day_120_ranking.floor().to_string(),
-            "day_250_ranking" => stock.day_250_ranking.floor().to_string(),
-            _ => String::new(),
-        }
+        self.cell_string(stock, &col.key).unwrap_or_default()
     }
 }
 
@@ -929,7 +933,7 @@ impl TableDelegate for UsersTable {
         _: &mut Context<TableState<Self>>,
     ) -> impl IntoElement {
         match col_ix {
-            0 => format!("{}", row_ix).into_any_element(),
+            0 => row_ix.to_string().into_any_element(),
             1 => format!("User {}", row_ix).into_any_element(),
             2 => format!("user-{}@mail.com", row_ix).into_any_element(),
             3 => "User".into_any_element(),
@@ -960,50 +964,50 @@ impl DataTableSection {
         let table = cx.new(|cx| TableState::new(delegate, window, cx));
         let scrollable_table = cx.new(|cx| TableState::new(UsersTable::new(cx), window, cx));
 
-        let _load_task = cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor()
-                    .timer(Duration::from_millis(33))
-                    .await;
-
-                this.update(cx, |this, cx| {
-                    if !this.refresh_data {
-                        return;
-                    }
-
-                    this.table.update(cx, |table, _| {
-                        // Only walk the head: the table paints a few dozen rows at a
-                        // time, so ticking every row of a million-row set stalls.
-                        const MAX_REFRESH_ROWS: usize = 2_000;
-                        table
-                            .delegate_mut()
-                            .stocks
-                            .iter_mut()
-                            .take(MAX_REFRESH_ROWS)
-                            .enumerate()
-                            .for_each(|(i, stock)| {
-                                let n = rng_usize(3, 10);
-                                // update 30% of the stocks
-                                if i % n == 0 {
-                                    stock.random_update();
-                                }
-                            });
-                    });
-                    cx.notify();
-                })
-                .ok();
-            }
-        });
-
         Self {
             table,
             scrollable_table,
             stripe: false,
             refresh_data: false,
             size: Size::default(),
-            _load_task,
+            _load_task: Task::ready(()),
             _load_rows_task: Task::ready(()),
         }
+    }
+
+    /// The 33ms refresh tick; lives only while its Task is held, so the
+    /// timer stops when Refresh Data is off.
+    fn spawn_refresh_loop(cx: &mut Context<Self>) -> Task<()> {
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(33))
+                    .await;
+
+                this.update(cx, |this, cx| {
+                    this.table.update(cx, |table, _| {
+                        // Tick only the rows on screen: those are the ones that
+                        // repaint, and walking a million-row set stalls the tick.
+                        let delegate = table.delegate_mut();
+                        let len = delegate.stocks.len();
+                        let start = delegate.visible_rows.start.min(len);
+                        let end = delegate.visible_rows.end.min(len).max(start);
+                        delegate.stocks[start..end].iter_mut().enumerate().for_each(
+                            |(i, stock)| {
+                                let n = rng_usize(3, 10);
+                                // A random modulus, so a different fraction of
+                                // rows ticks each frame.
+                                if i % n == 0 {
+                                    stock.random_update();
+                                }
+                            },
+                        );
+                    });
+                    cx.notify();
+                })
+                .ok();
+            }
+        })
     }
 
     fn filler(&self, label: &str, height: Rems, cx: &App) -> impl IntoElement {
@@ -1017,7 +1021,7 @@ impl DataTableSection {
             .border_dashed()
             .border_color(cx.theme().border)
             .text_color(cx.theme().muted_foreground)
-            .child(SharedString::from(label.to_string()))
+            .child(label.to_string())
     }
 }
 
@@ -1082,12 +1086,20 @@ impl Render for DataTableSection {
             .on_action(cx.listener(|this, action: &DemoToggle, _, cx| {
                 if let Some(size) = action.size() {
                     this.size = size;
+                    // with_size sets the table options only; the delegate's
+                    // copy drives cell padding, so keep the two in step.
+                    this.table.update(cx, |table, cx| {
+                        table.delegate_mut().size = size;
+                        cx.notify();
+                    });
                     cx.notify();
                 }
             }))
             .on_action(cx.listener(|this, action: &TableRows, _, cx| {
                 let count = action.count();
                 if count == this.table.read(cx).delegate().stocks.len() {
+                    // Drop the in-flight build, or it lands against this choice.
+                    this._load_rows_task = Task::ready(());
                     return;
                 }
 
@@ -1206,6 +1218,13 @@ impl Render for DataTableSection {
                     }
                     TableOption::RefreshData => {
                         this.refresh_data = !this.refresh_data;
+                        // Replacing the task cancels the old timer loop, so
+                        // no wakeup happens while the feed is off.
+                        this._load_task = if this.refresh_data {
+                            Self::spawn_refresh_loop(cx)
+                        } else {
+                            Task::ready(())
+                        };
                         cx.notify();
                     }
                     TableOption::GroupHeaders => {

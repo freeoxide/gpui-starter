@@ -95,7 +95,7 @@ fn push_vertex(out: &mut Vec<f32>, pos: [f32; 3], normal: [f32; 3], uv: [f32; 2]
 
 /// UV sphere of radius 1: `(lat + 1) * lon + 2` vertices (unit normals equal
 /// to positions), triangle indices including the two pole fans.
-pub(crate) fn sphere_mesh(lat: usize, lon: usize) -> (Vec<u8>, Vec<u32>) {
+pub(in crate::features::wgpu) fn sphere_mesh(lat: usize, lon: usize) -> (Vec<u8>, Vec<u32>) {
     let mut vertices: Vec<f32> = Vec::with_capacity(((lat + 1) * lon + 2) * 8);
     push_vertex(&mut vertices, [0.0, 1.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0]);
     for i in 1..=(lat + 1) {

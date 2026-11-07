@@ -26,8 +26,6 @@ pub struct LifecycleState {
     pub startup_step: Option<String>,
     pub shutdown_step: Option<String>,
     pub last_startup_error: Option<String>,
-    pub last_shutdown_error: Option<String>,
-    pub last_error: Option<String>,
 }
 
 impl Global for LifecycleState {}
@@ -46,8 +44,6 @@ impl LifecycleState {
             startup_step: None,
             shutdown_step: None,
             last_startup_error: None,
-            last_shutdown_error: None,
-            last_error: None,
         }
     }
 }
@@ -71,18 +67,8 @@ pub fn set_shutdown_step(step: impl Into<String>, cx: &mut App) {
 }
 
 pub fn set_startup_error(error: impl Into<String>, cx: &mut App) {
-    let error = error.into();
     let state = cx.default_global::<LifecycleState>();
-    state.last_startup_error = Some(error.clone());
-    state.last_error = Some(error);
-    state.updated_at = AppTimestamp::now();
-}
-
-pub fn set_shutdown_error(error: impl Into<String>, cx: &mut App) {
-    let error = error.into();
-    let state = cx.default_global::<LifecycleState>();
-    state.last_shutdown_error = Some(error.clone());
-    state.last_error = Some(error);
+    state.last_startup_error = Some(error.into());
     state.updated_at = AppTimestamp::now();
 }
 
@@ -207,11 +193,8 @@ fn handle_panic(summary: &str, is_render: bool) {
     HANDLING_PANIC.store(false, Ordering::SeqCst);
 }
 
-// File-based crash detection is native-only: path APIs panic at runtime on
-// wasm and a browser tab has no next-launch semantics anyway.
-
-// Marker lives under the app data dir, never $TMPDIR (symlink planting); an
-// unset dir disables the feature.
+// Native-only: path APIs panic on wasm. The marker lives under the app data
+// dir, never $TMPDIR (symlink planting); an unset dir disables the feature.
 #[cfg(not(target_family = "wasm"))]
 fn crash_marker_path() -> Option<PathBuf> {
     APP_DATA_DIR.get().map(|dir| dir.join("crash-marker"))

@@ -18,9 +18,9 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
-/// Keys of the panels, each one tracks its own open state.
+// Panel keys; each panel tracks its own open state.
 const ORDER: &str = "collapsible-order";
 const FAQ: &str = "collapsible-faq";
 const USAGE: &str = "collapsible-usage";
@@ -94,6 +94,7 @@ fn file_row(name: &'static str, cx: &App) -> impl IntoElement {
     let accent = cx.theme().accent;
 
     h_flex()
+        .id(name)
         .h_7()
         .px_2()
         .gap_2()
@@ -138,7 +139,7 @@ impl CollapsibleSection {
     }
 
     /// A row that toggles `key` when clicked anywhere along it.
-    fn trigger_row(&self, key: &'static str, cx: &mut Context<Self>) -> Stateful<Div> {
+    fn trigger_row(key: &'static str, cx: &mut Context<Self>) -> Stateful<Div> {
         h_flex()
             .id(key)
             .w_full()
@@ -146,7 +147,7 @@ impl CollapsibleSection {
             .on_click(cx.listener(move |this, _, _, cx| this.toggle(key, cx)))
     }
 
-    /// A folder row of the tree example, the whole row toggles the folder.
+    /// A folder row of the tree example; the whole row toggles the folder.
     fn folder_row(
         &self,
         key: &'static str,
@@ -158,7 +159,7 @@ impl CollapsibleSection {
         let muted_foreground = cx.theme().muted_foreground;
         let radius = cx.theme().radius;
 
-        self.trigger_row(key, cx)
+        Self::trigger_row(key, cx)
             .h_7()
             .px_2()
             .gap_2()
@@ -243,7 +244,7 @@ impl CollapsibleSection {
                         .w_full()
                         .open(self.is_open(FAQ))
                         .child(
-                            self.trigger_row(FAQ, cx)
+                            Self::trigger_row(FAQ, cx)
                                 .justify_between()
                                 .gap_2()
                                 .child(div().text_sm().child("How do I reset my password?"))
@@ -251,8 +252,8 @@ impl CollapsibleSection {
                         )
                         .content(div().pt_3().text_sm().text_color(muted_foreground).child(
                             "Click the Forgot Password link on the sign in page, \
-                                 and we will send you an email with instructions to \
-                                 create a new one.",
+                             and we will send you an email with instructions to \
+                             create a new one.",
                         )),
                 ),
             )
@@ -422,7 +423,7 @@ impl CollapsibleSection {
                                 .w_full()
                                 .gap_2()
                                 .child(
-                                    self.trigger_row(API_KEYS, cx)
+                                    Self::trigger_row(API_KEYS, cx)
                                         .flex_1()
                                         .gap_2()
                                         .child(chevron(self.is_open(API_KEYS), cx))
@@ -531,7 +532,7 @@ impl CollapsibleSection {
                         .gap_3()
                         .open(self.is_open(PROFILE))
                         .child(
-                            self.trigger_row(PROFILE, cx)
+                            Self::trigger_row(PROFILE, cx)
                                 .justify_between()
                                 .gap_2()
                                 .child(

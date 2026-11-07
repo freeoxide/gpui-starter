@@ -24,10 +24,8 @@ fn op_versions_are_strictly_increasing_per_origin() {
     let mut driver = FakePeerDriver::new(0xABCDEF);
     let mut last: HashMap<u64, u64> = HashMap::new();
     for event in drained(&mut driver, 500) {
-        if let PeerEvent::Op(WireOp::Add { version, .. })
-        | PeerEvent::Op(WireOp::Update { version, .. })
-        | PeerEvent::Op(WireOp::Delete { version, .. }) = event
-        {
+        if let PeerEvent::Op(op) = event {
+            let version = op.version();
             let previous = last.insert(version.origin, version.lamport);
             assert!(
                 previous.is_none_or(|lamport| lamport < version.lamport),

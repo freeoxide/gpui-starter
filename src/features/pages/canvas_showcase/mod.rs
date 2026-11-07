@@ -2,7 +2,7 @@
 //! surface; everything else stays private to the crate. Removal = delete this
 //! directory and revert its seam touches: the `mod`/`pub use` pair in
 //! features/pages/mod.rs, the Page::CanvasShowcase arms and all() entry in
-//! shell/sidebar.rs, the VALID_HOSTS entry in shell/route.rs, the AppRoot
+//! shell/page.rs, the VALID_HOSTS entry in shell/route.rs, the AppRoot
 //! wiring in shell/root/app_root/state.rs, the page count in
 //! tests/e2e_navigation.rs, the nav_canvas_showcase/showcase_* keys in both
 //! locale files, and the common-table image line in Cargo.toml.
@@ -167,6 +167,21 @@ impl Render for CanvasShowcasePage {
                     .child(self.demos[self.active_ix].1.clone()),
             )
     }
+}
+
+/// Shared toolbar readout of the canvas selection size; one a11y contract
+/// for every demo that shows it.
+fn selected_count_readout(id: &'static str, selected: usize, cx: &App) -> AnyElement {
+    let count = selected.to_string();
+    let readout =
+        crate::i18n::localize_with_args("showcase_selected_count", &[("count", count.as_str())]);
+    div()
+        .id(SharedString::from(format!("{id}-selected-count")))
+        .a11y(Role::Status, readout.clone())
+        .a11y_live(accesskit::Live::Polite)
+        .text_color(cx.theme().muted_foreground)
+        .child(readout)
+        .into_any_element()
 }
 
 fn render_demo_shell(

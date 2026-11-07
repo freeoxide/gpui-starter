@@ -44,9 +44,7 @@ impl NotchFloaterView {
     }
 
     fn start_clock(&mut self, cx: &mut Context<Self>) {
-        let now = chrono::Local::now();
-        self.minute = now.format("%H:%M").to_string();
-        self.date = now.format("%a, %b %e").to_string();
+        (self.minute, self.date) = clock_strings();
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(Duration::from_secs(1)).await;
@@ -59,9 +57,7 @@ impl NotchFloaterView {
     }
 
     fn tick(&mut self, cx: &mut Context<Self>) {
-        let now = chrono::Local::now();
-        let minute = now.format("%H:%M").to_string();
-        let date = now.format("%a, %b %e").to_string();
+        let (minute, date) = clock_strings();
         if minute != self.minute || date != self.date {
             self.minute = minute;
             self.date = date;
@@ -108,16 +104,9 @@ impl NotchFloaterView {
     }
 
     fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        #[cfg(any(target_os = "macos", not(target_family = "wasm")))]
-        {
-            let _ = cx;
-            window.remove_window();
-        }
-        #[cfg(all(not(target_os = "macos"), target_family = "wasm"))]
-        {
-            let _ = window;
-            super::controller::close(cx);
-        }
+        // The click runs inside this window's dispatch lease; the controller
+        // re-leases the window to close it, so defer past the dispatch.
+        window.defer(cx, |_, cx| super::controller::close(cx));
     }
 
     fn render_expanded(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -189,11 +178,8 @@ impl Render for NotchFloaterView {
             } else {
                 div()
                     .size_full()
-                    .on_mouse_down(MouseButton::Left, {
-                        let entity = entity.clone();
-                        move |_, window, cx| {
-                            entity.update(cx, |this, cx| this.toggle_pinned(window, cx));
-                        }
+                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                        entity.update(cx, |this, cx| this.toggle_pinned(window, cx));
                     })
                     .child(widgets::collapsed_pill(&self.minute, cx))
                     .into_any_element()
@@ -205,4 +191,12 @@ impl Focusable for NotchFloaterView {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
+}
+
+fn clock_strings() -> (String, String) {
+    let now = chrono::Local::now();
+    (
+        now.format("%H:%M").to_string(),
+        now.format("%a, %b %e").to_string(),
+    )
 }

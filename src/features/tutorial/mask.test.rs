@@ -1,4 +1,4 @@
-use gpui_kit::{Bounds, FillOptions, FillRule, PathBuilder, PathStyle, Pixels, point, px, size};
+use gpui_kit::{Bounds, PathBuilder, Pixels, point, px, size};
 
 use super::{cutout_bounds, place_card, rounded_rect_path};
 
@@ -79,22 +79,41 @@ fn place_card_clamps_to_viewport() {
 }
 
 #[test]
-fn mask_path_builds() {
+fn cutout_subpath_adds_hole_geometry_to_the_mask_path() {
     let viewport = rect(0., 0., 800., 600.);
     let cutout = cutout_bounds(rect(100., 100., 200., 80.), px(8.));
-    let mut builder = PathBuilder::fill().with_style(PathStyle::Fill(
-        FillOptions::default().with_fill_rule(FillRule::EvenOdd),
-    ));
+
+    let bare_square = {
+        let mut builder = PathBuilder::fill();
+        viewport_square(&mut builder, viewport);
+        builder.build().expect("the viewport square must build")
+    };
+    let with_cutout = {
+        let mut builder = PathBuilder::fill();
+        viewport_square(&mut builder, viewport);
+        rounded_rect_path(&mut builder, cutout, px(8.));
+        builder.build().expect("the cutout mask path must build")
+    };
+
     assert!(
-        matches!(&builder.style, PathStyle::Fill(opts) if opts.fill_rule == FillRule::EvenOdd),
-        "the hole-punching fill rule must be set at the build site"
+        with_cutout.vertices.len() > bare_square.vertices.len(),
+        "rounded_rect_path must add vertices beyond the bare viewport square"
     );
+    assert!(
+        with_cutout
+            .vertices
+            .iter()
+            .any(|vertex| cutout.contains(&vertex.xy_position)),
+        "the cutout contour must contribute vertices inside the cutout rect"
+    );
+}
+
+// The outer subpath paint_spotlight writes before punching the cutout; kept
+// here so the test above varies only rounded_rect_path's output.
+fn viewport_square(builder: &mut PathBuilder, viewport: Bounds<Pixels>) {
     builder.move_to(viewport.origin);
     builder.line_to(point(viewport.right(), viewport.origin.y));
     builder.line_to(point(viewport.right(), viewport.bottom()));
     builder.line_to(point(viewport.origin.x, viewport.bottom()));
     builder.close();
-    rounded_rect_path(&mut builder, cutout, px(8.));
-    let path = builder.build().expect("even-odd mask path must build");
-    assert!(!path.vertices.is_empty());
 }

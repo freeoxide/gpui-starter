@@ -18,8 +18,8 @@ use super::demo::section;
 pub struct AlertDialogSection;
 
 impl AlertDialogSection {
-    pub fn view(_window: &mut Window, _cx: &mut App) -> Entity<Self> {
-        _cx.new(|_| Self)
+    pub fn view(_window: &mut Window, cx: &mut App) -> Entity<Self> {
+        cx.new(|_| Self)
     }
 }
 

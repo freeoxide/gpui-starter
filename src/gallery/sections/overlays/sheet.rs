@@ -79,10 +79,15 @@ const SHEET_ITEMS: [&str; 49] = [
 
 struct SheetListDelegate {
     story: WeakEntity<SheetSection>,
-    confirmed_index: Option<usize>,
+    // The confirmed item, not its row: searches replace `matches`, so a row
+    // index can point at a different item than the one that was confirmed.
+    confirmed_item: Option<Arc<str>>,
     selected_index: Option<usize>,
     items: Vec<Arc<str>>,
     matches: Vec<Arc<str>>,
+    // Search tasks are not cancelled, so each carries its query's generation
+    // and a stale task discards its result instead of stacking filters.
+    search_generation: usize,
 }
 
 impl ListDelegate for SheetListDelegate {
@@ -99,6 +104,8 @@ impl ListDelegate for SheetListDelegate {
         cx: &mut Context<ListState<Self>>,
     ) -> Task<()> {
         let query = query.to_string();
+        self.search_generation += 1;
+        let generation = self.search_generation;
         cx.spawn(async move |this, cx| {
             // Simulates a slow search with a fixed delay (upstream drew the
             // duration from the `fake` crate).
@@ -107,6 +114,9 @@ impl ListDelegate for SheetListDelegate {
                 .await;
 
             this.update(cx, |this, cx| {
+                if this.delegate().search_generation != generation {
+                    return;
+                }
                 let query = query.to_lowercase();
                 this.delegate_mut().matches = this
                     .delegate()
@@ -127,12 +137,10 @@ impl ListDelegate for SheetListDelegate {
         _: &mut Window,
         _: &mut Context<ListState<Self>>,
     ) -> Option<Self::Item> {
-        let confirmed = Some(ix.row) == self.confirmed_index;
-
         if let Some(item) = self.matches.get(ix.row) {
             let list_item = ListItem::new(("sheet-item", ix.row))
                 .check_icon(IconName::Check)
-                .confirmed(confirmed)
+                .confirmed(self.confirmed_item.as_ref() == Some(item))
                 .child(
                     h_flex()
                         .items_center()
@@ -177,10 +185,11 @@ impl ListDelegate for SheetListDelegate {
     }
 
     fn confirm(&mut self, _secondary: bool, _: &mut Window, cx: &mut Context<ListState<Self>>) {
-        let confirmed_index = self.selected_index;
-        let selected = confirmed_index.and_then(|ix| self.matches.get(ix).cloned());
+        let selected = self
+            .selected_index
+            .and_then(|ix| self.matches.get(ix).cloned());
         let _ = self.story.update(cx, |this, _| {
-            self.confirmed_index = confirmed_index;
+            self.confirmed_item = selected.clone();
             if let Some(item) = selected {
                 this.selected_value = Some(SharedString::from(item.to_string()));
             }
@@ -220,9 +229,10 @@ impl SheetSection {
             let delegate = SheetListDelegate {
                 story,
                 selected_index: None,
-                confirmed_index: None,
+                confirmed_item: None,
                 items: items.clone(),
                 matches: items,
+                search_generation: 0,
             };
             let list = cx.new(|cx| ListState::new(delegate, window, cx).searchable(true));
             let input1 = cx.new(|cx| InputState::new(window, cx).placeholder("Your Name"));
@@ -243,7 +253,7 @@ impl SheetSection {
         })
     }
 
-    fn open_sheet_at(&mut self, placement: Placement, window: &mut Window, cx: &mut Context<Self>) {
+    fn open_sheet_at(&self, placement: Placement, window: &mut Window, cx: &mut Context<Self>) {
         let list = self.list.clone();
 
         let drawer_h = match placement {

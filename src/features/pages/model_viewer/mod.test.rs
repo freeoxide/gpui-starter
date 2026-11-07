@@ -1,4 +1,4 @@
-use gpui_kit::{AppContext as _, TestAppContext, VisualTestContext, px, size};
+use gpui_kit::{TestAppContext, VisualTestContext, px, size};
 
 use super::ModelViewerPage;
 
@@ -15,14 +15,14 @@ fn open_page(cx: &mut TestAppContext) -> (gpui_kit::Entity<ModelViewerPage>, Vis
 /// Engine init is environment-dependent (a headless CI runner has no wgpu
 /// adapter), so GPU-free tests only drive paths that never need the engine.
 /// The first render may schedule the init task, but the engine itself only
-/// ever appears from the background task — never synchronously.
+/// ever appears from the background task, never synchronously.
 #[gpui_kit::test]
 fn construction_and_first_render_stay_synchronous_gpu_free(cx: &mut TestAppContext) {
     let (page, cx) = open_page(cx);
     cx.read(|cx| {
         let page_view = page.read(cx);
-        assert!(page_view.renderer.is_none());
-        assert!(page_view.engine.is_none());
+        assert!(page_view.native.renderer.is_none());
+        assert!(page_view.native.engine.is_none());
     });
 }
 

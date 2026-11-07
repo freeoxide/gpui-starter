@@ -149,8 +149,12 @@ impl SettingsSection {
                             "Auto Switch Theme",
                             SettingField::checkbox(
                                 |cx: &App| AppSettings::global(cx).auto_switch_theme,
-                                |val: bool, cx: &mut App| {
-                                    AppSettings::global_mut(cx).auto_switch_theme = val;
+                                {
+                                    let view = view.clone();
+                                    move |val: bool, cx: &mut App| {
+                                        AppSettings::global_mut(cx).auto_switch_theme = val;
+                                        view.update(cx, |_, cx| cx.notify());
+                                    }
                                 },
                             )
                             .default_value(default_settings.auto_switch_theme),
@@ -159,12 +163,13 @@ impl SettingsSection {
                         .disabled(disabled),
                         SettingItem::new(
                             "Resettable",
-                            SettingField::switch(
-                                |cx: &App| AppSettings::global(cx).resettable,
-                                |checked: bool, cx: &mut App| {
-                                    AppSettings::global_mut(cx).resettable = checked
-                                },
-                            ),
+                            SettingField::switch(|cx: &App| AppSettings::global(cx).resettable, {
+                                let view = view.clone();
+                                move |checked: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).resettable = checked;
+                                    view.update(cx, |_, cx| cx.notify());
+                                }
+                            }),
                         )
                         .description("Show or hide the reset button for settings.")
                         .disabled(disabled),
@@ -242,8 +247,12 @@ impl SettingsSection {
                                         ("Courier New".into(), "Courier New".into()),
                                     ],
                                     |cx: &App| AppSettings::global(cx).font_family.clone(),
-                                    |val: SharedString, cx: &mut App| {
-                                        AppSettings::global_mut(cx).font_family = val;
+                                    {
+                                        let view = view.clone();
+                                        move |val: SharedString, cx: &mut App| {
+                                            AppSettings::global_mut(cx).font_family = val;
+                                            view.update(cx, |_, cx| cx.notify());
+                                        }
                                     },
                                 )
                                 .default_value(default_settings.font_family),
@@ -261,8 +270,12 @@ impl SettingsSection {
                                         ..Default::default()
                                     },
                                     |cx: &App| AppSettings::global(cx).font_size,
-                                    |val: f64, cx: &mut App| {
-                                        AppSettings::global_mut(cx).font_size = val;
+                                    {
+                                        let view = view.clone();
+                                        move |val: f64, cx: &mut App| {
+                                            AppSettings::global_mut(cx).font_size = val;
+                                            view.update(cx, |_, cx| cx.notify());
+                                        }
                                     },
                                 )
                                 .default_value(default_settings.font_size),
@@ -282,8 +295,12 @@ impl SettingsSection {
                                         ..Default::default()
                                     },
                                     |cx: &App| AppSettings::global(cx).line_height,
-                                    |val: f64, cx: &mut App| {
-                                        AppSettings::global_mut(cx).line_height = val;
+                                    {
+                                        let view = view.clone();
+                                        move |val: f64, cx: &mut App| {
+                                            AppSettings::global_mut(cx).line_height = val;
+                                            view.update(cx, |_, cx| cx.notify());
+                                        }
                                     },
                                 )
                                 .default_value(default_settings.line_height),
@@ -296,23 +313,25 @@ impl SettingsSection {
                     SettingGroup::new().title("Other").items(vec![
                         SettingItem::new(
                             "Disable Settings",
-                            SettingField::switch(
-                                |cx: &App| AppSettings::global(cx).disabled,
-                                |checked: bool, cx: &mut App| {
-                                    AppSettings::global_mut(cx).disabled = checked
-                                },
-                            )
+                            SettingField::switch(|cx: &App| AppSettings::global(cx).disabled, {
+                                let view = view.clone();
+                                move |checked: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).disabled = checked;
+                                    view.update(cx, |_, cx| cx.notify());
+                                }
+                            })
                             .default_value(false),
                         )
                         .description("Lock the other settings."),
                         SettingItem::new(
                             "Foo",
-                            SettingField::switch(
-                                |cx: &App| AppSettings::global(cx).disabled,
-                                |checked: bool, cx: &mut App| {
-                                    AppSettings::global_mut(cx).disabled = checked
-                                },
-                            )
+                            SettingField::switch(|cx: &App| AppSettings::global(cx).disabled, {
+                                let view = view.clone();
+                                move |checked: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).disabled = checked;
+                                    view.update(cx, |_, cx| cx.notify());
+                                }
+                            })
                             .default_value(false),
                         )
                         .description("Find me by searching for my sibling")
@@ -341,29 +360,35 @@ impl SettingsSection {
                         .disabled(disabled),
                         SettingItem::new(
                             "Density",
-                            SettingField::render(|options, _window, cx| {
-                                let current = AppSettings::global(cx).density.clone();
-                                h_flex()
-                                    .gap_1()
-                                    .children(["Comfortable", "Compact"].map(|value| {
-                                        Button::new(SharedString::from(format!(
-                                            "settings-density-{value}"
-                                        )))
-                                        .label(value)
-                                        .with_size(options.size())
-                                        .map(|this| {
-                                            if current == value {
-                                                this.primary()
-                                            } else {
-                                                this.outline()
-                                            }
-                                        })
-                                        .on_click(
-                                            move |_, _, cx| {
-                                                AppSettings::global_mut(cx).density = value.into();
-                                            },
-                                        )
-                                    }))
+                            SettingField::render({
+                                let view = view.clone();
+                                move |options, _window, cx| {
+                                    let current = AppSettings::global(cx).density.clone();
+                                    h_flex().gap_1().children(["Comfortable", "Compact"].map(
+                                        |value| {
+                                            Button::new(SharedString::from(format!(
+                                                "settings-density-{value}"
+                                            )))
+                                            .label(value)
+                                            .with_size(options.size())
+                                            .map(|this| {
+                                                if current == value {
+                                                    this.primary()
+                                                } else {
+                                                    this.outline()
+                                                }
+                                            })
+                                            .on_click({
+                                                let view = view.clone();
+                                                move |_, _, cx| {
+                                                    AppSettings::global_mut(cx).density =
+                                                        value.into();
+                                                    view.update(cx, |_, cx| cx.notify());
+                                                }
+                                            })
+                                        },
+                                    ))
+                                }
                             })
                             // A custom element field manages its own state, so reset
                             // support must be wired up explicitly via `on_reset`.
@@ -389,8 +414,12 @@ impl SettingsSection {
                             "CLI Path",
                             SettingField::input(
                                 |cx: &App| AppSettings::global(cx).cli_path.clone(),
-                                |val: SharedString, cx: &mut App| {
-                                    AppSettings::global_mut(cx).cli_path = val;
+                                {
+                                    let view = view.clone();
+                                    move |val: SharedString, cx: &mut App| {
+                                        AppSettings::global_mut(cx).cli_path = val;
+                                        view.update(cx, |_, cx| cx.notify());
+                                    }
                                 },
                             )
                             .default_value(default_settings.cli_path),
@@ -412,8 +441,12 @@ impl SettingsSection {
                         "Enable Notifications",
                         SettingField::switch(
                             |cx: &App| AppSettings::global(cx).notifications_enabled,
-                            |val: bool, cx: &mut App| {
-                                AppSettings::global_mut(cx).notifications_enabled = val;
+                            {
+                                let view = view.clone();
+                                move |val: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).notifications_enabled = val;
+                                    view.update(cx, |_, cx| cx.notify());
+                                }
                             },
                         )
                         .default_value(default_settings.notifications_enabled),
@@ -424,8 +457,12 @@ impl SettingsSection {
                         "Auto Update",
                         SettingField::switch(
                             |cx: &App| AppSettings::global(cx).auto_update,
-                            |val: bool, cx: &mut App| {
-                                AppSettings::global_mut(cx).auto_update = val;
+                            {
+                                let view = view.clone();
+                                move |val: bool, cx: &mut App| {
+                                    AppSettings::global_mut(cx).auto_update = val;
+                                    view.update(cx, |_, cx| cx.notify());
+                                }
                             },
                         )
                         .default_value(default_settings.auto_update),

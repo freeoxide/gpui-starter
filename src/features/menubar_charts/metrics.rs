@@ -86,7 +86,8 @@ impl Sampler {
 
 pub(crate) struct MetricsState {
     samples: VecDeque<Sample>,
-    sampler: Sampler,
+    // None while the background task owns the sampler mid-tick.
+    sampler: Option<Sampler>,
     paused: bool,
 }
 
@@ -98,7 +99,7 @@ impl MetricsState {
         let sampler = Sampler::fixture();
         Self {
             samples: VecDeque::new(),
-            sampler,
+            sampler: Some(sampler),
             paused: false,
         }
     }
@@ -108,9 +109,37 @@ impl MetricsState {
     pub(crate) fn start(this: &Entity<Self>, cx: &mut App) {
         let this = this.downgrade();
         cx.spawn(async move |cx| {
+            let executor = cx.background_executor().clone();
             loop {
-                cx.background_executor().timer(INTERVAL).await;
-                if this.update(cx, |this, cx| this.tick(cx)).is_err() {
+                executor.timer(INTERVAL).await;
+                // Sampling reads /proc, so it never runs on the main thread;
+                // the sampler moves in and out of the task to keep its state.
+                let taken = this.update(cx, |this, _| {
+                    if this.paused {
+                        None
+                    } else {
+                        this.sampler.take()
+                    }
+                });
+                let (sampler, sample) = match taken {
+                    Ok(Some(mut sampler)) => {
+                        executor
+                            .spawn(async move {
+                                let sample = sampler.sample();
+                                (sampler, sample)
+                            })
+                            .await
+                    }
+                    Ok(None) => continue,
+                    Err(_) => break,
+                };
+                if this
+                    .update(cx, |this, cx| {
+                        this.sampler = Some(sampler);
+                        this.push(sample, cx);
+                    })
+                    .is_err()
+                {
                     break;
                 }
             }
@@ -118,11 +147,20 @@ impl MetricsState {
         .detach();
     }
 
+    /// Samples synchronously; tests drive the ring directly instead of
+    /// waiting on the 1 Hz timer.
+    #[cfg(test)]
     pub(crate) fn tick(&mut self, cx: &mut Context<Self>) {
         if self.paused {
             return;
         }
-        let sample = self.sampler.sample();
+        let Some(sample) = self.sampler.as_mut().map(Sampler::sample) else {
+            return;
+        };
+        self.push(sample, cx);
+    }
+
+    fn push(&mut self, sample: Sample, cx: &mut Context<Self>) {
         self.samples.push_back(sample);
         if self.samples.len() > MAX_SAMPLES {
             self.samples.pop_front();

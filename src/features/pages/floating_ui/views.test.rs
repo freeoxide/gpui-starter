@@ -1,6 +1,5 @@
-// Do NOT `use super::*` here: views.rs does `use gpui_kit::{prelude::*, *}`,
-// which re-exports gpui's `test` proc-macro and turns a bare `#[test]` (emitted
-// by `#[gpui_kit::test]`) into infinite recursion. Import only what is needed.
+// No `use super::*`: gpui's `test` proc-macro glob would make bare `#[test]`
+// recurse infinitely. Import only what we need.
 use gpui_kit::prelude::*;
 use gpui_kit::{AnyView, Context, TestAppContext, Window, div, px, size};
 
@@ -14,7 +13,7 @@ async fn emit_color_change_pushes_one_palette_event(cx: &mut TestAppContext) {
     cx.update(|cx| {
         emit_color_change("#30A46C".to_string(), cx);
     });
-    let events = cx.update(|cx| crate::events::drain(cx));
+    let events = cx.update(crate::events::drain);
     assert_eq!(events.len(), 1);
     assert!(matches!(
         &events[0].kind,
@@ -28,7 +27,7 @@ async fn emit_asset_change_pushes_one_palette_event(cx: &mut TestAppContext) {
     cx.update(|cx| {
         emit_asset_change("🚀".to_string(), cx);
     });
-    let events = cx.update(|cx| crate::events::drain(cx));
+    let events = cx.update(crate::events::drain);
     assert_eq!(events.len(), 1);
     assert!(matches!(
         &events[0].kind,

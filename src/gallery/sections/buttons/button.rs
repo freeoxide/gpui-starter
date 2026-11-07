@@ -38,13 +38,33 @@ impl Render for ButtonSection {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let demo = &self.demo;
         let multiple = self.toggle_multiple;
-        let button = |id: &'static str| Button::new(id).with_size(demo.size);
+        let button = |id: &'static str| {
+            Button::new(id)
+                .with_size(demo.size)
+                .disabled(demo.disabled)
+                .selected(demo.selected)
+                .loading(demo.loading)
+                .when(demo.compact, |this| this.compact())
+        };
 
+        let magenta = cx.theme().magenta;
         let custom_variant = ButtonCustomVariant::new(cx)
-            .color(cx.theme().magenta)
-            .foreground(cx.theme().magenta)
-            .hover(cx.theme().magenta.opacity(0.1))
-            .active(cx.theme().magenta.opacity(0.2));
+            .color(magenta)
+            .foreground(magenta)
+            .hover(magenta.opacity(0.1))
+            .active(magenta.opacity(0.2));
+        // The solid variant paints ~magenta behind the label, so its text
+        // needs the extreme the current mode's magenta is furthest from.
+        let solid_foreground = if cx.theme().mode.is_dark() {
+            black()
+        } else {
+            white()
+        };
+        let solid_custom_variant = ButtonCustomVariant::new(cx)
+            .color(magenta)
+            .foreground(solid_foreground)
+            .hover(magenta.opacity(0.1))
+            .active(magenta.opacity(0.2));
 
         v_flex()
             .w_full()
@@ -79,95 +99,16 @@ impl Render for ButtonSection {
                 section("button-variants", "Variants")
                     .description("Visual treatments communicate action priority.")
                     .w_128()
-                    .child(
-                        button("button-default")
-                            .label("Default")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
-                    )
-                    .child(
-                        button("button-primary")
-                            .primary()
-                            .label("Primary")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
-                    )
-                    .child(
-                        button("button-secondary")
-                            .secondary()
-                            .label("Secondary")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
-                    )
-                    .child(
-                        button("button-danger")
-                            .danger()
-                            .label("Danger")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
-                    )
-                    .child(
-                        button("button-warning")
-                            .warning()
-                            .label("Warning")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
-                    )
-                    .child(
-                        button("button-success")
-                            .success()
-                            .label("Success")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
-                    )
-                    .child(
-                        button("button-info")
-                            .info()
-                            .label("Info")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
-                    )
-                    .child(
-                        button("button-ghost")
-                            .ghost()
-                            .label("Ghost")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
-                    )
-                    .child(
-                        button("button-link")
-                            .link()
-                            .label("Link")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
-                    )
-                    .child(
-                        button("button-text")
-                            .text()
-                            .label("Text")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
-                    ),
+                    .child(button("button-default").label("Default"))
+                    .child(button("button-primary").primary().label("Primary"))
+                    .child(button("button-secondary").secondary().label("Secondary"))
+                    .child(button("button-danger").danger().label("Danger"))
+                    .child(button("button-warning").warning().label("Warning"))
+                    .child(button("button-success").success().label("Success"))
+                    .child(button("button-info").info().label("Info"))
+                    .child(button("button-ghost").ghost().label("Ghost"))
+                    .child(button("button-link").link().label("Link"))
+                    .child(button("button-text").text().label("Text")),
             )
             .child(
                 section("button-icons", "Icons")
@@ -176,76 +117,47 @@ impl Render for ButtonSection {
                         button("button-icon-confirm")
                             .outline()
                             .label("Confirm")
-                            .icon(IconName::Check)
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .icon(IconName::Check),
                     )
                     .child(
                         button("button-icon-abort")
                             .outline()
                             .label("Abort")
-                            .icon(IconName::Close)
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .icon(IconName::Close),
                     )
                     .child(
                         button("button-icon-maximize")
                             .outline()
                             .label("Maximize")
-                            .icon(Icon::new(IconName::Maximize))
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .icon(Icon::new(IconName::Maximize)),
                     )
                     .child(
-                        button("button-icon-custom-child")
-                            .child(
-                                h_flex()
-                                    .items_center()
-                                    .gap_2()
-                                    .child("Custom Child")
-                                    .child(IconName::ChevronDown)
-                                    .child(IconName::Eye),
-                            )
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                        button("button-icon-custom-child").child(
+                            h_flex()
+                                .items_center()
+                                .gap_2()
+                                .child("Custom Child")
+                                .child(IconName::ChevronDown)
+                                .child(IconName::Eye),
+                        ),
                     )
                     .child(
                         button("button-icon-ghost")
                             .ghost()
                             .icon(IconName::Check)
-                            .label("Confirm")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Confirm"),
                     )
                     .child(
                         button("button-icon-link")
                             .link()
                             .icon(IconName::Check)
-                            .label("Link")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Link"),
                     )
                     .child(
                         button("button-icon-text")
                             .text()
                             .icon(IconName::Check)
-                            .label("Text Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Text Button"),
                     ),
             )
             .child(
@@ -255,7 +167,8 @@ impl Render for ButtonSection {
                         h_flex()
                             .gap_4()
                             .child(
-                                button("button-progress-primary")
+                                Button::new("button-progress-primary")
+                                    .with_size(demo.size)
                                     .primary()
                                     .icon(
                                         ProgressCircle::new("button-progress-circle-primary")
@@ -265,7 +178,8 @@ impl Render for ButtonSection {
                                     .label("Installing…"),
                             )
                             .child(
-                                button("button-progress-default")
+                                Button::new("button-progress-default")
+                                    .with_size(demo.size)
                                     .icon(
                                         ProgressCircle::new("button-progress-circle-default")
                                             .value(35.),
@@ -273,7 +187,8 @@ impl Render for ButtonSection {
                                     .label("Installing…"),
                             )
                             .child(
-                                button("button-progress-half")
+                                Button::new("button-progress-half")
+                                    .with_size(demo.size)
                                     .icon(
                                         ProgressCircle::new("button-progress-circle-half")
                                             .value(68.),
@@ -281,7 +196,8 @@ impl Render for ButtonSection {
                                     .label("Installing…"),
                             )
                             .child(
-                                button("button-progress-most")
+                                Button::new("button-progress-most")
+                                    .with_size(demo.size)
                                     .icon(
                                         ProgressCircle::new("button-progress-circle-most")
                                             .value(85.),
@@ -298,90 +214,54 @@ impl Render for ButtonSection {
                         button("button-outline-primary")
                             .primary()
                             .outline()
-                            .label("Primary Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Primary Button"),
                     )
                     .child(
                         button("button-outline-default")
                             .outline()
-                            .label("Normal Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Normal Button"),
                     )
                     .child(
                         button("button-outline-danger")
                             .danger()
                             .outline()
-                            .label("Danger Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Danger Button"),
                     )
                     .child(
                         button("button-outline-warning")
                             .warning()
                             .outline()
-                            .label("Warning Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Warning Button"),
                     )
                     .child(
                         button("button-outline-success")
                             .success()
                             .outline()
-                            .label("Success Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Success Button"),
                     )
                     .child(
                         button("button-outline-info")
                             .info()
                             .outline()
-                            .label("Info Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Info Button"),
                     )
                     .child(
                         button("button-outline-ghost")
                             .ghost()
                             .outline()
-                            .label("Ghost Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Ghost Button"),
                     )
                     .child(
                         button("button-outline-link")
                             .link()
                             .outline()
-                            .label("Link Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Link Button"),
                     )
                     .child(
                         button("button-outline-text")
                             .text()
                             .outline()
-                            .label("Text Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Text Button"),
                     ),
             )
             .child(
@@ -392,60 +272,36 @@ impl Render for ButtonSection {
                         button("button-dropdown-primary")
                             .primary()
                             .dropdown_caret(true)
-                            .label("Primary Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Primary Button"),
                     )
                     .child(
                         button("button-dropdown-default")
                             .label("Default Button")
-                            .dropdown_caret(true)
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .dropdown_caret(true),
                     )
                     .child(
                         button("button-dropdown-secondary")
                             .secondary()
                             .label("Secondary Button")
-                            .dropdown_caret(true)
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .dropdown_caret(true),
                     )
                     .child(
                         button("button-dropdown-ghost")
                             .ghost()
                             .dropdown_caret(true)
-                            .label("Ghost Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Ghost Button"),
                     )
                     .child(
                         button("button-dropdown-link")
                             .link()
                             .dropdown_caret(true)
-                            .label("Link Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Link Button"),
                     )
                     .child(
                         button("button-dropdown-outline")
                             .outline()
                             .dropdown_caret(true)
-                            .label("Small Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Small Button"),
                     ),
             )
             .child(
@@ -453,27 +309,9 @@ impl Render for ButtonSection {
                     ButtonGroup::new("button-group")
                         .outline()
                         .disabled(demo.disabled)
-                        .child(
-                            button("button-group-one")
-                                .label("One")
-                                .disabled(demo.disabled)
-                                .selected(demo.selected)
-                                .when(demo.compact, |this| this.compact()),
-                        )
-                        .child(
-                            button("button-group-two")
-                                .label("Two")
-                                .disabled(demo.disabled)
-                                .selected(demo.selected)
-                                .when(demo.compact, |this| this.compact()),
-                        )
-                        .child(
-                            button("button-group-three")
-                                .label("Three")
-                                .disabled(demo.disabled)
-                                .selected(demo.selected)
-                                .when(demo.compact, |this| this.compact()),
-                        ),
+                        .child(button("button-group-one").label("One"))
+                        .child(button("button-group-two").label("Two"))
+                        .child(button("button-group-three").label("Three")),
                 ),
             )
             .child(
@@ -482,27 +320,9 @@ impl Render for ButtonSection {
                         .outline()
                         .layout(Axis::Vertical)
                         .disabled(demo.disabled)
-                        .child(
-                            button("button-vertical-one")
-                                .label("One")
-                                .disabled(demo.disabled)
-                                .selected(demo.selected)
-                                .when(demo.compact, |this| this.compact()),
-                        )
-                        .child(
-                            button("button-vertical-two")
-                                .label("Two")
-                                .disabled(demo.disabled)
-                                .selected(demo.selected)
-                                .when(demo.compact, |this| this.compact()),
-                        )
-                        .child(
-                            button("button-vertical-three")
-                                .label("Three")
-                                .disabled(demo.disabled)
-                                .selected(demo.selected)
-                                .when(demo.compact, |this| this.compact()),
-                        ),
+                        .child(button("button-vertical-one").label("One"))
+                        .child(button("button-vertical-two").label("Two"))
+                        .child(button("button-vertical-three").label("Three")),
                 ),
             )
             .child(
@@ -514,22 +334,26 @@ impl Render for ButtonSection {
                             .compact()
                             .multiple(self.toggle_multiple)
                             .child(
-                                button("button-selection-disabled")
+                                Button::new("button-selection-disabled")
+                                    .with_size(demo.size)
                                     .label("Disabled")
                                     .selected(demo.disabled),
                             )
                             .child(
-                                button("button-selection-loading")
+                                Button::new("button-selection-loading")
+                                    .with_size(demo.size)
                                     .label("Loading")
                                     .selected(demo.loading),
                             )
                             .child(
-                                button("button-selection-selected")
+                                Button::new("button-selection-selected")
+                                    .with_size(demo.size)
                                     .label("Selected")
                                     .selected(demo.selected),
                             )
                             .child(
-                                button("button-selection-compact")
+                                Button::new("button-selection-compact")
+                                    .with_size(demo.size)
                                     .label("Compact")
                                     .selected(demo.compact),
                             )
@@ -549,57 +373,33 @@ impl Render for ButtonSection {
                         button("button-icon-only-search")
                             .icon(IconName::Search)
                             .loading_icon(IconName::LoaderCircle)
-                            .primary()
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .primary(),
                     )
                     .child(
                         button("button-icon-only-info")
                             .icon(IconName::Info)
-                            .loading(true)
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .loading(true),
                     )
                     .child(
                         button("button-icon-only-danger")
                             .icon(IconName::Close)
-                            .danger()
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .danger(),
                     )
                     .child(
                         button("button-icon-only-small")
                             .icon(IconName::Search)
-                            .primary()
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .primary(),
                     )
                     .child(
                         button("button-icon-only-outline")
                             .icon(IconName::Search)
-                            .outline()
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .outline(),
                     )
                     .child(
                         button("button-icon-only-ghost")
                             .icon(IconName::ArrowLeft)
                             .loading_icon(IconName::LoaderCircle)
-                            .ghost()
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .ghost(),
                     ),
             )
             .child(
@@ -609,44 +409,28 @@ impl Render for ButtonSection {
                         button("button-custom-size-heart")
                             .icon(IconName::Heart)
                             .size(px(24.))
-                            .ghost()
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .ghost(),
                     ),
             )
             .child(
                 section("button-custom-color", "Custom color")
                     .child(
                         button("button-custom-color-solid")
-                            .custom(custom_variant)
-                            .label("Custom Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .custom(solid_custom_variant)
+                            .label("Custom Button"),
                     )
                     .child(
                         button("button-custom-color-outline")
                             .outline()
                             .custom(custom_variant)
-                            .label("Outline Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Outline Button"),
                     )
                     .child(
                         button("button-custom-color-icon")
                             .outline()
                             .icon(IconName::Bell)
                             .custom(custom_variant)
-                            .label("Icon Button")
-                            .disabled(demo.disabled)
-                            .selected(demo.selected)
-                            .loading(demo.loading)
-                            .when(demo.compact, |this| this.compact()),
+                            .label("Icon Button"),
                     ),
             )
     }

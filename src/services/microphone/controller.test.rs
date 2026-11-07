@@ -29,9 +29,8 @@ fn setup(cx: &mut TestAppContext) -> MicConfigGuard {
     capture_guard(cx)
 }
 
-// SAVE_SCHEDULED is process-global while tests run in parallel; restoring the
-// pre-test values then force_save completes the cycle with no disk write.
-// Call it inside the same closure that armed the debounce, before any park.
+// SAVE_SCHEDULED is shared by parallel tests: call this in the closure that armed the
+// debounce, before any park, so restoring then force_save ends without a disk write.
 fn complete_config_cycle(cx: &mut App, guard: &MicConfigGuard) {
     crate::app_state::update_config(cx, |c| {
         c.mic_device_id = guard.device_id.clone();
@@ -69,7 +68,7 @@ fn initialize_loads_persisted_gain_and_registers_capability(cx: &mut TestAppCont
         initialize(cx);
         assert_eq!(snapshot(cx).gain_db, 6.0);
         assert_ne!(snapshot(cx).permission, MicrophonePermissionState::Unknown);
-        assert!(crate::capabilities::snapshot(cx).contains_key("microphone_input"));
+        assert!(crate::capabilities::snapshot(cx).contains_key(&Capability::MICROPHONE_INPUT));
         complete_config_cycle(cx, &guard);
     });
     cx.executor().run_until_parked();
@@ -127,6 +126,8 @@ fn demo_start_pushes_samples_and_stop_detaches(cx: &mut TestAppContext) {
     cx.executor().advance_clock(Duration::from_millis(100));
     cx.executor().run_until_parked();
     cx.update(|cx| {
+        waveform.update(cx, |state, cx| state.refresh(cx));
+        assert!(waveform.read(cx).spectrum().is_some());
         assert!(waveform.read(cx).has_source());
         assert_eq!(waveform.read(cx).dropped_samples(), 0);
     });

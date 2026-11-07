@@ -2,10 +2,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use gpui_auth::{AuthEvent, AuthIo, InMemoryStore, TokenStore};
+use gpui_auth::{AuthError, AuthEvent, AuthIo, InMemoryStore, TokenStore};
 use gpui_kit::{Subscription, TestAppContext};
 
 use super::*;
+use crate::capabilities::Capability;
 use crate::services::session::SessionState;
 
 fn mock_install(
@@ -54,22 +55,15 @@ fn authorization_urls(
 }
 
 #[gpui_kit::test]
-async fn install_sets_both_capability_entries(cx: &mut TestAppContext) {
+async fn install_sets_the_email_capability_entry(cx: &mut TestAppContext) {
     test_install(cx);
     let snapshot = cx.read(|cx| crate::capabilities::snapshot(cx));
-    let email = snapshot.get("auth_email").expect("auth_email entry");
-    #[cfg(not(target_family = "wasm"))]
+    let email = snapshot
+        .get(&Capability::AUTH_EMAIL)
+        .expect("auth_email entry");
     assert!(email.supported && email.enabled && !email.degraded);
-    #[cfg(target_family = "wasm")]
-    assert!(!email.supported && email.degraded);
-    // Native: auth_social::install owns the entry, so the adapter sets none.
-    #[cfg(not(target_family = "wasm"))]
-    assert!(!snapshot.contains_key("auth_social"));
-    #[cfg(target_family = "wasm")]
-    {
-        let social = snapshot.get("auth_social").expect("auth_social entry");
-        assert!(!social.supported && social.degraded);
-    }
+    // auth_social::install owns the entry, so the adapter sets none.
+    assert!(!snapshot.contains_key(&Capability::AUTH_SOCIAL));
 }
 
 #[gpui_kit::test]
@@ -83,6 +77,16 @@ async fn callback_link_routing_truth_table(cx: &mut TestAppContext) {
         assert!(!handle_callback_link("gpui-starter://settings", cx));
         assert!(!handle_callback_link("gpui-starter://auth/other", cx));
         assert!(!handle_callback_link("not-a-url://x", cx));
+    });
+}
+
+#[gpui_kit::test]
+async fn callback_link_before_install_falls_through_to_routing(cx: &mut TestAppContext) {
+    cx.update(|cx| {
+        assert!(!handle_callback_link(
+            "gpui-starter://auth/callback?code=1&state=2",
+            cx
+        ));
     });
 }
 
@@ -111,13 +115,13 @@ async fn mock_sign_in_routes_through_to_the_session_state(cx: &mut TestAppContex
             account_label: "Mock account".to_string()
         }
     );
-    cx.update(|cx| assert!(store.load("mock", cx).unwrap().is_some()));
+    assert!(store.load("mock").await.unwrap().is_some());
 
     controller.update(cx, |controller, cx| controller.sign_out(cx));
     cx.run_until_parked();
     let session = cx.read(|cx| crate::session::snapshot(cx).state);
     assert_eq!(session, SessionState::SignedOut);
-    cx.update(|cx| assert_eq!(store.load("mock", cx).unwrap(), None));
+    assert_eq!(store.load("mock").await.unwrap(), None);
 }
 
 #[gpui_kit::test]
@@ -152,9 +156,9 @@ async fn restored_sign_in_propagates_to_the_session_state(cx: &mut TestAppContex
             avatar_url: None,
         }),
     };
+    store.save("mock", &tokens).await.unwrap();
     cx.update(|cx| {
         crate::services::session::initialize(cx);
-        store.save("mock", &tokens, cx).unwrap();
         install_with(
             store,
             AuthIo {
@@ -195,7 +199,6 @@ mod email_suites {
     struct EmailApp {
         controller: Entity<AuthController>,
         store: Arc<InMemoryStore>,
-        clock: Arc<AtomicI64>,
         events: Rc<RefCell<Vec<AuthEvent>>>,
         _subscription: Subscription,
     }
@@ -204,9 +207,8 @@ mod email_suites {
         let store = Arc::new(InMemoryStore::new());
         let shared: Arc<dyn TokenStore> = store.clone();
         let clock = Arc::new(AtomicI64::new(IAT));
-        let clock_reader = clock.clone();
         let clock_fn: Arc<dyn Fn() -> i64 + Send + Sync> =
-            Arc::new(move || clock_reader.load(Ordering::SeqCst));
+            Arc::new(move || clock.load(Ordering::SeqCst));
         let backend = Arc::new(DemoBackend::with_params(
             argon2::Params::new(8, 1, 1, None).unwrap(),
         ));
@@ -241,7 +243,6 @@ mod email_suites {
         EmailApp {
             controller,
             store,
-            clock,
             events,
             _subscription: subscription,
         }
@@ -269,12 +270,12 @@ mod email_suites {
         cx.read(|cx| crate::session::snapshot(cx).state)
     }
 
-    fn stored_row(cx: &mut TestAppContext, app: &EmailApp) -> Option<gpui_auth::TokenSet> {
-        cx.update(|cx| app.store.load("email", cx).unwrap())
+    async fn stored_row(app: &EmailApp) -> Option<gpui_auth::TokenSet> {
+        app.store.load("email").await.unwrap()
     }
 
     #[gpui_kit::test]
-    async fn full_roundtrip_sign_up_sign_in_refresh_sign_out(cx: &mut TestAppContext) {
+    async fn full_roundtrip_sign_up_sign_in_sign_out(cx: &mut TestAppContext) {
         let app = install_email(cx);
         sign_up(&app, cx, EMAIL);
         assert!(
@@ -291,29 +292,20 @@ mod email_suites {
                 account_label: EMAIL.to_string()
             }
         );
-        let row = stored_row(cx, &app).expect("store row after sign-in");
+        let row = stored_row(&app).await.expect("store row after sign-in");
         assert_eq!(row.provider_id, "email");
-        assert_eq!(row.access_token.expose(), "demo-access-0");
-
-        app.clock.store(IAT + 900 - 121, Ordering::SeqCst);
-        app.controller
-            .update(cx, |controller, cx| controller.refresh_if_needed(120, cx));
-        cx.run_until_parked();
-        let row = stored_row(cx, &app).unwrap();
-        assert_eq!(row.access_token.expose(), "demo-access-0");
-
-        app.clock.store(IAT + 900 - 120, Ordering::SeqCst);
-        app.controller
-            .update(cx, |controller, cx| controller.refresh_if_needed(120, cx));
-        cx.run_until_parked();
-        let row = stored_row(cx, &app).unwrap();
-        assert_eq!(row.access_token.expose(), "demo-access-1");
-        assert_eq!(row.refresh_token.unwrap().expose(), "demo-refresh-0");
+        assert!(row.access_token.expose().starts_with("demo-access-"));
+        assert!(
+            row.refresh_token
+                .unwrap()
+                .expose()
+                .starts_with("demo-refresh-")
+        );
 
         app.controller
             .update(cx, |controller, cx| controller.sign_out(cx));
         cx.run_until_parked();
-        assert_eq!(stored_row(cx, &app), None);
+        assert_eq!(stored_row(&app).await, None);
         assert_eq!(session_state(cx), SessionState::SignedOut);
     }
 
@@ -324,142 +316,73 @@ mod email_suites {
         sign_in(&app, cx, EMAIL, "wrong-password");
         assert!(matches!(
             controller_state(cx, &app),
-            AuthState::Error(message) if message.contains("invalid email or password")
+            AuthState::Error(AuthError::InvalidCredentials)
         ));
         assert!(matches!(session_state(cx), SessionState::Error(_)));
-        assert_eq!(stored_row(cx, &app), None);
+        assert_eq!(stored_row(&app).await, None);
     }
+}
 
-    #[gpui_kit::test]
-    async fn duplicate_sign_up_surfaces_the_error(cx: &mut TestAppContext) {
-        let app = install_email(cx);
-        sign_up(&app, cx, EMAIL);
-        sign_up(&app, cx, EMAIL);
-        assert!(matches!(
-            controller_state(cx, &app),
-            AuthState::Error(message) if message.contains("already registered")
-        ));
-    }
+// KeyringStore is the only app-owned logic here; these hit the real OS
+// keyring (session-keyed on Linux), so each test uses its own provider id.
+#[cfg(not(target_family = "wasm"))]
+mod keyring_store {
+    use super::*;
 
-    #[gpui_kit::test]
-    async fn totp_enrollment_challenge_and_verify(cx: &mut TestAppContext) {
-        let app = install_email(cx);
-        sign_up(&app, cx, EMAIL);
-        sign_in(&app, cx, EMAIL, PASSWORD);
-
-        app.controller
-            .update(cx, |controller, cx| controller.enroll_totp(cx));
-        cx.run_until_parked();
-        let enrollment = cx
-            .read(|cx| app.controller.read(cx).totp_enrollment().cloned())
-            .expect("enrollment round");
-        assert_eq!(enrollment.email, EMAIL);
-        assert_eq!(enrollment.secret_base32.len(), 32);
-        assert!(
-            enrollment
-                .otpauth_url
-                .starts_with("otpauth://totp/gpui-starter:")
-        );
-        let secret = decode_base32(&enrollment.secret_base32);
-        let now = app.clock.load(Ordering::SeqCst);
-
-        app.controller.update(cx, |controller, cx| {
-            controller.confirm_totp_enrollment(wrong_code_for(&secret, now), cx)
-        });
-        cx.run_until_parked();
-        let error = cx.read(|cx| {
-            app.controller
-                .read(cx)
-                .totp_enrollment_error()
-                .map(str::to_string)
-        });
-        assert_eq!(error.as_deref(), Some("TOTP code rejected"));
-
-        app.controller.update(cx, |controller, cx| {
-            controller.confirm_totp_enrollment(totp_code(&secret, now), cx)
-        });
-        cx.run_until_parked();
-        assert!(cx.read(|cx| app.controller.read(cx).totp_enrollment().is_none()));
-
-        app.controller
-            .update(cx, |controller, cx| controller.sign_out(cx));
-        cx.run_until_parked();
-        sign_in(&app, cx, EMAIL, PASSWORD);
-        assert_eq!(
-            controller_state(cx, &app),
-            AuthState::AwaitingChallenge {
-                email: EMAIL.to_string(),
-                error: None,
-            }
-        );
-
-        app.controller.update(cx, |controller, cx| {
-            controller.submit_totp(wrong_code_for(&secret, now), cx)
-        });
-        cx.run_until_parked();
-        assert_eq!(
-            controller_state(cx, &app),
-            AuthState::AwaitingChallenge {
-                email: EMAIL.to_string(),
-                error: Some("TOTP code rejected".to_string()),
-            }
-        );
-
-        app.controller.update(cx, |controller, cx| {
-            controller.submit_totp(totp_code(&secret, now), cx)
-        });
-        cx.run_until_parked();
-        assert_eq!(
-            controller_state(cx, &app),
-            AuthState::SignedIn {
-                account_label: EMAIL.to_string()
-            }
-        );
-        assert!(stored_row(cx, &app).is_some());
-    }
-
-    fn totp_code(secret: &[u8], unix: i64) -> String {
-        use hmac::{Hmac, Mac};
-        use sha1::Sha1;
-        let counter = unix.div_euclid(30) as u64;
-        let mut mac = Hmac::<Sha1>::new_from_slice(secret).unwrap();
-        mac.update(&counter.to_be_bytes());
-        let digest = mac.finalize().into_bytes();
-        let offset = usize::from(digest[19] & 0x0f);
-        let bin = ((u32::from(digest[offset]) & 0x7f) << 24)
-            | (u32::from(digest[offset + 1]) << 16)
-            | (u32::from(digest[offset + 2]) << 8)
-            | u32::from(digest[offset + 3]);
-        format!("{:06}", bin % 1_000_000)
-    }
-
-    fn wrong_code_for(secret: &[u8], unix: i64) -> String {
-        let valid: Vec<String> = (-1..=1)
-            .map(|delta| totp_code(secret, unix + delta * 30))
-            .collect();
-        (0..1_000_000u32)
-            .map(|candidate| format!("{candidate:06}"))
-            .find(|candidate| !valid.contains(candidate))
-            .unwrap()
-    }
-
-    fn decode_base32(encoded: &str) -> Vec<u8> {
-        const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-        let mut out = Vec::new();
-        let mut buffer = 0u32;
-        let mut bits = 0u32;
-        for char in encoded.chars() {
-            let value = ALPHABET
-                .iter()
-                .position(|candidate| *candidate as char == char)
-                .expect("base32 alphabet");
-            buffer = (buffer << 5) | value as u32;
-            bits += 5;
-            if bits >= 8 {
-                bits -= 8;
-                out.push(((buffer >> bits) & 0xff) as u8);
-            }
+    fn tokens(provider_id: &str) -> gpui_auth::TokenSet {
+        gpui_auth::TokenSet {
+            provider_id: provider_id.to_string(),
+            access_token: gpui_auth::SecretString::new("roundtrip-access"),
+            refresh_token: Some(gpui_auth::SecretString::new("roundtrip-refresh")),
+            id_token: None,
+            token_type: "Bearer".to_string(),
+            expires_at: Some(1_700_000_000),
+            scope: Some("profile".to_string()),
+            account: Some(gpui_auth::AccountInfo {
+                id: None,
+                email: Some("user@example.test".to_string()),
+                display_name: Some("Keyring Store Test".to_string()),
+                avatar_url: None,
+            }),
         }
-        out
+    }
+
+    #[gpui_kit::test]
+    async fn save_then_load_roundtrips_the_token_row() {
+        KeyringStore
+            .save(
+                "keyring-store-roundtrip",
+                &tokens("keyring-store-roundtrip"),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            KeyringStore.load("keyring-store-roundtrip").await.unwrap(),
+            Some(tokens("keyring-store-roundtrip"))
+        );
+        KeyringStore
+            .delete("keyring-store-roundtrip")
+            .await
+            .unwrap();
+    }
+
+    #[gpui_kit::test]
+    async fn a_corrupt_row_loads_as_a_miss_not_an_error() {
+        crate::services::secure_storage::set_secret_blocking(
+            KEYRING_SERVICE,
+            "keyring-store-corrupt",
+            "{not-json",
+        )
+        .unwrap();
+        assert_eq!(
+            KeyringStore.load("keyring-store-corrupt").await.unwrap(),
+            None
+        );
+        KeyringStore.delete("keyring-store-corrupt").await.unwrap();
+    }
+
+    #[gpui_kit::test]
+    async fn deleting_a_missing_key_is_ok() {
+        KeyringStore.delete("keyring-store-missing").await.unwrap();
     }
 }

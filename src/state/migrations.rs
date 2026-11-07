@@ -1,14 +1,10 @@
 use crate::state::config_store::{APP_STATE_VERSION, AppConfig};
 
+/// Bump a config from any older schema version to the current one. Every
+/// post-v0 field carries a serde default, so only the version moves;
+/// `load_config` quarantines newer-than-build files before this runs.
 pub fn migrate(mut config: AppConfig) -> AppConfig {
-    // v0 -> v1 migration placeholders. Keep explicit so later versions can
-    // append deterministic transforms.
-    if config.version < 1 {
-        config.global_shortcut_enabled = true;
-        config.version = 1;
-    }
-
-    if config.version != APP_STATE_VERSION {
+    if config.version < APP_STATE_VERSION {
         config.version = APP_STATE_VERSION;
     }
     config

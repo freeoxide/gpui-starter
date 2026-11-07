@@ -36,12 +36,12 @@ impl ChatTurn {
     }
 }
 
-/// `messages` is the full
-/// transcript; the returned stream yields the reply as string chunks.
+/// A backend that streams assistant replies.
 pub trait ChatStreamSource {
     /// Error produced by individual stream items; rendered via `Display`.
     type Error: std::fmt::Display + Send + 'static;
     type Stream: Stream<Item = Result<String, Self::Error>> + Send + 'static;
 
+    /// `messages` is the full transcript; the stream yields the reply as string chunks.
     fn stream(&self, messages: &[ChatTurn], cx: &App) -> Self::Stream;
 }

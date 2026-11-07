@@ -5,7 +5,6 @@ mod brush;
 mod checkerboard;
 mod color_mix;
 mod colors;
-mod demo;
 mod mapper;
 
 use gpui_kit::{App, Window};

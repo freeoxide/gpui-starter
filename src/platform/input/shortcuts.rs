@@ -88,17 +88,17 @@ impl std::fmt::Display for RegistryError {
     }
 }
 
-pub type Handler = Rc<dyn Fn(&mut App)>;
+type Handler = Rc<dyn Fn(&mut App)>;
 
-// All mutations and dispatch run on the app thread: OS events hop flume
-// (Windows) or the tray channel (macOS) first, so the table needs no lock.
+// All mutations and dispatch run on the app thread: OS events hop the
+// forwarder's flume channel first, so the table needs no lock.
 #[derive(Default)]
-pub struct HandlerRegistry {
+struct HandlerRegistry {
     entries: Vec<(&'static str, Handler)>,
 }
 
 impl HandlerRegistry {
-    pub fn register(&mut self, id: &'static str, handler: Handler) -> Result<(), RegistryError> {
+    fn register(&mut self, id: &'static str, handler: Handler) -> Result<(), RegistryError> {
         if accelerator(id).is_none() {
             return Err(RegistryError::UnknownAccelerator);
         }
@@ -109,13 +109,7 @@ impl HandlerRegistry {
         Ok(())
     }
 
-    pub fn unregister(&mut self, id: &str) -> bool {
-        let before = self.entries.len();
-        self.entries.retain(|(known, _)| *known != id);
-        before != self.entries.len()
-    }
-
-    pub fn handler(&self, id: &str) -> Option<&Handler> {
+    fn handler(&self, id: &str) -> Option<&Handler> {
         self.entries
             .iter()
             .find(|(known, _)| *known == id)
@@ -138,13 +132,8 @@ pub fn set_handler(
     cx.update_default_global::<DispatchTable, _>(|table, _| table.0.register(id, Rc::new(handler)))
 }
 
-/// Drop an accelerator's handler; true when one was registered.
-pub fn remove_handler(id: &str, cx: &mut App) -> bool {
-    cx.update_default_global::<DispatchTable, _>(|table, _| table.0.unregister(id))
-}
-
 /// Fire an accelerator's handler; false (with a warn) when none is wired.
-/// Runs outside the dispatch-table lease, so a handler may (un)register.
+/// Runs outside the dispatch-table lease, so a handler may register mid-fire.
 pub fn trigger(id: &str, cx: &mut App) -> bool {
     tracing::info!(target: LOG, accelerator = id, "Accelerator fired");
     let handler =
@@ -162,7 +151,7 @@ pub fn trigger(id: &str, cx: &mut App) -> bool {
 }
 
 /// Map a global-hotkey crate event id to its accelerator and fire it.
-/// Called on the app thread from the tray (macOS) and pump (Windows) seams.
+/// Called on the app thread from the hotkey forwarder's flume pump.
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub fn dispatch_hotkey(hotkey_id: u32, cx: &mut App) {
     let Some(acc) = ACCELERATORS
@@ -207,10 +196,8 @@ impl Global for ShortcutState {}
 static HOTKEY_MANAGER: OnceLock<Mutex<Option<global_hotkey::GlobalHotKeyManager>>> =
     OnceLock::new();
 
-// On Windows the manager owns a hidden window created on the calling thread:
-// WM_HOTKEY dispatches only while that thread pumps messages and Drop
-// (DestroyWindow) must run on that same thread, so the manager's whole
-// lifecycle is confined to one worker thread.
+// On Windows the manager owns a hidden window: WM_HOTKEY dispatches only on
+// its creating thread, and Drop (DestroyWindow) must run there too.
 #[cfg(target_os = "windows")]
 static HOTKEY_WORKER: OnceLock<Mutex<Option<HotkeyWorker>>> = OnceLock::new();
 
@@ -230,11 +217,15 @@ pub fn initialize(cx: &mut App) {
         last_error: None,
     };
     cx.set_global(state);
-    if let Err(err) = set_handler(LAUNCHER, crate::launcher::open_launcher, cx) {
+    if let Err(err) = set_handler(
+        LAUNCHER,
+        crate::features::command_palette::open_launcher,
+        cx,
+    ) {
         tracing::warn!(target: LOG, error = %err, "launcher shortcut handler registration failed");
     }
-    // macOS hotkey events are forwarded by tray.rs, which is macOS-only.
-    #[cfg(target_os = "windows")]
+    // Spawned here, independent of tray.rs: its setup returns early when the
+    // icon fails to build, which would leave OS-registered hotkeys undispatched.
     spawn_hotkey_event_forwarder(cx);
     apply_enabled(enabled, cx);
 }
@@ -359,7 +350,7 @@ pub fn shutdown(_cx: &mut App) {}
 
 // The drain thread parks on a blocking crossbeam recv and forwards over flume:
 // `AsyncApp` is `!Send`, so it cannot `cx.update` (same shape as tray.rs).
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn spawn_hotkey_event_forwarder(cx: &mut App) {
     use global_hotkey::{GlobalHotKeyEvent, HotKeyState};
 
@@ -494,7 +485,7 @@ fn spawn_hotkey_worker() -> Result<(), String> {
 
 fn set_capability(state: &ShortcutState, cx: &mut App) {
     crate::capabilities::set(
-        "global_shortcuts",
+        crate::capabilities::Capability::GLOBAL_SHORTCUTS,
         crate::capabilities::CapabilityStatus {
             supported: cfg!(any(target_os = "macos", target_os = "windows")),
             enabled: state.registered,

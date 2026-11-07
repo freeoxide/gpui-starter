@@ -6,17 +6,21 @@ use gpui_kit::{
 };
 
 use super::backend_service::{
-    LOG, NativeNotificationState, NotificationRuntimeSnapshot, NotificationService,
+    LOG, NativeNotificationState, NotificationRuntimeSnapshot, NotificationService, bounded,
 };
-use super::inbox::{self, NotificationAttemptRecord, NotificationInboxKind};
+use super::inbox::{self, NotificationAttemptRecord};
 use super::types::{
     NotificationBackendKind, NotificationImportance, NotificationPermissionState,
     NotificationRequest, NotificationSendResult,
 };
 
 pub fn initialize(cx: &mut App) {
-    let service = Arc::new(NotificationService::new());
-    let snapshot = NotificationRuntimeSnapshot::new(&service);
+    // Seed from the persisted flag so startup never re-runs the user-toggle
+    // API, which would record a phantom inbox attempt per launch.
+    let enabled_by_user =
+        crate::app_state::with_config(cx, |config| config.native_notifications_enabled);
+    let service = Arc::new(NotificationService::new(native_runtime(cx)));
+    let snapshot = NotificationRuntimeSnapshot::new(&service, enabled_by_user);
     tracing::info!(
         target: LOG,
         active_backend = %snapshot.active_backend,
@@ -25,23 +29,41 @@ pub fn initialize(cx: &mut App) {
         degraded_reason = ?snapshot.degraded_reason,
         "installing native notification global state"
     );
-    let degraded = snapshot.degraded_reason.is_some();
-    let reason = snapshot.degraded_reason.clone();
-    let last_error = snapshot.last_backend_error.clone();
     cx.set_global(NativeNotificationState { service, snapshot });
+    publish_capability(cx);
+    refresh_permission_state(cx);
+    refresh_daemon_state(cx);
+}
+
+/// The wasm tokio shim is undriven, so only a native runtime can host the
+/// send and permission deadlines.
+fn native_runtime(cx: &App) -> Option<Arc<tokio::runtime::Runtime>> {
+    #[cfg(not(target_family = "wasm"))]
+    {
+        crate::services::tokio_runtime::handle(cx)
+    }
+    #[cfg(target_family = "wasm")]
+    {
+        let _ = cx;
+        None
+    }
+}
+
+/// Single publisher: every snapshot mutation re-publishes, so the capability
+/// registry and the runtime snapshot never disagree (diagnostics shows both).
+fn publish_capability(cx: &mut App) {
+    let snapshot = cx.global::<NativeNotificationState>().snapshot.clone();
     crate::capabilities::set(
-        "native_notifications",
+        crate::capabilities::Capability::NATIVE_NOTIFICATIONS,
         crate::capabilities::CapabilityStatus {
             supported: true,
-            enabled: true,
-            degraded,
-            reason,
-            last_error,
+            enabled: snapshot.enabled_by_user,
+            degraded: snapshot.degraded_reason.is_some(),
+            reason: snapshot.degraded_reason,
+            last_error: snapshot.last_backend_error,
         },
         cx,
     );
-    refresh_permission_state(cx);
-    refresh_daemon_state(cx);
 }
 
 pub fn snapshot(cx: &App) -> NotificationRuntimeSnapshot {
@@ -55,25 +77,8 @@ pub fn set_native_notifications_enabled(enabled: bool, cx: &mut App) {
     });
     mutate_snapshot(cx, |snapshot| {
         snapshot.enabled_by_user = enabled;
-        if !enabled {
-            snapshot.degraded_reason =
-                Some(crate::i18n::localize("notifications_degraded_disabled_by_user").into());
-        } else {
-            snapshot.degraded_reason = None;
-        }
+        snapshot.recompute_degraded_reason();
     });
-    let snapshot = cx.global::<NativeNotificationState>().snapshot.clone();
-    crate::capabilities::set(
-        "native_notifications",
-        crate::capabilities::CapabilityStatus {
-            supported: true,
-            enabled,
-            degraded: snapshot.degraded_reason.is_some(),
-            reason: snapshot.degraded_reason,
-            last_error: snapshot.last_backend_error,
-        },
-        cx,
-    );
     inbox::record_attempt(
         NotificationAttemptRecord {
             title: crate::i18n::localize("notifications_settings_updated"),
@@ -83,10 +88,7 @@ pub fn set_native_notifications_enabled(enabled: bool, cx: &mut App) {
                 "notifications_native_disabled"
             }),
             backend: NotificationBackendKind::UiOnly,
-            delivered_natively: false,
-            degraded: !enabled,
             error_summary: None,
-            kind: NotificationInboxKind::SettingsUpdate,
         },
         cx,
     );
@@ -94,9 +96,16 @@ pub fn set_native_notifications_enabled(enabled: bool, cx: &mut App) {
 
 pub fn refresh_permission_state(cx: &mut App) {
     let service = cx.global::<NativeNotificationState>().service.clone();
+    let runtime = native_runtime(cx);
     tracing::debug!(target: LOG, "scheduling async permission refresh");
     cx.spawn(async move |cx| {
-        let permission = service.refresh_permission_state().await;
+        // Apple may never invoke the settings handler, so bound the probe; the
+        // interactive request prompt stays unbounded by design.
+        let probe = async move { service.refresh_permission_state().await };
+        let permission = match bounded(runtime.as_ref(), probe).await {
+            Ok(permission) => permission,
+            Err(err) => NotificationPermissionState::Unavailable(err),
+        };
         tracing::info!(target: LOG, ?permission, "permission refresh completed");
         cx.update(move |cx| {
             mutate_snapshot(cx, |snapshot| {
@@ -145,20 +154,8 @@ pub fn refresh_daemon_state(cx: &mut App) {
             cx.update(move |cx| {
                 mutate_snapshot(cx, |snapshot| {
                     snapshot.daemon_capabilities = caps_display;
-                    if daemon_present {
-                        snapshot.degraded_reason = None;
-                        snapshot.last_backend_error = None;
-                    } else {
-                        snapshot.degraded_reason = Some(
-                            "No notification daemon owns org.freedesktop.Notifications — \
-                             install notify-osd / dunst / mako"
-                                .into(),
-                        );
-                        snapshot.last_backend_error = Some(
-                            "org.freedesktop.Notifications is not reachable on the session bus"
-                                .into(),
-                        );
-                    }
+                    snapshot.daemon_present = daemon_present;
+                    snapshot.recompute_degraded_reason();
                 });
             });
         })
@@ -194,10 +191,7 @@ pub fn request_permission_from_window(window: &mut Window, cx: &mut App) {
                     title: crate::i18n::localize("notifications_permission_updated"),
                     body: message.to_string(),
                     backend: NotificationBackendKind::UiOnly,
-                    delivered_natively: false,
-                    degraded: false,
                     error_summary: None,
-                    kind: NotificationInboxKind::PermissionUpdate,
                 },
                 cx,
             );
@@ -247,10 +241,7 @@ pub fn send_from_window(request: NotificationRequest, window: &mut Window, cx: &
                     title: inbox_title,
                     body: inbox_body,
                     backend: result.backend_used,
-                    delivered_natively: result.delivered_natively,
-                    degraded: result.degraded,
                     error_summary: result.error_summary.as_ref().map(ToString::to_string),
-                    kind: NotificationInboxKind::Attempt,
                 },
                 cx,
             );
@@ -364,15 +355,16 @@ fn apply_send_result(result: &NotificationSendResult, cx: &mut App) {
     );
     mutate_snapshot(cx, |snapshot| {
         snapshot.active_backend = result.backend_used;
-        snapshot.last_backend_error = result.error_summary.clone();
-        snapshot.degraded_reason = if result.degraded {
-            result
-                .error_summary
-                .clone()
-                .or_else(|| Some(crate::i18n::localize("notifications_degraded").into()))
-        } else {
-            None
-        };
+        if result.delivered_natively {
+            // A delivered send proves a daemon answered the bus name.
+            snapshot.daemon_present = true;
+        }
+        // A policy skip (native off / not preferred) is not a backend failure;
+        // leave the durable reason untouched so it cannot flip per send.
+        if result.delivered_natively || result.degraded {
+            snapshot.last_backend_error = result.error_summary.clone();
+        }
+        snapshot.recompute_degraded_reason();
     });
 }
 
@@ -381,6 +373,7 @@ fn mutate_snapshot(cx: &mut App, f: impl FnOnce(&mut NotificationRuntimeSnapshot
         f(&mut state.snapshot);
         cx.refresh_windows();
     });
+    publish_capability(cx);
 }
 
 fn push_in_app_feedback(

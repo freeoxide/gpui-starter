@@ -10,9 +10,8 @@ pub struct FloatingWindowId(pub SharedString);
 pub enum FloatLevel {
     /// Above the app's normal windows. Not OS-topmost on Windows/X11.
     Floating,
-    /// PopUp window kind: NSPopUp level + all spaces (macOS),
-    /// WS_EX_TOPMOST (Windows), notification type (X11). Implies
-    /// non-activating on macOS and non-resizable on Windows.
+    /// PopUp window kind: NSPopUp level + all spaces (macOS), WS_EX_TOPMOST (Windows),
+    /// notification type (X11). Implies non-activating on macOS, non-resizable on Windows.
     AlwaysOnTop,
 }
 
@@ -136,9 +135,8 @@ impl FloatingSpec {
         self
     }
 
-    /// Spawn-time click-through: the float ignores all pointer input.
-    /// Applied over the platform shim right after the native window opens;
-    /// advisory where no shim exists (wasm overlays, test windows).
+    /// Spawn-time click-through: the float ignores all pointer input. Advisory where no
+    /// platform shim exists (wasm overlays, test windows).
     pub fn click_through(mut self, enabled: bool) -> Self {
         self.click_through = enabled;
         self

@@ -3,18 +3,21 @@ use std::sync::Arc;
 
 use collab_protocol::{
     Board, Change, ClientId, CursorMsg, Peer, PeerLeaveMsg, ShapeKey, SnapshotMsg, WireColor,
-    WireOp, WireShape,
+    WireOp, WireShape, WireStroke, WireStyle,
 };
 use gpui_kit::*;
 
-use crate::capabilities::CapabilityStatus;
+use crate::capabilities::{Capability, CapabilityStatus};
 use crate::platform::clock::{Duration, Instant};
-use crate::ui::canvas::{CanvasShape, CanvasState, ShapeId};
+use crate::ui::canvas::{CanvasShape, CanvasState, ShapeId, ShapeStyle, StrokeStyle, measure_text};
 
 use super::fake;
 
 const TARGET: &str = "gpui_starter::multiuser_canvas";
 const CURSOR_THROTTLE: Duration = Duration::from_millis(50);
+// Below this a decode failure is a log line; at this many in a row the
+// capability turns degraded, since a version-skewed server drops every message.
+const UNDECODABLE_DEGRADE_AFTER: u32 = 3;
 pub(crate) const PEER_PALETTE: [WireColor; 8] = [
     WireColor([0., 0.65, 0.5, 1.]),
     WireColor([45., 0.65, 0.5, 1.]),
@@ -85,6 +88,7 @@ pub(crate) struct CollabSession {
     link: Option<Arc<dyn NetLink>>,
     last_cursor: Option<Instant>,
     demo_generation: u64,
+    undecodable_streak: u32,
 }
 
 impl CollabSession {
@@ -100,10 +104,14 @@ impl CollabSession {
             color: PEER_PALETTE[(id % PEER_PALETTE.len() as u64) as usize],
         };
         #[cfg(not(target_family = "wasm"))]
-        crate::capabilities::set("collab_canvas", CapabilityStatus::supported_enabled(), cx);
+        crate::capabilities::set(
+            Capability::COLLAB_CANVAS,
+            CapabilityStatus::supported_enabled(),
+            cx,
+        );
         #[cfg(target_family = "wasm")]
         crate::capabilities::set(
-            "collab_canvas",
+            Capability::COLLAB_CANVAS,
             CapabilityStatus {
                 supported: false,
                 enabled: true,
@@ -126,6 +134,7 @@ impl CollabSession {
             link: None,
             last_cursor: None,
             demo_generation: 0,
+            undecodable_streak: 0,
         };
         session.start_demo(cx);
         session
@@ -193,6 +202,7 @@ impl CollabSession {
             if let Some(old) = self.link.take() {
                 old.shutdown();
             }
+            self.undecodable_streak = 0;
             self.status = Status::Connecting;
             self.announce_status(cx);
             cx.notify();
@@ -222,6 +232,7 @@ impl CollabSession {
             link.shutdown();
         }
         self.peers.clear();
+        self.undecodable_streak = 0;
         self.status = if self.mode == Mode::Live {
             Status::Offline
         } else {
@@ -254,7 +265,11 @@ impl CollabSession {
             InboundEvent::Error { message } => {
                 tracing::warn!(target: TARGET, error = %message, "collab socket error");
                 if self.mode == Mode::Live {
-                    crate::capabilities::set("collab_canvas", CapabilityStatus::error(message), cx);
+                    crate::capabilities::set(
+                        Capability::COLLAB_CANVAS,
+                        CapabilityStatus::error(message),
+                        cx,
+                    );
                     cx.notify();
                 }
             }
@@ -269,39 +284,49 @@ impl CollabSession {
         cx: &mut Context<Self>,
     ) {
         match event {
-            "snapshot" => {
-                if let Ok(msg) = serde_json::from_value::<SnapshotMsg>(payload) {
+            "snapshot" => match serde_json::from_value::<SnapshotMsg>(payload) {
+                Ok(msg) => {
+                    self.note_decodable(cx);
                     self.apply_snapshot(msg, cx);
                 }
-            }
-            "peer_join" => {
-                if let Ok(peer) = serde_json::from_value::<Peer>(payload) {
+                Err(err) => self.note_undecodable(event, &err, cx),
+            },
+            "peer_join" => match serde_json::from_value::<Peer>(payload) {
+                Ok(peer) => {
+                    self.note_decodable(cx);
                     if peer.id != self.identity.id {
                         self.peers.insert(peer.id, PeerCursor { peer, doc: None });
                         cx.notify();
                     }
                 }
-            }
-            "peer_leave" => {
-                if let Ok(msg) = serde_json::from_value::<PeerLeaveMsg>(payload) {
+                Err(err) => self.note_undecodable(event, &err, cx),
+            },
+            "peer_leave" => match serde_json::from_value::<PeerLeaveMsg>(payload) {
+                Ok(msg) => {
+                    self.note_decodable(cx);
                     if self.peers.remove(&msg.id).is_some() {
                         cx.notify();
                     }
                 }
-            }
-            "op" => {
-                if let Ok(op) = serde_json::from_value::<WireOp>(payload) {
+                Err(err) => self.note_undecodable(event, &err, cx),
+            },
+            "op" => match serde_json::from_value::<WireOp>(payload) {
+                Ok(op) => {
+                    self.note_decodable(cx);
                     self.apply_op(op, cx);
                 }
-            }
-            "cursor" => {
-                if let Ok(msg) = serde_json::from_value::<CursorMsg>(payload) {
+                Err(err) => self.note_undecodable(event, &err, cx),
+            },
+            "cursor" => match serde_json::from_value::<CursorMsg>(payload) {
+                Ok(msg) => {
+                    self.note_decodable(cx);
                     if let Some(entry) = self.peers.get_mut(&msg.origin) {
                         entry.doc = Some(point(px(msg.doc[0]), px(msg.doc[1])));
                         cx.notify();
                     }
                 }
-            }
+                Err(err) => self.note_undecodable(event, &err, cx),
+            },
             other => {
                 tracing::debug!(target: TARGET, event = other, "unhandled collab event");
             }
@@ -322,7 +347,8 @@ impl CollabSession {
         }
         match op {
             WireOp::Add { shape, .. } | WireOp::Update { shape, .. } => {
-                let canvas_shape = wire_shape_to_canvas(&shape);
+                let canvas_shape =
+                    wire_shape_to_canvas(&shape, &WindowTextSystem::new(cx.text_system().clone()));
                 match self.by_wire.get(&key).copied() {
                     Some(local_id) => {
                         self.canvas.update(cx, |state, cx| {
@@ -360,15 +386,20 @@ impl CollabSession {
 
     #[cfg_attr(target_family = "wasm", allow(dead_code))]
     pub(crate) fn apply_snapshot(&mut self, msg: SnapshotMsg, cx: &mut Context<Self>) {
-        self.board.replace_all(msg.shapes.clone());
+        let SnapshotMsg {
+            peers,
+            shapes,
+            tombstones,
+        } = msg;
         let mut by_wire = HashMap::new();
         let mut by_local = HashMap::new();
+        let text_system = WindowTextSystem::new(cx.text_system().clone());
         self.canvas.update(cx, |state, cx| {
             state.edit_document(cx, |doc| {
                 doc.clear();
                 let layer = doc.add_layer();
-                for entry in &msg.shapes {
-                    let shape = wire_shape_to_canvas(&entry.shape);
+                for entry in &shapes {
+                    let shape = wire_shape_to_canvas(&entry.shape, &text_system);
                     if let Some(local_id) = doc.add_shape(layer, shape) {
                         by_wire.insert(entry.key, local_id);
                         by_local.insert(local_id, entry.key);
@@ -376,21 +407,13 @@ impl CollabSession {
                 }
             });
         });
+        self.board.replace_all(shapes, tombstones);
         self.by_wire = by_wire;
         self.by_local = by_local;
-        self.peers = msg
-            .peers
-            .iter()
+        self.peers = peers
+            .into_iter()
             .filter(|peer| peer.id != self.identity.id)
-            .map(|peer| {
-                (
-                    peer.id,
-                    PeerCursor {
-                        peer: peer.clone(),
-                        doc: None,
-                    },
-                )
-            })
+            .map(|peer| (peer.id, PeerCursor { peer, doc: None }))
             .collect();
         self.status = Status::Connected;
         self.announce_status(cx);
@@ -467,7 +490,7 @@ impl CollabSession {
 
     /// Throttles the own cursor to 20 Hz and pushes it over the link when
     /// one exists. Nothing rendered reads this state, so there is no notify.
-    pub(crate) fn set_own_cursor(&mut self, doc: Point<Pixels>, _cx: &mut Context<Self>) {
+    pub(crate) fn set_own_cursor(&mut self, doc: Point<Pixels>) {
         let now = Instant::now();
         let due = self
             .last_cursor
@@ -562,13 +585,42 @@ impl CollabSession {
         }
     }
 
+    #[cfg_attr(target_family = "wasm", allow(dead_code))]
+    fn note_decodable(&mut self, cx: &mut Context<Self>) {
+        let was_degraded = self.undecodable_streak >= UNDECODABLE_DEGRADE_AFTER;
+        self.undecodable_streak = 0;
+        if was_degraded {
+            self.announce_status(cx);
+            cx.notify();
+        }
+    }
+
+    #[cfg_attr(target_family = "wasm", allow(dead_code))]
+    fn note_undecodable(&mut self, event: &str, err: &serde_json::Error, cx: &mut Context<Self>) {
+        log_undecodable(event, err);
+        self.undecodable_streak = self.undecodable_streak.saturating_add(1);
+        if self.undecodable_streak == UNDECODABLE_DEGRADE_AFTER {
+            self.announce_status(cx);
+            cx.notify();
+        }
+    }
+
     fn announce_status(&self, cx: &mut Context<Self>) {
         let status = match self.status {
             Status::Reconnecting => CapabilityStatus::degraded("reconnecting"),
+            _ if self.undecodable_streak >= UNDECODABLE_DEGRADE_AFTER => {
+                CapabilityStatus::degraded("server messages fail to decode")
+            }
             _ => CapabilityStatus::supported_enabled(),
         };
-        crate::capabilities::set("collab_canvas", status, cx);
+        crate::capabilities::set(Capability::COLLAB_CANVAS, status, cx);
     }
+}
+
+/// A decode failure means the server speaks a newer collab-protocol version
+/// than this client; dropping it silently would look like a dead session.
+fn log_undecodable(event: &str, err: &serde_json::Error) {
+    tracing::warn!(target: TARGET, event, error = %err, "collab message failed to decode");
 }
 
 pub(crate) fn wire_color_to_hsla(color: WireColor) -> Hsla {
@@ -585,8 +637,8 @@ fn hsla_to_wire(color: Hsla) -> WireColor {
     WireColor([color.h * 360., color.s, color.l, color.a])
 }
 
-fn wire_stroke_to_canvas(stroke: &collab_protocol::WireStroke) -> crate::ui::canvas::StrokeStyle {
-    crate::ui::canvas::StrokeStyle {
+fn wire_stroke_to_canvas(stroke: &WireStroke) -> StrokeStyle {
+    StrokeStyle {
         width: px(stroke.width),
         color: wire_color_to_hsla(stroke.color),
         dash: stroke
@@ -612,16 +664,15 @@ fn canvas_bounds_to_wire(bounds: &Bounds<Pixels>) -> [f32; 4] {
     ]
 }
 
-fn wire_shape_to_canvas(shape: &WireShape) -> CanvasShape {
-    use collab_protocol::WireStyle;
+fn wire_shape_to_canvas(shape: &WireShape, text_system: &WindowTextSystem) -> CanvasShape {
     let style_to_canvas = |style: &WireStyle| match (
         style.fill.map(wire_color_to_hsla),
         style.stroke.as_ref().map(wire_stroke_to_canvas),
     ) {
-        (Some(fill), Some(stroke)) => crate::ui::canvas::ShapeStyle::both(fill, stroke),
-        (Some(fill), None) => crate::ui::canvas::ShapeStyle::filled(fill),
-        (None, Some(stroke)) => crate::ui::canvas::ShapeStyle::stroked(stroke),
-        (None, None) => crate::ui::canvas::ShapeStyle::default(),
+        (Some(fill), Some(stroke)) => ShapeStyle::both(fill, stroke),
+        (Some(fill), None) => ShapeStyle::filled(fill),
+        (None, Some(stroke)) => ShapeStyle::stroked(stroke),
+        (None, None) => ShapeStyle::default(),
     };
     match shape {
         WireShape::Rect { bounds, style } => {
@@ -647,13 +698,15 @@ fn wire_shape_to_canvas(shape: &WireShape) -> CanvasShape {
             text.clone(),
             px(*font_size),
             wire_color_to_hsla(*color),
+            // Measured locally: the wire format carries no bounds, and both
+            // peers shape with the same default font.
+            measure_text(text_system, text, px(*font_size)),
         ),
     }
 }
 
 pub(crate) fn canvas_shape_to_wire(shape: &CanvasShape) -> Option<WireShape> {
-    use collab_protocol::WireStyle;
-    let stroke_from = |stroke: &crate::ui::canvas::StrokeStyle| collab_protocol::WireStroke {
+    let stroke_from = |stroke: &StrokeStyle| WireStroke {
         width: stroke.width.as_f32(),
         color: hsla_to_wire(stroke.color),
         dash: stroke
@@ -695,6 +748,7 @@ pub(crate) fn canvas_shape_to_wire(shape: &CanvasShape) -> Option<WireShape> {
             text,
             font_size,
             color,
+            ..
         } => WireShape::Text {
             position: [position.x.as_f32(), position.y.as_f32()],
             text: text.to_string(),

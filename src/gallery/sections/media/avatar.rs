@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use super::demo::{section, size_label};
 
 const AVATARS: [&str; 11] = [
     "https://avatars.githubusercontent.com/u/5518?v=4",
@@ -34,16 +34,6 @@ enum AvatarToggle {
     SizeSmall,
     SizeMedium,
     SizeLarge,
-}
-
-fn size_label(size: Size) -> &'static str {
-    match size {
-        Size::XSmall => "XSmall",
-        Size::Small => "Small",
-        Size::Medium => "Medium",
-        Size::Large => "Large",
-        Size::Size(_) => "Custom",
-    }
 }
 
 /// The story toolbar's size switcher, on the house split button.

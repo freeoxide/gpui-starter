@@ -75,7 +75,7 @@ impl ViewerState {
             pitch: DEFAULT_PITCH,
             distance: DEFAULT_DISTANCE,
             spin: 0.0,
-            mesh: mesh.clone(),
+            mesh,
             mesh_stats,
             mesh_name: String::new(),
             pending_mesh: None,

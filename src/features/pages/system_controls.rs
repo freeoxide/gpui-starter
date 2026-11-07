@@ -6,17 +6,57 @@ use gpui_kit::component::{ActiveTheme as _, Disableable as _, Icon, IconName, h_
 use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
+use crate::platform::clock::Instant;
 use crate::system_controls::{
     BatteryChargeState, BatteryStatus, BluetoothAccess, BluetoothStatus, ControlState,
     REASON_MACOS_BLUETOOTH_POWER, SystemControlsSnapshot,
 };
 
-#[cfg(not(target_family = "wasm"))]
 const INTERVAL: std::time::Duration = std::time::Duration::from_secs(2);
+// Half of the 0.01 step: PulseAudio's 1/65536 quantization leaves readback
+// ~5e-6 off any grid value, which f32::EPSILON would treat as drift.
+const SYNC_TOLERANCE: f32 = 0.005;
+
+fn should_sync(now: Instant, suppress_until: Option<Instant>) -> bool {
+    suppress_until.is_none_or(|t| now >= t)
+}
+
+fn suppress_window() -> Instant {
+    Instant::now() + INTERVAL
+}
+
+#[derive(Clone, Copy)]
+enum SliderTarget {
+    Volume,
+    Brightness,
+}
+
+impl SliderTarget {
+    fn level(self, snapshot: &SystemControlsSnapshot) -> Option<f32> {
+        match self {
+            Self::Volume => match &snapshot.volume {
+                ControlState::Ready(volume) => Some(volume.level),
+                _ => None,
+            },
+            Self::Brightness => match &snapshot.brightness {
+                ControlState::Ready(brightness) => Some(brightness.level),
+                _ => None,
+            },
+        }
+    }
+
+    fn apply(self, value: f32, cx: &mut App) {
+        match self {
+            Self::Volume => crate::system_controls::set_volume(value, cx),
+            Self::Brightness => crate::system_controls::set_brightness(value, cx),
+        }
+    }
+}
 
 pub struct SystemControlsPage {
     volume: Entity<SliderState>,
     brightness: Entity<SliderState>,
+    suppress_until: Option<Instant>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -37,17 +77,17 @@ impl SystemControlsPage {
                 .default_value(0.)
         });
         let _subscriptions = vec![
-            cx.subscribe(&volume, |_, _, event: &SliderEvent, cx| match event {
-                SliderEvent::Change(_) => cx.notify(),
-                SliderEvent::Release(value) => {
-                    crate::system_controls::set_volume(value.start(), cx);
-                }
+            cx.observe(&volume, |this, slider, cx| {
+                this.commit_if_drifted(SliderTarget::Volume, &slider, cx);
             }),
-            cx.subscribe(&brightness, |_, _, event: &SliderEvent, cx| match event {
-                SliderEvent::Change(_) => cx.notify(),
-                SliderEvent::Release(value) => {
-                    crate::system_controls::set_brightness(value.start(), cx);
-                }
+            cx.observe(&brightness, |this, slider, cx| {
+                this.commit_if_drifted(SliderTarget::Brightness, &slider, cx);
+            }),
+            cx.subscribe(&volume, |this, _, event: &SliderEvent, cx| {
+                this.on_slider_event(SliderTarget::Volume, event, cx)
+            }),
+            cx.subscribe(&brightness, |this, _, event: &SliderEvent, cx| {
+                this.on_slider_event(SliderTarget::Brightness, event, cx)
             }),
             cx.observe_global_in::<SystemControlsSnapshot>(window, |this, window, cx| {
                 this.sync_sliders(window, cx);
@@ -55,32 +95,64 @@ impl SystemControlsPage {
             }),
         ];
 
-        #[cfg(not(target_family = "wasm"))]
-        cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor().timer(INTERVAL).await;
-                let result = this.update(cx, |_, cx| crate::system_controls::refresh(cx));
-                if result.is_err() {
-                    break;
-                }
-            }
-        })
-        .detach();
-        crate::system_controls::refresh(cx);
-
+        // Periodic refresh is owned by the system_controls service loop; the
+        // page only reacts to snapshot changes.
         Self {
             volume,
             brightness,
+            suppress_until: None,
             _subscriptions,
         }
     }
 
+    fn on_slider_event(
+        &mut self,
+        target: SliderTarget,
+        event: &SliderEvent,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            SliderEvent::Change(_) => {
+                self.suppress_until = Some(suppress_window());
+                cx.notify();
+            }
+            SliderEvent::Release(value) => {
+                target.apply(value.start(), cx);
+                self.suppress_until = Some(suppress_window());
+            }
+        }
+    }
+
+    /// The kit's a11y Increment/Decrement call `set_value` without emitting
+    /// any SliderEvent, so a value drifted from the snapshot commits here.
+    fn commit_if_drifted(
+        &mut self,
+        target: SliderTarget,
+        slider: &Entity<SliderState>,
+        cx: &mut Context<Self>,
+    ) {
+        if !should_sync(Instant::now(), self.suppress_until) {
+            return;
+        }
+        let Some(level) = target.level(&crate::system_controls::snapshot(cx)) else {
+            return;
+        };
+        let value = slider.read(cx).value().start();
+        if (value - level).abs() > SYNC_TOLERANCE {
+            target.apply(value, cx);
+            self.suppress_until = Some(suppress_window());
+        }
+    }
+
     fn sync_sliders(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !should_sync(Instant::now(), self.suppress_until) {
+            return;
+        }
         let snapshot = crate::system_controls::snapshot(cx);
         if let ControlState::Ready(volume) = &snapshot.volume {
             let level = volume.level;
             self.volume.update(cx, |state, cx| {
-                if (state.value().start() - level).abs() > f32::EPSILON {
+                if (state.value().start() - level).abs() > SYNC_TOLERANCE {
                     state.set_value(level, window, cx);
                 }
             });
@@ -88,7 +160,7 @@ impl SystemControlsPage {
         if let ControlState::Ready(brightness) = &snapshot.brightness {
             let level = brightness.level;
             self.brightness.update(cx, |state, cx| {
-                if (state.value().start() - level).abs() > f32::EPSILON {
+                if (state.value().start() - level).abs() > SYNC_TOLERANCE {
                     state.set_value(level, window, cx);
                 }
             });
@@ -115,7 +187,7 @@ impl SystemControlsPage {
                         .gap_2()
                         .child(value_row(
                             crate::i18n::localize("system_controls_charge"),
-                            format!("{}% · {}", (battery.charge * 100.).round(), state_text),
+                            format!("{}% · {state_text}", (battery.charge * 100.).round()),
                             cx,
                         ))
                         .child(value_row(

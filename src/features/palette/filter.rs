@@ -12,54 +12,32 @@ struct FilteredItem {
     score: i64,
 }
 
-#[derive(Clone, Debug)]
-pub struct FuzzyMatchConfig {
-    pub exact_match_bonus: i64,
-    pub prefix_match_bonus: i64,
-    /// Bonus added when the query matches the start of any whitespace-delimited
-    /// word in the name.
-    pub word_prefix_bonus: i64,
-    /// Maximum bonus for contiguous (adjacent) matched characters; scaled by the
-    /// observed contiguity ratio.
-    pub contiguity_bonus: i64,
-    /// Multiplier applied to a match found only in the description (0.0–1.0
-    /// demotes description-only hits below name hits).
-    pub description_penalty: f64,
-}
-
-impl Default for FuzzyMatchConfig {
-    fn default() -> Self {
-        Self {
-            exact_match_bonus: 1000,
-            prefix_match_bonus: 500,
-            word_prefix_bonus: 250,
-            contiguity_bonus: 100,
-            description_penalty: 0.6,
-        }
-    }
-}
+const EXACT_MATCH_BONUS: i64 = 1000;
+const PREFIX_MATCH_BONUS: i64 = 500;
+/// Added when the query matches the start of any whitespace-delimited word.
+const WORD_PREFIX_BONUS: i64 = 250;
+/// Maximum bonus for contiguous matched characters, scaled by the observed
+/// contiguity ratio.
+const CONTIGUITY_BONUS: i64 = 100;
+/// Multiplier for description-only matches; below 1.0 it demotes them under
+/// name hits.
+const DESCRIPTION_PENALTY: f64 = 0.6;
 
 pub struct ItemFilter {
     matcher: SkimMatcherV2,
-    config: FuzzyMatchConfig,
 }
 
 impl Default for ItemFilter {
     fn default() -> Self {
-        Self::new(FuzzyMatchConfig::default())
-    }
-}
-
-impl ItemFilter {
-    pub fn new(config: FuzzyMatchConfig) -> Self {
         Self {
             // Skim is smart-case by default; callers hand over the raw
             // query, and uppercase input must stay case-insensitive.
             matcher: SkimMatcherV2::default().ignore_case(),
-            config,
         }
     }
+}
 
+impl ItemFilter {
     /// Return just the matching indices, sorted by descending score.
     pub fn filter_indices<E: PaletteEntry>(&self, items: &[E], query: &str) -> Vec<usize> {
         self.filter_with_scores(items, query)
@@ -129,7 +107,7 @@ impl ItemFilter {
             if !query.contains(' ') {
                 return None;
             }
-            let no_spaces: String = query.chars().filter(|c| *c != ' ').collect();
+            let no_spaces = query.replace(' ', "");
             if let Some(hit) = self.matcher.fuzzy_indices(text, &no_spaces) {
                 return Some(hit);
             }
@@ -141,30 +119,30 @@ impl ItemFilter {
 
         if !is_description {
             if text_lower == query_lower {
-                score += self.config.exact_match_bonus;
+                score += EXACT_MATCH_BONUS;
             } else if text_lower.starts_with(query_lower) {
-                score += self.config.prefix_match_bonus;
+                score += PREFIX_MATCH_BONUS;
             } else if Self::matches_word_start(text_lower, query_lower) {
-                score += self.config.word_prefix_bonus;
+                score += WORD_PREFIX_BONUS;
             }
         }
 
-        score += self.contiguity_bonus(&indices);
+        score += Self::contiguity_bonus(&indices);
 
         if is_description {
-            score = (score as f64 * self.config.description_penalty) as i64;
+            score = (score as f64 * DESCRIPTION_PENALTY) as i64;
         }
 
         Some(score)
     }
 
-    fn contiguity_bonus(&self, indices: &[usize]) -> i64 {
+    fn contiguity_bonus(indices: &[usize]) -> i64 {
         if indices.len() <= 1 {
-            return self.config.contiguity_bonus;
+            return CONTIGUITY_BONUS;
         }
         let adjacent = indices.windows(2).filter(|w| w[1] == w[0] + 1).count();
         let ratio = adjacent as f64 / (indices.len() - 1) as f64;
-        (ratio * self.config.contiguity_bonus as f64) as i64
+        (ratio * CONTIGUITY_BONUS as f64) as i64
     }
 
     /// Both arguments must already be lowercased.
@@ -178,7 +156,6 @@ impl ItemFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::palette::items::PaletteEntry;
 
     struct Entry {
         name: &'static str,

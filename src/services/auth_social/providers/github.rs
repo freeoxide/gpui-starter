@@ -12,7 +12,7 @@ use oauth2::{
 };
 use serde::Deserialize;
 
-use super::{PendingRedirect, start_redirect, token_set};
+use super::{PendingRedirect, revoke_denied, start_redirect, token_set};
 use crate::services::auth_social::{ProviderConfig, ProviderKind, RedirectMode};
 
 const DEFAULT_AUTHORIZE_URL: &str = "https://github.com/login/oauth/authorize";
@@ -102,10 +102,6 @@ impl GitHubProvider {
         lock(&self.pending).as_ref()?.port
     }
 
-    fn lock_guard(&self) -> std::sync::MutexGuard<'_, Option<PendingRedirect>> {
-        lock(&self.pending)
-    }
-
     fn token_request_form(&self, code: &str, redirect_uri: &str) -> String {
         let mut form = url::form_urlencoded::Serializer::new(String::new());
         form.append_pair("grant_type", "authorization_code");
@@ -162,7 +158,7 @@ impl GitHubProvider {
         let user: GhUser = self
             .github_json(http, &format!("{}/user", self.endpoints.api), access_token)
             .await?;
-        let email = match user.email.clone() {
+        let email = match user.email {
             Some(email) => Some(email),
             None => {
                 let emails: Vec<GhEmail> = self
@@ -182,7 +178,7 @@ impl GitHubProvider {
         Some(AccountInfo {
             id: Some(user.login.clone()),
             email,
-            display_name: user.name.clone().or(Some(user.login.clone())),
+            display_name: user.name.or_else(|| Some(user.login.clone())),
             avatar_url: user.avatar_url,
         })
     }
@@ -258,7 +254,7 @@ impl AuthProvider for GitHubProvider {
             request = request.add_scope(Scope::new(scope.clone()));
         }
         let (authorize_url, _csrf) = request.url();
-        *self.lock_guard() = Some(pending);
+        *lock(&self.pending) = Some(pending);
         Ok(FlowLaunch {
             authorize_url: authorize_url.to_string(),
             state,
@@ -333,10 +329,9 @@ impl AuthProvider for GitHubProvider {
             .await
             .map_err(|err| AuthError::Network(err.to_string()))?;
         if !response.status().is_success() {
-            return Err(AuthError::Network(format!(
-                "token revocation returned {}",
-                response.status()
-            )));
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(revoke_denied(status, body));
         }
         Ok(())
     }

@@ -29,8 +29,7 @@ use serde::Deserialize;
 use super::{ProviderKind, RedirectMode};
 use gpui_kit::App;
 
-/// Larger files are treated as unreadable rather than parsed; the same
-/// bounding discipline as the app-state file, scaled to a credentials file.
+/// Larger files are treated as unreadable rather than parsed.
 const MAX_CONFIG_BYTES: u64 = 64 * 1024;
 
 const CONFIG_FILE: &str = "auth-providers.json";

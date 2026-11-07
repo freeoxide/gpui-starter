@@ -2,9 +2,10 @@ use std::collections::HashSet;
 #[cfg(not(target_family = "wasm"))]
 use std::io::{Read as _, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 #[cfg(test)]
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 #[cfg(not(target_family = "wasm"))]
 use atomic_write_file::AtomicWriteFile;
@@ -13,6 +14,8 @@ use gpui_kit::{App, BorrowAppContext, Global, Task};
 // persisted serde representation) are unchanged.
 use gpui_kit::component::scroll::ScrollbarMode;
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use tempfile::tempdir;
 
 use crate::{
     app::{LOCALE_EN, LOCALE_ZH_CN},
@@ -21,6 +24,7 @@ use crate::{
     notifications::inbox::NotificationInboxItem,
     paths::AppPaths,
     routes::AppRoute,
+    services::telemetry::TelemetryMode,
 };
 // Atomic-write persistence helpers are native-only (see `save_config`).
 #[cfg(not(target_family = "wasm"))]
@@ -56,8 +60,11 @@ pub struct AppState {
     dirty: bool,
     // Serialized bytes of the last successful flush; lets identical states skip the write.
     last_flushed_bytes: Vec<u8>,
-    // Bound debounce task; dropped on shutdown so it cannot commit stale bytes
-    // beneath the synchronous flush (dropping a `Task` cancels it).
+    // Bumped by force_save; a background write already being polled cannot be
+    // cancelled, so it checks this before the rename and abandons the commit.
+    flush_generation: Arc<AtomicU64>,
+    // Bound debounce task; dropped on shutdown so a suspended flush cannot
+    // fire beneath the synchronous write.
     in_flight_save: Option<Task<()>>,
 }
 
@@ -65,13 +72,16 @@ impl Global for AppState {}
 
 /// Persisted application configuration. The pub fields are the on-disk serde
 /// schema pinned by tests/snapshot_tests.rs: add new fields with a
-/// `#[serde(default)]`, never rename or repurpose an existing one.
+/// `#[serde(default)]`, never rename or repurpose an existing one. No
+/// `skip_serializing_if`: the pinned default snapshot asserts every field.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AppConfig {
     pub version: u32,
     pub theme: String,
     pub scrollbar_show: Option<ScrollbarMode>,
-    pub locale: String,
+    /// `None` follows the OS locale at startup; `Some` must name a bundled
+    /// locale (`en`, `zh-CN`) or it normalizes back to `en`.
+    pub locale: Option<String>,
     pub active_route: AppRoute,
     pub sidebar_collapsed: bool,
     pub native_notifications_enabled: bool,
@@ -102,10 +112,13 @@ pub struct AppConfig {
     /// behind a per-launch handshake (TCC prompt fires on first access).
     #[serde(default)]
     pub bluetooth_monitoring_enabled: bool,
-    /// Automatic update checks (startup + periodic) opt-in; the manual
-    /// CheckForUpdates action ignores this gate.
+    /// Automatic update checks (startup + periodic) opt-in.
     #[serde(default)]
     pub update_check_on_startup: bool,
+    /// Telemetry consent: the persisted mode (Disabled default) re-applied at
+    /// startup, so an opt-in survives restarts.
+    #[serde(default)]
+    pub telemetry_mode: TelemetryMode,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -114,6 +127,23 @@ pub struct PersistedWindowBounds {
     pub y: f32,
     pub width: f32,
     pub height: f32,
+    /// UUID of the display the window sat on; a display that no longer
+    /// exists falls back to centered placement at restore time.
+    #[serde(default)]
+    pub display_id: Option<String>,
+    #[serde(default)]
+    pub state: PersistedWindowState,
+}
+
+/// How the window was open when it closed; mirrors gpui's `WindowBounds`
+/// variants so a maximized or fullscreen session restores that way.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PersistedWindowState {
+    #[default]
+    Windowed,
+    Maximized,
+    Fullscreen,
 }
 
 impl PersistedWindowBounds {
@@ -137,7 +167,7 @@ impl Default for AppConfig {
             version: APP_STATE_VERSION,
             theme: "Default Light".to_string(),
             scrollbar_show: None,
-            locale: LOCALE_EN.to_string(),
+            locale: None,
             active_route: AppRoute::default(),
             sidebar_collapsed: false,
             native_notifications_enabled: true,
@@ -156,26 +186,27 @@ impl Default for AppConfig {
             widgets_layout: Vec::new(),
             bluetooth_monitoring_enabled: false,
             update_check_on_startup: false,
+            telemetry_mode: TelemetryMode::default(),
         }
     }
 }
 
 impl AppConfig {
-    /// Canonical locale/version, and drop window bounds a corrupt file could
-    /// have planted so window creation always sees usable values.
-    pub fn normalized(mut self) -> Self {
-        if self.version == 0 {
-            self.version = APP_STATE_VERSION;
-        }
-        if self.locale != LOCALE_EN && self.locale != LOCALE_ZH_CN {
-            self.locale = LOCALE_EN.to_string();
+    /// Canonical locale, and drop window bounds a corrupt file could have
+    /// planted so window creation always sees usable values. In place
+    /// because `update_config` runs this per tick during window drags.
+    pub fn normalized(&mut self) {
+        if let Some(locale) = &self.locale
+            && locale != LOCALE_EN
+            && locale != LOCALE_ZH_CN
+        {
+            self.locale = Some(LOCALE_EN.to_string());
         }
         if let Some(bounds) = &self.window_bounds
             && !bounds.is_plausible()
         {
             self.window_bounds = None;
         }
-        self
     }
 }
 
@@ -223,7 +254,7 @@ pub fn initialize(cx: &mut App) {
 
     // Pre-compute the initial flushed bytes so that a no-op update_config
     // immediately after startup will skip the write.
-    let initial_bytes = serde_json::to_vec(&config).unwrap_or_default();
+    let initial_bytes = serialize_config(&config).unwrap_or_default();
 
     cx.set_global(AppState {
         paths,
@@ -232,6 +263,7 @@ pub fn initialize(cx: &mut App) {
         last_save_error: None,
         dirty: false,
         last_flushed_bytes: initial_bytes,
+        flush_generation: Arc::new(AtomicU64::new(0)),
         in_flight_save: None,
     });
 }
@@ -287,9 +319,25 @@ pub fn paths(cx: &App) -> AppPaths {
             {
                 AppPaths::fallback()
             }
+            // initialize() already tolerated this failure; degrading beats a
+            // startup panic, and the un-installed global keeps persistence off.
             #[cfg(not(target_family = "wasm"))]
             {
-                AppPaths::new().expect("failed to initialize fallback app paths")
+                AppPaths::new().unwrap_or_else(|err| {
+                    tracing::error!(
+                        target: "gpui_starter::app_state",
+                        error = %err,
+                        "app paths unavailable; degrading to empty paths"
+                    );
+                    AppPaths {
+                        config_dir: PathBuf::new(),
+                        data_dir: PathBuf::new(),
+                        cache_dir: PathBuf::new(),
+                        log_dir: PathBuf::new(),
+                        runtime_dir: PathBuf::new(),
+                        state_file: PathBuf::new(),
+                    }
+                })
             }
         })
 }
@@ -304,7 +352,7 @@ pub fn update_config(cx: &mut App, update: impl FnOnce(&mut AppConfig)) {
 
     cx.update_global::<AppState, _>(|state, _cx| {
         update(&mut state.config);
-        state.config = state.config.clone().normalized();
+        state.config.normalized();
         state.dirty = true;
     });
 
@@ -323,15 +371,16 @@ pub fn force_save(cx: &mut App) {
     // Shutdown: write synchronously (the process must not exit before the
     // write lands); the debounced hot path keeps fsync off the UI thread.
     cx.update_global::<AppState, _>(|state, _cx| {
-        // Drop the debounce task first so it cannot race or reorder beneath
-        // the synchronous write below.
+        // Dropping only cancels a suspended flush; the generation bump makes
+        // an in-flight write abandon its rename beneath this write.
         state.in_flight_save = None;
+        state.flush_generation.fetch_add(1, Ordering::Release);
 
         if !state.dirty {
             return;
         }
         if let Some((path, bytes)) = prepare_flush(state) {
-            let result = save_config(&path, &bytes);
+            let result = save_config(&path, &bytes, None);
             // Nothing to re-arm on the shutdown path.
             let _ = commit_flush(state, bytes, result);
         }
@@ -361,17 +410,21 @@ fn arm_debounce(cx: &mut App) {
                 if !state.dirty {
                     return None;
                 }
-                prepare_flush(state)
+                let generation = state.flush_generation.load(Ordering::Relaxed);
+                let latest_generation = state.flush_generation.clone();
+                prepare_flush(state).map(|flush| (flush, generation, latest_generation))
             })
         });
 
-        let Some((path, bytes)) = request else {
+        let Some(((path, bytes), generation, latest_generation)) = request else {
             return;
         };
 
         let write_bytes = bytes.clone();
         let result = bg
-            .spawn(async move { save_config(&path, &write_bytes) })
+            .spawn(async move {
+                save_config(&path, &write_bytes, Some((&latest_generation, generation)))
+            })
             .await;
 
         cx.update(|cx| {
@@ -390,7 +443,7 @@ fn arm_debounce(cx: &mut App) {
 
 /// Serialize on the UI thread (no I/O); `None` when clean or on failure.
 fn prepare_flush(state: &mut AppState) -> Option<(PathBuf, Vec<u8>)> {
-    let new_bytes = match serde_json::to_vec(&state.config) {
+    let new_bytes = match serialize_config(&state.config) {
         Ok(bytes) => bytes,
         Err(err) => {
             let error = err.to_string();
@@ -417,12 +470,12 @@ fn prepare_flush(state: &mut AppState) -> Option<(PathBuf, Vec<u8>)> {
 fn commit_flush(
     state: &mut AppState,
     written_bytes: Vec<u8>,
-    result: Result<(), AppError>,
+    result: Result<bool, AppError>,
 ) -> bool {
     match result {
-        Ok(()) => {
+        Ok(true) => {
             state.last_save_error = None;
-            let current = serde_json::to_vec(&state.config).unwrap_or_default();
+            let current = serialize_config(&state.config).unwrap_or_default();
             if current == written_bytes {
                 state.dirty = false;
                 state.last_flushed_bytes = written_bytes;
@@ -442,6 +495,15 @@ fn commit_flush(
                 );
                 true
             }
+        }
+        Ok(false) => {
+            // A newer flush superseded this write and owns the file; these
+            // bytes never landed, so only a still-dirty state re-arms.
+            tracing::debug!(
+                target: "gpui_starter::app_state",
+                "background flush superseded before commit; rename abandoned"
+            );
+            state.dirty
         }
         Err(err) => {
             let error = err.to_string();
@@ -463,6 +525,16 @@ fn load_config(path: &Path) -> (AppConfig, Option<String>) {
     let file = match std::fs::File::open(path) {
         Ok(file) => file,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            // First run: materialize the defaults so the file documents its
+            // own schema for hand editing; failure is non-fatal.
+            let default_bytes = serialize_config(&AppConfig::default()).unwrap_or_default();
+            if let Err(write_err) = save_config(path, &default_bytes, None) {
+                tracing::warn!(
+                    target: "gpui_starter::app_state",
+                    error = %write_err,
+                    "failed to write the default state file on first run"
+                );
+            }
             return (AppConfig::default(), None);
         }
         Err(err) => return state_read_error(path, err),
@@ -493,9 +565,30 @@ fn load_config(path: &Path) -> (AppConfig, Option<String>) {
 
     match serde_json::from_str::<AppConfig>(&json) {
         Ok(config) => {
-            let config = crate::state::migrations::migrate(config).normalized();
-            // Log-only tier: lints surface unusable-but-loadable values.
+            // A newer build's fields would be dropped on the next save;
+            // quarantine the file rather than silently rewrite it v1-shaped.
+            if config.version > APP_STATE_VERSION {
+                quarantine_bad_config(path);
+                return (
+                    AppConfig::default(),
+                    Some(
+                        AppError::StateParse {
+                            path: path.to_path_buf(),
+                            details: format!(
+                                "state file version {} is newer than this build's {}; \
+                                 original preserved as .bad",
+                                config.version, APP_STATE_VERSION
+                            ),
+                        }
+                        .to_string(),
+                    ),
+                );
+            }
+            // Lint the raw on-disk shape: normalized() repairs these values
+            // below, so post-normalize lints could never fire.
             crate::state::config_validation::validate_config(&config);
+            let mut config = crate::state::migrations::migrate(config);
+            config.normalized();
             (config, None)
         }
         Err(err) => {
@@ -542,14 +635,26 @@ fn oversized_state_error(path: &Path) -> (AppConfig, Option<String>) {
     )
 }
 
-/// Write pre-serialized bytes atomically.
-fn save_config(path: &Path, json_bytes: &[u8]) -> Result<(), AppError> {
+/// The on-disk form every flush site must share: pretty JSON, so state.json
+/// (the app's only settings file) stays a hand-editing interface.
+fn serialize_config(config: &AppConfig) -> Result<Vec<u8>, serde_json::Error> {
+    serde_json::to_vec_pretty(config)
+}
+
+/// Write pre-serialized bytes atomically plus a trailing newline. A guarded
+/// write (`superseded_by` = generation snapshot + shared counter) abandons the
+/// rename and returns `Ok(false)` when a newer flush superseded it.
+fn save_config(
+    path: &Path,
+    json_bytes: &[u8],
+    superseded_by: Option<(&AtomicU64, u64)>,
+) -> Result<bool, AppError> {
     // wasm has no writable config directory (fallback path is empty) — treat
     // persistence as a no-op so the in-memory config stays authoritative.
     #[cfg(target_family = "wasm")]
     {
-        let _ = (path, json_bytes);
-        return Ok(());
+        let _ = (path, json_bytes, superseded_by);
+        return Ok(true);
     }
     #[cfg(not(target_family = "wasm"))]
     {
@@ -578,11 +683,18 @@ fn save_config(path: &Path, json_bytes: &[u8]) -> Result<(), AppError> {
             path: path.to_path_buf(),
             details: err.to_string(),
         })?;
+        if let Some((latest_generation, generation)) = superseded_by
+            && latest_generation.load(Ordering::Acquire) != generation
+        {
+            // Dropping the file discards the temp write; the destination
+            // keeps whatever the superseding flush put there.
+            return Ok(false);
+        }
         file.commit().map_err(|err| AppError::StateWrite {
             path: path.to_path_buf(),
             details: err.to_string(),
         })?;
-        Ok(())
+        Ok(true)
     }
 }
 
@@ -617,19 +729,22 @@ pub(crate) fn debounce_test_lock() -> std::sync::MutexGuard<'static, ()> {
 
 /// Seed the AppState global from `config` with no disk read and no debounced
 /// save armed; feature tests use this instead of `initialize`, which touches
-/// the real state file. Trailing writes land in a throwaway temp file.
+/// the real state file. Trailing writes land in a throwaway per-test temp file.
 #[cfg(test)]
 pub(crate) fn install_for_tests(config: AppConfig, cx: &mut App) {
-    let temp = std::env::temp_dir().join("gpui-starter-config-test.json");
+    // keep() detaches the TempDir cleanup guard; a fresh dir per call keeps
+    // parallel tests from sharing one state file.
+    let dir = tempdir().expect("temp dir for test state").keep();
+    let state_file = dir.join("state.json");
     let paths = AppPaths {
-        config_dir: temp.parent().map(Path::to_path_buf).unwrap_or_default(),
-        data_dir: temp.parent().map(Path::to_path_buf).unwrap_or_default(),
-        cache_dir: temp.parent().map(Path::to_path_buf).unwrap_or_default(),
-        log_dir: temp.parent().map(Path::to_path_buf).unwrap_or_default(),
-        runtime_dir: temp.parent().map(Path::to_path_buf).unwrap_or_default(),
-        state_file: temp,
+        config_dir: dir.clone(),
+        data_dir: dir.clone(),
+        cache_dir: dir.clone(),
+        log_dir: dir.clone(),
+        runtime_dir: dir,
+        state_file,
     };
-    let flushed = serde_json::to_vec(&config).unwrap_or_default();
+    let flushed = serialize_config(&config).unwrap_or_default();
     cx.set_global(AppState {
         paths,
         config,
@@ -637,6 +752,7 @@ pub(crate) fn install_for_tests(config: AppConfig, cx: &mut App) {
         last_save_error: None,
         dirty: false,
         last_flushed_bytes: flushed,
+        flush_generation: Arc::new(AtomicU64::new(0)),
         in_flight_save: None,
     });
 }

@@ -1,6 +1,6 @@
 //! DatePicker section, ported from the upstream `DatePickerStory`.
 
-use chrono::{Datelike, Days, Duration, Utc};
+use chrono::{Datelike, Days, Duration, Local, NaiveTime, Utc};
 use gpui_kit::component::{
     ActiveTheme as _, Sizable as _, Size, calendar,
     date_picker::{DatePicker, DatePickerEvent, DatePickerState, DateRangePreset},
@@ -18,7 +18,7 @@ pub struct DatePickerSection {
     date_picker_small: Entity<DatePickerState>,
     date_picker_large: Entity<DatePickerState>,
     date_picker_custom: Entity<DatePickerState>,
-    date_picker_value: Option<String>,
+    date_picker_value: Option<SharedString>,
     date_range_picker: Entity<DatePickerState>,
     default_range_mode_picker: Entity<DatePickerState>,
     birthday_picker: Entity<DatePickerState>,
@@ -26,8 +26,10 @@ pub struct DatePickerSection {
     date_time_picker: Entity<DatePickerState>,
     date_time_second_picker: Entity<DatePickerState>,
     date_time_12h_picker: Entity<DatePickerState>,
-    date_time_value: Option<String>,
+    date_time_value: Option<SharedString>,
     size: Size,
+    presets: Vec<DateRangePreset>,
+    range_presets: Vec<DateRangePreset>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -37,7 +39,7 @@ impl DatePickerSection {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let now = chrono::Local::now().naive_local().date();
+        let now = Local::now().naive_local().date();
         let date_picker = cx.new(|cx| {
             let mut picker = DatePickerState::new(window, cx).disabled_matcher(vec![0, 6]);
             picker.set_date(now, window, cx);
@@ -92,83 +94,23 @@ impl DatePickerSection {
 
         let date_time_picker = cx.new(|cx| {
             let mut picker = DatePickerState::new(window, cx).time_precision(TimePrecision::Minute);
-            picker.set_date_time(chrono::Local::now().naive_local(), window, cx);
+            picker.set_date_time(Local::now().naive_local(), window, cx);
             picker
         });
         let date_time_second_picker = cx.new(|cx| {
             DatePickerState::new(window, cx)
                 .time_precision(TimePrecision::Second)
-                .default_time(chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap())
+                .default_time(NaiveTime::from_hms_opt(9, 0, 0).unwrap())
         });
         let date_time_12h_picker = cx.new(|cx| {
             DatePickerState::new(window, cx)
                 .time_precision(TimePrecision::Minute)
                 .hour_cycle(HourCycle::H12)
-                .default_time(chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap())
+                .default_time(NaiveTime::from_hms_opt(9, 0, 0).unwrap())
         });
 
-        let _subscriptions = vec![
-            cx.subscribe(&date_picker, |this, _, ev, cx| match ev {
-                DatePickerEvent::Change(date) => {
-                    this.date_picker_value = date.format("%Y-%m-%d").map(|s| s.to_string());
-                    cx.notify();
-                }
-            }),
-            cx.subscribe(&date_range_picker, |this, _, ev, cx| match ev {
-                DatePickerEvent::Change(date) => {
-                    this.date_picker_value = date.format("%Y-%m-%d").map(|s| s.to_string());
-                    cx.notify();
-                }
-            }),
-            cx.subscribe(&default_range_mode_picker, |this, _, ev, cx| match ev {
-                DatePickerEvent::Change(date) => {
-                    this.date_picker_value = date.format("%Y-%m-%d").map(|s| s.to_string());
-                    cx.notify();
-                }
-            }),
-            cx.subscribe(&date_time_picker, |this, _, ev, cx| match ev {
-                DatePickerEvent::Change(value) => {
-                    this.date_time_value = value.format("%Y-%m-%d %H:%M:%S").map(|s| s.to_string());
-                    cx.notify();
-                }
-            }),
-            cx.subscribe(&date_time_second_picker, |this, _, ev, cx| match ev {
-                DatePickerEvent::Change(value) => {
-                    this.date_time_value = value.format("%Y-%m-%d %H:%M:%S").map(|s| s.to_string());
-                    cx.notify();
-                }
-            }),
-            cx.subscribe(&date_time_12h_picker, |this, _, ev, cx| match ev {
-                DatePickerEvent::Change(value) => {
-                    this.date_time_value = value.format("%Y-%m-%d %H:%M:%S").map(|s| s.to_string());
-                    cx.notify();
-                }
-            }),
-        ];
-
-        Self {
-            date_picker,
-            date_picker_large,
-            date_picker_small,
-            date_picker_custom,
-            date_range_picker,
-            default_range_mode_picker,
-            birthday_picker,
-            without_appearance_picker,
-            date_time_picker,
-            date_time_second_picker,
-            date_time_12h_picker,
-            date_time_value: None,
-            size: Size::Medium,
-            date_picker_value: None,
-            _subscriptions,
-        }
-    }
-}
-
-impl Render for DatePickerSection {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let size = self.size;
+        // Preset dates are fixed at construction; rebuilding them per render
+        // would drift the labels' dates across repaints.
         let presets = vec![
             DateRangePreset::single(
                 "Yesterday",
@@ -206,6 +148,65 @@ impl Render for DatePickerSection {
             ),
         ];
 
+        let _subscriptions = vec![
+            cx.subscribe(&date_picker, |this, _, ev, cx| {
+                let DatePickerEvent::Change(date) = ev;
+                this.date_picker_value = date.format("%Y-%m-%d");
+                cx.notify();
+            }),
+            cx.subscribe(&date_range_picker, |this, _, ev, cx| {
+                let DatePickerEvent::Change(date) = ev;
+                this.date_picker_value = date.format("%Y-%m-%d");
+                cx.notify();
+            }),
+            cx.subscribe(&default_range_mode_picker, |this, _, ev, cx| {
+                let DatePickerEvent::Change(date) = ev;
+                this.date_picker_value = date.format("%Y-%m-%d");
+                cx.notify();
+            }),
+            cx.subscribe(&date_time_picker, |this, _, ev, cx| {
+                let DatePickerEvent::Change(value) = ev;
+                this.date_time_value = value.format("%Y-%m-%d %H:%M:%S");
+                cx.notify();
+            }),
+            cx.subscribe(&date_time_second_picker, |this, _, ev, cx| {
+                let DatePickerEvent::Change(value) = ev;
+                this.date_time_value = value.format("%Y-%m-%d %H:%M:%S");
+                cx.notify();
+            }),
+            cx.subscribe(&date_time_12h_picker, |this, _, ev, cx| {
+                let DatePickerEvent::Change(value) = ev;
+                this.date_time_value = value.format("%Y-%m-%d %H:%M:%S");
+                cx.notify();
+            }),
+        ];
+
+        Self {
+            date_picker,
+            date_picker_large,
+            date_picker_small,
+            date_picker_custom,
+            date_range_picker,
+            default_range_mode_picker,
+            birthday_picker,
+            without_appearance_picker,
+            date_time_picker,
+            date_time_second_picker,
+            date_time_12h_picker,
+            date_time_value: None,
+            size: Size::Medium,
+            presets,
+            range_presets,
+            date_picker_value: None,
+            _subscriptions,
+        }
+    }
+}
+
+impl Render for DatePickerSection {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let size = self.size;
+
         v_flex()
             .w_full()
             .items_center()
@@ -233,7 +234,7 @@ impl Render for DatePickerSection {
                                     .with_size(size)
                                     .w(rems(17.5))
                                     .cleanable(true)
-                                    .presets(presets),
+                                    .presets(self.presets.clone()),
                             )
                             .child(
                                 div()
@@ -315,7 +316,7 @@ impl Render for DatePickerSection {
                             .w(rems(17.5))
                             .number_of_months(2)
                             .cleanable(true)
-                            .presets(range_presets.clone()),
+                            .presets(self.range_presets.clone()),
                     ),
             )
             .child(
@@ -328,7 +329,7 @@ impl Render for DatePickerSection {
                             .w(rems(17.5))
                             .placeholder("Range mode picker")
                             .cleanable(true)
-                            .presets(range_presets.clone()),
+                            .presets(self.range_presets.clone()),
                     ),
             )
             .child(

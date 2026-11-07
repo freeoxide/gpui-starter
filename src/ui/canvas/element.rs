@@ -2,12 +2,12 @@ use gpui_kit::*;
 
 use super::cache::CanvasCaches;
 use super::paint::{paint_grid, paint_selection, paint_shape};
+use super::scene::ShapeId;
 use super::state::{CanvasState, HIT_TOLERANCE};
 use super::tool::{CanvasPointerEvent, CanvasScrollEvent, ToolContext};
 
-/// Mounts the canvas. `id` keys the element state (path caches) and must be
-/// unique among siblings. Fills its parent. The mounting view must
-/// `cx.observe(&state, |_, _, cx| cx.notify())` so mutations repaint.
+/// Fills its parent; `id` keys the path caches and must be unique among siblings.
+/// The mounting view must `cx.observe(&state, |_, _, cx| cx.notify())` to repaint.
 pub struct Canvas {
     id: ElementId,
     state: Entity<CanvasState>,
@@ -62,14 +62,14 @@ fn pointer_event(
     }
 }
 
-fn tool_ctx(bounds: Bounds<Pixels>, s: &CanvasState, doc: Point<Pixels>) -> ToolContext {
+fn tool_ctx(bounds: Bounds<Pixels>, s: &CanvasState, hit: Option<ShapeId>) -> ToolContext {
     ToolContext {
         viewport: Bounds {
             origin: Point::default(),
             size: bounds.size,
         },
         transform: s.transform(),
-        hit: s.hit_test(doc, px(HIT_TOLERANCE.as_f32() / s.zoom())),
+        hit,
     }
 }
 
@@ -130,7 +130,7 @@ impl Element for CanvasElement {
         state.update(cx, |s, cx| {
             window.with_content_mask(Some(ContentMask { bounds }), |window| {
                 paint_grid(bounds, s.grid(), s.transform(), window, cx);
-                let caches = CanvasCaches::for_paint((id.clone(), "caches"), window, cx);
+                let caches = CanvasCaches::for_paint((id, "caches"), window, cx);
                 caches.update(cx, |caches, cx| {
                     let doc_gen = s.doc_paint_generation();
                     let mut shape_ix = 0usize;
@@ -165,12 +165,16 @@ impl Element for CanvasElement {
                             window,
                             cx,
                         );
+                        shape_ix += 1;
                     }
                     paint_selection(
                         s.document(),
                         s.selected_shape_ids(),
+                        doc_gen,
                         s.transform(),
                         bounds,
+                        caches,
+                        2 * shape_ix,
                         window,
                         cx,
                     );
@@ -198,8 +202,16 @@ impl Element for CanvasElement {
                         let doc = s.transform().to_doc(position);
                         let event =
                             pointer_event(position, e.button, e.click_count, e.modifiers, doc);
-                        let ctx = tool_ctx(bounds, s, doc);
-                        s.pointer_active = true;
+                        let ctx = tool_ctx(
+                            bounds,
+                            s,
+                            s.hit_test(doc, px(HIT_TOLERANCE.as_f32() / s.zoom())),
+                        );
+                        // Tools only start gestures on the left button; a
+                        // chorded click must not arm one.
+                        if e.button == MouseButton::Left {
+                            s.pointer_active = true;
+                        }
                         s.dispatch_tool_event(cx, |tool, s, cx| {
                             tool.pointer_down(&event, &ctx, s, cx)
                         });
@@ -228,6 +240,19 @@ impl Element for CanvasElement {
                 }
                 if hitbox.is_hovered(window) || state.read(cx).is_pointer_active() {
                     state.update(cx, |s, cx| {
+                        // The gesture's up was consumed above the canvas; end
+                        // it here rather than drag with no button held.
+                        if s.pointer_active && e.pressed_button.is_none() {
+                            let doc = s.transform().to_doc(position);
+                            let event =
+                                pointer_event(position, MouseButton::Left, 0, e.modifiers, doc);
+                            let ctx = tool_ctx(bounds, s, None);
+                            s.dispatch_tool_event(cx, |tool, s, cx| {
+                                tool.pointer_up(&event, &ctx, s, cx)
+                            });
+                            s.pointer_active = false;
+                            return;
+                        }
                         let doc = s.transform().to_doc(position);
                         let event = pointer_event(
                             position,
@@ -236,7 +261,7 @@ impl Element for CanvasElement {
                             e.modifiers,
                             doc,
                         );
-                        let ctx = tool_ctx(bounds, s, doc);
+                        let ctx = tool_ctx(bounds, s, None);
                         s.dispatch_tool_event(cx, |tool, s, cx| {
                             tool.pointer_move(&event, &ctx, s, cx)
                         });
@@ -249,7 +274,9 @@ impl Element for CanvasElement {
         window.on_mouse_event({
             let state = state.clone();
             move |e: &MouseUpEvent, phase, _, cx| {
-                if !phase.bubble() {
+                // Capture phase: an element above the canvas must not swallow
+                // the up that ends an in-flight gesture.
+                if !phase.capture() {
                     return;
                 }
                 let position = e.position - bounds.origin;
@@ -261,12 +288,17 @@ impl Element for CanvasElement {
                     }
                     return;
                 }
+                // Only a left-down arms a gesture, so a non-left up while armed
+                // is a chorded release; dispatching it would commit mid-gesture.
+                if e.button != MouseButton::Left {
+                    return;
+                }
                 if state.read(cx).is_pointer_active() {
                     state.update(cx, |s, cx| {
                         let doc = s.transform().to_doc(position);
                         let event =
                             pointer_event(position, e.button, e.click_count, e.modifiers, doc);
-                        let ctx = tool_ctx(bounds, s, doc);
+                        let ctx = tool_ctx(bounds, s, None);
                         s.dispatch_tool_event(cx, |tool, s, cx| {
                             tool.pointer_up(&event, &ctx, s, cx)
                         });
@@ -277,47 +309,41 @@ impl Element for CanvasElement {
             }
         });
 
-        window.on_mouse_event({
-            let hitbox = hitbox.clone();
-            let state = state.clone();
-            move |e: &ScrollEvent, phase, window, cx| {
-                if !phase.bubble() || !hitbox.should_handle_scroll(window) {
+        window.on_mouse_event(move |e: &ScrollEvent, phase, window, cx| {
+            if !phase.bubble() || !hitbox.should_handle_scroll(window) {
+                return;
+            }
+            let position = e.position - bounds.origin;
+            cx.stop_propagation();
+            state.update(cx, |s, cx| {
+                let doc = s.transform().to_doc(position);
+                let event = CanvasScrollEvent {
+                    screen_position: position,
+                    doc_position: doc,
+                    delta: e.delta,
+                    modifiers: e.modifiers,
+                };
+                let ctx = tool_ctx(bounds, s, None);
+                let consumed =
+                    s.dispatch_tool_event(cx, |tool, s, cx| tool.scroll(&event, &ctx, s, cx));
+                if consumed {
                     return;
                 }
-                let position = e.position - bounds.origin;
-                cx.stop_propagation();
-                state.update(cx, |s, cx| {
-                    let doc = s.transform().to_doc(position);
-                    let event = CanvasScrollEvent {
-                        screen_position: position,
-                        doc_position: doc,
-                        delta: e.delta,
-                        modifiers: e.modifiers,
+                if e.modifiers.control || e.modifiers.platform {
+                    let delta_lines = match e.delta {
+                        ScrollDelta::Lines(delta) => delta.y,
+                        ScrollDelta::Pixels(delta) => delta.y.as_f32() / 40.,
                     };
-                    let ctx = tool_ctx(bounds, s, doc);
-                    let consumed =
-                        s.dispatch_tool_event(cx, |tool, s, cx| tool.scroll(&event, &ctx, s, cx));
-                    if consumed {
-                        return;
-                    }
-                    if e.modifiers.control || e.modifiers.platform {
-                        let delta_lines = match e.delta {
-                            ScrollDelta::Lines(delta) => delta.y,
-                            ScrollDelta::Pixels(delta) => delta.y.as_f32() / 40.,
-                        };
-                        let factor = (-delta_lines * 0.1).exp();
-                        s.zoom_at(position, factor, cx);
-                    } else {
-                        let delta = match e.delta {
-                            ScrollDelta::Lines(delta) => {
-                                point(px(-delta.x * 40.), px(-delta.y * 40.))
-                            }
-                            ScrollDelta::Pixels(delta) => point(-delta.x, -delta.y),
-                        };
-                        s.pan_by(delta, cx);
-                    }
-                });
-            }
+                    let factor = (-delta_lines * 0.1).exp();
+                    s.zoom_at(position, factor, cx);
+                } else {
+                    let delta = match e.delta {
+                        ScrollDelta::Lines(delta) => point(px(-delta.x * 40.), px(-delta.y * 40.)),
+                        ScrollDelta::Pixels(delta) => point(-delta.x, -delta.y),
+                    };
+                    s.pan_by(delta, cx);
+                }
+            });
         });
     }
 }

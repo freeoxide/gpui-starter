@@ -46,20 +46,22 @@ impl RenderOnce for Checkerboard {
                 canvas(
                     move |_, _, _| (),
                     move |bounds, _, window, _| {
-                        let tile = square_size;
-                        let rows = (bounds.size.height / tile).ceil() as i32;
-                        let cols = (bounds.size.width / tile).ceil() as i32;
+                        let rows = (bounds.size.height / square_size).ceil() as i32;
+                        let cols = (bounds.size.width / square_size).ceil() as i32;
 
                         for row in 0..rows {
                             for col in 0..cols {
                                 if (row + col) % 2 == 0 {
                                     let origin = bounds.origin
-                                        + point(tile * (col as f32), tile * (row as f32));
+                                        + point(
+                                            square_size * (col as f32),
+                                            square_size * (row as f32),
+                                        );
 
                                     window.paint_quad(PaintQuad {
                                         bounds: Bounds {
                                             origin,
-                                            size: size(tile, tile),
+                                            size: size(square_size, square_size),
                                         },
                                         corner_radii: Corners::default(),
                                         background: c2.into(),

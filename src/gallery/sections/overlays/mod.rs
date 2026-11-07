@@ -1,7 +1,7 @@
 //! Overlay-family sections, ported from the upstream stories: Alert,
 //! AlertDialog, Dialog, HoverCard, Notification, Popover, Sheet, and Tooltip
-//! (the last two also carry the `tooltip_top_edge` and `dialog_overlay`
-//! examples).
+//! (Dialog also carries the `dialog_overlay` example, Tooltip the
+//! `tooltip_top_edge` one).
 
 mod alert;
 mod alert_dialog;

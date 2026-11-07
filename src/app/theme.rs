@@ -1,5 +1,5 @@
-use gpui_kit::App;
 use gpui_kit::component::ActiveTheme as _;
+use gpui_kit::{App, SharedString};
 
 /// Runs unconditionally at startup, and again after a watcher reload (which
 /// clears the registry); name-dedup keeps already-registered dev themes winning.
@@ -12,42 +12,38 @@ pub fn register_embedded_themes(cx: &mut App) {
     }
 }
 
-/// Restore embedded themes a kit watcher reload dropped: kit `reload()` clears
-/// the registry and only re-reads `themes_dir`, so anything not on disk
-/// (the embedded set) vanishes on every watcher event, file deletion included.
-/// No-op when nothing is missing.
+/// Re-register embedded themes a kit watcher reload dropped: `reload()` clears
+/// the registry and re-reads only `themes_dir`, so the embedded set vanishes on
+/// every watcher event. No-op when nothing is missing.
 pub fn ensure_embedded_themes(cx: &mut App) {
-    // global_mut notifies observers even when nothing changes, so check
-    // first: mutating from the observer that called us must terminate.
-    if embedded_files_missing(gpui_kit::component::ThemeRegistry::global(cx)) == 0 {
+    // global_mut notifies observers even when nothing changes; only take it
+    // when a file is missing, or the observer that called us never terminates.
+    let dropped = dropped_embedded_themes(gpui_kit::component::ThemeRegistry::global(cx));
+    if dropped.is_empty() {
         return;
     }
-    restore_embedded_themes(gpui_kit::component::ThemeRegistry::global_mut(cx));
+    restore_embedded_themes(gpui_kit::component::ThemeRegistry::global_mut(cx), &dropped);
 }
 
-/// Load every embedded theme file carrying at least one name missing from
-/// `registry`; returns how many files were (re)loaded.
-fn restore_embedded_themes(registry: &mut gpui_kit::component::ThemeRegistry) -> usize {
-    let dropped: Vec<_> = crate::app::assets::embedded_themes()
+/// Embedded theme files carrying at least one theme name absent from `registry`.
+fn dropped_embedded_themes(
+    registry: &gpui_kit::component::ThemeRegistry,
+) -> Vec<(SharedString, String)> {
+    crate::app::assets::embedded_themes()
         .into_iter()
         .filter(|(file, json)| file_has_missing_theme(file, json, registry))
-        .collect();
-    let count = dropped.len();
-    for (file, json) in &dropped {
+        .collect()
+}
+
+fn restore_embedded_themes(
+    registry: &mut gpui_kit::component::ThemeRegistry,
+    dropped: &[(SharedString, String)],
+) {
+    for (file, json) in dropped {
         if let Err(err) = registry.load_themes_from_str(json) {
             tracing::warn!("invalid embedded theme {file}: {err}");
         }
     }
-    count
-}
-
-/// Number of embedded theme files whose parsed theme names are not all
-/// present in `registry`.
-fn embedded_files_missing(registry: &gpui_kit::component::ThemeRegistry) -> usize {
-    crate::app::assets::embedded_themes()
-        .iter()
-        .filter(|(file, json)| file_has_missing_theme(file, json, registry))
-        .count()
 }
 
 fn file_has_missing_theme(

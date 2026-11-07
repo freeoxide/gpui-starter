@@ -142,7 +142,7 @@ pub(super) fn render_mutations_table(
                         div()
                             .text_xs()
                             .text_color(muted_foreground)
-                            .child(format!("{}", m.retry_count)),
+                            .child(m.retry_count.to_string()),
                     ]))
                 .into_any_element()
         })

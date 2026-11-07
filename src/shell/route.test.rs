@@ -56,12 +56,14 @@ fn rejects_path_traversal_in_segment() {
 }
 
 #[test]
-fn rejects_null_byte_in_segment() {
-    let err = AppRoute::parse_deep_link("gpui-starter://settings/\0notifications").unwrap_err();
+fn rejects_percent_encoded_nul_in_segment() {
+    // `Url::parse` percent-encodes NUL, so the validator sees `%00notifications`
+    // and rejects it as an unknown route; raw `\0` never survives URL parsing.
+    let err = AppRoute::parse_deep_link("gpui-starter://settings/%00notifications").unwrap_err();
     let msg = err.to_string();
     assert!(
-        msg.contains("forbidden character") || msg.contains("invalid deep link"),
-        "expected null-byte rejection, got: {msg}"
+        msg.contains("unknown route"),
+        "expected unknown-route rejection, got: {msg}"
     );
 }
 
@@ -77,11 +79,11 @@ fn validate_path_segment_helper() {
     assert!(validate_path_segment("notifications").is_ok());
     assert!(validate_path_segment("..").is_err());
     assert!(validate_path_segment("foo/../bar").is_err());
-    assert!(validate_path_segment("seg\x00ment").is_err());
+    assert!(validate_path_segment("seg\\ment").is_err());
 }
 
-/// `to_hash` must cover EVERY page (exhaustive over `Page::all`), plus the
-/// settings sub-route — a new Page variant fails here until it is added.
+/// `to_hash` must round-trip every entry of `Page::all`, plus the settings
+/// sub-route. Variants missing from `all()` are a `Page`-side gap.
 #[test]
 fn to_hash_round_trips_every_page() {
     for page in Page::all() {
@@ -102,9 +104,17 @@ fn to_hash_round_trips_every_page() {
 }
 
 #[test]
-fn from_hash_matches_to_hash_for_every_valid_host() {
-    for host in VALID_HOSTS {
-        let route = AppRoute::parse_deep_link(&format!("{}://{}", APP_URL_SCHEME, host)).unwrap();
+fn every_page_host_parses_as_a_deep_link() {
+    let hosts: Vec<&str> = Page::all().iter().map(|page| page.host()).collect();
+    let mut unique = hosts.clone();
+    unique.sort_unstable();
+    unique.dedup();
+    assert_eq!(hosts.len(), unique.len(), "every Page needs its own host");
+
+    for page in Page::all() {
+        let url = format!("{}://{}", APP_URL_SCHEME, page.host());
+        let route =
+            AppRoute::parse_deep_link(&url).unwrap_or_else(|err| panic!("{} rejected: {err}", url));
         assert_eq!(AppRoute::from_hash(&route.to_hash()).unwrap(), route);
     }
 }
@@ -148,7 +158,7 @@ fn from_hash_rejects_unknown_and_unsafe_hashes() {
     // Encoded path traversal survives URL parsing and is rejected by the
     // deep-link validator (same input the parse_deep_link tests use).
     assert!(AppRoute::from_hash("#/settings/..%2Fetc").is_err());
-    assert!(AppRoute::from_hash("#/settings/\0notifications").is_err());
+    assert!(AppRoute::from_hash("#/settings/%00notifications").is_err());
     assert!(AppRoute::from_hash("#/home/extra/segments").is_err());
     assert!(AppRoute::from_hash("https://example.com").is_err());
 }

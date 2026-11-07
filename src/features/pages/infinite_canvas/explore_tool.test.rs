@@ -1,6 +1,6 @@
 use gpui_kit::{
-    AppContext as _, CursorStyle, Entity, Modifiers, MouseButton, Pixels, ScrollDelta,
-    TestAppContext, point, px,
+    AppContext as _, Bounds, CursorStyle, Entity, Modifiers, MouseButton, Pixels, ScrollDelta,
+    TestAppContext, point, px, size,
 };
 
 use crate::ui::canvas::{
@@ -72,9 +72,9 @@ fn pointer(screen: (f32, f32)) -> CanvasPointerEvent {
 
 fn tool_ctx(transform: CanvasTransform) -> ToolContext {
     ToolContext {
-        viewport: gpui_kit::Bounds {
+        viewport: Bounds {
             origin: point(px(0.), px(0.)),
-            size: gpui_kit::size(px(800.), px(600.)),
+            size: size(px(800.), px(600.)),
         },
         transform,
         hit: None,

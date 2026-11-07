@@ -4,7 +4,8 @@ use std::rc::Rc;
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::*;
 use gpui_kit::{
-    Bounds, Entity, Subscription, TestAppContext, VisualTestContext, Window, div, point, px, size,
+    Bounds, Entity, Pixels, Point, Subscription, TestAppContext, VisualTestContext, Window, div,
+    point, px, size,
 };
 
 use crate::ui::canvas::{CanvasEvent, CanvasState};
@@ -162,7 +163,7 @@ fn viewport_tracks_the_canvas_area_across_resize(cx: &mut TestAppContext) {
     });
     let host = handle.root(cx).unwrap();
     let page = cx.read(|cx| host.read(cx).page.clone());
-    let mut cx = VisualTestContext::from_window(handle.into(), &cx);
+    let mut cx = VisualTestContext::from_window(handle.into(), cx);
     cx.update(|window, cx| window.draw(cx).clear(cx));
     let viewport = cx.read(|cx| page.read(cx).viewport);
     assert!(viewport.size.width > px(0.));
@@ -181,7 +182,7 @@ fn viewport_tracks_the_canvas_area_across_resize(cx: &mut TestAppContext) {
     assert!(resized.size.width > viewport.size.width);
 }
 
-fn viewport_800x600() -> Bounds<gpui_kit::Pixels> {
+fn viewport_800x600() -> Bounds<Pixels> {
     Bounds {
         origin: point(px(0.), px(0.)),
         size: size(px(800.), px(600.)),
@@ -202,7 +203,7 @@ fn drawn_page(cx: &mut TestAppContext) -> (Entity<InfiniteCanvasPage>, VisualTes
 fn assert_centered_on(
     cx: &VisualTestContext,
     page: &Entity<InfiniteCanvasPage>,
-    expected: gpui_kit::Point<gpui_kit::Pixels>,
+    expected: Point<Pixels>,
 ) {
     let (state, viewport) = cx.read(|cx| {
         let page = page.read(cx);

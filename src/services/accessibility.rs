@@ -147,7 +147,7 @@ pub fn initialize(cx: &mut App) {
     refresh(cx);
     let stored = snapshot(cx);
     crate::capabilities::set(
-        "accessibility",
+        crate::capabilities::Capability::ACCESSIBILITY,
         capability_status(stored.accesskit_linked),
         cx,
     );

@@ -1,8 +1,7 @@
 use gpui_kit::{AppContext as _, TestAppContext, WindowOptions};
 
 use super::{
-    CAPABILITY_DESKTOP_WIDGETS, DesktopWidgetsPage, WidgetKind, catalog, init, open_map, row_kinds,
-    set_widget_enabled,
+    DesktopWidgetsPage, WidgetKind, catalog, init, open_map, row_kinds, set_widget_enabled,
 };
 use crate::app_state::{AppConfig, debounce_test_lock, force_save, install_for_tests};
 use crate::features::pages::desktop_widgets::catalog::PersistedWidget;
@@ -33,7 +32,7 @@ async fn init_registers_the_desktop_widgets_capability_row(cx: &mut TestAppConte
     let status = cx
         .read(|cx| {
             crate::capabilities::snapshot(cx)
-                .get(CAPABILITY_DESKTOP_WIDGETS)
+                .get(&crate::capabilities::Capability::DESKTOP_WIDGETS)
                 .cloned()
         })
         .expect("capability row registered");

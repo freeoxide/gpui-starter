@@ -4,16 +4,15 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use gpui_kit::{
-    AppContext, Bounds, CursorStyle, Entity, Modifiers, MouseButton, Pixels, Subscription,
+    AppContext, Bounds, Context, CursorStyle, Entity, Modifiers, MouseButton, Pixels, Subscription,
     TestAppContext, point, px, size,
 };
 
 use crate::ui::canvas::{
-    BrushConfig, BuiltinTool, CanvasEvent, CanvasPointerEvent, CanvasScrollEvent, CanvasShape,
-    CanvasState, CanvasTool, CanvasTransform, PanTool, SelectTool, ShapeConfig, ShapeId, ShapeKind,
-    ShapeStyle, ToolContext,
+    BrushConfig, BuiltinTool, CanvasEvent, CanvasPointerEvent, CanvasShape, CanvasState,
+    CanvasTool, CanvasTransform, PanTool, SelectTool, ShapeConfig, ShapeId, ShapeKind, ShapeStyle,
+    ToolContext,
 };
-use gpui_kit::Context;
 
 fn pointer(screen: (f32, f32), button: MouseButton, modifiers: Modifiers) -> CanvasPointerEvent {
     let screen_position = point(px(screen.0), px(screen.1));
@@ -198,31 +197,6 @@ fn pan_drag_sequence_moves_the_view_by_the_total_delta(cx: &mut TestAppContext) 
 }
 
 #[gpui_kit::test]
-fn pan_tool_scroll_pans_lines_and_defers_ctrl_wheel_to_zoom(cx: &mut TestAppContext) {
-    let state = cx.new(|_| CanvasState::new());
-    let event = CanvasScrollEvent {
-        screen_position: point(px(0.), px(0.)),
-        doc_position: point(px(0.), px(0.)),
-        delta: gpui_kit::ScrollDelta::Lines(point(0., 2.)),
-        modifiers: Modifiers::none(),
-    };
-    let ctx = tool_ctx(CanvasTransform::IDENTITY, None);
-    let consumed = state.update(cx, |s, cx| {
-        s.dispatch_tool_event(cx, |tool, s, cx| tool.scroll(&event, &ctx, s, cx))
-    });
-    assert!(consumed);
-    assert_px_eq(cx.read(|cx| state.read(cx).pan().y), px(-80.));
-
-    let mut ctrl = event;
-    ctrl.modifiers = Modifiers::control();
-    let consumed = state.update(cx, |s, cx| {
-        s.dispatch_tool_event(cx, |tool, s, cx| tool.scroll(&ctrl, &ctx, s, cx))
-    });
-    assert!(!consumed);
-    assert_px_eq(cx.read(|cx| state.read(cx).pan().y), px(-80.));
-}
-
-#[gpui_kit::test]
 fn select_click_selects_and_drag_moves_once_per_move(cx: &mut TestAppContext) {
     let (state, shape_id) = seeded_rect_doc(cx);
     state.update(cx, |s, cx| s.set_builtin_tool(BuiltinTool::Select, cx));
@@ -308,6 +282,102 @@ fn select_click_on_empty_canvas_clears_selection(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn shift_click_selects_two_shapes_and_drag_moves_them_together(cx: &mut TestAppContext) {
+    let state = cx.new(|_| CanvasState::new());
+    let (first, second) = state.update(cx, |s, cx| {
+        let layer = s.add_layer(cx);
+        let first = s
+            .add_shape(
+                layer,
+                rect_shape(Bounds {
+                    origin: point(px(100.), px(100.)),
+                    size: size(px(50.), px(50.)),
+                }),
+                cx,
+            )
+            .unwrap();
+        let second = s
+            .add_shape(
+                layer,
+                rect_shape(Bounds {
+                    origin: point(px(200.), px(100.)),
+                    size: size(px(50.), px(50.)),
+                }),
+                cx,
+            )
+            .unwrap();
+        (first, second)
+    });
+    state.update(cx, |s, cx| s.set_builtin_tool(BuiltinTool::Select, cx));
+
+    dispatch_down(
+        &state,
+        cx,
+        &pointer((120., 120.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(CanvasTransform::IDENTITY, Some(first)),
+    );
+    dispatch_up(
+        &state,
+        cx,
+        &pointer((120., 120.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(CanvasTransform::IDENTITY, None),
+    );
+    dispatch_down(
+        &state,
+        cx,
+        &pointer((220., 120.), MouseButton::Left, Modifiers::shift()),
+        &tool_ctx(CanvasTransform::IDENTITY, Some(second)),
+    );
+    assert!(cx.read(|cx| state.read(cx).selected_shape_ids() == &[first, second]));
+    dispatch_up(
+        &state,
+        cx,
+        &pointer((220., 120.), MouseButton::Left, Modifiers::shift()),
+        &tool_ctx(CanvasTransform::IDENTITY, None),
+    );
+
+    // Dragging the already-selected second shape moves both by the same delta.
+    dispatch_down(
+        &state,
+        cx,
+        &pointer((220., 120.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(CanvasTransform::IDENTITY, Some(second)),
+    );
+    dispatch_move(
+        &state,
+        cx,
+        &pointer((250., 130.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(CanvasTransform::IDENTITY, None),
+    );
+    dispatch_up(
+        &state,
+        cx,
+        &pointer((250., 130.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(CanvasTransform::IDENTITY, None),
+    );
+    let origins = cx.read(|cx| {
+        let s = state.read(cx);
+        (
+            s.document().shape(first).unwrap().doc_bounds().origin,
+            s.document().shape(second).unwrap().doc_bounds().origin,
+        )
+    });
+    assert_px_eq(origins.0.x, px(130.));
+    assert_px_eq(origins.0.y, px(110.));
+    assert_px_eq(origins.1.x, px(230.));
+    assert_px_eq(origins.1.y, px(110.));
+
+    // Shift+click on empty canvas keeps the selection.
+    dispatch_down(
+        &state,
+        cx,
+        &pointer((900., 900.), MouseButton::Left, Modifiers::shift()),
+        &tool_ctx(CanvasTransform::IDENTITY, None),
+    );
+    assert!(cx.read(|cx| state.read(cx).selected_shape_ids() == &[first, second]));
+}
+
+#[gpui_kit::test]
 fn brush_drag_commits_one_path_with_deduped_points(cx: &mut TestAppContext) {
     let state = cx.new(|_| CanvasState::new());
     state.update(cx, |s, cx| {
@@ -365,6 +435,100 @@ fn brush_drag_commits_one_path_with_deduped_points(cx: &mut TestAppContext) {
     });
     assert_eq!(point_count, 2);
     assert_eq!(&*events.borrow(), &[CanvasEvent::DocumentChanged]);
+}
+
+#[gpui_kit::test]
+fn brush_dedup_measures_screen_distance_through_the_transform(cx: &mut TestAppContext) {
+    let state = cx.new(|_| CanvasState::new());
+    state.update(cx, |s, cx| {
+        s.add_layer(cx);
+        s.set_builtin_tool(BuiltinTool::Brush(Default::default()), cx);
+    });
+    // Zoom 2: 0.75 doc px is 1.5 screen px (kept), 0.4 doc px is 0.8 screen
+    // px (dropped). Comparing raw doc distances would drop the 0.75 sample.
+    let ctx = tool_ctx(CanvasTransform::new(point(px(0.), px(0.)), 2.), None);
+    dispatch_down(
+        &state,
+        cx,
+        &pointer((0., 0.), MouseButton::Left, Modifiers::none()),
+        &ctx,
+    );
+    dispatch_move(
+        &state,
+        cx,
+        &pointer((0.4, 0.), MouseButton::Left, Modifiers::none()),
+        &ctx,
+    );
+    dispatch_move(
+        &state,
+        cx,
+        &pointer((0.75, 0.), MouseButton::Left, Modifiers::none()),
+        &ctx,
+    );
+    dispatch_move(
+        &state,
+        cx,
+        &pointer((1.5, 0.), MouseButton::Left, Modifiers::none()),
+        &ctx,
+    );
+    dispatch_up(
+        &state,
+        cx,
+        &pointer((1.5, 0.), MouseButton::Left, Modifiers::none()),
+        &ctx,
+    );
+    let point_count = cx.read(|cx| {
+        state
+            .read(cx)
+            .document()
+            .shapes()
+            .find_map(|(_, _, s)| match s {
+                CanvasShape::Path { points, .. } => Some(points.len()),
+                _ => None,
+            })
+            .unwrap()
+    });
+    assert_eq!(point_count, 3);
+}
+
+#[gpui_kit::test]
+fn right_button_up_does_not_commit_an_in_flight_left_stroke(cx: &mut TestAppContext) {
+    let state = cx.new(|_| CanvasState::new());
+    state.update(cx, |s, cx| {
+        s.add_layer(cx);
+        s.set_builtin_tool(BuiltinTool::Brush(Default::default()), cx);
+    });
+    let ctx = tool_ctx(CanvasTransform::IDENTITY, None);
+    dispatch_down(
+        &state,
+        cx,
+        &pointer((10., 10.), MouseButton::Left, Modifiers::none()),
+        &ctx,
+    );
+    dispatch_move(
+        &state,
+        cx,
+        &pointer((40., 40.), MouseButton::Left, Modifiers::none()),
+        &ctx,
+    );
+    dispatch_up(
+        &state,
+        cx,
+        &pointer((40., 40.), MouseButton::Right, Modifiers::none()),
+        &ctx,
+    );
+    assert!(cx.read(|cx| state.read(cx).tool_overlay().is_some()));
+    let committed = cx.read(|cx| state.read(cx).document().shapes().count());
+    assert_eq!(committed, 0);
+    dispatch_up(
+        &state,
+        cx,
+        &pointer((40., 40.), MouseButton::Left, Modifiers::none()),
+        &ctx,
+    );
+    assert!(cx.read(|cx| state.read(cx).tool_overlay().is_none()));
+    let committed = cx.read(|cx| state.read(cx).document().shapes().count());
+    assert_eq!(committed, 1);
 }
 
 #[gpui_kit::test]

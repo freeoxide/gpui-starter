@@ -3,29 +3,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ids::EventId, time::AppTimestamp};
 
-/// Cap on stored records; the newest are kept.
-const MAX_RECORDS: usize = 200;
+/// Cap on stored records (in-memory ring and sqlite retention); the newest
+/// are kept.
+pub(crate) const MAX_RECORDS: usize = 200;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ErrorCategory {
-    Network,
-    Storage,
-    Rendering,
-    Config,
-    System,
-}
-
-impl ErrorCategory {
-    pub fn label(&self) -> &'static str {
-        match self {
-            Self::Network => "network",
-            Self::Storage => "storage",
-            Self::Rendering => "rendering",
-            Self::Config => "config",
-            Self::System => "system",
-        }
-    }
-}
+pub use crate::errors::ErrorCategory;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorAction {
@@ -65,7 +47,7 @@ pub fn report(
 ) -> EventId {
     // Error text reaches the screen, the sqlite log, and crash reports — scrub
     // home paths so none of them leak the local username.
-    let message = scrub_home(&message.into());
+    let message = crate::crash_report::scrub_home(&message.into());
     let record = ErrorRecord {
         id: EventId::new(),
         occurred_at: AppTimestamp::now(),
@@ -117,7 +99,7 @@ pub fn report(
     id
 }
 
-/// Returns the number of error records without cloning the records Vec.
+/// Returns the number of stored error records.
 pub fn record_count(cx: &App) -> usize {
     cx.try_global::<ErrorSurfaceState>()
         .map(|state| state.records.len())
@@ -148,22 +130,6 @@ async fn persist_error(
     error: &ErrorRecord,
 ) -> Result<(), crate::storage::StorageError> {
     db.persist_error_record(error).await
-}
-
-/// Error messages may embed io paths.
-fn scrub_home(text: &str) -> String {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_default();
-    scrub_home_with(text, &home)
-}
-
-fn scrub_home_with(text: &str, home: &str) -> String {
-    if home.is_empty() {
-        text.to_string()
-    } else {
-        text.replace(home, "~")
-    }
 }
 
 #[cfg(test)]

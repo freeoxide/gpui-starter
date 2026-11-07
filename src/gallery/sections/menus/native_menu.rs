@@ -13,7 +13,7 @@ use serde::Deserialize;
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 /// Dispatched by native menu items; "Word Wrap" updates its checked state.
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -103,7 +103,7 @@ impl NativeMenuSection {
             .border_color(cx.theme().border)
             .rounded(cx.theme().radius_lg)
             .text_color(cx.theme().muted_foreground)
-            .child(SharedString::from(label.to_string()))
+            .child(label.to_string())
     }
 }
 

@@ -282,8 +282,19 @@ async fn success_after_the_timeout_clears_the_error_panel(cx: &mut TestAppContex
 async fn every_demo_installs_its_document_and_tool_without_a_gpu(cx: &mut TestAppContext) {
     let (page, mut cx) = open_page(cx);
     cx.run_until_parked();
-
-    for (ix, spec) in DEMOS.iter().enumerate() {
+    // An adapter-less runner boots the engine into its error state, and
+    // switch_demo then keeps the error panel (with its Retry) on screen.
+    if cx.read(|cx| {
+        let page_view = page.read(cx);
+        page_view.runtime.is_none() && page_view.shader.read(cx).runtime_error().is_some()
+    }) {
+        eprintln!("skipping: no wgpu adapter (engine errored at boot)");
+        return;
+    }
+    // 0 last: the page boots on Gradient, and a re-click of the active demo
+    // is a no-op, so Gradient needs a real switch to install.
+    for ix in [1, 2, 3, 0] {
+        let spec = &DEMOS[ix];
         switch_demo(&page, &mut cx, ix);
         let (demo, tool_id, slider) = cx.read(|cx| {
             let page_view = page.read(cx);
@@ -318,6 +329,96 @@ async fn every_demo_installs_its_document_and_tool_without_a_gpu(cx: &mut TestAp
             "demo {ix} placeholder must stay the 1x1 blank until a frame lands"
         );
     }
+}
+
+/// A failed init must keep its error panel across demo switches: the panel
+/// holds the page's only Retry button, and nothing else restarts init.
+#[gpui_kit::test]
+async fn demo_switch_keeps_the_error_panel_when_init_failed(cx: &mut TestAppContext) {
+    let _seam = SeamGuard::arm(super::InitSeam::Park);
+    let (page, mut cx) = open_page(cx);
+    page.update(&mut cx, |page, cx| page.start_runtime(cx));
+    cx.executor()
+        .advance_clock(super::INIT_TIMEOUT + Duration::from_secs(1));
+    cx.run_until_parked();
+    cx.read(|cx| {
+        assert!(
+            page.read(cx).shader.read(cx).runtime_error().is_some(),
+            "the parked init must land in the error panel first"
+        )
+    });
+
+    switch_demo(&page, &mut cx, 2);
+    cx.read(|cx| {
+        let page_view = page.read(cx);
+        assert!(page_view.runtime.is_none());
+        assert_eq!(
+            page_view.shader.read(cx).demo(),
+            DemoId::Gradient,
+            "a switch without a runtime must be refused"
+        );
+        assert!(
+            page_view.shader.read(cx).runtime_error().is_some(),
+            "the error panel must survive the switch"
+        );
+    });
+}
+
+/// install_demo reuses the slider entity: the knob must track
+/// `shader.slider` on every path that re-installs the active demo.
+#[gpui_kit::test]
+async fn install_demo_reuses_the_slider_entity_in_sync_with_the_shader(cx: &mut TestAppContext) {
+    let (page, mut cx) = open_page(cx);
+    cx.run_until_parked();
+    // Same adapter-less boot as above: nothing re-installs without a GPU.
+    if cx.read(|cx| {
+        let page_view = page.read(cx);
+        page_view.runtime.is_none() && page_view.shader.read(cx).runtime_error().is_some()
+    }) {
+        eprintln!("skipping: no wgpu adapter (engine errored at boot)");
+        return;
+    }
+    let slider_entity = cx.read(|cx| page.read(cx).slider.clone());
+
+    // Init lands after the user moved the slider: the knob must keep the
+    // user's value instead of snapping back to the spec default.
+    page.update(&mut cx, |page, cx| {
+        page.shader.update(cx, |s, cx| s.set_slider(1.75, cx));
+    });
+    page.update(&mut cx, |page, cx| page.install_demo(cx));
+    cx.read(|cx| {
+        let page_view = page.read(cx);
+        assert_eq!(page_view.slider, slider_entity);
+        let knob = page_view.slider.read(cx).value().start();
+        assert!(
+            (knob - 1.75).abs() < 1e-3,
+            "the init-time install must keep the dragged value, got {knob}"
+        );
+    });
+
+    // Re-clicking the active demo changes nothing.
+    switch_demo(&page, &mut cx, 0);
+    cx.read(|cx| {
+        let page_view = page.read(cx);
+        assert_eq!(page_view.slider, slider_entity);
+        assert!(
+            (page_view.shader.read(cx).slider() - 1.75).abs() < 1e-3,
+            "a re-click of the active demo must not reset the slider"
+        );
+    });
+
+    // A real switch resets knob and shader to the new spec on the same entity.
+    switch_demo(&page, &mut cx, 1);
+    cx.read(|cx| {
+        let page_view = page.read(cx);
+        assert_eq!(page_view.slider, slider_entity);
+        let spec = DEMOS[1].slider;
+        let state = page_view.slider.read(cx);
+        assert_eq!(state.min_value(), spec.min);
+        assert_eq!(state.max_value(), spec.max);
+        assert!((state.value().start() - spec.default).abs() < 1e-3);
+        assert!((page_view.shader.read(cx).slider() - spec.default).abs() < 1e-3);
+    });
 }
 
 #[gpui_kit::test]

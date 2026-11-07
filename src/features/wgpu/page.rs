@@ -18,13 +18,13 @@ use super::state::WgpuPageState;
 use crate::platform::clock::{self, Duration, Instant};
 
 #[cfg(not(target_family = "wasm"))]
-use super::CAPABILITY_WGPU;
-#[cfg(not(target_family = "wasm"))]
 use super::demos::{DemoId, RenderJob, SceneRenderer};
 #[cfg(not(target_family = "wasm"))]
 use super::engine::WgpuEngine;
 #[cfg(not(target_family = "wasm"))]
 use super::state::PARTICLE_COUNTS;
+#[cfg(not(target_family = "wasm"))]
+use crate::capabilities::Capability;
 
 /// Backstop deadline for a lost init: the fenced init bounds the attempt
 /// itself, and this watchdog surfaces a timeout if its result never lands.
@@ -33,8 +33,8 @@ const INIT_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[cfg(test)]
 thread_local! {
-    /// Test seam for the init task: park it forever, or delay it past the
-    /// watchdog deadline before running the real init.
+    /// Test seam for the init task: park it forever, delay it past the
+    /// watchdog deadline, or fail it fast with a known cause.
     static INIT_SEAM: std::cell::Cell<InitSeam> =
         const { std::cell::Cell::new(InitSeam::Real) };
 }
@@ -45,6 +45,7 @@ enum InitSeam {
     Real,
     Park,
     Delay(Duration),
+    Fail,
 }
 
 #[cfg(test)]
@@ -95,6 +96,7 @@ impl WgpuPage {
     /// engine init starts at the first render, not here.
     pub fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
         let state = cx.new(|cx| WgpuPageState::new(cx));
+        let _subscriptions = vec![cx.observe(&state, |_, _, cx| cx.notify())];
         Self {
             state,
             #[cfg(not(target_family = "wasm"))]
@@ -107,7 +109,7 @@ impl WgpuPage {
             init_task: None,
             #[cfg(not(target_family = "wasm"))]
             init_watchdog: None,
-            _subscriptions: Vec::new(),
+            _subscriptions,
         }
     }
 
@@ -134,6 +136,10 @@ impl WgpuPage {
                     if matches!(seam, InitSeam::Park) {
                         std::future::pending::<()>().await;
                     }
+                    #[cfg(test)]
+                    if matches!(seam, InitSeam::Fail) {
+                        anyhow::bail!("wgpu init seam failure");
+                    }
                     WgpuEngine::new_fenced()
                 })
                 .await;
@@ -144,7 +150,7 @@ impl WgpuPage {
                         page.engine = Some(engine);
                         page.state.update(cx, |s, cx| s.clear_error(cx));
                         crate::capabilities::set(
-                            CAPABILITY_WGPU,
+                            Capability::WGPU_EMBED,
                             crate::capabilities::CapabilityStatus::supported_enabled(),
                             cx,
                         );
@@ -154,7 +160,7 @@ impl WgpuPage {
                 Err(err) => {
                     let _ = cx.update(|cx| {
                         crate::capabilities::set(
-                            CAPABILITY_WGPU,
+                            Capability::WGPU_EMBED,
                             crate::capabilities::CapabilityStatus::error(err.to_string()),
                             cx,
                         );
@@ -179,7 +185,7 @@ impl WgpuPage {
                     INIT_TIMEOUT.as_secs()
                 );
                 crate::capabilities::set(
-                    CAPABILITY_WGPU,
+                    Capability::WGPU_EMBED,
                     crate::capabilities::CapabilityStatus::error(err.to_string()),
                     cx,
                 );
@@ -477,9 +483,12 @@ impl WgpuPage {
                         return;
                     }
                     let now = clock::Instant::now();
+                    // Read before the mark overwrites it: dt spans kick to
+                    // kick, the whole frame period, not the pacing sleep.
+                    let dt = state.read(cx).frame_dt(now);
                     state.update(cx, |s, cx| s.mark_frame_started(now, cx));
                     cx.spawn(async move |cx| {
-                        frame_task(page, state, engine, cx).await;
+                        frame_task(page, state, engine, dt, cx).await;
                     })
                     .detach();
                 });
@@ -497,6 +506,7 @@ async fn frame_task(
     page: Entity<WgpuPage>,
     state: Entity<WgpuPageState>,
     engine: Arc<WgpuEngine>,
+    dt: f32,
     cx: &mut AsyncApp,
 ) {
     let now = Instant::now();
@@ -505,16 +515,13 @@ async fn frame_task(
         cx.background_executor().timer(wait).await;
     }
 
-    // Snapshot after the wait: dt must span the paced frame period, not the
-    // microseconds between the kick and this task's first line.
     let now = Instant::now();
-    let (playing, demo_ix, particle_count, size, dt, elapsed) = state.read_with(cx, |s, _| {
+    let (playing, demo_ix, particle_count, size, elapsed) = state.read_with(cx, |s, _| {
         (
             s.is_playing(),
             s.demo_ix(),
             s.particle_count(),
             s.pending_size(),
-            s.frame_dt(now),
             s.elapsed_at(now),
         )
     });
@@ -584,7 +591,9 @@ async fn frame_task(
                     let _ = rx.recv();
                 }
                 let started = Instant::now();
-                let mut guard = renderer.lock().expect("wgpu renderer mutex");
+                let mut guard = renderer
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 guard
                     .render(job)
                     .map(|bytes| (bytes, started.elapsed().as_secs_f32() * 1000.0))
@@ -607,7 +616,7 @@ async fn frame_task(
 fn frame_failed(state: &Entity<WgpuPageState>, err: anyhow::Error, cx: &mut AsyncApp) {
     let _ = cx.update(|cx| {
         crate::capabilities::set(
-            CAPABILITY_WGPU,
+            Capability::WGPU_EMBED,
             crate::capabilities::CapabilityStatus::degraded(err.to_string()),
             cx,
         );

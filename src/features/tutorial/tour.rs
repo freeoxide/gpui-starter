@@ -1,7 +1,7 @@
 use gpui_kit::SharedString;
 
+use crate::page::Page;
 use crate::routes::AppRoute;
-use crate::sidebar::Page;
 
 /// One tour stop. `route` is emitted as a Navigate event when the step
 /// becomes current; None keeps the current page.

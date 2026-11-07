@@ -4,6 +4,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{prelude::*, *};
 
+use crate::platform::clock::{Duration, Instant};
 use crate::ui::canvas::{Canvas, *};
 
 use super::geometry::square_at;
@@ -11,6 +12,9 @@ use super::geometry::square_at;
 const FIELD_W: f32 = 800.;
 const FIELD_H: f32 = 500.;
 const PARTICLE_COUNT: usize = 48;
+/// One simulation step is one frame at ~60fps of wall clock, so renders
+/// advance the field by elapsed time and re-renders are idempotent.
+const FRAME: Duration = Duration::from_millis(16);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Particle {
@@ -78,6 +82,10 @@ pub(super) struct ParticleFieldDemo {
     particles: Vec<Particle>,
     ids: Vec<ShapeId>,
     playing: bool,
+    /// Elapsed-time anchor; resume and reset re-anchor so the field never
+    /// jumps. Ticks are counted, not derived from render count.
+    anchor: Instant,
+    ticks_done: u64,
     _subscription: Subscription,
 }
 
@@ -112,7 +120,7 @@ impl ParticleFieldDemo {
                                 ShapeStyle::filled(colors[i % 3].opacity(0.85)),
                             ),
                         )
-                        .unwrap_or_default()
+                        .expect("layer was just created")
                     })
                     .collect()
             })
@@ -123,23 +131,26 @@ impl ParticleFieldDemo {
             particles,
             ids,
             playing: true,
+            anchor: cx.background_executor().now(),
+            ticks_done: 0,
             _subscription,
         }
     }
 
+    fn reanchor(&mut self, cx: &Context<Self>) {
+        self.anchor = cx.background_executor().now();
+        self.ticks_done = 0;
+    }
+
     fn write_positions(&mut self, cx: &mut Context<Self>) {
-        let positions: Vec<_> = self
-            .particles
-            .iter()
-            .map(|particle| square_at(particle.pos, particle.diameter))
-            .collect();
-        let ids = self.ids.clone();
+        let particles = &self.particles;
+        let ids = &self.ids;
         self.state.update(cx, |s, cx| {
             s.edit_document(cx, |doc| {
-                for (id, bounds) in ids.iter().zip(&positions) {
+                for (id, particle) in ids.iter().zip(particles) {
                     doc.update_shape(*id, |shape| {
-                        if let CanvasShape::Ellipse { bounds: b, .. } = shape {
-                            *b = *bounds;
+                        if let CanvasShape::Ellipse { bounds, .. } = shape {
+                            *bounds = square_at(particle.pos, particle.diameter);
                         }
                     });
                 }
@@ -149,11 +160,15 @@ impl ParticleFieldDemo {
 
     fn toggle_playing(&mut self, cx: &mut Context<Self>) {
         self.playing = !self.playing;
+        if self.playing {
+            self.reanchor(cx);
+        }
         cx.notify();
     }
 
     fn reset_field(&mut self, cx: &mut Context<Self>) {
         self.particles = seed_particles();
+        self.reanchor(cx);
         self.write_positions(cx);
     }
 }
@@ -161,8 +176,22 @@ impl ParticleFieldDemo {
 impl Render for ParticleFieldDemo {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.playing && window.is_window_active() && !cx.reduce_motion() {
-            tick(&mut self.particles);
-            self.write_positions(cx);
+            // Advance only to the wall-clock tick count: an unrelated
+            // re-render at the same instant advances nothing.
+            let target = cx
+                .background_executor()
+                .now()
+                .saturating_duration_since(self.anchor)
+                .as_millis() as u64
+                / FRAME.as_millis() as u64;
+            let before = self.ticks_done;
+            while self.ticks_done < target {
+                tick(&mut self.particles);
+                self.ticks_done += 1;
+            }
+            if self.ticks_done > before {
+                self.write_positions(cx);
+            }
             window.request_animation_frame();
         }
         let (toggle_label, toggle_icon) = if self.playing {

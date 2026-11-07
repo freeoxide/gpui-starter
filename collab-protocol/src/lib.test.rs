@@ -33,6 +33,41 @@ fn version(lamport: u64, origin: ClientId) -> Version {
     Version { lamport, origin }
 }
 
+fn rect_shape_json() -> serde_json::Value {
+    serde_json::json!({
+        "kind": "rect",
+        "bounds": [10.0, 20.0, 30.0, 40.0],
+        "style": {
+            "fill": [210.0, 0.6, 0.5, 1.0],
+            "stroke": {
+                "width": 2.0,
+                "color": [0.0, 0.0, 0.0, 1.0],
+                "dash": [4.0, 2.0]
+            }
+        }
+    })
+}
+
+fn path_shape_json() -> serde_json::Value {
+    serde_json::json!({
+        "kind": "path",
+        "points": [[0.0, 0.0], [10.0, 5.0], [20.0, 0.0]],
+        "stroke": {
+            "width": 3.0,
+            "color": [120.0, 0.7, 0.6, 1.0],
+            "dash": null
+        }
+    })
+}
+
+fn sorted_state(board: &Board) -> (Vec<ShapeEntry>, Vec<(ShapeKey, Version)>) {
+    let mut shapes: Vec<_> = board.shapes().cloned().collect();
+    shapes.sort_by_key(|entry| (entry.key.origin, entry.key.seq));
+    let mut tombstones: Vec<_> = board.tombstones().collect();
+    tombstones.sort_by_key(|(key, _)| (key.origin, key.seq));
+    (shapes, tombstones)
+}
+
 #[test]
 fn wire_ops_round_trip_through_json() {
     let ops = vec![
@@ -71,6 +106,7 @@ fn snapshot_round_trips_through_json() {
             version: version(2, 9),
             shape: rect_shape(),
         }],
+        tombstones: vec![(key(9, 2), version(5, 9))],
     };
     let json = serde_json::to_value(&msg).unwrap();
     let back: SnapshotMsg = serde_json::from_value(json).unwrap();
@@ -78,17 +114,110 @@ fn snapshot_round_trips_through_json() {
 }
 
 #[test]
-fn add_op_discriminant_is_snake_case_kind_tag() {
-    let op = WireOp::Add {
-        key: key(1, 1),
-        version: version(1, 1),
-        shape: rect_shape(),
-    };
-    let json = serde_json::to_value(&op).unwrap();
-    assert_eq!(json["kind"], serde_json::json!("add"));
-    let back: WireOp =
-        serde_json::from_value(serde_json::json!({"kind": "add", "key": {"origin": 1, "seq": 1}, "version": {"lamport": 1, "origin": 1}, "shape": serde_json::to_value(rect_shape()).unwrap()})).unwrap();
-    assert_eq!(back, op);
+fn snapshot_without_tombstones_decodes_for_older_servers() {
+    let json = serde_json::json!({"peers": [], "shapes": []});
+    let msg: SnapshotMsg = serde_json::from_value(json).unwrap();
+    assert!(msg.tombstones.is_empty());
+}
+
+#[test]
+fn wire_shapes_decode_from_literal_json() {
+    let cases = [
+        (rect_shape_json(), rect_shape()),
+        (
+            serde_json::json!({
+                "kind": "ellipse",
+                "bounds": [1.0, 2.0, 3.0, 4.0],
+                "style": {"fill": null, "stroke": null}
+            }),
+            WireShape::Ellipse {
+                bounds: [1.0, 2.0, 3.0, 4.0],
+                style: WireStyle {
+                    fill: None,
+                    stroke: None,
+                },
+            },
+        ),
+        (
+            serde_json::json!({
+                "kind": "triangle",
+                "bounds": [5.0, 6.0, 7.0, 8.0],
+                "style": {"fill": [120.0, 0.7, 0.6, 1.0], "stroke": null}
+            }),
+            WireShape::Triangle {
+                bounds: [5.0, 6.0, 7.0, 8.0],
+                style: WireStyle {
+                    fill: Some(WireColor([120.0, 0.7, 0.6, 1.0])),
+                    stroke: None,
+                },
+            },
+        ),
+        (path_shape_json(), path_shape()),
+        (
+            serde_json::json!({
+                "kind": "text",
+                "position": [3.0, 4.0],
+                "text": "hi",
+                "font_size": 12.5,
+                "color": [0.0, 0.0, 0.0, 1.0]
+            }),
+            WireShape::Text {
+                position: [3.0, 4.0],
+                text: "hi".into(),
+                font_size: 12.5,
+                color: WireColor([0.0, 0.0, 0.0, 1.0]),
+            },
+        ),
+    ];
+    for (json, expected) in cases {
+        assert_eq!(serde_json::from_value::<WireShape>(json).unwrap(), expected);
+    }
+}
+
+#[test]
+fn wire_ops_decode_from_literal_json() {
+    let cases = [
+        (
+            serde_json::json!({
+                "kind": "add",
+                "key": {"origin": 1, "seq": 1},
+                "version": {"lamport": 1, "origin": 1},
+                "shape": rect_shape_json()
+            }),
+            WireOp::Add {
+                key: key(1, 1),
+                version: version(1, 1),
+                shape: rect_shape(),
+            },
+        ),
+        (
+            serde_json::json!({
+                "kind": "update",
+                "key": {"origin": 1, "seq": 1},
+                "version": {"lamport": 2, "origin": 1},
+                "shape": path_shape_json()
+            }),
+            WireOp::Update {
+                key: key(1, 1),
+                version: version(2, 1),
+                shape: path_shape(),
+            },
+        ),
+        (
+            serde_json::json!({
+                "kind": "delete",
+                "key": {"origin": 1, "seq": 1},
+                "version": {"lamport": 3, "origin": 1}
+            }),
+            WireOp::Delete {
+                key: key(1, 1),
+                version: version(3, 1),
+            },
+        ),
+    ];
+    for (json, expected) in cases {
+        assert_eq!(serde_json::from_value::<WireOp>(json).unwrap(), expected);
+    }
 }
 
 #[test]
@@ -98,6 +227,54 @@ fn stale_update_is_rejected_after_add() {
     assert!(board.integrate(k, version(2, 1), Change::Put(rect_shape())));
     assert!(!board.integrate(k, version(1, 1), Change::Put(path_shape())));
     assert_eq!(board.shape(&k).unwrap().shape, rect_shape());
+}
+
+#[test]
+fn stale_remove_is_rejected_after_put() {
+    let mut board = Board::new();
+    let k = key(1, 1);
+    assert!(board.integrate(k, version(4, 1), Change::Put(rect_shape())));
+    assert!(!board.integrate(k, version(2, 1), Change::Remove));
+    assert_eq!(board.shape(&k).unwrap().shape, rect_shape());
+}
+
+#[test]
+fn same_ops_integrated_in_any_order_converge() {
+    let ops = [
+        (key(1, 1), version(2, 1), Change::Put(rect_shape())),
+        (key(1, 1), version(3, 1), Change::Remove),
+        (key(1, 1), version(4, 2), Change::Put(path_shape())),
+        (key(2, 1), version(5, 3), Change::Put(rect_shape())),
+        (key(2, 1), version(1, 3), Change::Remove),
+    ];
+
+    let mut forward = Board::new();
+    for (k, v, change) in &ops {
+        forward.integrate(*k, *v, change.clone());
+    }
+    let mut reverse = Board::new();
+    for (k, v, change) in ops.iter().rev() {
+        reverse.integrate(*k, *v, change.clone());
+    }
+
+    assert_eq!(sorted_state(&forward), sorted_state(&reverse));
+    let (shapes, tombstones) = sorted_state(&forward);
+    assert_eq!(
+        shapes,
+        vec![
+            ShapeEntry {
+                key: key(1, 1),
+                version: version(4, 2),
+                shape: path_shape(),
+            },
+            ShapeEntry {
+                key: key(2, 1),
+                version: version(5, 3),
+                shape: rect_shape(),
+            },
+        ]
+    );
+    assert!(tombstones.is_empty());
 }
 
 #[test]
@@ -143,23 +320,46 @@ fn replace_all_swaps_state_and_raises_the_clock() {
     board.integrate(key(1, 2), version(9, 1), Change::Remove);
     board.observe(version(9, 1));
 
-    board.replace_all(vec![ShapeEntry {
-        key: key(2, 1),
-        version: version(6, 2),
-        shape: path_shape(),
-    }]);
+    board.replace_all(
+        vec![ShapeEntry {
+            key: key(2, 1),
+            version: version(6, 2),
+            shape: path_shape(),
+        }],
+        vec![],
+    );
 
     assert!(board.shape(&key(1, 1)).is_none());
     assert!(board.shape(&key(2, 1)).is_some());
     assert_eq!(board.lamport(), 10);
     assert!(board.next_version(1).lamport > 10);
 
-    board.replace_all(vec![ShapeEntry {
-        key: key(2, 2),
-        version: version(50, 2),
-        shape: path_shape(),
-    }]);
+    board.replace_all(
+        vec![ShapeEntry {
+            key: key(2, 2),
+            version: version(50, 2),
+            shape: path_shape(),
+        }],
+        vec![],
+    );
     assert!(board.next_version(1).lamport > 50);
+}
+
+#[test]
+fn replace_all_seeds_tombstones_from_the_snapshot() {
+    let mut board = Board::new();
+    board.replace_all(
+        vec![ShapeEntry {
+            key: key(2, 1),
+            version: version(3, 2),
+            shape: rect_shape(),
+        }],
+        vec![(key(1, 1), version(7, 1))],
+    );
+
+    assert!(!board.integrate(key(1, 1), version(6, 1), Change::Put(rect_shape())));
+    assert!(board.shape(&key(1, 1)).is_none());
+    assert_eq!(board.lamport(), 7);
 }
 
 #[test]

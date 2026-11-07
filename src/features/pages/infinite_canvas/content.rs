@@ -1,8 +1,9 @@
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::{App, Bounds, Context, Hsla, Pixels, Point, point, px, size};
+use gpui_kit::{App, Bounds, Context, Hsla, Pixels, Point, WindowTextSystem, point, px, size};
 
 use crate::ui::canvas::{
     CanvasDocument, CanvasGrid, CanvasShape, CanvasState, LayerId, ShapeStyle, StrokeStyle,
+    measure_text,
 };
 
 pub(crate) const NOTE_W: Pixels = px(140.);
@@ -158,6 +159,9 @@ pub(crate) fn build_field(
     let palette = note_palette(cx);
     let border = cx.theme().border;
     let text_color = cx.theme().foreground.opacity(0.9);
+    let text_system = WindowTextSystem::new(cx.text_system().clone());
+    // Regeneration keeps the HUD's grid toggle; only spacing resets.
+    let grid_visible = state.grid().visible;
     let (bodies, labels) = state.edit_document(cx, |doc: &mut CanvasDocument| {
         doc.clear();
         let bodies = doc.add_layer();
@@ -187,6 +191,7 @@ pub(crate) fn build_field(
                             spec.label.clone(),
                             px(12.),
                             text_color,
+                            measure_text(&text_system, &spec.label, px(12.)),
                         ),
                     );
                 }
@@ -210,7 +215,7 @@ pub(crate) fn build_field(
     });
     state.set_grid(
         CanvasGrid {
-            visible: true,
+            visible: grid_visible,
             spacing: px(64.),
         },
         cx,

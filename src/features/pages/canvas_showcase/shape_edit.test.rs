@@ -11,7 +11,7 @@ use crate::ui::canvas::{
 };
 
 use super::ShapesDemo;
-use super::geometry::{handle_positions, resize_bounds, scale_points};
+use super::geometry::handle_positions;
 
 const SEED_RECT: Bounds<Pixels> = Bounds {
     origin: point(px(80.), px(80.)),
@@ -151,15 +151,17 @@ fn clicking_a_shape_selects_it_and_makes_eight_handles(cx: &mut TestAppContext) 
     assert!(cx.read(|cx| state.read(cx).selected_shape_ids() == &[rect_id]));
     let handles = handle_shapes(cx, &state);
     assert_eq!(handles.len(), 8);
+    // Handles sit on the doc_bounds corners, which pad the 1px stroke by 0.5;
+    // mid handles average the corners, so their axis keeps the raw midpoint.
     let expected_origins = [
-        (76., 76.),
-        (166., 76.),
-        (256., 76.),
-        (256., 126.),
-        (256., 176.),
-        (166., 176.),
-        (76., 176.),
-        (76., 126.),
+        (75.5, 75.5),
+        (166., 75.5),
+        (256.5, 75.5),
+        (256.5, 126.),
+        (256.5, 176.5),
+        (166., 176.5),
+        (75.5, 176.5),
+        (75.5, 126.),
     ];
     for ((_, shape), (x, y)) in handles.iter().zip(expected_origins) {
         let CanvasShape::Rect { bounds, .. } = shape else {
@@ -212,15 +214,132 @@ fn move_drag_translates_the_selection_by_the_delta(cx: &mut TestAppContext) {
         &pointer((130., 110.), MouseButton::Left, Modifiers::none()),
         &tool_ctx(Some(rect_id)),
     );
+    // Second stop: the per-move translate must come from the drag snapshot,
+    // not compound onto the already-moved shape.
+    dispatch_move(
+        &state,
+        cx,
+        &pointer((145., 125.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(rect_id)),
+    );
     let origin = shape_bounds(cx, &state, rect_id).origin;
-    assert_px_eq(origin.x, SEED_RECT.origin.x + px(30.));
-    assert_px_eq(origin.y, SEED_RECT.origin.y + px(10.));
+    // shape_bounds reads doc_bounds, which pads the seeded rect's 1px stroke by 0.5.
+    assert_px_eq(origin.x, SEED_RECT.origin.x + px(45.) - px(0.5));
+    assert_px_eq(origin.y, SEED_RECT.origin.y + px(25.) - px(0.5));
+    dispatch_up(
+        &state,
+        cx,
+        &pointer((145., 125.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(rect_id)),
+    );
+}
+
+#[gpui_kit::test]
+fn move_drag_translates_every_shape_in_a_multi_selection(cx: &mut TestAppContext) {
+    let state = mounted_demo(cx);
+    let rect_id = hit_at(cx, &state, (100., 100.)).expect("rect under the click");
+    dispatch_down(
+        &state,
+        cx,
+        &pointer((100., 100.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(rect_id)),
+    );
+    let ellipse_id = hit_at(cx, &state, (400., 160.)).expect("ellipse under the click");
+    dispatch_down(
+        &state,
+        cx,
+        &pointer((400., 160.), MouseButton::Left, Modifiers::shift()),
+        &tool_ctx(Some(ellipse_id)),
+    );
+    dispatch_move(
+        &state,
+        cx,
+        &pointer((420., 170.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(ellipse_id)),
+    );
+    let rect_origin = shape_bounds(cx, &state, rect_id).origin;
+    assert_px_eq(rect_origin.x, SEED_RECT.origin.x + px(20.) - px(0.5));
+    assert_px_eq(rect_origin.y, SEED_RECT.origin.y + px(10.) - px(0.5));
+    // The seeded ellipse is filled, so its doc_bounds carries no stroke pad.
+    let ellipse_bounds = shape_bounds(cx, &state, ellipse_id);
+    assert_px_eq(ellipse_bounds.origin.x, px(320. + 20.));
+    assert_px_eq(ellipse_bounds.origin.y, px(100. + 10.));
+}
+
+#[gpui_kit::test]
+fn pointer_up_ends_every_drag_kind(cx: &mut TestAppContext) {
+    let state = mounted_demo(cx);
+    let rect_id = hit_at(cx, &state, (100., 100.)).expect("rect under the click");
+    dispatch_down(
+        &state,
+        cx,
+        &pointer((100., 100.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(rect_id)),
+    );
+    dispatch_move(
+        &state,
+        cx,
+        &pointer((130., 110.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(rect_id)),
+    );
     dispatch_up(
         &state,
         cx,
         &pointer((130., 110.), MouseButton::Left, Modifiers::none()),
         &tool_ctx(Some(rect_id)),
     );
+    let settled = shape_bounds(cx, &state, rect_id);
+    dispatch_move(
+        &state,
+        cx,
+        &pointer((260., 220.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(rect_id)),
+    );
+    let after = shape_bounds(cx, &state, rect_id);
+    assert_px_eq(after.origin.x, settled.origin.x);
+    assert_px_eq(after.origin.y, settled.origin.y);
+    assert_px_eq(after.size.width, settled.size.width);
+    assert_px_eq(after.size.height, settled.size.height);
+
+    let state = mounted_demo(cx);
+    let rect_id = hit_at(cx, &state, (100., 100.)).expect("rect under the click");
+    dispatch_down(
+        &state,
+        cx,
+        &pointer((100., 100.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(rect_id)),
+    );
+    let handle_id = hit_at(cx, &state, (80., 80.)).expect("top-left handle");
+    dispatch_down(
+        &state,
+        cx,
+        &pointer((80., 80.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(handle_id)),
+    );
+    dispatch_move(
+        &state,
+        cx,
+        &pointer((60., 60.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(handle_id)),
+    );
+    dispatch_up(
+        &state,
+        cx,
+        &pointer((60., 60.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(handle_id)),
+    );
+    let settled = shape_bounds(cx, &state, rect_id);
+    dispatch_move(
+        &state,
+        cx,
+        &pointer((250., 200.), MouseButton::Left, Modifiers::none()),
+        &tool_ctx(Some(handle_id)),
+    );
+    let after = shape_bounds(cx, &state, rect_id);
+    assert_px_eq(after.origin.x, settled.origin.x);
+    assert_px_eq(after.origin.y, settled.origin.y);
+    assert_px_eq(after.size.width, settled.size.width);
+    assert_px_eq(after.size.height, settled.size.height);
 }
 
 #[gpui_kit::test]
@@ -275,10 +394,12 @@ fn resize_drag_through_the_top_left_handle_clamps_at_the_minimum(cx: &mut TestAp
         &tool_ctx(Some(handle_id)),
     );
     let bounds = shape_bounds(cx, &state, rect_id);
-    assert_px_eq(bounds.origin.x, px(60.));
-    assert_px_eq(bounds.origin.y, px(60.));
-    assert_px_eq(bounds.size.width, px(200.));
-    assert_px_eq(bounds.size.height, px(120.));
+    // The drag resizes the doc_bounds frame, so the read pads the 1px stroke
+    // again: the raw bounds land at (60,60) 200.5x120.5.
+    assert_px_eq(bounds.origin.x, px(59.5));
+    assert_px_eq(bounds.origin.y, px(59.5));
+    assert_px_eq(bounds.size.width, px(201.5));
+    assert_px_eq(bounds.size.height, px(121.5));
     dispatch_move(
         &state,
         cx,
@@ -288,8 +409,8 @@ fn resize_drag_through_the_top_left_handle_clamps_at_the_minimum(cx: &mut TestAp
     let bounds = shape_bounds(cx, &state, rect_id);
     assert_px_eq(bounds.origin.x, px(252.));
     assert_px_eq(bounds.origin.y, px(172.));
-    assert_px_eq(bounds.size.width, px(8.));
-    assert_px_eq(bounds.size.height, px(8.));
+    assert_px_eq(bounds.size.width, px(9.));
+    assert_px_eq(bounds.size.height, px(9.));
     dispatch_up(
         &state,
         cx,
@@ -453,16 +574,20 @@ fn path_resize_does_not_compound_across_moves(cx: &mut TestAppContext) {
         Some(CanvasShape::Path { points, .. }) => points.clone(),
         _ => panic!("path stays a path"),
     });
-    let expected = scale_points(
-        &seeded_points,
-        start_bounds,
-        resize_bounds(start_bounds, 0, point(px(60.), px(360.))),
-    );
-    for (actual, expected) in resized.iter().zip(&expected) {
+    // Hand-derived: doc bounds pad the hull by the 1px half stroke, so the
+    // drag grows (99,389) 182x62 into (60,360) 221x91.
+    let (sx, sy) = (221. / 182., 91. / 62.);
+    for (actual, seeded) in resized.iter().zip(&seeded_points) {
+        let expected = (
+            60. + (seeded.x.as_f32() - 99.) * sx,
+            360. + (seeded.y.as_f32() - 389.) * sy,
+        );
         assert!(
-            (actual.x.as_f32() - expected.x.as_f32()).abs() < 0.01
-                && (actual.y.as_f32() - expected.y.as_f32()).abs() < 0.01,
-            "expected {expected:?}, got {actual:?}"
+            (actual.x.as_f32() - expected.0).abs() < 0.01
+                && (actual.y.as_f32() - expected.1).abs() < 0.01,
+            "expected ({:.3},{:.3}) from {seeded:?}, got {actual:?}",
+            expected.0,
+            expected.1
         );
     }
 }

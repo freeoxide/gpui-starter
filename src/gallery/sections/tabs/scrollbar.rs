@@ -1,7 +1,5 @@
 //! Scrollbar section, ported from the upstream `ScrollbarStory`.
 
-use std::rc::Rc;
-
 use gpui_kit::component::{
     ActiveTheme as _,
     button::{Button, DropdownButton},
@@ -21,7 +19,7 @@ const DATASETS: [&str; 4] = ["Standard", "Wide", "Stress", "Short"];
 const ITEM_HEIGHT: Pixels = px(50.);
 
 pub struct ScrollbarSection {
-    items: Rc<Vec<String>>,
+    item_count: usize,
     size_mode: usize,
     scroll_handle: UniformListScrollHandle,
 }
@@ -29,7 +27,7 @@ pub struct ScrollbarSection {
 impl ScrollbarSection {
     pub fn view(_window: &mut Window, cx: &mut App) -> Entity<Self> {
         cx.new(|_| Self {
-            items: Rc::new((0..5000).map(|i| format!("Item {i}")).collect()),
+            item_count: 5000,
             size_mode: 0,
             scroll_handle: UniformListScrollHandle::new(),
         })
@@ -37,13 +35,13 @@ impl ScrollbarSection {
 
     fn change_dataset(&mut self, mode: usize, cx: &mut Context<Self>) {
         self.size_mode = mode;
-        let count = match mode {
+        // Row text is a pure function of the index, so only the count changes.
+        self.item_count = match mode {
             0 => 5000,
             1 => 100,
             2 => 500_000,
             _ => 5,
         };
-        self.items = Rc::new((0..count).map(|i| format!("Item {i}")).collect());
         cx.notify();
     }
 }
@@ -102,29 +100,25 @@ impl Render for ScrollbarSection {
                     .border_1()
                     .border_color(cx.theme().border)
                     .child(
-                        uniform_list("scrollbar-list", self.items.len(), {
-                            let items = self.items.clone();
-                            move |visible_range, _, cx| {
-                                let mut elements = Vec::with_capacity(visible_range.len());
-                                for ix in visible_range {
-                                    let item = &items[ix];
-                                    elements.push(
-                                        div()
-                                            .h(ITEM_HEIGHT)
-                                            .pt_1()
-                                            .items_center()
-                                            .justify_center()
-                                            .text_sm()
-                                            .child(
-                                                div()
-                                                    .p_2()
-                                                    .bg(cx.theme().secondary)
-                                                    .child(item.to_string()),
-                                            ),
-                                    );
-                                }
-                                elements
+                        uniform_list("scrollbar-list", self.item_count, |visible_range, _, cx| {
+                            let mut elements = Vec::with_capacity(visible_range.len());
+                            for ix in visible_range {
+                                elements.push(
+                                    div()
+                                        .h(ITEM_HEIGHT)
+                                        .pt_1()
+                                        .items_center()
+                                        .justify_center()
+                                        .text_sm()
+                                        .child(
+                                            div()
+                                                .p_2()
+                                                .bg(cx.theme().secondary)
+                                                .child(format!("Item {ix}")),
+                                        ),
+                                );
                             }
+                            elements
                         })
                         .py_1()
                         .px_3()

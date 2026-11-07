@@ -23,3 +23,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     color_picker::register(sections, window, cx);
     rating::register(sections, window, cx);
 }
+
+#[cfg(test)]
+#[path = "mod.test.rs"]
+mod mod_test;

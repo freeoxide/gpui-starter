@@ -65,10 +65,9 @@ pub fn slot(id: PaletteId, cx: &App) -> Option<PersistedPalette> {
 /// Replace `id`'s persisted slot. The one writer shape for this feature.
 pub fn save_slot(entry: PersistedPalette, cx: &mut App) {
     crate::app_state::update_config(cx, |config| {
-        let id = entry.id.clone();
         let v = &mut config.floating_palettes;
-        v.retain(|p| p.id != id);
-        v.push(entry.clone());
+        v.retain(|p| p.id != entry.id);
+        v.push(entry);
     });
 }
 

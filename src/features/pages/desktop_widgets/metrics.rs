@@ -26,13 +26,6 @@ impl MetricsWidget {
         Self { metrics }
     }
 
-    #[cfg(test)]
-    pub(crate) fn new_for_test(cx: &mut Context<Self>) -> Self {
-        let metrics = cx.new(|_| MetricsState::new());
-        cx.observe(&metrics, |_, _, cx| cx.notify()).detach();
-        Self { metrics }
-    }
-
     pub(crate) fn view(window: &mut Window, cx: &mut App) -> Entity<MetricsWidget> {
         cx.new(|cx| Self::new(window, cx))
     }
@@ -40,7 +33,7 @@ impl MetricsWidget {
 
 impl Render for MetricsWidget {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let samples: Vec<Sample> = self.metrics.read(cx).samples().iter().cloned().collect();
+        let samples: Vec<Sample> = self.metrics.read(cx).samples().iter().copied().collect();
         let last = samples.last().copied();
         let muted = cx.theme().muted_foreground;
         let spark_color = cx.theme().chart_2;

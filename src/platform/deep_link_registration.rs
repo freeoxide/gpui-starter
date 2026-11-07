@@ -8,8 +8,8 @@
 
 use std::path::Path;
 
-use crate::platform::process::single_instance::SCHEME;
 use crate::platform::toast_identity::same_path;
+use crate::shell::route::APP_URL_SCHEME;
 
 const LOG: &str = "gpui_starter::deep_link_registration";
 
@@ -22,7 +22,7 @@ pub fn ensure_deep_link_registered() -> Result<(), String> {
     let command = format!("\"{}\" \"%1\"", exe.display());
 
     let scheme = windows_registry::CURRENT_USER
-        .create(format!("Software\\Classes\\{}", scheme_key()))
+        .create(format!("Software\\Classes\\{APP_URL_SCHEME}"))
         .map_err(|err| format!("create scheme key: {err}"))?;
     // RegCreateKeyExW creates one level per call, so walk down to the command key.
     let command_key = scheme
@@ -32,8 +32,7 @@ pub fn ensure_deep_link_registered() -> Result<(), String> {
         .map_err(|err| format!("create command key: {err}"))?;
 
     // Self-healing fast path: a stored command already pointing at this exe is
-    // left untouched; anything else (first run, exe moved between dev target
-    // dirs, garbage) is rewritten.
+    // left untouched; anything else is rewritten.
     if let Ok(existing) = command_key.get_string("")
         && command_matches(&existing, &exe)
     {
@@ -50,12 +49,6 @@ pub fn ensure_deep_link_registered() -> Result<(), String> {
         .map_err(|err| format!("write scheme values: {err}"))?;
     tracing::info!(target: LOG, command = %command, "deep-link scheme registered for the current exe");
     Ok(())
-}
-
-/// Registry key name for the scheme: `gpui-starter://` minus `://`. Derived,
-/// never a second copy of the scheme string.
-fn scheme_key() -> String {
-    SCHEME.strip_suffix("://").unwrap_or(SCHEME).to_string()
 }
 
 /// A stored `shell\open\command` value matches when its quoted path is the

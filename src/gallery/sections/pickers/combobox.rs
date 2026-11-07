@@ -146,12 +146,11 @@ impl SearchableListDelegate for Max2Delegate {
                     selection.retain(|(ix, _)| ix != index);
                 }
                 SearchableListChange::Select { index } => {
-                    if selection.len() < 2 {
-                        if let Some(item) = self.item(*index) {
-                            if !selection.iter().any(|(ix, _)| ix == index) {
-                                selection.push((*index, *item));
-                            }
-                        }
+                    if selection.len() < 2
+                        && let Some(item) = self.item(*index)
+                        && !selection.iter().any(|(ix, _)| ix == index)
+                    {
+                        selection.push((*index, *item));
                     }
                 }
             }
@@ -479,7 +478,7 @@ impl ComboboxSection {
 }
 
 impl Render for ComboboxSection {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let multi_badges_state = self.multi_badges.clone();
 
         v_flex()
@@ -543,7 +542,7 @@ impl Render for ComboboxSection {
                                 let (icon, title) = match trigger.selection() {
                                     [] => (None, None),
                                     [(_index, item)] => {
-                                        (Some(item.icon.clone()), Some(item.title().clone()))
+                                        (Some(item.icon.clone()), Some(item.title()))
                                     }
                                     items => (
                                         None,
@@ -625,7 +624,10 @@ impl Render for ComboboxSection {
                                             search_query.to_string(),
                                         ]);
 
-                                        drop(items.perform_search(&search_query, window, cx));
+                                        // SearchableVec completes synchronously; hold the Task
+                                        // to scope end so a future async delegate cannot cancel it.
+                                        let _search =
+                                            items.perform_search(&search_query, window, cx);
 
                                         state.update(cx, |state, cx| {
                                             state.set_items(items, window, cx);
@@ -647,7 +649,7 @@ impl Render for ComboboxSection {
                             .render_trigger(|trigger, _, cx| {
                                 let title = match trigger.selection() {
                                     [] => None,
-                                    [(_index, item)] => Some(item.title().clone()),
+                                    [(_index, item)] => Some(item.title()),
                                     items => {
                                         Some(SharedString::new(format!("{} selected", items.len())))
                                     }
@@ -740,8 +742,8 @@ impl Render for ComboboxSection {
                                                         .text_xs()
                                                         .child(div().truncate().child(item))
                                                         .child(
-                                                            Button::new(SharedString::from(
-                                                                format!("combobox-remove-{item}"),
+                                                            Button::new(format!(
+                                                                "combobox-remove-{item}"
                                                             ))
                                                             .ghost()
                                                             .xsmall()
@@ -857,7 +859,7 @@ impl Render for ComboboxSection {
                                                 .px_1()
                                                 .text_xs()
                                                 .text_color(cx.theme().muted_foreground)
-                                                .child(format!("+{} more", hidden)),
+                                                .child(format!("+{hidden} more")),
                                         )
                                     })
                                     .into_any_element()
@@ -933,21 +935,11 @@ impl Render for ComboboxSection {
                             ))
                             .child(format!(
                                 "multi_badges: {:?}",
-                                self.multi_badges
-                                    .read(cx)
-                                    .selected_values()
-                                    .iter()
-                                    .map(|v| v.to_string())
-                                    .collect::<Vec<_>>()
+                                self.multi_badges.read(cx).selected_values()
                             ))
                             .child(format!(
                                 "multi_count: {:?}",
-                                self.multi_count
-                                    .read(cx)
-                                    .selected_values()
-                                    .iter()
-                                    .map(|v| v.to_string())
-                                    .collect::<Vec<_>>()
+                                self.multi_count.read(cx).selected_values()
                             )),
                     ),
             )

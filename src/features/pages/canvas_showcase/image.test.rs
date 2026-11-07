@@ -1,33 +1,30 @@
-use gpui_kit::{DevicePixels, TestAppContext, size};
+use gpui_kit::TestAppContext;
 
 use crate::ui::canvas::CanvasShape;
 
-use super::{ImageDemo, SWATCH, checker_swatch, render_image};
+use super::{CELL, ImageDemo, SWATCH, checker_swatch, render_image};
 
 #[test]
-fn checker_swatch_writes_bgra_bytes_at_exact_size() {
+fn checker_swatch_writes_rgba_bytes_at_exact_size() {
     let swatch = checker_swatch();
     assert_eq!(swatch.as_raw().len(), (SWATCH * SWATCH * 4) as usize);
-    assert_eq!(swatch.get_pixel(0, 0).0, [60, 120, 230, 255]);
-    assert_eq!(swatch.get_pixel(12, 0).0, [170, 90, 40, 255]);
+    assert_eq!(swatch.get_pixel(0, 0).0, [230, 120, 60, 255]);
+    assert_eq!(swatch.get_pixel(12, 0).0, [40, 90, 170, 255]);
 }
 
 #[test]
-fn render_image_reports_the_swatch_dimensions() {
+fn render_image_hands_bgra_bytes_to_the_renderer() {
     let image = render_image();
-    assert_eq!(image.size(0), size(DevicePixels(96), DevicePixels(96)));
-}
-
-#[test]
-fn each_render_image_call_gets_a_distinct_id() {
-    let a = render_image();
-    let b = render_image();
-    assert_ne!(a.id, b.id);
-    assert_ne!(a, b);
+    let bytes = image.as_bytes(0).expect("one frame");
+    assert_eq!(bytes.len(), (SWATCH * SWATCH * 4) as usize);
+    // RenderImage samples BGRA, so the swatch's RGBA cells arrive swapped.
+    assert_eq!(&bytes[0..4], &[60, 120, 230, 255][..]);
+    let cell = (CELL * 4) as usize;
+    assert_eq!(&bytes[cell..cell + 4], &[170, 90, 40, 255][..]);
 }
 
 #[gpui_kit::test]
-fn seed_places_two_placements_of_one_shared_image(cx: &mut TestAppContext) {
+async fn seed_places_two_placements_of_one_shared_image(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
     let handle = cx.add_window(|_, cx| ImageDemo::new(cx));
     let demo = handle.root(cx).expect("demo root entity");

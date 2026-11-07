@@ -21,7 +21,7 @@ pub fn set_locale(locale: &str, cx: &mut App) {
     let _ = gpui_form::i18n::change_locale(cx, language);
     cx.set_global::<LocaleState>(LocaleState(SharedString::from(locale.to_string())));
     crate::app_state::update_config(cx, |config| {
-        config.locale = locale.to_string();
+        config.locale = Some(locale.to_string());
     });
     cx.refresh_windows();
 }

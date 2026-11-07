@@ -1,16 +1,24 @@
 use std::{
+    fs,
     io::{BufRead, ErrorKind, Write},
-    sync::mpsc,
+    path::Path,
+    sync::{Mutex, mpsc},
     time::Duration,
 };
 
 use tempfile::tempdir;
 
 use super::{
-    AcquireOutcome, MAX_LINE_BYTES, SCHEME, acquire_instance_lock, append_forwarded_link,
-    create_forwarder_listener, drain_forwarded_links, link_path_for_log, lock_file_path,
-    read_bounded_line, resolve_ipc_name, retry_until_single, send_forwarded_link_via_ipc,
+    AcquireOutcome, ForwardOutcome, MAX_LINE_BYTES, RUNTIME_DIR_ENV, acquire_instance_lock,
+    append_forwarded_link, create_forwarder_listener, drain_forwarded_links, forward_deep_link,
+    initial_deep_link, link_path_for_log, lock_file_path, queue_file_path, read_bounded_line,
+    request_raise, resolve_ipc_name, retry_until_single, send_forwarded_link_via_ipc,
 };
+use crate::ipc::{
+    ForwardedCommand, ForwardedResponse,
+    rpc::{decode_request, encode_line},
+};
+use crate::shell::route::APP_URL_SCHEME;
 use interprocess::local_socket::{GenericNamespaced, ListenerOptions, prelude::*};
 
 #[test]
@@ -30,6 +38,29 @@ fn forwarded_links_roundtrip_in_order() {
         ]
     );
     assert!(drain_forwarded_links(&queue).is_empty());
+}
+
+#[cfg(target_family = "unix")]
+#[test]
+fn drain_moves_a_planted_symlink_aside_without_clobbering_its_target() {
+    let dir = tempdir().expect("tempdir");
+    let victim = dir.path().join("victim.log");
+    std::fs::write(&victim, "sentinel").expect("write victim");
+    let queue = dir.path().join("forwarded-deep-links.queue");
+    std::os::unix::fs::symlink(&victim, &queue).expect("plant symlink");
+
+    let _links = drain_forwarded_links(&queue);
+
+    assert_eq!(
+        std::fs::read_to_string(&victim).expect("victim survives"),
+        "sentinel",
+        "the planted symlink's target must not be clobbered"
+    );
+    assert!(!queue.exists(), "the symlink itself is what gets removed");
+    assert!(
+        !dir.path().join("forwarded-deep-links.drained").exists(),
+        "the drained copy must be cleaned up"
+    );
 }
 
 #[test]
@@ -53,12 +84,118 @@ fn forwards_link_over_ipc() {
         }
     });
 
-    let sent = format!("{SCHEME}settings");
+    let sent = format!("{APP_URL_SCHEME}://settings");
     send_forwarded_link_via_ipc(&unique_name, &sent).expect("send via ipc");
     let received = rx
         .recv_timeout(Duration::from_secs(3))
         .expect("receive forwarded link");
     assert_eq!(received, sent);
+}
+
+#[test]
+fn busy_link_is_delivered_when_the_primary_listens() {
+    if !GenericNamespaced::is_supported() {
+        return;
+    }
+    let unique_name = format!("com.gpui-starter.tests.{}", uuid::Uuid::new_v4());
+    let name = resolve_ipc_name(&unique_name).expect("resolve name");
+    let listener = ListenerOptions::new()
+        .name(name)
+        .create_sync()
+        .expect("create listener");
+    let (tx, rx) = mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        if let Some(Ok(conn)) = listener.incoming().next() {
+            let mut reader = std::io::BufReader::new(conn);
+            let mut line = String::new();
+            let _ = reader.read_line(&mut line);
+            let _ = tx.send(line.trim().to_string());
+        }
+    });
+
+    let link = format!("{APP_URL_SCHEME}://settings");
+    let outcome = forward_deep_link(Some(&unique_name), None, &link);
+
+    assert_eq!(outcome, ForwardOutcome::Sent);
+    let received = rx
+        .recv_timeout(Duration::from_secs(3))
+        .expect("listener read the frame");
+    assert_eq!(received, link);
+}
+
+#[test]
+fn busy_link_falls_back_to_the_queue_when_ipc_fails() {
+    if !GenericNamespaced::is_supported() {
+        return;
+    }
+    let dir = tempdir().expect("tempdir");
+    let queue = dir.path().join("forwarded-deep-links.queue");
+    let dead = format!("com.gpui-starter.tests.dead.{}", uuid::Uuid::new_v4());
+    let link = format!("{APP_URL_SCHEME}://settings");
+
+    let outcome = forward_deep_link(Some(&dead), Some(&queue), &link);
+
+    assert_eq!(outcome, ForwardOutcome::Queued);
+    assert_eq!(
+        fs::read_to_string(&queue).expect("queue written").trim(),
+        link
+    );
+}
+
+#[test]
+fn busy_link_is_dropped_with_no_socket_or_no_queue() {
+    let link = format!("{APP_URL_SCHEME}://settings");
+    assert_eq!(
+        forward_deep_link(None, Some(Path::new("/unused")), &link),
+        ForwardOutcome::Dropped,
+        "no socket path means the link goes nowhere"
+    );
+    if GenericNamespaced::is_supported() {
+        let dead = format!("com.gpui-starter.tests.dead.{}", uuid::Uuid::new_v4());
+        assert_eq!(
+            forward_deep_link(Some(&dead), None, &link),
+            ForwardOutcome::Dropped,
+            "a failed send with no queue drops the link"
+        );
+    }
+}
+
+#[test]
+fn a_second_launch_raises_the_running_window_over_ipc() {
+    if !GenericNamespaced::is_supported() {
+        return;
+    }
+    let unique_name = format!("com.gpui-starter.tests.{}", uuid::Uuid::new_v4());
+    let name = resolve_ipc_name(&unique_name).expect("resolve name");
+    let listener = ListenerOptions::new()
+        .name(name)
+        .create_sync()
+        .expect("create listener");
+    let (tx, rx) = mpsc::channel::<ForwardedCommand>();
+    std::thread::spawn(move || {
+        let Some(Ok(mut conn)) = listener.incoming().next() else {
+            return;
+        };
+        let frame = match read_bounded_line(&conn) {
+            Ok(Some(line)) => line,
+            _ => return,
+        };
+        if let Some(req) = decode_request(&frame) {
+            let _ = tx.send(req.command);
+            if let Ok(reply) = encode_line(&ForwardedResponse::ok(req.id)) {
+                let _ = conn.write_all(reply.as_bytes());
+            }
+        }
+    });
+
+    assert!(
+        request_raise(&unique_name),
+        "the primary must ack the raise"
+    );
+    let command = rx
+        .recv_timeout(Duration::from_secs(3))
+        .expect("raise request arrived");
+    assert_eq!(command, ForwardedCommand::ShowWindow);
 }
 
 /// Listener plus a connected client on a throwaway name; the reader runs on
@@ -73,7 +210,10 @@ fn bounded_line_harness(payload: usize) -> Option<String> {
     let (tx, rx) = mpsc::channel::<Option<String>>();
     std::thread::spawn(move || {
         let conn = listener.incoming().next().and_then(|c| c.ok());
-        let _ = tx.send(conn.as_ref().and_then(read_bounded_line));
+        let _ = tx.send(
+            conn.as_ref()
+                .and_then(|c| read_bounded_line(c).ok().flatten()),
+        );
     });
 
     let mut client = interprocess::local_socket::Stream::connect(
@@ -184,6 +324,23 @@ fn retry_failed_short_circuits_without_sleeping() {
 }
 
 #[test]
+fn initial_deep_link_takes_the_first_scheme_argument() {
+    let first = format!("{APP_URL_SCHEME}://settings?x=1");
+    let args = vec![
+        "/usr/bin/gpui-starter".to_string(),
+        "--flag".to_string(),
+        first.clone(),
+        format!("{APP_URL_SCHEME}://form"),
+    ];
+    assert_eq!(initial_deep_link(&args).as_deref(), Some(first.as_str()));
+    assert_eq!(
+        initial_deep_link(&["/usr/bin/gpui-starter".to_string()]),
+        None,
+        "argv[0] must never read as a link"
+    );
+}
+
+#[test]
 fn log_path_strips_the_query_and_keeps_plain_links() {
     assert_eq!(
         link_path_for_log("gpui-starter://auth/callback?code=x&state=y"),
@@ -195,8 +352,53 @@ fn log_path_strips_the_query_and_keeps_plain_links() {
     );
 }
 
+// Env mutation is process-global; the seam test and the pinned-path test
+// below read env-derived paths and must not race each other.
+static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+/// Removes the var on drop so a panic cannot leak the seam into other tests.
+struct EnvGuard(&'static str);
+
+impl EnvGuard {
+    fn set(name: &'static str, value: &Path) -> Self {
+        unsafe { std::env::set_var(name, value) };
+        Self(name)
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        unsafe { std::env::remove_var(self.0) };
+    }
+}
+
+#[test]
+fn runtime_dir_env_redirects_the_single_instance_artifacts() {
+    let _guard = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let dir = tempdir().expect("tempdir");
+    let _seam = EnvGuard::set(RUNTIME_DIR_ENV, dir.path());
+
+    let queue = queue_file_path().expect("seam supplies the queue");
+    assert_eq!(
+        queue,
+        dir.path()
+            .join("runtime")
+            .join("forwarded-deep-links.queue")
+    );
+    let lock = lock_file_path().expect("seam supplies the lock");
+    assert!(
+        lock.starts_with(dir.path()),
+        "the lock must isolate under the seam too"
+    );
+}
+
 #[test]
 fn lock_file_is_pinned_to_the_per_user_cache_dir() {
+    let _guard = ENV_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let path = lock_file_path().expect("a per-user dir must resolve in tests");
     assert!(
         path.is_absolute(),

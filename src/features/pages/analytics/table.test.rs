@@ -65,10 +65,14 @@ async fn page_sort_ascending_orders_page_strings(cx: &mut TestAppContext) {
         .unwrap();
     cx.read(|cx| {
         let delegate = entity.read(cx).delegate();
-        let last = delegate.rows_count(cx) - 1;
-        let first = delegate.row(0).unwrap().page.to_string();
-        let last_page = delegate.row(last).unwrap().page.to_string();
-        assert!(first <= last_page);
+        let pages: Vec<String> = (0..delegate.rows_count(cx))
+            .map(|ix| delegate.row(ix).unwrap().page.to_string())
+            .collect();
+        assert_eq!(pages.len(), 48);
+        assert!(
+            pages.windows(2).all(|pair| pair[0] <= pair[1]),
+            "every adjacent pair must be ordered: {pages:?}"
+        );
     });
 }
 
@@ -96,6 +100,36 @@ async fn key_at_round_trips_into_channel_series(cx: &mut TestAppContext) {
     cx.read(|cx| {
         let delegate = entity.read(cx).delegate();
         assert_eq!(delegate.row_ix_for_key(&key), Some(0));
+    });
+}
+
+#[gpui_kit::test]
+async fn keys_disambiguate_sibling_channels_of_the_same_page(cx: &mut TestAppContext) {
+    let table = load_table(cx);
+    let entity = table.root(cx).unwrap();
+    let (organic_ix, paid_ix) = cx.read(|cx| {
+        let delegate = entity.read(cx).delegate();
+        let find = |channel: &str| {
+            (0..delegate.rows_count(cx))
+                .find(|&ix| {
+                    let row = delegate.row(ix).unwrap();
+                    row.page == "/dashboard" && row.channel == channel
+                })
+                .unwrap_or_else(|| panic!("/dashboard {channel} row must exist"))
+        };
+        (find("organic"), find("paid"))
+    });
+    cx.read(|cx| {
+        let delegate = entity.read(cx).delegate();
+        let organic = delegate.key_at(organic_ix).expect("organic key");
+        let paid = delegate.key_at(paid_ix).expect("paid key");
+        assert_eq!(organic.page, paid.page);
+        assert_ne!(
+            organic, paid,
+            "sibling channels of one page must never share a key"
+        );
+        assert_eq!(delegate.row_ix_for_key(&organic), Some(organic_ix));
+        assert_eq!(delegate.row_ix_for_key(&paid), Some(paid_ix));
     });
 }
 

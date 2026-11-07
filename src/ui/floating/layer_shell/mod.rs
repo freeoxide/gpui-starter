@@ -9,24 +9,16 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
 mod defer;
-mod passthrough;
 mod spec;
 pub(crate) mod state;
 #[cfg(target_os = "linux")]
 pub(crate) mod wayland;
 
 pub use defer::spawn_floating_after_displays;
-pub use passthrough::set_input_passthrough;
-pub use spec::{Edge4, FloatSurface, LayerShellSpec, WidgetKeyboardInteractivity, WidgetLayer};
+pub use spec::{FloatSurface, LayerShellSpec, WidgetLayer};
+pub use state::init;
 #[cfg(target_os = "linux")]
 pub use wayland::is_layer_shell_unsupported;
-
-/// Called once from `floating::init`. Registers the two capability rows
-/// for the current platform and session; idempotent.
-pub use state::init;
-
-pub const CAPABILITY_LAYER_SHELL_WIDGETS: &str = "layer_shell_widgets";
-pub const CAPABILITY_LAYER_SHELL_INPUT_PASSTHROUGH: &str = "layer_shell_input_passthrough";
 
 pub(crate) const LOG: &str = "gpui_starter::ui::floating::layer_shell";
 

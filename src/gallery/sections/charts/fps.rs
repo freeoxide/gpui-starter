@@ -6,6 +6,7 @@
 use gpui_kit::base::ElementExt as _;
 use gpui_kit::component::{ActiveTheme as _, Sizable as _, button::Button, h_flex, v_flex};
 use gpui_kit::*;
+use std::rc::Rc;
 
 use crate::gallery::registry::GallerySection;
 
@@ -15,13 +16,9 @@ const HILBERT_SIZE: f32 = 200.;
 const HILBERT_ITERATIONS: u32 = 1;
 const SUBDIVISIONS: usize = 6;
 
-/// How far the curve reaches from the origin: each recursion centers a
-/// sub-cell on a corner and extends half a sub-cell out, 1.5x the half size.
-const HILBERT_EXTENT: f32 = HILBERT_SIZE / 2. * 1.5;
-
-/// Fraction of a grid cell the curve may fill; covers the spline's ~8%
-/// overshoot and the perspective divide's ~1.32 near-face magnification.
-const CELL_FILL: f32 = 0.68;
+/// Fraction of a grid cell the curve's circumscribed circle may fill; the
+/// remainder covers the 1px stroke and float error.
+const CELL_FILL: f32 = 0.96;
 
 /// Points per drawn path. A path carries one color, so the gradient is built
 /// from short runs; GPUI has no per-vertex colors.
@@ -53,9 +50,12 @@ impl Vec3 {
 
 struct HilbertScene {
     /// The spline, shared by every curve on screen.
-    points: Vec<Vec3>,
+    points: Rc<Vec<Vec3>>,
+    /// The spline's true circumscribed radius, measured rather than assumed:
+    /// the bounding cube's corners sit sqrt(3) times farther out than a face.
+    curve_radius: f32,
     /// Vertex colors for the demo's three schemes, indexed by scheme.
-    palettes: [Vec<Hsla>; 3],
+    palettes: Rc<[Vec<Hsla>; 3]>,
     curves: usize,
     /// Where the view is being pulled to, and where it currently is.
     cursor_tilt: Point<f32>,
@@ -72,15 +72,20 @@ impl HilbertScene {
     }
 
     fn new() -> Self {
-        let points = hilbert_spline();
-        let palettes = [
+        let points = Rc::new(hilbert_spline());
+        let curve_radius = points
+            .iter()
+            .map(|v| (v.x * v.x + v.y * v.y + v.z * v.z).sqrt())
+            .fold(0., f32::max);
+        let palettes = Rc::new([
             color_scheme(&points, Scheme::CyanByX),
             color_scheme(&points, Scheme::MagentaByY),
             color_scheme(&points, Scheme::Rainbow),
-        ];
+        ]);
 
         Self {
             points,
+            curve_radius,
             palettes,
             // The original lays out six curves in a 2x3 grid.
             curves: 6,
@@ -94,6 +99,7 @@ impl HilbertScene {
     fn render_curves(&self) -> impl IntoElement {
         let points = self.points.clone();
         let palettes = self.palettes.clone();
+        let fit_diameter = 2. * max_projected_radius(self.curve_radius);
         let curves = self.curves;
         let tilt = self.tilt;
         let spin = self.frame as f32 / FRAMES_PER_SECOND * 0.35;
@@ -108,9 +114,10 @@ impl HilbertScene {
                     bounds.size.width / columns as f32,
                     bounds.size.height / rows as f32,
                 );
-                let scale =
-                    (cell.width.min(cell.height).as_f32() / (HILBERT_EXTENT * 2.)) * CELL_FILL;
+                let scale = cell.width.min(cell.height).as_f32() / fit_diameter * CELL_FILL;
 
+                // One projection buffer per paint call, refilled per curve.
+                let mut projected: Vec<Point<f32>> = Vec::with_capacity(points.len());
                 for index in 0..curves {
                     let column = index % columns;
                     let row = index / columns;
@@ -123,10 +130,10 @@ impl HilbertScene {
                     let yaw = spin * direction + index as f32 * 0.4 + tilt.x;
                     let pitch = tilt.y;
 
-                    let projected: Vec<Point<f32>> = points
-                        .iter()
-                        .map(|vertex| project(*vertex, yaw, pitch, center, scale))
-                        .collect();
+                    projected.clear();
+                    for vertex in points.iter() {
+                        projected.push(project(*vertex, yaw, pitch, center, scale));
+                    }
                     paint_gradient_curve(window, &projected, &palettes[index % palettes.len()]);
                 }
             },
@@ -268,6 +275,14 @@ fn project(vertex: Vec3, yaw: f32, pitch: f32, center: Point<f32>, scale: f32) -
         center.x + x * perspective * scale,
         center.y + y * perspective * scale,
     )
+}
+
+/// Largest screen radius a point `radius` units from the origin can reach,
+/// worst over all rotations: at depth -radius²/EYE the radial extent and the
+/// perspective magnification peak together (matches a yaw/pitch sweep).
+fn max_projected_radius(radius: f32) -> f32 {
+    let radial = (EYE_DISTANCE * EYE_DISTANCE - radius * radius).max(1.);
+    radius * EYE_DISTANCE / radial.sqrt()
 }
 
 #[derive(Clone, Copy)]

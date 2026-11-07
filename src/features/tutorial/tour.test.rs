@@ -33,11 +33,8 @@ fn demo_tour_targets_are_unique_and_nonempty() {
     assert!(!tour.steps.is_empty());
     let mut targets: Vec<_> = tour.steps.iter().map(|step| step.target).collect();
     targets.sort_unstable();
-    let unique_len = {
-        targets.dedup();
-        targets.len()
-    };
-    assert_eq!(unique_len, demo_tour().steps.len());
+    targets.dedup();
+    assert_eq!(targets.len(), tour.steps.len());
 }
 
 #[test]

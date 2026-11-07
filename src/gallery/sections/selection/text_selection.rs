@@ -32,7 +32,7 @@ impl TextSelectionSection {
         }
     }
 
-    fn bubble(&self, ix: usize, text: &str, mine: bool, cx: &App) -> impl IntoElement {
+    fn bubble(ix: usize, text: &str, mine: bool, cx: &App) -> impl IntoElement {
         div().flex().when(mine, |this| this.justify_end()).child(
             div()
                 .max_w(rems(26.25))
@@ -56,21 +56,31 @@ impl Render for TextSelectionSection {
             .w_full()
             .gap_3()
             .p_4()
-            .child(self.bubble(0, "**Hello!** How can I help you today?", false, cx))
-            .child(self.bubble(
+            .child(Self::bubble(
+                0,
+                "**Hello!** How can I help you today?",
+                false,
+                cx,
+            ))
+            .child(Self::bubble(
                 1,
                 "I want to select text *across* multiple bubbles.",
                 true,
                 cx,
             ))
-            .child(self.bubble(
+            .child(Self::bubble(
                 2,
                 "Sure, drag from anywhere, even from the blank space between \
                  bubbles, then press `cmd-c` to copy everything.",
                 false,
                 cx,
             ))
-            .child(self.bubble(3, "Nice, it also keeps the top-to-bottom order.", true, cx))
+            .child(Self::bubble(
+                3,
+                "Nice, it also keeps the top-to-bottom order.",
+                true,
+                cx,
+            ))
             .child(h_flex().child(
                 Button::new("text-selection-noop").label("Clicking me must not start selection"),
             ))

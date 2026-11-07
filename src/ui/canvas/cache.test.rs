@@ -3,7 +3,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use gpui_kit::{Path, PathBuilder, Pixels, Point, black, point, px};
+use gpui_kit::{Path, PathBuilder, Pixels, Point, black, point, px, size};
 
 use super::ShapeCache;
 use crate::ui::canvas::{CanvasShape, ShapeStyle, StrokeStyle};
@@ -32,7 +32,7 @@ fn path_builds_once_per_generation_and_not_on_origin_change() {
         let content = CanvasShape::rect(
             gpui_kit::Bounds {
                 origin: point(px(0.), px(0.)),
-                size: gpui_kit::size(px(10.), px(10.)),
+                size: size(px(10.), px(10.)),
             },
             ShapeStyle::default(),
         );
@@ -60,7 +60,6 @@ fn path_builds_once_per_generation_and_not_on_origin_change() {
     assert_eq!(builds.get(), 1);
     assert_eq!(hashes.get(), 1, "same generation never rehashes");
 
-    // New generation, unchanged content: revalidated without rebuilding.
     cache.get_path(2, &key, Point::default(), &build).unwrap();
     assert_eq!(builds.get(), 1);
     assert_eq!(hashes.get(), 2);
@@ -72,14 +71,14 @@ fn path_rebuilds_when_generation_and_content_both_change() {
     let content = CanvasShape::rect(
         gpui_kit::Bounds {
             origin: point(px(0.), px(0.)),
-            size: gpui_kit::size(px(10.), px(10.)),
+            size: size(px(10.), px(10.)),
         },
         ShapeStyle::default(),
     );
     let moved = CanvasShape::rect(
         gpui_kit::Bounds {
             origin: point(px(4.), px(0.)),
-            size: gpui_kit::size(px(10.), px(10.)),
+            size: size(px(10.), px(10.)),
         },
         ShapeStyle::default(),
     );
@@ -111,7 +110,7 @@ fn returned_vertices_differ_by_exactly_the_origin_delta() {
     let content = CanvasShape::rect(
         gpui_kit::Bounds {
             origin: point(px(0.), px(0.)),
-            size: gpui_kit::size(px(10.), px(10.)),
+            size: size(px(10.), px(10.)),
         },
         ShapeStyle::default(),
     );
@@ -146,26 +145,50 @@ fn returned_vertices_differ_by_exactly_the_origin_delta() {
 
 #[test]
 fn text_key_changes_with_content_and_color() {
-    let base = CanvasShape::text(point(px(1.), px(2.)), "alpha", px(12.), black());
+    let base = CanvasShape::text(
+        point(px(1.), px(2.)),
+        "alpha",
+        px(12.),
+        black(),
+        size(px(20.), px(14.)),
+    );
     let base_key = super::shape_key(&base, 1.);
     assert_ne!(super::shape_key(&base, 2.), base_key);
     assert_ne!(
         super::shape_key(
-            &CanvasShape::text(point(px(1.), px(2.)), "beta", px(12.), black()),
+            &CanvasShape::text(
+                point(px(1.), px(2.)),
+                "beta",
+                px(12.),
+                black(),
+                size(px(20.), px(14.)),
+            ),
             1.
         ),
         base_key
     );
     assert_ne!(
         super::shape_key(
-            &CanvasShape::text(point(px(1.), px(2.)), "alpha", px(12.), gpui_kit::white()),
+            &CanvasShape::text(
+                point(px(1.), px(2.)),
+                "alpha",
+                px(12.),
+                gpui_kit::white(),
+                size(px(20.), px(14.)),
+            ),
             1.
         ),
         base_key
     );
     assert_eq!(
         super::shape_key(
-            &CanvasShape::text(point(px(1.), px(2.)), "alpha", px(12.), black()),
+            &CanvasShape::text(
+                point(px(1.), px(2.)),
+                "alpha",
+                px(12.),
+                black(),
+                size(px(20.), px(14.)),
+            ),
             1.
         ),
         base_key
@@ -213,7 +236,7 @@ fn shape_key_is_stable_for_identical_input() {
     let shape = CanvasShape::rect(
         gpui_kit::Bounds {
             origin: point(px(1.), px(2.)),
-            size: gpui_kit::size(px(30.), px(40.)),
+            size: size(px(30.), px(40.)),
         },
         ShapeStyle::default(),
     );
@@ -225,7 +248,7 @@ fn triangle_shape_key_changes_with_bounds_stroke_and_zoom() {
     let base = CanvasShape::triangle(
         gpui_kit::Bounds {
             origin: point(px(0.), px(0.)),
-            size: gpui_kit::size(px(10.), px(10.)),
+            size: size(px(10.), px(10.)),
         },
         ShapeStyle::stroked(StrokeStyle {
             width: px(2.),
@@ -238,7 +261,7 @@ fn triangle_shape_key_changes_with_bounds_stroke_and_zoom() {
     let resized = CanvasShape::triangle(
         gpui_kit::Bounds {
             origin: point(px(0.), px(0.)),
-            size: gpui_kit::size(px(20.), px(10.)),
+            size: size(px(20.), px(10.)),
         },
         ShapeStyle::stroked(StrokeStyle {
             width: px(2.),

@@ -21,12 +21,158 @@ pub(crate) fn parse_theme_key(key: &str) -> ParsedKey {
         };
     }
 
-    // The flat ThemeColor struct loses the dot hierarchy, so this table
-    // reconstructs it for the keys that carry one.
+    // The flat ThemeColor struct loses the dot hierarchy; this table restores
+    // it from ThemeConfigColors serde renames, which no rule derives
+    // (title_bar keeps its underscore, progress_bar does not).
     let (category, name, canonical) = match key {
+        // Accordion
+        "accordion" => ("Accordion", "Background", "accordion.background"),
+
         // Accent
         "accent" => ("Accent", "Background", "accent.background"),
         "accent_foreground" => ("Accent", "Foreground", "accent.foreground"),
+
+        // Button
+        "button" => ("Button", "Background", "button.background"),
+        "button_active" => ("Button", "Active Background", "button.active.background"),
+        "button_foreground" => ("Button", "Foreground", "button.foreground"),
+        "button_hover" => ("Button", "Hover Background", "button.hover.background"),
+        "button_danger" => ("Button", "Danger Background", "button.danger.background"),
+        "button_danger_active" => (
+            "Button",
+            "Danger Active Background",
+            "button.danger.active.background",
+        ),
+        "button_danger_foreground" => ("Button", "Danger Foreground", "button.danger.foreground"),
+        "button_danger_hover" => (
+            "Button",
+            "Danger Hover Background",
+            "button.danger.hover.background",
+        ),
+        "button_info" => ("Button", "Info Background", "button.info.background"),
+        "button_info_active" => (
+            "Button",
+            "Info Active Background",
+            "button.info.active.background",
+        ),
+        "button_info_foreground" => ("Button", "Info Foreground", "button.info.foreground"),
+        "button_info_hover" => (
+            "Button",
+            "Info Hover Background",
+            "button.info.hover.background",
+        ),
+        "button_primary" => ("Button", "Primary Background", "button.primary.background"),
+        "button_primary_active" => (
+            "Button",
+            "Primary Active Background",
+            "button.primary.active.background",
+        ),
+        "button_primary_foreground" => {
+            ("Button", "Primary Foreground", "button.primary.foreground")
+        }
+        "button_primary_hover" => (
+            "Button",
+            "Primary Hover Background",
+            "button.primary.hover.background",
+        ),
+        "button_secondary" => (
+            "Button",
+            "Secondary Background",
+            "button.secondary.background",
+        ),
+        "button_secondary_active" => (
+            "Button",
+            "Secondary Active Background",
+            "button.secondary.active.background",
+        ),
+        "button_secondary_foreground" => (
+            "Button",
+            "Secondary Foreground",
+            "button.secondary.foreground",
+        ),
+        "button_secondary_hover" => (
+            "Button",
+            "Secondary Hover Background",
+            "button.secondary.hover.background",
+        ),
+        "button_success" => ("Button", "Success Background", "button.success.background"),
+        "button_success_active" => (
+            "Button",
+            "Success Active Background",
+            "button.success.active.background",
+        ),
+        "button_success_foreground" => {
+            ("Button", "Success Foreground", "button.success.foreground")
+        }
+        "button_success_hover" => (
+            "Button",
+            "Success Hover Background",
+            "button.success.hover.background",
+        ),
+        "button_warning" => ("Button", "Warning Background", "button.warning.background"),
+        "button_warning_active" => (
+            "Button",
+            "Warning Active Background",
+            "button.warning.active.background",
+        ),
+        "button_warning_foreground" => {
+            ("Button", "Warning Foreground", "button.warning.foreground")
+        }
+        "button_warning_hover" => (
+            "Button",
+            "Warning Hover Background",
+            "button.warning.hover.background",
+        ),
+
+        // Description List
+        "description_list_label" => (
+            "Description List",
+            "Label Background",
+            "description_list.label.background",
+        ),
+        "description_list_label_foreground" => (
+            "Description List",
+            "Label Foreground",
+            "description_list.label.foreground",
+        ),
+
+        // Drag / Drop Target
+        "drag_border" => ("Drag", "Border", "drag.border"),
+        "drop_target" => ("Drop Target", "Background", "drop_target.background"),
+
+        // Group Box
+        "group_box" => ("Group Box", "Background", "group_box.background"),
+        "group_box_foreground" => ("Group Box", "Foreground", "group_box.foreground"),
+
+        // Link
+        "link" => ("Link", "Color", "link"),
+        "link_active" => ("Link", "Active", "link.active"),
+        "link_hover" => ("Link", "Hover", "link.hover"),
+
+        // Popover / Progress
+        "popover" => ("Popover", "Background", "popover.background"),
+        "popover_foreground" => ("Popover", "Foreground", "popover.foreground"),
+        "progress_bar" => ("Progress", "Bar Background", "progress.bar.background"),
+
+        // Scrollbar
+        "scrollbar" => ("Scrollbar", "Background", "scrollbar.background"),
+        "scrollbar_thumb" => (
+            "Scrollbar",
+            "Thumb Background",
+            "scrollbar.thumb.background",
+        ),
+        "scrollbar_thumb_hover" => (
+            "Scrollbar",
+            "Thumb Hover Background",
+            "scrollbar.thumb.hover.background",
+        ),
+
+        // Status Bar / Title Bar / Window
+        "status_bar" => ("Status Bar", "Background", "status_bar.background"),
+        "status_bar_border" => ("Status Bar", "Border", "status_bar.border"),
+        "title_bar" => ("Title Bar", "Background", "title_bar.background"),
+        "title_bar_border" => ("Title Bar", "Border", "title_bar.border"),
+        "window_border" => ("Window", "Border", "window.border"),
 
         // Primary
         "primary" => ("Primary", "Background", "primary.background"),
@@ -80,6 +226,8 @@ pub(crate) fn parse_theme_key(key: &str) -> ParsedKey {
         "table_active" => ("Table", "Active Background", "table.active.background"),
         "table_active_border" => ("Table", "Active Border", "table.active.border"),
         "table_even" => ("Table", "Even Background", "table.even.background"),
+        "table_foot" => ("Table", "Foot Background", "table.foot.background"),
+        "table_foot_foreground" => ("Table", "Foot Foreground", "table.foot.foreground"),
         "table_head" => ("Table", "Head Background", "table.head.background"),
         "table_head_foreground" => ("Table", "Head Foreground", "table.head.foreground"),
         "table_hover" => ("Table", "Hover Background", "table.hover.background"),
@@ -191,3 +339,7 @@ fn to_title_case_full(s: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
+
+#[cfg(test)]
+#[path = "mapper.test.rs"]
+mod mapper_test;

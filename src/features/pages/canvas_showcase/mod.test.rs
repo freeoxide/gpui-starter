@@ -1,7 +1,7 @@
 use gpui_kit::AppContext as _;
 
 use super::{CanvasDemo, CanvasShowcasePage};
-use crate::sidebar::Page;
+use crate::page::Page;
 
 #[test]
 fn every_showcase_key_resolves_in_the_catalog() {
@@ -45,8 +45,12 @@ fn the_page_constructs_with_every_demo_registered(cx: &mut gpui_kit::TestAppCont
     cx.read(|cx| {
         let page = page.read(cx);
         assert_eq!(page.demos.len(), CanvasDemo::ALL.len());
-        for (kind, _) in &page.demos {
-            assert!(CanvasDemo::ALL.contains(kind));
+        for (ix, (kind, _)) in page.demos.iter().enumerate() {
+            assert_eq!(
+                *kind,
+                CanvasDemo::ALL[ix],
+                "demo {ix} must sit at its ALL slot or tab labels and content desync"
+            );
         }
     });
 }

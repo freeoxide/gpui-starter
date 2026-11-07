@@ -109,7 +109,7 @@ impl BezierEditTool {
                         },
                     ),
                 )
-                .unwrap_or_default();
+                .expect("layer was just created");
             let guide_ids = [
                 doc.add_shape(
                     guides_layer,
@@ -122,7 +122,7 @@ impl BezierEditTool {
                         },
                     ),
                 )
-                .unwrap_or_default(),
+                .expect("layer was just created"),
                 doc.add_shape(
                     guides_layer,
                     CanvasShape::path(
@@ -134,7 +134,7 @@ impl BezierEditTool {
                         },
                     ),
                 )
-                .unwrap_or_default(),
+                .expect("layer was just created"),
             ];
             let handle_ids = [
                 doc.add_shape(
@@ -144,7 +144,7 @@ impl BezierEditTool {
                         ShapeStyle::filled(primary),
                     ),
                 )
-                .unwrap_or_default(),
+                .expect("layer was just created"),
                 doc.add_shape(
                     handles_layer,
                     CanvasShape::ellipse(
@@ -159,7 +159,7 @@ impl BezierEditTool {
                         ),
                     ),
                 )
-                .unwrap_or_default(),
+                .expect("layer was just created"),
                 doc.add_shape(
                     handles_layer,
                     CanvasShape::ellipse(
@@ -174,7 +174,7 @@ impl BezierEditTool {
                         ),
                     ),
                 )
-                .unwrap_or_default(),
+                .expect("layer was just created"),
                 doc.add_shape(
                     handles_layer,
                     CanvasShape::ellipse(
@@ -182,7 +182,7 @@ impl BezierEditTool {
                         ShapeStyle::filled(primary),
                     ),
                 )
-                .unwrap_or_default(),
+                .expect("layer was just created"),
             ];
             (curve_id, guide_ids, handle_ids)
         });

@@ -5,87 +5,39 @@ use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::{
-    accessibility, app_state, capabilities, crash_report, desktop_actions, error_surface,
-    lifecycle::LifecycleState, notifications, shortcuts, storage, telemetry, undo_stack,
+    accessibility, app_state,
+    capabilities::{self, Capability},
+    crash_report, desktop_actions, error_surface,
+    lifecycle::LifecycleState,
+    notifications, shortcuts, storage, telemetry, undo_stack,
 };
 
 pub struct DiagnosticsPage {
     _subscriptions: Vec<Subscription>,
 }
 
+fn track<T: Global>(window: &mut Window, cx: &mut Context<DiagnosticsPage>) -> Subscription {
+    cx.observe_global_in::<T>(window, |_, _, cx| cx.notify())
+}
+
 impl DiagnosticsPage {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let mut subscriptions = Vec::new();
-        subscriptions.push(
-            cx.observe_global_in::<app_state::AppState>(window, |_, _, cx| {
-                cx.notify();
-            }),
-        );
-        subscriptions.push(cx.observe_global_in::<LifecycleState>(window, |_, _, cx| {
-            cx.notify();
-        }));
-        subscriptions.push(
-            cx.observe_global_in::<notifications::NativeNotificationState>(window, |_, _, cx| {
-                cx.notify();
-            }),
-        );
-        subscriptions.push(cx.observe_global_in::<capabilities::CapabilityRegistry>(
-            window,
-            |_, _, cx| {
-                cx.notify();
-            },
-        ));
-        subscriptions.push(
-            cx.observe_global_in::<storage::StorageSnapshot>(window, |_, _, cx| {
-                cx.notify();
-            }),
-        );
-        subscriptions.push(cx.observe_global_in::<telemetry::TelemetrySnapshot>(
-            window,
-            |_, _, cx| {
-                cx.notify();
-            },
-        ));
-        subscriptions.push(
-            cx.observe_global_in::<desktop_actions::DesktopActionsState>(window, |_, _, cx| {
-                cx.notify();
-            }),
-        );
-        subscriptions.push(
-            cx.observe_global_in::<shortcuts::ShortcutState>(window, |_, _, cx| {
-                cx.notify();
-            }),
-        );
-        subscriptions.push(
-            cx.observe_global_in::<undo_stack::UndoState>(window, |_, _, cx| {
-                cx.notify();
-            }),
-        );
-        subscriptions.push(
-            cx.observe_global_in::<accessibility::AccessibilitySnapshot>(window, |_, _, cx| {
-                cx.notify();
-            }),
-        );
-        subscriptions.push(cx.observe_global_in::<error_surface::ErrorSurfaceState>(
-            window,
-            |_, _, cx| {
-                cx.notify();
-            },
-        ));
-        subscriptions.push(cx.observe_global_in::<crash_report::CrashReportSnapshot>(
-            window,
-            |_, _, cx| {
-                cx.notify();
-            },
-        ));
-        subscriptions.push(
-            cx.observe_global_in::<crate::services::auth_ui::AuthUiState>(window, |_, _, cx| {
-                cx.notify();
-            }),
-        );
-        Self {
-            _subscriptions: subscriptions,
-        }
+        let _subscriptions = vec![
+            track::<app_state::AppState>(window, cx),
+            track::<LifecycleState>(window, cx),
+            track::<notifications::NativeNotificationState>(window, cx),
+            track::<capabilities::CapabilityRegistry>(window, cx),
+            track::<storage::StorageSnapshot>(window, cx),
+            track::<telemetry::TelemetrySnapshot>(window, cx),
+            track::<desktop_actions::DesktopActionsState>(window, cx),
+            track::<shortcuts::ShortcutState>(window, cx),
+            track::<undo_stack::UndoState>(window, cx),
+            track::<accessibility::AccessibilitySnapshot>(window, cx),
+            track::<error_surface::ErrorSurfaceState>(window, cx),
+            track::<crash_report::CrashReportSnapshot>(window, cx),
+            track::<crate::auth_ui::AuthUiState>(window, cx),
+        ];
+        Self { _subscriptions }
     }
 }
 
@@ -128,7 +80,26 @@ impl Render for DiagnosticsPage {
                     .outline()
                     .label(crate::i18n::localize("diagnostics_copy"))
                     .on_click(|_, _, cx| {
-                        let _ = crate::desktop_actions::copy_diagnostics(cx);
+                        if let Err(error) = desktop_actions::copy_diagnostics(cx) {
+                            tracing::warn!(
+                                target: "gpui_starter::diagnostics",
+                                %error,
+                                "copy diagnostics failed"
+                            );
+                            error_surface::report(
+                                format!(
+                                    "{}: {error}",
+                                    crate::i18n::localize("command_copy_diagnostics_failed")
+                                ),
+                                crate::errors::AppErrorSeverity::Error,
+                                error_surface::ErrorCategory::System,
+                                vec![
+                                    error_surface::ErrorAction::Retry,
+                                    error_surface::ErrorAction::Dismiss,
+                                ],
+                                cx,
+                            );
+                        }
                     }),
             )
             .child(
@@ -136,7 +107,26 @@ impl Render for DiagnosticsPage {
                     .outline()
                     .label(crate::i18n::localize("diagnostics_open_logs"))
                     .on_click(|_, _, cx| {
-                        let _ = crate::desktop_actions::open_logs_folder(cx);
+                        if let Err(error) = desktop_actions::open_logs_folder(cx) {
+                            tracing::warn!(
+                                target: "gpui_starter::diagnostics",
+                                %error,
+                                "open logs folder failed"
+                            );
+                            error_surface::report(
+                                format!(
+                                    "{}: {error}",
+                                    crate::i18n::localize("command_open_logs_failed")
+                                ),
+                                crate::errors::AppErrorSeverity::Error,
+                                error_surface::ErrorCategory::Storage,
+                                vec![
+                                    error_surface::ErrorAction::OpenSettings,
+                                    error_surface::ErrorAction::Dismiss,
+                                ],
+                                cx,
+                            );
+                        }
                     }),
             )
             .child(
@@ -144,8 +134,8 @@ impl Render for DiagnosticsPage {
                     .outline()
                     .label(crate::i18n::localize("diagnostics_dismiss_latest_error"))
                     .on_click(|_, _, cx| {
-                        if let Some(error) = crate::error_surface::latest(cx) {
-                            crate::error_surface::dismiss(error.id, cx);
+                        if let Some(error) = error_surface::latest(cx) {
+                            error_surface::dismiss(error.id, cx);
                         }
                     }),
             )
@@ -154,7 +144,7 @@ impl Render for DiagnosticsPage {
                     .outline()
                     .label(crate::i18n::localize("diagnostics_retry_crash_upload"))
                     .on_click(|_, _, cx| {
-                        crate::crash_report::upload_pending_reports(cx);
+                        crash_report::upload_pending_reports(cx);
                     }),
             )
             .when(cfg!(debug_assertions), |this| {
@@ -183,9 +173,12 @@ fn row(label_key: &str, value: &str) -> Stateful<Div> {
     row_labeled(label_key, &crate::i18n::localize(label_key), value)
 }
 
-fn capability_row(name: &str, value: &str) -> Stateful<Div> {
-    let label = format!("{}:{name}", crate::i18n::localize("diagnostics_capability"));
-    row_labeled(&format!("Capability:{name}"), &label, value)
+fn capability_row(capability: Capability, value: &str) -> Stateful<Div> {
+    let label = format!(
+        "{}:{capability}",
+        crate::i18n::localize("diagnostics_capability")
+    );
+    row_labeled(&format!("Capability:{capability}"), &label, value)
 }
 
 fn row_labeled(identity: &str, label: &str, value: &str) -> Stateful<Div> {

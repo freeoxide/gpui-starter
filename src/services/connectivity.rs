@@ -17,6 +17,9 @@ pub struct ConnectivitySnapshot {
     pub probe_url: String,
     pub interfaces: Vec<String>,
     pub last_error: Option<String>,
+    /// Token of the newest spawned probe; completions carrying an older
+    /// token are stale and must not overwrite a fresher result.
+    probe_generation: u64,
 }
 
 impl Default for ConnectivitySnapshot {
@@ -26,6 +29,7 @@ impl Default for ConnectivitySnapshot {
             probe_url: "https://example.com".to_string(),
             interfaces: Vec::new(),
             last_error: None,
+            probe_generation: 0,
         }
     }
 }
@@ -58,6 +62,11 @@ pub fn check_now(cx: &mut App) {
         return;
     };
 
+    let generation = cx.update_global::<ConnectivitySnapshot, _>(|next, _| {
+        next.probe_generation += 1;
+        next.probe_generation
+    });
+
     cx.spawn(async move |cx| {
         let probe_handle = rt.spawn(async move {
             client
@@ -71,22 +80,39 @@ pub fn check_now(cx: &mut App) {
         // tokio blocking thread so it never stalls the main GPUI thread.
         let interfaces_handle = rt.spawn_blocking(read_interfaces);
 
-        let result = match probe_handle.await {
-            Ok(r) => r.map_err(|e| e.to_string()),
-            Err(e) => Err(format!("connectivity probe panicked: {e}")),
+        // Cross-runtime await: a tokio worker's wake can race the executor's
+        // park; poll with a short timer so completion never depends on that
+        // wake alone. A finished handle resolves on first poll.
+        let (result, interfaces) = loop {
+            if probe_handle.is_finished() && interfaces_handle.is_finished() {
+                let result = match probe_handle.await {
+                    Ok(r) => r.map_err(|e| e.to_string()),
+                    Err(e) => Err(format!("connectivity probe panicked: {e}")),
+                };
+                let interfaces = interfaces_handle.await.unwrap_or_else(|e| {
+                    tracing::warn!(
+                        target: "gpui_starter::connectivity",
+                        error = %e,
+                        "failed to read network interfaces"
+                    );
+                    Vec::new()
+                });
+                break (result, interfaces);
+            }
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(25))
+                .await;
         };
-
-        let interfaces = interfaces_handle.await.unwrap_or_else(|e| {
-            tracing::warn!(
-                target: "gpui_starter::connectivity",
-                error = %e,
-                "failed to read network interfaces"
-            );
-            Vec::new()
-        });
 
         cx.update(move |cx| {
             cx.update_global::<ConnectivitySnapshot, _>(|next, _cx| {
+                if next.probe_generation != generation {
+                    tracing::debug!(
+                        target: "gpui_starter::connectivity",
+                        "discarding stale connectivity probe result"
+                    );
+                    return;
+                }
                 next.interfaces = interfaces;
                 match result {
                     Ok(response) if response.status().is_success() => {
@@ -152,3 +178,7 @@ pub fn check_now(cx: &mut App) {
         "connectivity snapshot updated from navigator.onLine"
     );
 }
+
+#[cfg(test)]
+#[path = "connectivity.test.rs"]
+mod connectivity_test;

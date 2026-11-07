@@ -16,7 +16,7 @@ use gpui_kit::component::{
 use gpui_kit::{actions, prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
-use crate::audio::{AudioEngine, PEAK_COLUMNS, PlaybackStatus, WaveformPeaks};
+use crate::audio::{AudioEngine, AudioError, PEAK_COLUMNS, PlaybackStatus, WaveformPeaks};
 use crate::ui::waveform::{Waveform, WaveformMode, WaveformState};
 
 actions!(audio_page, [TogglePlayback]);
@@ -47,7 +47,7 @@ fn paint_peaks(
     cx: &App,
 ) {
     let scale = window.scale_factor();
-    let width_px = ((bounds.size.width.as_f32() * scale).round().max(1.)) as usize;
+    let width_px = (bounds.size.width.as_f32() * scale).round().max(1.) as usize;
     let played = cx.theme().primary.opacity(0.9);
     let unplayed = cx.theme().muted_foreground.opacity(0.45);
     for x in 0..width_px {
@@ -98,20 +98,13 @@ fn transport_idle(status: Option<PlaybackStatus>) -> bool {
     matches!(status, None | Some(PlaybackStatus::Loading))
 }
 
-fn error_key(error: &str) -> &'static str {
-    const OUTPUT_PREFIXES: [&str; 4] = [
-        "output failed",
-        "no output device",
-        "device unsupported",
-        "playback unavailable",
-    ];
-    if OUTPUT_PREFIXES
-        .iter()
-        .any(|prefix| error.starts_with(prefix))
-    {
-        "audio_error_output"
-    } else {
-        "audio_error_decode"
+fn error_key(error: &AudioError) -> &'static str {
+    match error {
+        AudioError::Decode(_) | AudioError::NoAudioTrack => "audio_error_decode",
+        AudioError::NoOutputDevice
+        | AudioError::UnsupportedDevice(_)
+        | AudioError::Output(_)
+        | AudioError::Unavailable => "audio_error_output",
     }
 }
 
@@ -153,13 +146,12 @@ impl AudioPage {
         let device_select =
             cx.new(|cx| SelectState::new(device_names.clone(), selected_index, window, cx));
 
-        let mut subscriptions = Vec::new();
-        subscriptions.push(cx.observe(&engine, |_, _, cx| cx.notify()));
-        subscriptions.push(cx.observe(&waveform, |_, _, cx| cx.notify()));
-        subscriptions.push(cx.observe_in(&engine, window, |this, _, window, cx| {
-            this.reconcile_devices(window, cx);
-        }));
-        subscriptions.push(
+        let subscriptions = vec![
+            cx.observe(&engine, |_, _, cx| cx.notify()),
+            cx.observe(&waveform, |_, _, cx| cx.notify()),
+            cx.observe_in(&engine, window, |this, _, window, cx| {
+                this.reconcile_devices(window, cx);
+            }),
             cx.subscribe(
                 &volume_slider,
                 |this, _, event: &SliderEvent, cx| match event {
@@ -169,17 +161,17 @@ impl AudioPage {
                     }
                 },
             ),
-        );
-        subscriptions.push(cx.subscribe(
-            &device_select,
-            |this, _, event: &SelectEvent<Vec<String>>, cx| {
-                let SelectEvent::Confirm(value) = event;
-                if let Some(name) = value.clone() {
-                    this.engine
-                        .update(cx, |engine, cx| engine.select_device(&name, cx));
-                }
-            },
-        ));
+            cx.subscribe(
+                &device_select,
+                |this, _, event: &SelectEvent<Vec<String>>, cx| {
+                    let SelectEvent::Confirm(value) = event;
+                    if let Some(name) = value {
+                        this.engine
+                            .update(cx, |engine, cx| engine.select_device(name, cx));
+                    }
+                },
+            ),
+        ];
 
         Self {
             engine,
@@ -195,16 +187,20 @@ impl AudioPage {
     }
 
     fn reconcile_devices(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let names = self
-            .engine
-            .read(cx)
-            .devices()
+        // The engine notifies ~30x/s while playing; compare without cloning.
+        let devices = self.engine.read(cx).devices();
+        let unchanged = devices.len() == self.device_names.len()
+            && devices
+                .iter()
+                .zip(&self.device_names)
+                .all(|(device, name)| device.name == *name);
+        if unchanged {
+            return;
+        }
+        let names = devices
             .iter()
             .map(|device| device.name.clone())
             .collect::<Vec<_>>();
-        if names == self.device_names {
-            return;
-        }
         self.device_select
             .update(cx, |state, cx| state.set_items(names.clone(), window, cx));
         self.device_names = names;
@@ -310,9 +306,10 @@ impl AudioPage {
 
     fn render_error_alert(&self, cx: &Context<Self>) -> Option<impl IntoElement> {
         let error = self.engine.read(cx).last_error()?;
+        let message = error.to_string();
         Some(Alert::warning(
             "audio-error-alert",
-            crate::i18n::localize_with_args(error_key(&error), &[("error", &error)]),
+            crate::i18n::localize_with_args(error_key(error), &[("error", &message)]),
         ))
     }
 
@@ -338,14 +335,12 @@ impl AudioPage {
     }
 
     fn render_overview(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let engine = self.engine.clone();
-        let position = engine.read(cx).position();
+        let position = self.engine.read(cx).position();
         let bounds_cell = self.overview_bounds.clone();
         let canvas_bounds_cell = self.overview_bounds.clone();
         let paint_engine = self.engine.clone();
         let toggle_engine = self.engine.clone();
         let seek_engine = self.engine.clone();
-        let drag_engine = self.engine.clone();
         let drag_bounds_cell = self.overview_bounds.clone();
         let expected_id = self.engine.entity_id();
 
@@ -389,12 +384,12 @@ impl AudioPage {
                             seek_engine.update(cx, |engine, cx| engine.seek_fraction(fraction, cx));
                         }
                     })
-                    .on_drag(DragSeek(self.engine.entity_id()), |drag, _, _, cx| {
+                    .on_drag(DragSeek(expected_id), |drag, _, _, cx| {
                         cx.stop_propagation();
                         cx.new(|_| drag.clone())
                     })
                     .on_drag_move(window.listener_for(
-                        &drag_engine,
+                        &self.engine,
                         move |engine, event: &DragMoveEvent<DragSeek>, _, cx| {
                             let DragSeek(id) = event.drag(cx);
                             if *id == expected_id
@@ -448,21 +443,15 @@ impl AudioPage {
                         this.engine.update(cx, |engine, cx| engine.stop(cx));
                     })),
             )
-            .child(
+            .child({
+                let time_label = format!("{} / {}", format_time(position), format_time(duration));
                 div()
                     .id("audio-time")
-                    .a11y(
-                        Role::Paragraph,
-                        format!("{} / {}", format_time(position), format_time(duration)),
-                    )
+                    .a11y(Role::Paragraph, time_label.clone())
                     .a11y_live(accesskit::Live::Polite)
                     .text_sm()
-                    .child(format!(
-                        "{} / {}",
-                        format_time(position),
-                        format_time(duration)
-                    )),
-            )
+                    .child(time_label)
+            })
             .children(status.map(|status| {
                 div()
                     .text_sm()
@@ -541,7 +530,7 @@ impl AudioPage {
     }
 
     fn playback_supported(&self, cx: &Context<Self>) -> bool {
-        match crate::capabilities::snapshot(cx).get("audio_playback") {
+        match crate::capabilities::get(crate::capabilities::Capability::AUDIO_PLAYBACK, cx) {
             Some(status) => status.supported,
             None => !cfg!(target_family = "wasm"),
         }

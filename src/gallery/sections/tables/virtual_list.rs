@@ -55,7 +55,20 @@ pub struct VirtualListSection {
     columns_count: usize,
     axis: ScrollbarAxis,
     size_mode: usize,
+    loading: bool,
     visible_range: Range<usize>,
+
+    _load_task: Task<()>,
+}
+
+/// Rows and columns each dataset mode carries, in menu order.
+fn dataset_shape(mode: usize) -> (usize, usize) {
+    match mode {
+        1 => (100, 100),
+        2 => (500_000, 100),
+        3 => (5, 10),
+        _ => (5000, 30),
+    }
 }
 
 impl VirtualListSection {
@@ -71,31 +84,42 @@ impl VirtualListSection {
                 columns_count: 100,
                 axis: ScrollbarAxis::Both,
                 size_mode: 0,
+                loading: false,
                 visible_range: (0..0),
+                _load_task: Task::ready(()),
             }
         })
     }
 
     fn change_dataset(&mut self, n: usize, cx: &mut Context<Self>) {
         self.size_mode = n;
-        if n == 0 {
-            self.items = (0..5000).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
-            self.columns_count = 30;
-        } else if n == 1 {
-            self.items = (0..100).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
-            self.columns_count = 100;
-        } else if n == 2 {
-            self.items = (0..500000)
-                .map(|i| format!("Item {}", i))
-                .collect::<Vec<_>>();
-            self.columns_count = 100;
-        } else {
-            self.items = (0..5).map(|i| format!("Item {}", i)).collect::<Vec<_>>();
-            self.columns_count = 10;
-        }
-
-        self.item_sizes = Rc::new(self.items.iter().map(|_| ITEM_SIZE).collect());
+        let (count, columns_count) = dataset_shape(n);
+        self.columns_count = columns_count;
+        self.loading = true;
         cx.notify();
+
+        // The stress set allocates half a million Strings; build it off the
+        // UI thread, then swap the rows in. Replacing _load_task drops any
+        // in-flight build so it cannot land against a newer choice.
+        self._load_task = cx.spawn(async move |this, cx| {
+            let (items, sizes) = cx
+                .background_spawn(async move {
+                    let items = (0..count)
+                        .map(|i| format!("Item {}", i))
+                        .collect::<Vec<_>>();
+                    let sizes = items.iter().map(|_| ITEM_SIZE).collect::<Vec<_>>();
+                    (items, sizes)
+                })
+                .await;
+
+            this.update(cx, |this, cx| {
+                this.items = items;
+                this.item_sizes = Rc::new(sizes);
+                this.loading = false;
+                cx.notify();
+            })
+            .ok();
+        });
     }
 
     fn change_axis(&mut self, axis: ScrollbarAxis, cx: &mut Context<Self>) {
@@ -187,6 +211,7 @@ impl VirtualListSection {
                     .into_any_element(),
             ]))
             .child(format!("Visible: {:?}", self.visible_range))
+            .children(self.loading.then_some("Loading dataset…"))
     }
 }
 
@@ -264,7 +289,7 @@ impl Render for VirtualListSection {
                                                                 render_item(cx).child(if i == 0 {
                                                                     format!("row: {}", ix)
                                                                 } else {
-                                                                    format!("{}", i)
+                                                                    i.to_string()
                                                                 })
                                                             }),
                                                         )

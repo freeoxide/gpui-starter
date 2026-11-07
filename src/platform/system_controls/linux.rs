@@ -21,7 +21,9 @@ const BLUEZ: &str = "org.bluez";
 const ADAPTER_INTERFACE: &str = "org.bluez.Adapter1";
 const DEVICE_INTERFACE: &str = "org.bluez.Device1";
 
-const PULSE_TICKS: u32 = 300;
+// Worst case is three waits per read (wait_ready plus two pumps), so this
+// budget keeps a hung pulse server under the service's 2s poll cadence.
+const PULSE_TICKS: u32 = 50;
 const PULSE_TICK: Duration = Duration::from_millis(10);
 const PULSE_APP_NAME: &str = "gpui-starter";
 
@@ -38,7 +40,7 @@ pub(super) fn apply(op: SystemOp) -> Result<(), String> {
         SystemOp::SetVolume { level } => with_pulse(|session| {
             let sink = session.default_sink_name()?;
             let (mut volumes, _) = session.sink_volumes(&sink)?;
-            let target = Volume(((level.clamp(0., 1.)) * Volume::NORMAL.0 as f32).round() as u32);
+            let target = Volume((level.clamp(0., 1.) * Volume::NORMAL.0 as f32).round() as u32);
             volumes.set(volumes.len(), target);
             session.set_sink_volume(&sink, &volumes)
         }),
@@ -84,26 +86,26 @@ fn unavailable<T>(error: String) -> ControlState<T> {
 
 // Called only through the service-side Bluetooth gate (RCA §4).
 pub(super) fn read_bluetooth() -> ControlState<BluetoothStatus> {
-    match bluetooth_objects() {
-        Ok((adapter, objects)) => {
-            let devices = paired_devices(&objects);
-            let powered = match adapter {
-                Some(path) => match adapter_powered(&path) {
-                    Ok(powered) => Some(powered),
-                    Err(error) => return unavailable(error),
-                },
-                None => None,
-            };
-            ControlState::Ready(BluetoothStatus { powered, devices })
-        }
+    let read = || -> Result<BluetoothStatus, String> {
+        let objects = bluetooth_objects(&system_connection()?)?;
+        let devices = paired_devices(&objects);
+        // GetManagedObjects carries every interface's properties, so Powered
+        // is a dict lookup, not a second bus round trip.
+        let powered = find_adapter(&objects)
+            .map(|path| adapter_powered(&objects, &path))
+            .transpose()?;
+        Ok(BluetoothStatus { powered, devices })
+    };
+    match read() {
+        Ok(status) => ControlState::Ready(status),
         Err(error) => unavailable(error),
     }
 }
 
 fn apply_bluetooth_powered(powered: bool) -> Result<(), String> {
-    let (adapter, _) = bluetooth_objects()?;
-    let path = adapter.ok_or_else(|| "no bluetooth adapter".to_string())?;
-    let connection = zbus::blocking::Connection::system().map_err(|error| error.to_string())?;
+    let connection = system_connection()?;
+    let path = find_adapter(&bluetooth_objects(&connection)?)
+        .ok_or_else(|| "no bluetooth adapter".to_string())?;
     let proxy = zbus::blocking::Proxy::new(&connection, BLUEZ, path.as_str(), ADAPTER_INTERFACE)
         .map_err(|error| error.to_string())?;
     proxy
@@ -111,31 +113,39 @@ fn apply_bluetooth_powered(powered: bool) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
-fn bluetooth_objects() -> Result<(Option<OwnedObjectPath>, ManagedObjects), String> {
-    let connection = zbus::blocking::Connection::system().map_err(|error| error.to_string())?;
-    let manager = zbus::blocking::fdo::ObjectManagerProxy::new(&connection, BLUEZ, "/")
+fn system_connection() -> Result<zbus::blocking::Connection, String> {
+    zbus::blocking::Connection::system().map_err(|error| error.to_string())
+}
+
+fn bluetooth_objects(connection: &zbus::blocking::Connection) -> Result<ManagedObjects, String> {
+    let manager = zbus::blocking::fdo::ObjectManagerProxy::new(connection, BLUEZ, "/")
         .map_err(|error| error.to_string())?;
-    let objects = manager
+    manager
         .get_managed_objects()
-        .map_err(|error| error.to_string())?;
-    let adapter = objects
+        .map_err(|error| error.to_string())
+}
+
+fn find_adapter(objects: &ManagedObjects) -> Option<OwnedObjectPath> {
+    objects
         .iter()
         .find(|(_, interfaces)| {
             interfaces
                 .keys()
                 .any(|interface| interface.as_str() == ADAPTER_INTERFACE)
         })
-        .map(|(path, _)| path.clone());
-    Ok((adapter, objects))
+        .map(|(path, _)| path.clone())
 }
 
-fn adapter_powered(path: &OwnedObjectPath) -> Result<bool, String> {
-    let connection = zbus::blocking::Connection::system().map_err(|error| error.to_string())?;
-    let proxy = zbus::blocking::Proxy::new(&connection, BLUEZ, path.as_str(), ADAPTER_INTERFACE)
-        .map_err(|error| error.to_string())?;
-    proxy
-        .get_property::<bool>("Powered")
-        .map_err(|error| error.to_string())
+fn adapter_powered(objects: &ManagedObjects, path: &OwnedObjectPath) -> Result<bool, String> {
+    objects
+        .get(path)
+        .and_then(|interfaces| {
+            interfaces
+                .iter()
+                .find(|(interface, _)| interface.as_str() == ADAPTER_INTERFACE)
+        })
+        .and_then(|(_, properties)| property_bool(properties, "Powered"))
+        .ok_or_else(|| format!("no {ADAPTER_INTERFACE} Powered property"))
 }
 
 fn paired_devices(objects: &ManagedObjects) -> Vec<PairedDevice> {
@@ -146,11 +156,15 @@ fn paired_devices(objects: &ManagedObjects) -> Vec<PairedDevice> {
                 .iter()
                 .find(|(interface, _)| interface.as_str() == DEVICE_INTERFACE)
                 .map(|(_, properties)| properties)?;
-            device_property_bool(properties, "Paired")?;
+            // `?` alone drops only a missing Paired; bluez always sends it,
+            // so an unpaired device needs the value checked too.
+            if !property_bool(properties, "Paired")? {
+                return None;
+            }
             Some(PairedDevice {
-                address: device_property_string(properties, "Address").unwrap_or_default(),
-                alias: device_property_string(properties, "Alias").unwrap_or_default(),
-                connected: device_property_bool(properties, "Connected").unwrap_or(false),
+                address: property_string(properties, "Address").unwrap_or_default(),
+                alias: property_string(properties, "Alias").unwrap_or_default(),
+                connected: property_bool(properties, "Connected").unwrap_or(false),
             })
         })
         .collect();
@@ -158,13 +172,13 @@ fn paired_devices(objects: &ManagedObjects) -> Vec<PairedDevice> {
     devices
 }
 
-fn device_property_bool(properties: &HashMap<String, OwnedValue>, name: &str) -> Option<bool> {
+fn property_bool(properties: &HashMap<String, OwnedValue>, name: &str) -> Option<bool> {
     properties
         .get(name)
         .and_then(|value| bool::try_from(value).ok())
 }
 
-fn device_property_string(properties: &HashMap<String, OwnedValue>, name: &str) -> Option<String> {
+fn property_string(properties: &HashMap<String, OwnedValue>, name: &str) -> Option<String> {
     properties
         .get(name)
         .and_then(|value| <&str as TryFrom<&OwnedValue>>::try_from(value).ok())
@@ -317,3 +331,7 @@ fn read_volume() -> ControlState<VolumeStatus> {
         Err(error) => unavailable(error),
     }
 }
+
+#[cfg(test)]
+#[path = "linux.test.rs"]
+mod linux_test;

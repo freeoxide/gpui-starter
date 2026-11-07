@@ -113,7 +113,7 @@ fn initialize_state(
     };
 
     crate::capabilities::set(
-        "file_logging",
+        crate::capabilities::Capability::FILE_LOGGING,
         crate::capabilities::CapabilityStatus {
             supported: cfg!(not(target_family = "wasm")),
             enabled: runtime.enabled,

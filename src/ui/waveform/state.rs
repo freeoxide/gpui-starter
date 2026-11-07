@@ -22,9 +22,9 @@ pub enum WaveformMode {
     Spectrum,
 }
 
-pub(crate) enum WaveformSamples {
-    Line(Vec<f32>),
-    Envelope(Vec<ColumnAgg>),
+pub(crate) enum WaveformSamples<'a> {
+    Line(&'a [f32]),
+    Envelope(&'a [ColumnAgg]),
 }
 
 struct SourceAttachment {
@@ -33,8 +33,7 @@ struct SourceAttachment {
     channels: usize,
 }
 
-/// Retained waveform state. Mount with `cx.new(|_| WaveformState::new())`,
-/// render with `Waveform::new(id, entity)`, and observe
+/// Retained state rendered by `Waveform::new(id, entity)`; the mounting view must
 /// `cx.observe(&state, |_, _, cx| cx.notify())`. Mutators notify once.
 pub struct WaveformState {
     source: Option<SourceAttachment>,
@@ -48,6 +47,8 @@ pub struct WaveformState {
     tick: Option<Task<()>>,
     drain_buf: Vec<f32>,
     mixdown: Vec<f32>,
+    lane_line: Vec<f32>,
+    lane_env: Vec<ColumnAgg>,
 }
 
 impl Default for WaveformState {
@@ -70,12 +71,13 @@ impl WaveformState {
             tick: None,
             drain_buf: Vec::new(),
             mixdown: Vec::new(),
+            lane_line: Vec::new(),
+            lane_env: Vec::new(),
         }
     }
 
-    /// Creates the sample channel, starts the 33 ms refresh tick, returns the
-    /// producer for the audio thread. Panics unless `channels` is 1 or 2 and
-    /// `sample_rate` > 0; `retention` clamps; replaces any previous source.
+    /// Replaces any source, clamps `retention`, starts the 33 ms refresh tick, and
+    /// returns its producer. Panics unless `channels` is 1 or 2 and `sample_rate` > 0.
     pub fn attach_source(
         &mut self,
         sample_rate: u32,
@@ -176,17 +178,14 @@ impl WaveformState {
             .map_or(0, |source| source.consumer.dropped())
     }
 
-    /// Drains the ring, integrates history, recomputes the spectrum, notifies
-    /// once if unpaused data arrived. The internal tick calls this; tests and
-    /// embedders may call it directly to force a synchronous update.
+    /// Drains the ring, updates history and spectrum, and notifies once if unpaused
+    /// data arrived. The tick calls this; call it directly to force a synchronous update.
     pub fn refresh(&mut self, cx: &mut Context<Self>) {
-        if self.source.is_none() {
+        let Some(source) = self.source.as_mut() else {
             return;
-        }
+        };
         self.drain_buf.clear();
-        if let Some(source) = self.source.as_mut() {
-            source.consumer.drain_into(&mut self.drain_buf);
-        }
+        source.consumer.drain_into(&mut self.drain_buf);
         if self.drain_buf.is_empty() || self.paused {
             return;
         }
@@ -235,17 +234,19 @@ impl WaveformState {
         (self.window.as_secs_f32() * source.sample_rate as f32) as usize
     }
 
-    pub(crate) fn channel_view(&self, ch: usize, columns: usize) -> WaveformSamples {
+    /// Fills per-lane scratch reused across paints; the borrow ends at the
+    /// next call, so consume the view before querying the next lane.
+    pub(crate) fn channel_view(&mut self, ch: usize, columns: usize) -> WaveformSamples<'_> {
         let Some(history) = self.channels.get(ch) else {
-            return WaveformSamples::Line(Vec::new());
+            return WaveformSamples::Line(&[]);
         };
         let window_samples = self.window_samples().max(1);
         if window_samples <= columns {
-            let mut samples = Vec::new();
-            history.last_samples(window_samples, &mut samples);
-            WaveformSamples::Line(samples)
+            history.last_samples(window_samples, &mut self.lane_line);
+            WaveformSamples::Line(&self.lane_line)
         } else {
-            WaveformSamples::Envelope(history.query(window_samples, columns))
+            history.query(window_samples, columns, &mut self.lane_env);
+            WaveformSamples::Envelope(&self.lane_env)
         }
     }
 }

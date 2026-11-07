@@ -2,11 +2,10 @@
 //! rendered surfaces; `PlayerEngine` is shared state behind the
 //! `MusicPlayerGlobal` global. Removal = delete this directory and revert the
 //! seam touches: the `pub mod music;`/`pub use` lines in features/pages/mod.rs,
-//! the Page::Music arms and all() entry in shell/sidebar.rs, the VALID_HOSTS
-//! entry in shell/route.rs, the AppRoot wiring and bar child in
-//! shell/root/app_root/{state,render}.rs, the page count in
-//! tests/e2e_navigation.rs, the music_* and nav_music keys in both locale
-//! files, and the "music_playback" capability line in app/init.rs.
+//! the Page::Music arms and all() entry in shell/page.rs, the AppRoot wiring
+//! and bar child in shell/root/app_root/{state,render}.rs, the Page::Music
+//! entry in tests/e2e_navigation.rs, the music_* and nav_music keys in both
+//! locale files, and the "music_playback" capability line in app/init.rs.
 
 mod bar;
 mod covers;
@@ -40,7 +39,7 @@ pub fn init(
     let engine = cx.new(|cx| PlayerEngine::new(Library::catalog(), cx));
     cx.set_global(MusicPlayerGlobal(engine.clone()));
     crate::capabilities::set(
-        "music_playback",
+        crate::capabilities::Capability::MUSIC_PLAYBACK,
         crate::capabilities::CapabilityStatus::supported_enabled(),
         cx,
     );

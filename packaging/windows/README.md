@@ -49,13 +49,13 @@ startup, installer or not:
   the Linux tarball).
 
 The exe icon comes from `build.rs` at the repo root: `winresource` embeds
-`assets/app-icon/gpui-starter.ico` into the .exe resource section whenever
-`CARGO_CFG_TARGET_OS=windows`, which makes title bar, taskbar, and the
-portable exe show the app icon with no runtime work. On non-Windows hosts
-the build script is a no-op (the crate still compiles as a host build-dep,
-nothing invokes it). MSVC builds need `rc.exe` from the Windows SDK; the
-GHA images ship it, and `scripts/windows-dev-env.sh --setup` fetches one
-for bare dev machines.
+`assets/app-icon/gpui-starter.ico` into the .exe resource section when the
+build host and target are both Windows (the crate is a target-gated
+build-dep and `build.rs` host-gates the block), which makes title bar,
+taskbar, and the portable exe show the app icon with no runtime work. On
+non-Windows hosts the crate is not compiled at all. MSVC builds need
+`rc.exe` from the Windows SDK; the GHA images ship it, and
+`scripts/windows-dev-env.sh --setup` fetches one for bare dev machines.
 
 ## Updater on Windows: known gap (not implemented here)
 

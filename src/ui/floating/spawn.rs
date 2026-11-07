@@ -18,16 +18,27 @@ use super::spec::{
     resolve_bounds, window_is_open,
 };
 
-/// Spawn a float for `spec`. Native errors: the anchor cannot be resolved or
-/// window creation failed. A Window anchor whose window is mid-dispatch
-/// defers the open to the end of the cycle and returns an inert registry
-/// handle; the real entry lands moments later with exact anchor bounds.
+/// One float per id: a live id is closed first, so a reopen replaces it in
+/// place instead of orphaning an OS window off the registry.
+fn close_live_entry(id: &FloatingWindowId, cx: &mut App) {
+    let live = floating_snapshot(cx)
+        .into_iter()
+        .find(|entry| &entry.id == id)
+        .map(|entry| entry.handle);
+    if let Some(handle) = live {
+        close_floating(&handle, cx);
+    }
+}
+
+/// Spawn a float for `spec`; errors when the anchor is unavailable or the window fails to open.
+/// A mid-dispatch Window anchor defers the open to the cycle's end and returns an inert handle.
 #[cfg(not(target_family = "wasm"))]
 pub fn spawn_floating(
     spec: FloatingSpec,
     build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     cx: &mut App,
 ) -> anyhow::Result<FloatingHandle> {
+    close_live_entry(spec.id(), cx);
     let interim_id = spec.id().clone();
     let bounds = match resolve_float_bounds_outcome(&spec, cx) {
         BoundsOutcome::Resolved(bounds) => bounds,
@@ -48,6 +59,8 @@ fn spawn_floating_settled(
     build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     cx: &mut App,
 ) -> anyhow::Result<FloatingHandle> {
+    // Two same-id defers can settle back to back; the later one replaces.
+    close_live_entry(spec.id(), cx);
     let bounds = match resolve_float_bounds_outcome(&spec, cx) {
         BoundsOutcome::Resolved(bounds) => bounds,
         // Retries run un-leased, so a still-blocked anchor is a real failure.
@@ -106,14 +119,13 @@ fn open_floating_window(
         options
     };
     let opened = {
-        let id = spec.id().clone();
         let title = spec.window_title();
         let chromeless = spec.is_chromeless();
         let build_view = factory.clone();
         gpui_kit::open_window(make_options(use_layer), cx, move |window, cx| {
             window.set_window_title(&title);
             let view = build_view(window, cx);
-            cx.new(|cx| FloatingShell::new(id, title, view, chromeless, cx))
+            cx.new(|cx| FloatingShell::new(title, view, chromeless, window, cx))
         })
     };
     let (window, surface) = match opened {
@@ -139,7 +151,6 @@ fn open_floating_window(
                         "compositor rejected the layer surface; retrying as a plain float"
                     );
                     super::layer_shell::state::record_unsupported(&err, cx);
-                    let id = spec.id().clone();
                     let title = spec.window_title();
                     let chromeless = spec.is_chromeless();
                     let build_view = factory.clone();
@@ -147,7 +158,7 @@ fn open_floating_window(
                         gpui_kit::open_window(make_options(false), cx, move |window, cx| {
                             window.set_window_title(&title);
                             let view = build_view(window, cx);
-                            cx.new(|cx| FloatingShell::new(id, title, view, chromeless, cx))
+                            cx.new(|cx| FloatingShell::new(title, view, chromeless, window, cx))
                         })?;
                     (window, super::layer_shell::FloatSurface::Window)
                 } else {
@@ -192,6 +203,7 @@ pub fn spawn_floating(
     build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     cx: &mut App,
 ) -> anyhow::Result<FloatingHandle> {
+    close_live_entry(spec.id(), cx);
     if spec.layer_shell_spec().is_some() {
         super::layer_shell::note_ignored_once();
     }
@@ -204,7 +216,7 @@ pub fn spawn_floating(
             cx.defer(move |cx| {
                 if let Err(err) = spawn_floating_settled(spec, build, cx) {
                     tracing::warn!(
-                        target: "gpui_starter::ui::floating",
+                        target: shims::LOG,
                         error = %err,
                         "deferred overlay float spawn failed"
                     );
@@ -226,6 +238,8 @@ fn spawn_floating_settled(
     build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     cx: &mut App,
 ) -> anyhow::Result<FloatingHandle> {
+    // Two same-id defers can settle back to back; the later one replaces.
+    close_live_entry(spec.id(), cx);
     let root = crate::app::window::root_window(cx)
         .ok_or_else(|| anyhow!("no main window to host overlay float"))?;
     let bounds = overlay_bounds(&root, spec.float_anchor(), spec.size(), cx)?;
@@ -254,13 +268,10 @@ fn register_overlay(
     root: &AnyWindowHandle,
     cx: &mut App,
 ) -> anyhow::Result<FloatingHandle> {
-    let build_view = factory.clone();
     let view = root
-        .update(cx, |_, window, cx| build_view(window, cx))
+        .update(cx, |_, window, cx| factory(window, cx))
         .map_err(|_| anyhow!("no main window to host overlay float"))?;
-    let id = spec.id().clone();
-    let chromeless = spec.is_chromeless();
-    let handle = FloatingHandle::Overlay(id.clone());
+    let handle = FloatingHandle::Overlay(spec.id().clone());
     set_entry(
         RegistryEntry {
             spec,
@@ -272,7 +283,6 @@ fn register_overlay(
         },
         cx,
     );
-    super::overlay_host::set_pane_chromeless(&id, chromeless, cx);
     Ok(handle)
 }
 
@@ -286,9 +296,8 @@ pub fn close_floating(handle: &FloatingHandle, cx: &mut App) -> bool {
     }
 }
 
-/// Runtime mouse pass-through on an open float. Returns true when a
-/// platform shim acknowledged the request; false is a normal outcome
-/// (overlay handle, wasm, test platform, gone window), never an error.
+/// Runtime mouse pass-through on an open float. True when a platform shim acknowledged
+/// it; false (overlay handle, wasm, test platform, gone window) is normal, not an error.
 pub fn set_floating_click_through(handle: &FloatingHandle, enabled: bool, cx: &mut App) -> bool {
     match handle {
         FloatingHandle::Native(window) => window
@@ -298,9 +307,8 @@ pub fn set_floating_click_through(handle: &FloatingHandle, enabled: bool, cx: &m
     }
 }
 
-/// Runtime always-on-top on an open float. On success the registry entry's
-/// level becomes the current level; false (never an error) on overlay
-/// handles, Wayland, wasm, the test platform, or a gone window.
+/// Runtime always-on-top on an open float; success also updates the registry entry's level.
+/// False, never an error, on overlay handles, Wayland, wasm, the test platform, or a gone window.
 pub fn set_floating_always_on_top(handle: &FloatingHandle, enabled: bool, cx: &mut App) -> bool {
     let applied = match handle {
         FloatingHandle::Native(window) => window
@@ -321,8 +329,8 @@ pub fn set_floating_always_on_top(handle: &FloatingHandle, enabled: bool, cx: &m
 
 pub fn close_all_floating(cx: &mut App) -> usize {
     let handles: Vec<FloatingHandle> = floating_snapshot(cx)
-        .iter()
-        .map(|entry| entry.handle.clone())
+        .into_iter()
+        .map(|entry| entry.handle)
         .collect();
     let count = handles.len();
     for handle in handles {
@@ -331,9 +339,8 @@ pub fn close_all_floating(cx: &mut App) -> usize {
     count
 }
 
-/// Recompute the anchor and reopen: native windows close and reopen (gpui has
-/// no move API), overlay floats only update their stored bounds. Content
-/// state is not carried across a native respawn; caller responsibility.
+/// Recompute the anchor: native floats close and reopen (gpui has no move API), losing
+/// content state; overlay floats only update their stored bounds.
 pub fn respawn_floating(id: &FloatingWindowId, cx: &mut App) -> bool {
     let Some(entry) = remove_entry(id, cx) else {
         return false;
@@ -342,8 +349,8 @@ pub fn respawn_floating(id: &FloatingWindowId, cx: &mut App) -> bool {
         FloatingHandle::Overlay(_) => {
             let mut entry = entry;
             if let Some(root) = crate::app::window::root_window(cx)
-                && let Some(bounds) =
-                    overlay_bounds(&root, entry.spec.float_anchor(), entry.spec.size(), cx).ok()
+                && let Ok(bounds) =
+                    overlay_bounds(&root, entry.spec.float_anchor(), entry.spec.size(), cx)
             {
                 entry.bounds = bounds;
                 set_entry(entry, cx);
@@ -353,7 +360,7 @@ pub fn respawn_floating(id: &FloatingWindowId, cx: &mut App) -> bool {
         }
         FloatingHandle::Native(old_window) => {
             let _ = old_window.update(cx, |_, window, _| window.remove_window());
-            let factory = entry.build.clone();
+            let factory = entry.build;
             let spec = entry.spec;
             spawn_floating(spec, move |window, cx| factory(window, cx), cx).is_ok()
         }

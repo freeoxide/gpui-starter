@@ -1,4 +1,4 @@
-use gpui_kit::{App, Global, Pixels, SharedString, Size, px, rgba, size};
+use gpui_kit::{App, BorrowAppContext as _, Global, Pixels, SharedString, Size, px, rgba, size};
 use serde::{Deserialize, Serialize};
 
 use crate::ui::floating::FloatingWindowId;
@@ -93,21 +93,29 @@ pub fn apply_change(palette: &str, value: &str, cx: &mut App) {
         );
         return;
     };
-    let mut next = cx
-        .try_global::<PaletteSyncState>()
-        .cloned()
-        .unwrap_or_default();
-    match id {
-        PaletteId::Color => next.color_hex = value.to_string(),
-        PaletteId::Assets => next.last_asset = Some(value.into()),
-        PaletteId::Note => {
-            tracing::debug!(
-                target: "gpui_starter::floating_ui",
-                "note palette carries no cross-window state"
-            );
-        }
+    if id == PaletteId::Note {
+        tracing::debug!(
+            target: "gpui_starter::floating_ui",
+            "note palette carries no cross-window state"
+        );
+        return;
     }
-    cx.set_global(next);
+    // Re-picking the current value must not wake every palette observer.
+    let unchanged = cx
+        .try_global::<PaletteSyncState>()
+        .is_some_and(|state| match id {
+            PaletteId::Color => state.color_hex == value,
+            PaletteId::Assets => state.last_asset.as_deref() == Some(value),
+            PaletteId::Note => true,
+        });
+    if unchanged {
+        return;
+    }
+    cx.update_default_global::<PaletteSyncState, _>(|state, _| match id {
+        PaletteId::Color => state.color_hex = value.to_string(),
+        PaletteId::Assets => state.last_asset = Some(value.into()),
+        PaletteId::Note => {}
+    });
 }
 
 /// "#RRGGBB"/"#RRGGBBAA" -> Rgba; None on malformed input.
@@ -124,7 +132,7 @@ pub(crate) fn hex_to_rgba(hex: &str) -> Option<gpui_kit::Rgba> {
     Some(rgba(value))
 }
 
-/// Rgba -> "#RRGGBB"; alpha below 1.0 rounds into the channels it covers.
+/// Rgba -> "#RRGGBB"; alpha is dropped.
 pub(crate) fn rgba_to_hex(color: gpui_kit::Rgba) -> String {
     let channel = |c: f32| (c * 255.).round().clamp(0., 255.) as u8;
     format!(

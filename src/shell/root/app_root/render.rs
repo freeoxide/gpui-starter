@@ -13,9 +13,9 @@ use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt;
 use crate::app::ToggleSearch;
+use crate::features::pages::{ReloadCurrentPage, RenderErrorPage, TriggerRenderError};
+use crate::page::Page;
 use crate::routes::AppRoute;
-use crate::sidebar::Page;
-use crate::views::{ReloadCurrentPage, RenderErrorPage, TriggerRenderError};
 
 use super::super::actions::{NavigateToPage, RefreshPage, ToggleSidebar, is_rtl_locale};
 use super::super::frame_time;
@@ -31,11 +31,12 @@ impl Render for AppRoot {
 
         // clock (not std::time): Instant::now panics at runtime on wasm.
         let render_started = crate::platform::clock::Instant::now();
-        let page_title = if self.render_error {
+        let page_title: SharedString = if self.render_error {
             crate::i18n::localize("render_error_title")
         } else {
             self.active_route.localized_title()
-        };
+        }
+        .into();
         let active_page = self.active_route.page_for_render();
         let rtl = is_rtl_locale(&crate::app::current_locale(cx));
         let side = if rtl { Side::Right } else { Side::Left };
@@ -124,9 +125,11 @@ impl Render for AppRoot {
                             // bridges report the stored value +1.
                             position: ix,
                             total: Page::all().len(),
-                            on_click: Rc::new(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                                this.set_route(AppRoute::page(page), cx);
-                            })),
+                            on_click: Rc::new(cx.listener(
+                                move |this, _: &ClickEvent, window, cx| {
+                                    this.set_route(AppRoute::page(page), window, cx);
+                                },
+                            )),
                             context_menu,
                         }
                     }),
@@ -150,8 +153,8 @@ impl Render for AppRoot {
                             .id("page-title")
                             .a11y(Role::Heading, page_title.clone())
                             .aria_level(1)
-                            // Navigation moves no keyboard focus, so the
-                            // new page title is announced via this live region.
+                            // Navigation focus lands on the content area, which
+                            // announces nothing; the live region speaks the title.
                             .a11y_live(accesskit::Live::Polite)
                             .text_xl()
                             .font_weight(FontWeight::BOLD)
@@ -170,12 +173,9 @@ impl Render for AppRoot {
                     }),
             );
 
-        // Expanded: the sidebar fills a resizable panel (the wrapper must
-        // resolve the sidebar's relative width against a definite size).
-        // Collapsed: a fixed 48px icon rail outside the resizable group —
-        // the group only takes ResizablePanel children, and the panel's
-        // keyed size state must not pin the rail open at the panel width.
-        // In RTL locales the sidebar appears on the right; swap panel order.
+        // Expanded: the resizable panel gives the sidebar's relative width
+        // a definite size. Collapsed: a fixed 48px rail sibling, because a
+        // ResizablePanel child's keyed size would pin it at the panel width.
         let layout: AnyElement = if self.collapsed {
             let rail = div().id("sidebar-rail").h_full().flex_shrink_0().child(
                 div()
@@ -229,15 +229,15 @@ impl Render for AppRoot {
         let content_area = div()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(|_, _: &ToggleSearch, _, cx| {
-                crate::launcher::open_launcher(cx);
+                crate::features::command_palette::open_launcher(cx);
             }))
             .on_action(cx.listener(|this, _: &ToggleSidebar, _, cx| {
                 this.toggle_sidebar(cx);
             }))
-            .on_action(cx.listener(|this, action: &NavigateToPage, _, cx| {
+            .on_action(cx.listener(|this, action: &NavigateToPage, window, cx| {
                 let pages = Page::all();
                 if let Some(&page) = pages.get(action.0) {
-                    this.set_route(AppRoute::page(page), cx);
+                    this.set_route(AppRoute::page(page), window, cx);
                 }
             }))
             .on_action(cx.listener(|this, _: &RefreshPage, _, cx| {

@@ -1,12 +1,10 @@
-use gpui_kit::prelude::*;
-use gpui_kit::{Entity, TestAppContext, VisualTestContext, Window, point, px, size};
+use gpui_kit::{Entity, TestAppContext, VisualTestContext, point, px, size};
 
 use crate::platform::clock::Instant;
 use crate::ui::canvas::perf_probe;
 
 use super::InfiniteCanvasPage;
 use super::minimap::minimap_probe;
-
 use super::perf::{
     PAGE_SLOW_RENDER_THRESHOLD_US, is_slow_page_render, last_gen_us, last_page_render_us,
     store_gen_us, store_page_render_us,
@@ -38,7 +36,7 @@ fn drawn_page(cx: &mut TestAppContext) -> (Entity<InfiniteCanvasPage>, VisualTes
 }
 
 fn pan_and_draw(page: &Entity<InfiniteCanvasPage>, vcx: &mut VisualTestContext, frame: usize) {
-    let bounce = if frame % 2 == 0 { 1. } else { -1. };
+    let bounce = if frame.is_multiple_of(2) { 1. } else { -1. };
     page.update(vcx, |page, cx| {
         page.state.update(cx, |state, cx| {
             state.pan_by(point(px(7. * bounce), px(5. * bounce)), cx)
@@ -65,7 +63,7 @@ fn assert_quiet_pans(page: &Entity<InfiniteCanvasPage>, vcx: &mut VisualTestCont
     perf_probe::reset();
     minimap_probe::reset();
     pan_pair(page, vcx);
-    let [path_builds, key_hashes, text_shapings] = perf_probe::snapshot();
+    let [path_builds, key_hashes, text_shapings, _dot_paints] = perf_probe::snapshot();
     assert_eq!(path_builds, 0, "steady pan must not rebuild cached paths");
     assert_eq!(key_hashes, 0, "steady pan must not rehash shape content");
     assert_eq!(text_shapings, 0, "steady pan must not reshape labels");
@@ -98,7 +96,7 @@ fn pan_frames_reuse_every_paint_cache(cx: &mut TestAppContext) {
     perf_probe::reset();
     minimap_probe::reset();
     set_zoom(&page, &mut vcx, 0.7);
-    let [path_builds, key_hashes, _] = perf_probe::snapshot();
+    let [path_builds, key_hashes, ..] = perf_probe::snapshot();
     assert!(
         path_builds > 0 || key_hashes > 0,
         "a zoom change must revalidate the visible shapes"
@@ -124,12 +122,12 @@ fn pan_frames_reuse_every_paint_cache(cx: &mut TestAppContext) {
 }
 
 /// Wall-clock guard: medians are per `window.draw` (the harness paints the
-/// tree twice per draw), with headroom for CI variance. Release-tuned.
+/// tree twice per draw). Host timings vary ~2x, so `just perf` opts in.
 #[gpui_kit::test]
+#[ignore = "wall-clock budgets vary ~2x between hosts; run via `just perf`"]
 fn pan_frame_budget_stays_under_ceiling(cx: &mut TestAppContext) {
     let frames = if cfg!(debug_assertions) { 5 } else { 24 };
-    // Debug medians run ~60ms here but the host varies ~2x between sessions,
-    // so the debug ceiling keeps >4x headroom; release is the tuned lane.
+    // Release is the tuned lane; debug keeps >4x headroom on its ~60ms medians.
     let ceiling_us = if cfg!(debug_assertions) {
         250_000
     } else {
@@ -137,7 +135,7 @@ fn pan_frame_budget_stays_under_ceiling(cx: &mut TestAppContext) {
     };
     let (page, mut vcx) = drawn_page(cx);
 
-    let mut scenario = |label: &str, zoom: Option<f32>, vcx: &mut VisualTestContext| {
+    let scenario = |label: &str, zoom: Option<f32>, vcx: &mut VisualTestContext| {
         if let Some(zoom) = zoom {
             set_zoom(&page, vcx, zoom);
         }

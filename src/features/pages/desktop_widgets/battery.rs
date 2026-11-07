@@ -64,25 +64,13 @@ pub(crate) struct BatteryWidget {
 
 impl BatteryWidget {
     pub(crate) fn new(_window: &mut Window, cx: &mut Context<Self>) -> Self {
+        // Freshness comes from the system_controls service poll loop; the
+        // widget only re-renders on snapshot changes.
         let _subscriptions = vec![
             cx.observe_global::<crate::system_controls::SystemControlsSnapshot>(|_, cx| {
                 cx.notify();
             }),
         ];
-        cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor()
-                    .timer(std::time::Duration::from_secs(30))
-                    .await;
-                if this
-                    .update(cx, |_, cx| crate::system_controls::refresh(cx))
-                    .is_err()
-                {
-                    break;
-                }
-            }
-        })
-        .detach();
         Self { _subscriptions }
     }
 

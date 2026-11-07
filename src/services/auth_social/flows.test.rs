@@ -2,10 +2,11 @@ use std::io::{Read as _, Write as _};
 use std::sync::Arc;
 use std::time::Duration;
 
-use gpui_auth::{AuthEvent, AuthIo, AuthState, InMemoryStore, TokenStore};
-use gpui_kit::{AppContext as _, Entity, Subscription, TestAppContext};
+use gpui_auth::{AuthError, AuthEvent, AuthIo, AuthState, InMemoryStore, TokenStore};
+use gpui_kit::{Entity, Subscription, TestAppContext};
 
 use super::*;
+use crate::capabilities::Capability;
 use crate::services::auth_social::providers::fake_idp::FakeIdP;
 use crate::services::auth_social::{OidcConfig, ProviderConfig, SocialConfig};
 use crate::services::session::SessionState;
@@ -120,7 +121,9 @@ async fn empty_config_leaves_every_provider_unconfigured(cx: &mut TestAppContext
         assert_eq!(status.state, None);
     }
     let capabilities = cx.read(|cx| crate::capabilities::snapshot(cx));
-    let aggregate = capabilities.get("auth_social").expect("aggregate entry");
+    let aggregate = capabilities
+        .get(&Capability::AUTH_SOCIAL)
+        .expect("aggregate entry");
     assert!(!aggregate.enabled && aggregate.degraded);
     assert!(
         aggregate
@@ -128,7 +131,9 @@ async fn empty_config_leaves_every_provider_unconfigured(cx: &mut TestAppContext
             .as_ref()
             .is_some_and(|reason| reason.contains("no providers configured"))
     );
-    let provider_row = capabilities.get("auth_social_oidc").expect("oidc row");
+    let provider_row = capabilities
+        .get(&Capability::AUTH_SOCIAL_OIDC)
+        .expect("oidc row");
     assert!(
         provider_row
             .reason
@@ -172,9 +177,13 @@ async fn configured_providers_get_controllers_and_degraded_rows(cx: &mut TestApp
         assert!(super::super::controller(ProviderKind::Oidc, cx).is_none());
     });
     let capabilities = cx.read(|cx| crate::capabilities::snapshot(cx));
-    let aggregate = capabilities.get("auth_social").expect("aggregate");
+    let aggregate = capabilities
+        .get(&Capability::AUTH_SOCIAL)
+        .expect("aggregate");
     assert!(aggregate.enabled && !aggregate.degraded);
-    let google_row = capabilities.get("auth_social_google").expect("google row");
+    let google_row = capabilities
+        .get(&Capability::AUTH_SOCIAL_GOOGLE)
+        .expect("google row");
     assert!(google_row.degraded);
     assert!(
         google_row
@@ -243,7 +252,17 @@ async fn full_loopback_flow_through_the_real_controller(cx: &mut TestAppContext)
         matches!(controller_state, AuthState::SignedIn { .. }),
         "{controller_state:?}"
     );
-    let stored = cx.update(|cx| store.load("oidc", cx).unwrap());
+    let opened = cx.read(|cx| {
+        cx.try_global::<SocialFlowsHandle>()
+            .expect("flows handle")
+            .0
+            .read(cx)
+            .opened_urls
+            .clone()
+    });
+    assert_eq!(opened.len(), 1, "the authorize URL opens exactly once");
+    assert!(opened[0].starts_with(&format!("{}/authorize", fake.origin())));
+    let stored = store.load("oidc").await.unwrap();
     assert!(stored.is_some());
     let session = cx.read(|cx| crate::services::session::snapshot(cx).state);
     assert_eq!(
@@ -255,8 +274,43 @@ async fn full_loopback_flow_through_the_real_controller(cx: &mut TestAppContext)
     let snapshot = cx.read(|cx| super::super::snapshot(cx));
     assert_eq!(snapshot.session_owner(), Some(ProviderKind::Oidc));
     let capabilities = cx.read(|cx| crate::capabilities::snapshot(cx));
-    let oidc_row = capabilities.get("auth_social_oidc").expect("oidc row");
+    let oidc_row = capabilities
+        .get(&Capability::AUTH_SOCIAL_OIDC)
+        .expect("oidc row");
     assert!(oidc_row.supported && oidc_row.enabled && !oidc_row.degraded);
+
+    cx.update(|cx| super::super::sign_out(ProviderKind::Oidc, cx));
+    // The owner can clear on the state-flip notify before the row is
+    // deleted; poll the store so the delete is what the test waits for.
+    for _ in 0..300 {
+        cx.run_until_parked();
+        if store.load("oidc").await.unwrap().is_none() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(
+        store.load("oidc").await.unwrap(),
+        None,
+        "sign-out deletes the token row"
+    );
+    assert_eq!(
+        cx.read(|cx| crate::services::session::snapshot(cx).state),
+        SessionState::SignedOut
+    );
+    let capabilities = cx.read(|cx| crate::capabilities::snapshot(cx));
+    let oidc_row = capabilities
+        .get(&Capability::AUTH_SOCIAL_OIDC)
+        .expect("oidc row");
+    assert!(oidc_row.supported && oidc_row.degraded);
+    assert!(
+        oidc_row
+            .reason
+            .as_ref()
+            .is_some_and(|reason| reason.contains("not connected")),
+        "row returns to degraded: {:?}",
+        oidc_row.reason
+    );
 }
 
 #[gpui_kit::test]
@@ -295,13 +349,10 @@ async fn wrong_state_redirect_errors_without_a_store_row(cx: &mut TestAppContext
 
     let controller_state = cx.read(|cx| controller.read(cx).state().clone());
     assert!(
-        matches!(
-            controller_state,
-            AuthState::Error(ref message) if message.contains("state mismatch")
-        ),
+        matches!(controller_state, AuthState::Error(AuthError::StateMismatch)),
         "got: {controller_state:?}"
     );
-    let stored = cx.update(|cx| store.load("oidc", cx).unwrap());
+    let stored = store.load("oidc").await.unwrap();
     assert_eq!(stored, None);
 }
 
@@ -336,10 +387,7 @@ async fn scheme_mode_redirect_uri_is_the_deep_link(cx: &mut TestAppContext) {
     });
     let controller_state = cx.read(|cx| controller.read(cx).state().clone());
     assert!(
-        matches!(
-            controller_state,
-            AuthState::Error(ref message) if message.contains("state mismatch")
-        ),
+        matches!(controller_state, AuthState::Error(AuthError::StateMismatch)),
         "{controller_state:?}"
     );
 }
@@ -391,6 +439,45 @@ async fn restarting_a_flow_cancels_the_previous_one(cx: &mut TestAppContext) {
         loopback_redirect_url(&first_url),
         "the replacement flow binds its own listener"
     );
+
+    let first_base = loopback_redirect_url(&first_url);
+    let first_state = first_url
+        .split("state=")
+        .nth(1)
+        .and_then(|rest| rest.split('&').next())
+        .expect("state param")
+        .to_string();
+    wait_until(cx, |_| {
+        sync_http_get(&format!("{first_base}?code=stale&state={first_state}")).is_none()
+    });
+    assert!(
+        sync_http_get(&format!("{first_base}?code=stale&state={first_state}")).is_none(),
+        "the cancelled flow's listener must be dead"
+    );
+}
+
+#[gpui_kit::test]
+async fn start_without_a_runtime_refuses_loopback_flows(cx: &mut TestAppContext) {
+    base(cx);
+    let config = oidc_config_for("http://127.0.0.1:9", None);
+    let store: Arc<dyn TokenStore> = Arc::new(InMemoryStore::new());
+    // io None -> fallback_io: no runtime, so a loopback start_flow would
+    // panic on the gpui executor instead of failing gracefully.
+    cx.update(|cx| super::install_with(config, Vec::new(), Some(store), None, cx));
+    let controller = cx
+        .update(|cx| super::super::controller(ProviderKind::Oidc, cx))
+        .expect("oidc controller");
+    let (urls, _subscription) = capture_authorization_urls(cx, &controller);
+    cx.update(|cx| super::super::start(ProviderKind::Oidc, cx));
+    cx.run_until_parked();
+    assert!(
+        urls.borrow().is_empty(),
+        "loopback sign-in is refused without a runtime"
+    );
+    assert!(matches!(
+        cx.read(|cx| controller.read(cx).state().clone()),
+        AuthState::SignedOut
+    ));
 }
 
 #[gpui_kit::test]
@@ -466,31 +553,40 @@ async fn production_install_resolves_the_shared_tokio_runtime(cx: &mut TestAppCo
     let (urls, _subscription) = capture_authorization_urls(cx, &controller);
     cx.update(|cx| super::super::start(ProviderKind::Oidc, cx));
     wait_until(cx, |_| !urls.borrow().is_empty());
-    assert!(urls.borrow()[0].starts_with(&format!("{}/authorize", fake.origin())));
+    let authorize_url = urls.borrow()[0].clone();
+    assert!(authorize_url.starts_with(&format!("{}/authorize", fake.origin())));
 
-    let redirect_base = loopback_redirect_url(&urls.borrow()[0]);
-    let state = urls.borrow()[0]
-        .split("state=")
-        .nth(1)
-        .and_then(|rest| rest.split('&').next())
-        .expect("state param")
-        .to_string();
-    let response = sync_http_get(&format!("{redirect_base}?code=fake-code&state={state}"))
+    let opened = cx.read(|cx| {
+        cx.try_global::<SocialFlowsHandle>()
+            .expect("flows handle")
+            .0
+            .read(cx)
+            .opened_urls
+            .clone()
+    });
+    assert_eq!(opened.len(), 1, "the authorize URL opens exactly once");
+    assert_eq!(opened[0], authorize_url);
+
+    // A bogus state stops at the controller: the exchange never runs, so the
+    // default KeyringStore is never written on this host.
+    let redirect_base = loopback_redirect_url(&authorize_url);
+    let response = sync_http_get(&format!("{redirect_base}?code=fake-code&state=bogus"))
         .expect("loopback capture through the shared runtime");
     assert!(response.contains("close this tab"));
     wait_until(cx, |cx| {
-        !matches!(
+        matches!(
             cx.read(|cx| controller.read(cx).state().clone()),
-            AuthState::SigningIn
+            AuthState::Error(_)
         )
     });
-    if matches!(
-        cx.read(|cx| controller.read(cx).state().clone()),
-        AuthState::SignedIn { .. }
-    ) {
-        cx.update(|cx| super::super::sign_out(ProviderKind::Oidc, cx));
-        cx.run_until_parked();
-    }
+    let controller_state = cx.read(|cx| controller.read(cx).state().clone());
+    assert!(
+        matches!(
+            &controller_state,
+            AuthState::Error(AuthError::StateMismatch)
+        ),
+        "{controller_state:?}"
+    );
 }
 
 #[test]
@@ -519,7 +615,9 @@ async fn config_warnings_replace_the_aggregate_capability_reason(cx: &mut TestAp
         );
     });
     let capabilities = cx.read(|cx| crate::capabilities::snapshot(cx));
-    let aggregate = capabilities.get("auth_social").expect("aggregate entry");
+    let aggregate = capabilities
+        .get(&Capability::AUTH_SOCIAL)
+        .expect("aggregate entry");
     assert!(!aggregate.enabled && aggregate.degraded);
     assert!(
         aggregate
@@ -553,7 +651,9 @@ async fn production_install_carries_a_broken_config_into_the_reason(cx: &mut Tes
         }
     }
     let capabilities = cx.read(|cx| crate::capabilities::snapshot(cx));
-    let aggregate = capabilities.get("auth_social").expect("aggregate entry");
+    let aggregate = capabilities
+        .get(&Capability::AUTH_SOCIAL)
+        .expect("aggregate entry");
     assert!(
         aggregate
             .reason

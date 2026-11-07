@@ -14,16 +14,18 @@ use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::microphone::{
-    self, CaptureStatus, DeviceOption, MicrophonePermissionState, MicrophoneState, dbfs,
+    self, CaptureStatus, DeviceOption, InputDeviceInfo, MicrophonePermissionState, MicrophoneState,
+    dbfs,
 };
 use crate::ui::waveform::{Waveform, WaveformMode, WaveformState};
+
+use super::settings::rows::status_row;
 
 pub struct MicrophonePage {
     waveform: Entity<WaveformState>,
     device_select: Entity<SelectState<Vec<DeviceOption>>>,
     gain_slider: Entity<SliderState>,
     device_ids: Vec<String>,
-    _subscriptions: Vec<Subscription>,
 }
 
 impl MicrophonePage {
@@ -37,7 +39,7 @@ impl MicrophonePage {
                 .step(1.)
                 .default_value(snapshot.gain_db)
         });
-        let items = device_options(&snapshot);
+        let items = device_options(&snapshot.devices);
         let selected_index = snapshot
             .selected_device
             .as_ref()
@@ -71,14 +73,12 @@ impl MicrophonePage {
             device_select,
             gain_slider,
             device_ids,
-            _subscriptions: Vec::new(),
         }
     }
 }
 
-fn device_options(snapshot: &microphone::MicrophoneSnapshot) -> Vec<DeviceOption> {
-    snapshot
-        .devices
+fn device_options(devices: &[InputDeviceInfo]) -> Vec<DeviceOption> {
+    devices
         .iter()
         .map(|device| DeviceOption {
             id: device.id.clone(),
@@ -102,13 +102,7 @@ fn reconcile_devices(
         if unchanged {
             return;
         }
-        devices
-            .iter()
-            .map(|device| DeviceOption {
-                id: device.id.clone(),
-                name: device.name.clone(),
-            })
-            .collect::<Vec<_>>()
+        device_options(devices)
     };
     this.device_ids = items.iter().map(|item| item.id.clone()).collect();
     this.device_select
@@ -122,29 +116,6 @@ fn status_label(status: &CaptureStatus) -> String {
         CaptureStatus::Capturing { .. } => crate::i18n::localize("microphone_status_capturing"),
         CaptureStatus::Error(_) => crate::i18n::localize("microphone_status_error"),
     }
-}
-
-/// `id` keys the row; the label is localized and would re-key the row on every
-/// locale switch. The combined "label: value" text is the accessible label.
-fn status_row(
-    id: &'static str,
-    label: impl Into<SharedString>,
-    value: impl Into<SharedString>,
-) -> impl IntoElement {
-    let label = label.into();
-    let value = value.into();
-    let text = format!("{label}: {value}");
-    div()
-        .id(ElementId::Name(SharedString::from(format!(
-            "microphone-status-{id}"
-        ))))
-        .a11y(Role::Paragraph, text)
-        .flex()
-        .items_center()
-        .justify_between()
-        .gap_4()
-        .child(Label::new(label))
-        .child(div().text_sm().child(value))
 }
 
 impl Render for MicrophonePage {
@@ -253,7 +224,7 @@ impl Render for MicrophonePage {
                             .w_12()
                             .text_sm()
                             .text_right()
-                            .child(format!("{:+.0} dB", gain)),
+                            .child(format!("{gain:+.0} dB")),
                     ),
             )
             .child(
@@ -306,16 +277,19 @@ impl Render for MicrophonePage {
                 ),
             )
             .child(status_row(
+                "microphone-status",
                 "status",
                 crate::i18n::localize("microphone_status"),
                 status_text,
             ))
             .child(status_row(
+                "microphone-status",
                 "permission",
                 crate::i18n::localize("microphone_permission"),
                 permission_text,
             ))
             .child(status_row(
+                "microphone-status",
                 "dropped",
                 crate::i18n::localize("microphone_dropped"),
                 self.waveform.read(cx).dropped_samples().to_string(),
@@ -350,8 +324,7 @@ fn permission_alert(permission: &MicrophonePermissionState) -> Option<impl IntoE
                 .child(Alert::warning(
                     "mic-permission-alert",
                     format!(
-                        "{} {}",
-                        reason,
+                        "{reason} {}",
                         crate::i18n::localize("microphone_permission_bundle_hint")
                     ),
                 ))

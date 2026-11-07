@@ -5,6 +5,7 @@ use std::time::Duration;
 use gpui_auth::{AuthController, AuthEvent, AuthIo, AuthProvider, AuthState, TokenStore};
 use gpui_kit::{App, AppContext as _, Context, Entity, Global, Subscription};
 
+use crate::capabilities::Capability;
 use crate::services::auth_social::config::SocialConfig;
 use crate::services::auth_social::providers::github::GitHubProvider;
 use crate::services::auth_social::providers::oidc::OidcProvider;
@@ -20,7 +21,7 @@ const NONE_CONFIGURED: &str =
 struct ActiveFlow {
     kind: ProviderKind,
     _task: Option<gpui_kit::Task<()>>,
-    _abort: Option<tokio::task::AbortHandle>,
+    abort: Option<tokio::task::AbortHandle>,
 }
 
 pub(crate) struct SocialFlows {
@@ -35,6 +36,8 @@ pub(crate) struct SocialFlows {
     active_flow: Option<ActiveFlow>,
     session_owner: Option<ProviderKind>,
     flow_timeout: Duration,
+    #[cfg(test)]
+    opened_urls: Vec<String>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -121,6 +124,8 @@ pub(crate) fn install_with(
             active_flow: None,
             session_owner: None,
             flow_timeout: FLOW_TIMEOUT,
+            #[cfg(test)]
+            opened_urls: Vec::new(),
             _subscriptions: subscriptions,
         }
     });
@@ -130,6 +135,8 @@ pub(crate) fn install_with(
         controller.update(cx, |controller, cx| controller.restore(cx));
     }
     entity.update(cx, |flows, cx| {
+        // The restore tasks only notify when stored tokens exist; the initial
+        // session state and capability rows must land either way.
         flows.sync_session(cx);
         flows.refresh_capabilities(cx);
     });
@@ -156,18 +163,31 @@ impl SocialFlows {
             );
             return;
         };
+        if self.runtime.is_none() && self.redirect_modes.get(&kind) == Some(&RedirectMode::Loopback)
+        {
+            tracing::warn!(
+                target: "gpui_starter::auth_social",
+                provider = kind.id(),
+                "no tokio runtime; refusing loopback sign-in flow"
+            );
+            return;
+        }
         if let Some(active) = self.active_flow.take() {
             if let Some(previous) = self.controllers.get(&active.kind) {
                 previous.update(cx, |previous, cx| previous.cancel(cx));
             }
-            if let Some(abort) = active._abort {
+            // cancel() cannot stop the detached start_flow task; kill the
+            // listener it may already have bound.
+            self.abort_pending_redirect(active.kind);
+            if let Some(abort) = active.abort {
                 abort.abort();
             }
         }
+
         self.active_flow = Some(ActiveFlow {
             kind,
             _task: None,
-            _abort: None,
+            abort: None,
         });
         controller.update(cx, |controller, cx| controller.start_sign_in(cx));
     }
@@ -231,38 +251,53 @@ impl SocialFlows {
                 if !flow_is_active {
                     return;
                 }
-                if let Err(err) = crate::services::desktop_actions::open_url(url, cx) {
-                    tracing::warn!(
-                        target: "gpui_starter::auth_social",
-                        provider = kind.id(),
-                        error = %open_failure_detail(&err),
-                        "failed to open authorization URL"
-                    );
-                }
+                self.open_authorization_url(kind, url, cx);
                 if self.redirect_modes.get(&kind) == Some(&RedirectMode::Loopback) {
                     if let Some((receiver, abort)) = self.take_pending_redirect(kind) {
                         self.spawn_drain(kind, receiver, abort, cx);
                     }
                 }
             }
+            // Session and capability updates ride the observe subscription,
+            // which fires on every state mutation; these arms keep only
+            // bookkeeping.
             AuthEvent::FlowCompleted => {
                 self.session_owner = Some(kind);
-                self.sync_session(cx);
-                self.refresh_capabilities(cx);
             }
             AuthEvent::FlowFailed { .. } => {
-                self.active_flow = None;
-                self.sync_session(cx);
-                self.refresh_capabilities(cx);
+                // A stale flow's late failure must not kill the live one.
+                if self
+                    .active_flow
+                    .as_ref()
+                    .is_some_and(|active| active.kind == kind)
+                {
+                    self.clear_active_flow();
+                    self.abort_pending_redirect(kind);
+                }
             }
             AuthEvent::SignedOut => {
                 if self.session_owner == Some(kind) {
                     self.session_owner = None;
                 }
-                self.sync_session(cx);
-                self.refresh_capabilities(cx);
             }
             AuthEvent::AccountCreated { .. } => {}
+        }
+    }
+
+    #[cfg(test)]
+    fn open_authorization_url(&mut self, _kind: ProviderKind, url: &str, _cx: &mut Context<Self>) {
+        self.opened_urls.push(url.to_string());
+    }
+
+    #[cfg(not(test))]
+    fn open_authorization_url(&self, kind: ProviderKind, url: &str, cx: &mut Context<Self>) {
+        if let Err(err) = crate::services::desktop_actions::open_url(url, cx) {
+            tracing::warn!(
+                target: "gpui_starter::auth_social",
+                provider = kind.id(),
+                error = %open_failure_detail(&err),
+                "failed to open authorization URL"
+            );
         }
     }
 
@@ -277,6 +312,20 @@ impl SocialFlows {
             ProviderKind::Google => self.google.as_ref()?.take_pending_redirect(),
             ProviderKind::GitHub => self.github.as_ref()?.take_pending_redirect(),
             ProviderKind::Oidc => self.generic.as_ref()?.take_pending_redirect(),
+        }
+    }
+
+    fn abort_pending_redirect(&mut self, kind: ProviderKind) {
+        if let Some((_, abort)) = self.take_pending_redirect(kind) {
+            abort.abort();
+        }
+    }
+
+    fn clear_active_flow(&mut self) {
+        if let Some(active) = self.active_flow.take()
+            && let Some(abort) = active.abort
+        {
+            abort.abort();
         }
     }
 
@@ -312,10 +361,17 @@ impl SocialFlows {
                 Err(_join_error) => {}
             }
         });
+        // A second arm for the same kind replaces the first drain; its
+        // listener must not outlive it.
+        if let Some(previous) = self.active_flow.take()
+            && let Some(abort) = previous.abort
+        {
+            abort.abort();
+        }
         self.active_flow = Some(ActiveFlow {
             kind,
             _task: Some(task),
-            _abort: Some(abort),
+            abort: Some(abort),
         });
     }
 
@@ -333,7 +389,7 @@ impl SocialFlows {
             provider = kind.id(),
             "sign-in flow timed out without a browser redirect"
         );
-        self.active_flow = None;
+        self.clear_active_flow();
         if let Some(controller) = self.controllers.get(&kind) {
             controller.update(cx, |controller, cx| controller.cancel(cx));
         }
@@ -376,7 +432,12 @@ impl SocialFlows {
             } else {
                 crate::capabilities::CapabilityStatus::degraded(CONFIGURED_NOT_CONNECTED)
             };
-            crate::capabilities::set(format!("auth_social_{}", kind.id()), status, cx);
+            let capability = match kind {
+                ProviderKind::Google => Capability::AUTH_SOCIAL_GOOGLE,
+                ProviderKind::GitHub => Capability::AUTH_SOCIAL_GITHUB,
+                ProviderKind::Oidc => Capability::AUTH_SOCIAL_OIDC,
+            };
+            crate::capabilities::set(capability, status, cx);
         }
         let aggregate = if any_configured {
             crate::capabilities::CapabilityStatus::supported_enabled()
@@ -385,7 +446,7 @@ impl SocialFlows {
         } else {
             crate::capabilities::CapabilityStatus::error(NONE_CONFIGURED)
         };
-        crate::capabilities::set("auth_social", aggregate, cx);
+        crate::capabilities::set(Capability::AUTH_SOCIAL, aggregate, cx);
     }
 
     pub(crate) fn controller(&self, kind: ProviderKind) -> Option<Entity<AuthController>> {
@@ -416,13 +477,11 @@ fn open_failure_detail(error: &crate::services::desktop_actions::DesktopActionEr
 fn map_auth_state(state: &AuthState) -> SessionState {
     match state {
         AuthState::SignedOut => SessionState::SignedOut,
-        AuthState::SigningIn | AuthState::SigningUp | AuthState::AwaitingChallenge { .. } => {
-            SessionState::SigningIn
-        }
+        AuthState::SigningIn | AuthState::SigningUp => SessionState::SigningIn,
         AuthState::SignedIn { account_label } => SessionState::SignedIn {
             account_label: account_label.clone(),
         },
-        AuthState::Error(message) => SessionState::Error(message.clone()),
+        AuthState::Error(error) => SessionState::Error(error.to_string()),
     }
 }
 

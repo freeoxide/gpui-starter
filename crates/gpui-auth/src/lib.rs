@@ -22,11 +22,11 @@ pub use controller::{AuthController, AuthEvent, AuthState};
 pub use demo_backend::DemoBackend;
 pub use email::{
     AuthBackend, AuthenticatedSession, EMAIL_PROVIDER_ID, EmailAccountStatus,
-    EmailPasswordProvider, PasswordAuth, SignInOutcome, TotpChallenge, TotpEnrollment,
+    EmailPasswordProvider, PasswordAuth,
 };
 pub use error::AuthError;
 #[cfg(feature = "mock-provider")]
-pub use mock::MockProvider;
+pub use mock::{MOCK_PROVIDER_ID, MockProvider};
 pub use pkce::{PkcePair, authorize_challenge, random_state};
 pub use provider::{AuthIo, AuthProvider, FlowLaunch, RedirectParams, RefreshPolicy};
 pub use store::{InMemoryStore, TokenStore};

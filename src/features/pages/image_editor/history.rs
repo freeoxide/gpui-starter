@@ -58,10 +58,11 @@ impl EditorHistory {
     ) {
         self.future.clear();
         self.past.push(op);
-        while self.past.len() > entry_limit || distinct_base_bytes(&self.past) > pixel_budget {
-            if self.past.is_empty() {
-                break;
-            }
+        // Never evict the just-recorded op: an oversized base must not kill
+        // undo for the whole session.
+        while self.past.len() > 1
+            && (self.past.len() > entry_limit || distinct_base_bytes(&self.past) > pixel_budget)
+        {
             self.past.remove(0);
         }
     }
@@ -97,22 +98,20 @@ impl EditorHistory {
     }
 }
 
-impl Default for EditorHistory {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 fn distinct_base_bytes(entries: &[EditOp]) -> usize {
-    let mut seen: Vec<*const RgbaImage> = Vec::new();
+    // Identity is content, not address: an evicted entry's allocation can be
+    // reused by a later image, and re-encoded copies must still dedup.
+    let mut seen: Vec<&Arc<RgbaImage>> = Vec::new();
     let mut total = 0usize;
     for op in entries {
         for base in [&op.before.base, &op.after.base] {
-            let ptr = Arc::as_ptr(base);
-            if seen.contains(&ptr) {
+            if seen
+                .iter()
+                .any(|seen| Arc::ptr_eq(seen, base) || ***seen == **base)
+            {
                 continue;
             }
-            seen.push(ptr);
+            seen.push(base);
             let (w, h) = base.dimensions();
             total += w as usize * h as usize * 4;
         }

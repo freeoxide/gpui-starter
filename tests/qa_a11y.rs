@@ -1,15 +1,14 @@
-//! Accessibility contracts that hold without a live window: capability
-//! registration truthfulness, snapshot semantics, the public element-helper
-//! surface, checklist claims, and runtime-proven rules, all anchored in code.
+//! Accessibility contracts that hold without a live window, each pinned
+//! against code or docs rather than a running UI.
 
+#[allow(dead_code)]
+mod common;
+
+use common::repo_file;
 use gpui_kit::{Role, accesskit::Live, div, prelude::*};
 
 use gpui_starter::accessibility::{A11yExt, AccessibilitySnapshot, capability_status};
 use gpui_starter::ui::widgets::virtual_list_item;
-
-// ---------------------------------------------------------------------------
-// Capability registration truthfulness
-// ---------------------------------------------------------------------------
 
 /// `initialize` registers exactly `capability_status(snapshot.accesskit_linked)`,
 /// so these pin what that registration may claim.
@@ -42,10 +41,6 @@ fn capability_without_bridge_is_unsupported_not_degraded() {
     assert!(!status.degraded);
 }
 
-// ---------------------------------------------------------------------------
-// Snapshot semantics
-// ---------------------------------------------------------------------------
-
 #[test]
 fn default_snapshot_reflects_compiled_bridge_without_windows() {
     let snap = AccessibilitySnapshot::default();
@@ -57,10 +52,6 @@ fn default_snapshot_reflects_compiled_bridge_without_windows() {
     assert_eq!(snap.total_windows, 0);
     assert!(!snap.status.is_empty());
 }
-
-// ---------------------------------------------------------------------------
-// Element helper surface
-// ---------------------------------------------------------------------------
 
 // A11y nodes are only observable through a live window with assistive tech
 // attached, so these pin the public surface and its gpui interop.
@@ -76,38 +67,31 @@ fn a11y_helpers_are_public_and_chainable() {
 
 #[test]
 fn virtual_list_item_chains_with_selection_state() {
-    let _row = virtual_list_item("row-0", "gpx-fetch 200 1h ago", 0, 4).aria_selected(true);
+    let _row = virtual_list_item("row-0", "gpx-fetch 200 1h ago", 0).aria_selected(true);
 }
-
-// ---------------------------------------------------------------------------
-// Checklist claims must match code
-// ---------------------------------------------------------------------------
 
 #[test]
 fn checklist_documents_the_real_bridge() {
-    let content = std::fs::read_to_string("docs/accessibility-checklist.md")
-        .expect("read accessibility checklist");
+    let content = repo_file("docs/accessibility-checklist.md");
     let normalized = content.to_lowercase();
 
     assert!(normalized.contains("accesskit"));
     assert!(normalized.contains("live region"));
     assert!(normalized.contains("wasm"));
     assert!(normalized.contains("diagnostics"));
-    // The bridge is real; the old aspirational wording must stay gone.
+    // The old aspirational checklist wording must not return.
     assert!(!normalized.contains("track accesskit integration points"));
 }
 
 #[test]
 fn checklist_bridge_claims_anchor_in_code() {
-    let palette =
-        std::fs::read_to_string("src/features/command_palette.rs").expect("read command palette");
+    let palette = repo_file("src/features/command_palette.rs");
     assert!(
         palette.contains("launcher-status"),
         "palette live region must exist as documented"
     );
 
-    let shell =
-        std::fs::read_to_string("src/shell/root/app_root/render.rs").expect("read shell render");
+    let shell = repo_file("src/shell/root/app_root/render.rs");
     assert!(
         shell.contains("Role::Navigation"),
         "navigation landmark must exist as documented"
@@ -117,25 +101,19 @@ fn checklist_bridge_claims_anchor_in_code() {
         "the landmark's name must carry the localization key"
     );
 
-    let virtual_list =
-        std::fs::read_to_string("src/ui/widgets/virtual_list.rs").expect("read virtual list");
+    let virtual_list = repo_file("src/ui/widgets/virtual_list.rs");
     assert!(
         virtual_list.contains("Role::ListItem"),
         "virtual list rows must be list items as documented"
     );
 }
 
-// ---------------------------------------------------------------------------
-// Runtime-verified rules must match code
-// ---------------------------------------------------------------------------
-
 // Keyed ids prevent the duplicate-a11y-node-id panic; virtual_list's anchors
 // pin the 0-based position contract. Both need a live window (see header).
 
 #[test]
 fn virtual_list_pins_zero_based_positions_and_container_setsize() {
-    let virtual_list =
-        std::fs::read_to_string("src/ui/widgets/virtual_list.rs").expect("read virtual list");
+    let virtual_list = repo_file("src/ui/widgets/virtual_list.rs");
 
     assert!(
         virtual_list.contains(".aria_position_in_set(index)"),
@@ -145,19 +123,18 @@ fn virtual_list_pins_zero_based_positions_and_container_setsize() {
         !virtual_list.contains(".aria_position_in_set(index + 1)"),
         "a +1 here reads one high through every AT bridge"
     );
-    // 2 = the container call (the only one the bridge reads) + the item-level
-    // call; item-only setsize surfaces as none through the ancestor walk.
+    // The ancestor walk reads only the List container's declaration, so the
+    // row builder must not carry an item-level setsize.
     assert_eq!(
         virtual_list.matches(".aria_size_of_set(total)").count(),
-        2,
-        "the bridge walks ancestors only, so the List container must declare setsize"
+        1,
+        "only the Role::List container may declare setsize"
     );
 }
 
 #[test]
 fn playground_helpers_derive_ids_from_call_site_keys() {
-    let helpers = std::fs::read_to_string("src/features/pages/query_playground/ui_helpers.rs")
-        .expect("read playground ui helpers");
+    let helpers = repo_file("src/features/pages/query_playground/ui_helpers.rs");
 
     for (keyed, text_derived) in [
         ("pg-mini-title-{key}", "pg-mini-title-{}"),

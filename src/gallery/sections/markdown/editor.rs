@@ -98,7 +98,8 @@ fn html_tag_name(value: &str) -> Option<&str> {
 }
 
 fn html_attr(value: &str, name: &str) -> Option<String> {
-    let pattern = format!("{name}=\"");
+    // The leading space keeps `uid=` and `data-id=` from reading as `id=`.
+    let pattern = format!(" {name}=\"");
     let start = value.find(&pattern)? + pattern.len();
     let end = value[start..].find('"')?;
     Some(value[start..start + end].to_string())
@@ -141,7 +142,9 @@ fn math_node(source: String, inline: bool, markdown: impl Into<String>) -> Markd
 fn block_math_source(source: &str) -> Option<&str> {
     let source = source.trim();
     let body = source.strip_prefix("$$")?.strip_suffix("$$")?.trim();
-    (!body.is_empty()).then_some(body)
+    // A second $$ means the paragraph only starts and ends with a block
+    // formula; treating it as one would swallow the prose between them.
+    (!body.is_empty() && !body.contains("$$")).then_some(body)
 }
 
 impl MarkdownPlugin for MathPlugin {
@@ -723,7 +726,6 @@ impl MarkdownSection {
             text_view,
             preview_zoom: 1.0,
             input_state,
-            // Default to horizontal scrolling for tables.
             table_wrap: false,
             selection_format: SelectionFormat::Plain,
             find_state,
@@ -836,7 +838,6 @@ impl MarkdownSection {
                     .gap_1()
                     .child(Clipboard::new("markdown-copy-code").value(code.clone()))
                     .when_some(lang, |this, lang| {
-                        // Only show run terminal button for certain languages
                         if lang.as_ref() == "rust" || lang.as_ref() == "python" {
                             this.child(
                                 Button::new("markdown-run-terminal")
@@ -933,14 +934,15 @@ impl MarkdownSection {
                     cx.open_url(url);
                 }
             })
-            // Tables scroll horizontally by default; the status bar toggle
-            // switches to wrapping.
             .style(self.text_view_style())
             .text_size(rems(self.preview_zoom))
             .flex_none()
             .px_5()
             .selectable(true)
             .selection_format(self.selection_format)
+            // Virtualized scrolling inside the fixed-height pane; it is also
+            // what lets reveal_range jump to a search match.
+            .scrollable(true)
     }
 }
 
@@ -970,8 +972,6 @@ impl Render for MarkdownSection {
                                 )
                                 .into_any(),
                         )
-                        // The gallery pane owns scrolling, so the preview
-                        // clips instead of scrolling inside its panel.
                         .child(
                             div()
                                 .size_full()

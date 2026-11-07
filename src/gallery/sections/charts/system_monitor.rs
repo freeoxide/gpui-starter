@@ -30,7 +30,6 @@ const MONITOR_SVG: &[u8] = include_bytes!("assets/monitor.svg");
 const SMARTPHONE_SVG: &[u8] = include_bytes!("assets/smartphone.svg");
 const TABLET_SVG: &[u8] = include_bytes!("assets/tablet.svg");
 
-/// Tab indices
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum MonitorTab {
     #[default]
@@ -58,9 +57,10 @@ enum DeviceSortField {
     Watch,
 }
 
-/// Devices table delegate
+/// Devices table delegate; each row keeps its fixture index, which is the
+/// only chronological order the display dates ("Apr 10") cannot give.
 struct DeviceTableDelegate {
-    rows: Vec<DailyDevice>,
+    rows: Vec<(usize, DailyDevice)>,
     columns: Vec<Column>,
     sort_field: DeviceSortField,
     sort_order: ColumnSort,
@@ -69,7 +69,7 @@ struct DeviceTableDelegate {
 impl DeviceTableDelegate {
     fn new(rows: Vec<DailyDevice>) -> Self {
         let mut delegate = Self {
-            rows,
+            rows: rows.into_iter().enumerate().collect(),
             columns: vec![
                 Column::new("date", "Date").width(90.).sortable(),
                 Column::new("desktop", "Desktop")
@@ -92,7 +92,7 @@ impl DeviceTableDelegate {
 
         match self.sort_field {
             DeviceSortField::Date => self.rows.sort_by(|a, b| {
-                let cmp = a.date.cmp(&b.date);
+                let cmp = a.0.cmp(&b.0);
                 if is_descending { cmp.reverse() } else { cmp }
             }),
             DeviceSortField::Desktop => self.sort_by_count(is_descending, |d| d.desktop),
@@ -104,8 +104,8 @@ impl DeviceTableDelegate {
 
     fn sort_by_count(&mut self, is_descending: bool, count: impl Fn(&DailyDevice) -> f64) {
         self.rows.sort_by(|a, b| {
-            let cmp = count(a)
-                .partial_cmp(&count(b))
+            let cmp = count(&a.1)
+                .partial_cmp(&count(&b.1))
                 .unwrap_or(std::cmp::Ordering::Equal);
             if is_descending { cmp.reverse() } else { cmp }
         });
@@ -132,7 +132,7 @@ impl TableDelegate for DeviceTableDelegate {
         _window: &mut Window,
         cx: &mut Context<TableState<Self>>,
     ) -> impl IntoElement {
-        let Some(row) = self.rows.get(row_ix) else {
+        let Some((_, row)) = self.rows.get(row_ix) else {
             return div().into_any_element();
         };
 
@@ -187,6 +187,10 @@ pub struct SystemMonitorSection {
     head: usize,
     active_tab: MonitorTab,
     device_table: Entity<TableState<DeviceTableDelegate>>,
+    /// The tick loop only outlives its last render while the section is on
+    /// screen; hidden sections stop waking, and render restarts the loop.
+    ticking: bool,
+    rendered_since_tick: bool,
 }
 
 impl SystemMonitorSection {
@@ -211,25 +215,41 @@ impl SystemMonitorSection {
             head,
             active_tab: MonitorTab::default(),
             device_table,
+            ticking: true,
+            // A section the gallery never opens must not advance on its
+            // first tick.
+            rendered_since_tick: false,
         };
 
-        // Start the update loop
+        Self::start_tick_loop(cx);
+
+        monitor
+    }
+
+    fn start_tick_loop(cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(INTERVAL).await;
 
-                let result = this.update(cx, |this, cx| {
-                    this.advance(cx);
-                });
-
-                if result.is_err() {
+                let keep_ticking = this.update(cx, |this, cx| this.tick(cx));
+                if !matches!(keep_ticking, Ok(true)) {
                     break;
                 }
             }
         })
         .detach();
+    }
 
-        monitor
+    /// Returns whether the loop keeps ticking; a tick that lands without a
+    /// render in between means the section is off screen.
+    fn tick(&mut self, cx: &mut Context<Self>) -> bool {
+        if !self.rendered_since_tick {
+            self.ticking = false;
+            return false;
+        }
+        self.rendered_since_tick = false;
+        self.advance(cx);
+        true
     }
 
     /// Slides the window one day forward, wrapping at the end of the fixture.
@@ -393,12 +413,13 @@ fn device_total(d: &DailyDevice) -> f64 {
 
 impl Render for SystemMonitorSection {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.rendered_since_tick = true;
+        if !self.ticking {
+            self.ticking = true;
+            Self::start_tick_loop(cx);
+        }
         let active_tab_index = self.active_tab as usize;
-        let in_view: f64 = self
-            .data
-            .iter()
-            .map(|d| d.desktop + d.mobile + d.tablet + d.watch)
-            .sum();
+        let in_view: f64 = self.data.iter().map(device_total).sum();
 
         v_flex()
             .w_full()
@@ -451,3 +472,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
         SystemMonitorSection::view(window, cx),
     ));
 }
+
+#[cfg(test)]
+#[path = "system_monitor.test.rs"]
+mod system_monitor_test;

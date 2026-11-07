@@ -149,12 +149,17 @@ fn main() {
 }
 ```
 
-`build.rs` runs on the host, so it must gate on `CARGO_CFG_TARGET_OS`
-(target OS), never `#[cfg(target_os = "windows")]` (host OS). On this Linux
-box building Linux targets, the branch never executes: `just clippy` and
-`just test` stay toolchain-free no-ops. When the target IS windows, MSVC
-builds need `rc.exe` from the Windows SDK and GNU builds need mingw
-`windres` ([winresource README](https://github.com/BenjaminRi/winresource)).
+`build.rs` runs on the host, so the deciding gate must be
+`CARGO_CFG_TARGET_OS` (target OS), never a bare `#[cfg(target_os =
+"windows")]` (host OS). On this Linux box building Linux targets, the
+branch never executes: `just clippy` and `just test` stay toolchain-free
+no-ops. An added `#[cfg(windows)]` host gate compiles the block out
+entirely, which is what lets the build-dependency be target-gated; the
+accepted cost is that a Linux-to-Windows cross build skips the icon,
+which B2 covers by building the exe natively on a Windows runner. When
+the target IS windows, MSVC builds need `rc.exe` from the Windows SDK and
+GNU builds need mingw `windres`
+([winresource README](https://github.com/BenjaminRi/winresource)).
 The GHA Windows image ships the full SDK, so `rc.exe` is present
 ([runner image](https://github.com/actions/runner-images/blob/main/images/windows/Windows2025-Readme.md)).
 

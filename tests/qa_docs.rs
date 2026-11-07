@@ -1,6 +1,11 @@
+#[allow(dead_code)]
+mod common;
+
+use common::repo_file;
+
 #[test]
 fn qa_matrix_contains_core_cases() {
-    let content = std::fs::read_to_string("docs/qa-matrix.md").expect("read qa matrix");
+    let content = repo_file("docs/qa-matrix.md");
     let normalized = content.to_lowercase();
     assert!(normalized.contains("second-instance forwarding"));
     assert!(normalized.contains("open logs folder"));
@@ -9,8 +14,7 @@ fn qa_matrix_contains_core_cases() {
 
 #[test]
 fn accessibility_checklist_exists() {
-    let content = std::fs::read_to_string("docs/accessibility-checklist.md")
-        .expect("read accessibility checklist");
+    let content = repo_file("docs/accessibility-checklist.md");
     assert!(content.contains("Keyboard And Focus"));
     assert!(content.contains("Done Criteria"));
 }

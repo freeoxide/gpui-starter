@@ -169,6 +169,8 @@ impl DialogSection {
     fn render_basic_dialog(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let dialog_overlay = self.dialog_overlay;
         let overlay_closable = self.overlay_closable;
+        let close_button = self.close_button;
+        let keyboard = self.keyboard;
         let input1 = self.input1.clone();
         let date = self.date.clone();
         let select = self.select.clone();
@@ -180,23 +182,27 @@ impl DialogSection {
                 Dialog::new(cx)
                     .trigger(Button::new("dialog-show").outline().label("Open Dialog"))
                     .overlay(dialog_overlay)
-                    .keyboard(self.keyboard)
-                    .close_button(self.close_button)
+                    .keyboard(keyboard)
+                    .close_button(close_button)
                     .overlay_closable(overlay_closable)
                     .on_ok({
-                        let view = view.clone();
                         let input1 = input1.clone();
                         let date = date.clone();
                         move |_, window, cx| {
                             view.update(cx, |view, cx| {
-                                view.selected_value = Some(
-                                    format!(
-                                        "Hello, {}, date: {}",
-                                        input1.read(cx).value(),
-                                        date.read(cx).date()
-                                    )
-                                    .into(),
-                                );
+                                let name = input1.read(cx).value();
+                                let name = if name.is_empty() {
+                                    "Anonymous"
+                                } else {
+                                    name.as_str()
+                                };
+                                let date = date
+                                    .read(cx)
+                                    .date()
+                                    .format("%Y-%m-%d")
+                                    .unwrap_or_else(|| "none".into());
+                                view.selected_value =
+                                    Some(format!("Hello, {name}, date: {date}").into());
                                 cx.notify();
                             });
                             window.push_notification("You have pressed confirm.", cx);
@@ -241,6 +247,9 @@ impl DialogSection {
                                                             .title("Other Dialog")
                                                             .child("This is another dialog.")
                                                             .min_h(px(100.))
+                                                            .overlay(dialog_overlay)
+                                                            .keyboard(keyboard)
+                                                            .close_button(close_button)
                                                             .overlay_closable(overlay_closable)
                                                     });
                                                 }),
@@ -318,6 +327,8 @@ impl DialogSection {
     fn render_dialog_without_title(&self, _cx: &mut Context<Self>) -> impl IntoElement {
         let dialog_overlay = self.dialog_overlay;
         let overlay_closable = self.overlay_closable;
+        let close_button = self.close_button;
+        let keyboard = self.keyboard;
 
         section("dialog-without-title", "Without title")
             .description("Render content without a heading.")
@@ -329,6 +340,8 @@ impl DialogSection {
                         window.open_dialog(cx, move |dialog, _, _| {
                             dialog
                                 .overlay(dialog_overlay)
+                                .keyboard(keyboard)
+                                .close_button(close_button)
                                 .overlay_closable(overlay_closable)
                                 .child(
                                     "This is a dialog without title, \
@@ -342,6 +355,8 @@ impl DialogSection {
     fn render_custom_buttons(&self, _cx: &mut Context<Self>) -> impl IntoElement {
         let dialog_overlay = self.dialog_overlay;
         let overlay_closable = self.overlay_closable;
+        let close_button = self.close_button;
+        let keyboard = self.keyboard;
 
         section("dialog-custom-actions", "Custom actions")
             .description("Replace the default footer actions.")
@@ -354,6 +369,8 @@ impl DialogSection {
                             dialog
                                 .rounded(cx.theme().radius_lg)
                                 .overlay(dialog_overlay)
+                                .keyboard(keyboard)
+                                .close_button(close_button)
                                 .overlay_closable(overlay_closable)
                                 .child(
                                     v_flex()
@@ -404,6 +421,8 @@ impl DialogSection {
     fn render_scrollable_dialog(&self, _cx: &mut Context<Self>) -> impl IntoElement {
         let dialog_overlay = self.dialog_overlay;
         let overlay_closable = self.overlay_closable;
+        let close_button = self.close_button;
+        let keyboard = self.keyboard;
 
         section("dialog-scrollable", "Scrollable")
             .description("Keep long content inside a fixed dialog size.")
@@ -417,6 +436,8 @@ impl DialogSection {
                                 .w(px(720.))
                                 .h(px(600.))
                                 .overlay(dialog_overlay)
+                                .keyboard(keyboard)
+                                .close_button(close_button)
                                 .overlay_closable(overlay_closable)
                                 .title("Dialog with scrollbar")
                                 .child(markdown(SCROLLABLE_CONTENT))
@@ -446,6 +467,8 @@ impl DialogSection {
     fn render_table_in_dialog(&self, _cx: &mut Context<Self>) -> impl IntoElement {
         let dialog_overlay = self.dialog_overlay;
         let overlay_closable = self.overlay_closable;
+        let close_button = self.close_button;
+        let keyboard = self.keyboard;
 
         section("dialog-data-table", "Data table")
             .description("Embed a full interactive component.")
@@ -462,6 +485,8 @@ impl DialogSection {
                                     .w(px(800.))
                                     .h(px(600.))
                                     .overlay(dialog_overlay)
+                                    .keyboard(keyboard)
+                                    .close_button(close_button)
                                     .overlay_closable(overlay_closable)
                                     .title("Dialog with Table")
                                     .child(
@@ -478,37 +503,58 @@ impl DialogSection {
     }
 
     fn render_custom_paddings(&self, _cx: &mut Context<Self>) -> impl IntoElement {
+        let dialog_overlay = self.dialog_overlay;
+        let overlay_closable = self.overlay_closable;
+        let close_button = self.close_button;
+        let keyboard = self.keyboard;
+
         section("dialog-padding", "Padding")
             .description("Control spacing around dialog content.")
             .child(
                 Button::new("dialog-custom-paddings")
                     .outline()
                     .label("Custom Paddings")
-                    .on_click(|_, window, cx| {
+                    .on_click(move |_, window, cx| {
                         window.open_dialog(cx, move |dialog, _, _| {
-                            dialog.p_3().title("Custom Dialog Title").child(
-                                "This is a custom dialog content, we can use \
-                                paddings to control the layout and spacing within \
-                                the dialog.",
-                            )
+                            dialog
+                                .overlay(dialog_overlay)
+                                .keyboard(keyboard)
+                                .close_button(close_button)
+                                .overlay_closable(overlay_closable)
+                                .p_3()
+                                .title("Custom Dialog Title")
+                                .child(
+                                    "This is a custom dialog content, we can use \
+                                    paddings to control the layout and spacing within \
+                                    the dialog.",
+                                )
                         });
                     }),
             )
     }
 
     fn render_custom_style(&self, _cx: &mut Context<Self>) -> impl IntoElement {
+        let dialog_overlay = self.dialog_overlay;
+        let overlay_closable = self.overlay_closable;
+        let close_button = self.close_button;
+        let keyboard = self.keyboard;
+
         section("dialog-custom-style", "Custom style")
             .description("Customize color, radius, and foreground.")
             .child(
                 Button::new("dialog-custom-style")
                     .outline()
                     .label("Custom Dialog Style")
-                    .on_click(|_, window, cx| {
+                    .on_click(move |_, window, cx| {
                         window.open_dialog(cx, move |dialog, _, cx| {
                             dialog
                                 .rounded(cx.theme().radius_lg)
                                 .bg(cx.theme().cyan)
                                 .text_color(cx.theme().info_foreground)
+                                .overlay(dialog_overlay)
+                                .keyboard(keyboard)
+                                .close_button(close_button)
+                                .overlay_closable(overlay_closable)
                                 .title("Custom Dialog Title")
                                 .child("This is a custom dialog content.")
                         });
@@ -517,52 +563,61 @@ impl DialogSection {
     }
 
     fn render_dialog_with_content(&self, _cx: &mut Context<Self>) -> impl IntoElement {
+        let dialog_overlay = self.dialog_overlay;
+        let overlay_closable = self.overlay_closable;
+        let close_button = self.close_button;
+        let keyboard = self.keyboard;
+
         section("dialog-custom-content", "Custom content")
             .description("Compose header, body, and footer explicitly.")
             .child(
                 Button::new("dialog-custom-width")
                     .outline()
                     .label("Custom Width (400px)")
-                    .on_click(|_, window, cx| {
+                    .on_click(move |_, window, cx| {
                         window.open_dialog(cx, move |dialog, _, _| {
-                            dialog.w(px(400.)).content(|content, _, _| {
-                                content
-                                    .child(
-                                        DialogHeader::new()
-                                            .child(DialogTitle::new().child("Custom Width"))
-                                            .child(
-                                                DialogDescription::new().child(
+                            dialog
+                                .w(px(400.))
+                                .overlay(dialog_overlay)
+                                .keyboard(keyboard)
+                                .close_button(close_button)
+                                .overlay_closable(overlay_closable)
+                                .content(|content, _, _| {
+                                    content
+                                        .child(
+                                            DialogHeader::new()
+                                                .child(DialogTitle::new().child("Custom Width"))
+                                                .child(DialogDescription::new().child(
                                                     "This dialog has a custom width of 400px.",
-                                                ),
-                                            ),
-                                    )
-                                    .child(
-                                        "Content area with custom width configuration, \
+                                                )),
+                                        )
+                                        .child(
+                                            "Content area with custom width configuration, \
                                         and the footer is used flex 1 button widths.",
-                                    )
-                                    .child(
-                                        DialogFooter::new()
-                                            .justify_center()
-                                            .child(
-                                                Button::new("dialog-width-cancel")
-                                                    .flex_1()
-                                                    .outline()
-                                                    .label("Cancel")
-                                                    .on_click(|_, window, cx| {
-                                                        window.close_dialog(cx);
-                                                    }),
-                                            )
-                                            .child(
-                                                Button::new("dialog-width-done")
-                                                    .flex_1()
-                                                    .primary()
-                                                    .label("Done")
-                                                    .on_click(|_, window, cx| {
-                                                        window.close_dialog(cx);
-                                                    }),
-                                            ),
-                                    )
-                            })
+                                        )
+                                        .child(
+                                            DialogFooter::new()
+                                                .justify_center()
+                                                .child(
+                                                    Button::new("dialog-width-cancel")
+                                                        .flex_1()
+                                                        .outline()
+                                                        .label("Cancel")
+                                                        .on_click(|_, window, cx| {
+                                                            window.close_dialog(cx);
+                                                        }),
+                                                )
+                                                .child(
+                                                    Button::new("dialog-width-done")
+                                                        .flex_1()
+                                                        .primary()
+                                                        .label("Done")
+                                                        .on_click(|_, window, cx| {
+                                                            window.close_dialog(cx);
+                                                        }),
+                                                ),
+                                        )
+                                })
                         })
                     }),
             )
@@ -571,6 +626,8 @@ impl DialogSection {
     fn render_textview_dialog(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let dialog_overlay = self.dialog_overlay;
         let overlay_closable = self.overlay_closable;
+        let close_button = self.close_button;
+        let keyboard = self.keyboard;
 
         section("dialog-selectable-text", "Selectable text")
             .description("Embed selectable rich text.")
@@ -582,8 +639,8 @@ impl DialogSection {
                             .label("TextView Dialog"),
                     )
                     .overlay(dialog_overlay)
-                    .keyboard(self.keyboard)
-                    .close_button(self.close_button)
+                    .keyboard(keyboard)
+                    .close_button(close_button)
                     .overlay_closable(overlay_closable)
                     .p_0()
                     .content(move |content, _, cx| {
@@ -628,6 +685,11 @@ impl DialogSection {
     }
 
     fn render_selection_isolation(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let dialog_overlay = self.dialog_overlay;
+        let overlay_closable = self.overlay_closable;
+        let close_button = self.close_button;
+        let keyboard = self.keyboard;
+
         section("dialog-selection-isolation", "Selection isolation")
             .description(
                 "A selection started inside the dialog or sheet must stay off the text behind it.",
@@ -641,10 +703,14 @@ impl DialogSection {
                         Button::new("dialog-isolation-open")
                             .outline()
                             .label("Open dialog")
-                            .on_click(|_, window, cx| {
-                                window.open_dialog(cx, |dialog, _, _| {
+                            .on_click(move |_, window, cx| {
+                                window.open_dialog(cx, move |dialog, _, _| {
                                     dialog
                                         .title("Selectable dialog")
+                                        .overlay(dialog_overlay)
+                                        .keyboard(keyboard)
+                                        .close_button(close_button)
+                                        .overlay_closable(overlay_closable)
                                         .child(
                                             TextView::markdown(
                                                 "dialog-isolation-text",
@@ -660,10 +726,12 @@ impl DialogSection {
                         Button::new("sheet-isolation-open")
                             .outline()
                             .label("Open Sheet")
-                            .on_click(|_, window, cx| {
-                                window.open_sheet(cx, |sheet, _, _| {
+                            .on_click(move |_, window, cx| {
+                                window.open_sheet(cx, move |sheet, _, _| {
                                     sheet
                                         .title("Selectable Sheet")
+                                        .overlay(dialog_overlay)
+                                        .overlay_closable(overlay_closable)
                                         .child(
                                             TextView::markdown(
                                                 "sheet-isolation-text",

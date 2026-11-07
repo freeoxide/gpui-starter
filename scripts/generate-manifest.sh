@@ -6,8 +6,14 @@ set -euo pipefail
 # If OUTPUT_FILE is omitted, writes to stdout.
 #
 # Optional environment variables:
-#   UPDATE_SIGNING_KEY  — base64-encoded Ed25519 private key for signing assets.
-#                         If not set, the signature field is left empty.
+#   UPDATE_SIGNING_KEY  — base64-encoded 64-byte Ed25519 private key
+#                         (seed || public key). Required: the updater refuses
+#                         unsigned assets, so a missing or unusable key fails
+#                         the run instead of shipping an unsigned manifest.
+#   ARTIFACTS_DIR       — directory holding the built release assets to hash
+#                         and sign (default: ./artifacts, where the release
+#                         workflow's download-artifact step puts them). Assets
+#                         are never re-downloaded from the release API.
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <VERSION> <GITHUB_REPO> [OUTPUT_FILE]" >&2
@@ -17,6 +23,14 @@ fi
 VERSION="$1"
 GITHUB_REPO="$2"
 OUTPUT_FILE="${3:-}"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-artifacts}"
+
+# The updater refuses unsigned assets, so a manifest with empty signatures
+# bricks updates for every user until the next release; fail the run instead.
+if [ -z "${UPDATE_SIGNING_KEY:-}" ]; then
+    echo "Error: UPDATE_SIGNING_KEY is not set; refusing to generate an unsigned manifest" >&2
+    exit 1
+fi
 
 API_URL="https://api.github.com/repos/${GITHUB_REPO}/releases/tags/v${VERSION}"
 
@@ -75,11 +89,6 @@ DMG_SIZE="$(echo "$DMG_ASSET" | jq -r '.size')"
 EXE_URL="$(echo "$EXE_ASSET" | jq -r '.browser_download_url')"
 EXE_SIZE="$(echo "$EXE_ASSET" | jq -r '.size')"
 
-# Compute the Ed25519 signature of each asset's SHA-256 hash. The signing key
-# is a base64-encoded 64-byte Ed25519 private key (seed || public key).
-DMG_SIGNATURE=""
-EXE_SIGNATURE=""
-
 # Signs a sha256 hex digest passed as $1 and prints the base64 signature;
 # empty output means failure, which callers turn into a hard error. The hash
 # travels via env (not shell interpolation) to avoid injection/quoting
@@ -108,34 +117,27 @@ except Exception as e:
 '
 }
 
-# Downloads $1 (a browser_download_url), prints its signature. A failed
-# download keeps the old warn-and-ship-unsigned behavior; a signing failure
-# exits non-zero (the updater refuses unsigned assets, so hiding it helps
-# nobody).
-sign_release_asset() {
-    FILE="$TMP_ASSETS/$(basename "$1")"
-    if ! gh_curl -sfL -o "$FILE" "$1"; then
-        echo "Warning: Failed to download asset for signing — signature will be empty" >&2
-        return 0
+# Signs the local asset at path $1; prints the base64 signature or exits
+# non-zero. Hashing the files in ARTIFACTS_DIR avoids re-downloading assets
+# from the release API, a CI step that can transiently fail.
+sign_local_asset() {
+    if [ ! -f "$1" ]; then
+        echo "Error: Asset '$1' not found; cannot sign the manifest" >&2
+        exit 1
     fi
-    SIGNATURE="$(sign_sha256 "$(shasum -a 256 "$FILE" | awk '{print $1}')")"
+    SIGNATURE="$(sign_sha256 "$(shasum -a 256 "$1" | awk '{print $1}')")"
     if [ -z "$SIGNATURE" ]; then
-        echo "Error: UPDATE_SIGNING_KEY is set but Ed25519 signing produced an empty signature" >&2
+        echo "Error: Ed25519 signing produced an empty signature for '$1'" >&2
         exit 1
     fi
     echo "Ed25519 signature generated: ${SIGNATURE:0:20}..." >&2
     printf '%s' "$SIGNATURE"
 }
 
-if [ -n "${UPDATE_SIGNING_KEY:-}" ]; then
-    echo "Signing manifest with Ed25519..." >&2
+echo "Signing manifest with Ed25519..." >&2
 
-    TMP_ASSETS="$(mktemp -d)"
-    trap 'rm -rf "$TMP_ASSETS"' EXIT
-
-    DMG_SIGNATURE="$(sign_release_asset "$DMG_URL")"
-    EXE_SIGNATURE="$(sign_release_asset "$EXE_URL")"
-fi
+DMG_SIGNATURE="$(sign_local_asset "${ARTIFACTS_DIR}/${DMG_NAME}")"
+EXE_SIGNATURE="$(sign_local_asset "${ARTIFACTS_DIR}/${EXE_NAME}")"
 
 # Generate the manifest JSON matching the UpdateManifest struct in updater.rs:
 #   { version, release_notes, platforms: { "<key>": { url, signature, size } } }

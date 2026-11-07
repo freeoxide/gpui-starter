@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher};
 
 use gpui_kit::*;
 
-use super::scene::{CanvasShape, ShapeStyle, StrokeStyle};
+use super::scene::{CanvasShape, ShapeId, ShapeStyle, StrokeStyle};
 
 /// One slot per painted artifact; the boxed line avoids ~3 KB/slot of inline
 /// SmallVec storage (a matching generation reuses the entry unhashed).
@@ -44,6 +44,8 @@ impl ShapeCache {
             self.path = None;
             self.line = None;
             self.path = build();
+            #[cfg(test)]
+            super::perf_probe::set_last_path_build(self.path.as_ref());
         }
         self.path.as_ref().map(|path| translated(path, origin))
     }
@@ -53,7 +55,7 @@ impl ShapeCache {
         generation: u64,
         content_key: impl FnOnce() -> u64,
         build: impl FnOnce() -> ShapedLine,
-    ) -> ShapedLine {
+    ) -> &ShapedLine {
         if self.invalidated(generation, content_key) || self.line.is_none() {
             #[cfg(test)]
             super::perf_probe::add_text_shaping();
@@ -61,7 +63,7 @@ impl ShapeCache {
             self.line = None;
             self.line = Some(Box::new(build()));
         }
-        self.line.as_deref().cloned().expect("line built above")
+        self.line.as_deref().expect("line built above")
     }
 }
 
@@ -161,6 +163,7 @@ pub(crate) fn shape_key(shape: &CanvasShape, zoom: f32) -> u64 {
             text,
             font_size,
             color,
+            ..
         } => {
             hash_point(&mut hasher, position);
             hash_pixels(&mut hasher, *font_size);
@@ -170,6 +173,18 @@ pub(crate) fn shape_key(shape: &CanvasShape, zoom: f32) -> u64 {
         // Image paints uncached; nothing else contributes to its key.
         _ => {}
     }
+    hasher.finish()
+}
+
+/// Key for a cached selection outline: identity plus screen-space size. Panning
+/// moves only the paint origin, so it reuses the stored path untouched.
+pub(crate) fn selection_key(id: ShapeId, width: Pixels, height: Pixels) -> u64 {
+    #[cfg(test)]
+    super::perf_probe::add_key_hash();
+    let mut hasher = DefaultHasher::new();
+    id.0.hash(&mut hasher);
+    hash_pixels(&mut hasher, width);
+    hash_pixels(&mut hasher, height);
     hasher.finish()
 }
 

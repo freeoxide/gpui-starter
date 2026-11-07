@@ -133,7 +133,6 @@ crate-type = ["rlib", "cdylib"]
 # Enable OTLP export over HTTP/Protobuf for the telemetry module.
 # See src/telemetry.rs for the full list of optional dependencies this pulls in.
 otlp = ["dep:opentelemetry-otlp", "dep:opentelemetry_sdk"]
-websocket = ["dep:tokio-tungstenite"]
 # AI chat streaming page (default OFF). flume is unconditional
 # (services/streaming.rs needs it regardless), so this is an empty gate
 # that only controls the ai_chat feature-page module.
@@ -190,7 +189,6 @@ ed25519-dalek = { version = "2", features = ["std"] }
 base64 = "0.22"
 sha2 = "0.10"
 futures-util = "0.3"
-tokio-tungstenite = { version = "0.24", optional = true, features = ["native-tls"] }
 tempfile = "3.27.0"
 reqwest = { version = "0.12.24", default-features = false, features = [
     "cookies",
@@ -214,7 +212,7 @@ undo = "0.52.0"
 sys-locale = "0.3"
 flume = "0.11"
 fuzzy-matcher = "0.3"
-rust-embed = "8"
+rust-embed = { version = "8", features = ["include-exclude"] }
 # ui::waveform: rtrb is the SPSC ring between audio callback and UI tick;
 # rustfft drives the spectrum analyzer. Both compile on wasm32.
 rtrb = "0.4"
@@ -258,16 +256,14 @@ gpui = { package = "gpui-pre", version = "0.3.10", features = ["test-support"] }
 naga = { version = "=30.0.1", features = ["wgsl-in"] }
 
 # Test-only (plan 22 email-auth e2e): fast argon2 cost params for the demo
-# backend plus an RFC 6238 code oracle for the TOTP suites. Same target gate
-# as the gpui-auth lines so the wasm lane never resolves them.
+# backend. Same target gate as the gpui-auth lines so the wasm lane never
+# resolves them.
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
 argon2 = "0.5.3"
-hmac = "0.12"
-sha1 = "0.10"
 
-# Windows .exe icon embed; build.rs gates on CARGO_CFG_TARGET_OS so Linux,
-# macOS, and wasm hosts never invoke it (docs/research/icons-and-windows.md A2).
-[build-dependencies]
+# Windows .exe icon embed; the target gate keeps Linux, macOS, and wasm
+# builds from compiling it (docs/research/icons-and-windows.md A2).
+[target.'cfg(target_os = "windows")'.build-dependencies]
 winresource = "0.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]

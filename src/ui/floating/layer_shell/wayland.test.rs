@@ -1,8 +1,8 @@
-use gpui_kit::layer_shell::Anchor;
-use gpui_kit::{Edges, TestAppContext, point, px, size};
+use gpui_kit::layer_shell::{Anchor, KeyboardInteractivity, Layer};
+use gpui_kit::{Point, TestAppContext, point, px, size};
 
 use super::*;
-use crate::ui::floating::{FloatingSpec, FloatingWindowId, LayerShellSpec};
+use crate::ui::floating::{FloatingSpec, FloatingWindowId, LayerShellSpec, WidgetLayer};
 
 #[test]
 fn anchor_bits_cover_all_nine_placements() {
@@ -20,17 +20,6 @@ fn anchor_bits_cover_all_nine_placements() {
     for (placement, expected) in cases {
         assert_eq!(anchor_bits(placement), expected, "{placement:?}");
     }
-}
-
-#[test]
-fn margin_tuple_keeps_css_order() {
-    let edges = Edges {
-        top: px(1.),
-        right: px(2.),
-        bottom: px(3.),
-        left: px(4.),
-    };
-    assert_eq!(margin_tuple(edges), (px(1.), px(2.), px(3.), px(4.)));
 }
 
 #[test]
@@ -56,14 +45,6 @@ fn margin_from_anchor_applies_the_offset_only_on_touched_edges() {
 }
 
 #[test]
-fn edge_bits_map_to_single_anchor_bits() {
-    assert_eq!(edge_bits(Edge4::Top), Anchor::TOP);
-    assert_eq!(edge_bits(Edge4::Right), Anchor::RIGHT);
-    assert_eq!(edge_bits(Edge4::Bottom), Anchor::BOTTOM);
-    assert_eq!(edge_bits(Edge4::Left), Anchor::LEFT);
-}
-
-#[test]
 fn classifies_layer_shell_rejection() {
     let direct: anyhow::Error = LayerShellNotSupportedError.into();
     assert!(is_layer_shell_unsupported(&direct));
@@ -72,6 +53,36 @@ fn classifies_layer_shell_rejection() {
     assert!(!is_layer_shell_unsupported(&anyhow::anyhow!(
         "other failure"
     )));
+}
+
+#[test]
+fn layer_surface_options_assembles_the_widget_contract() {
+    let options = layer_surface_options(
+        WidgetLayer::Top,
+        Placement9::TopRight,
+        point(px(7.), px(11.)),
+    );
+    assert_eq!(options.namespace, "gpui-starter.widgets");
+    assert_eq!(options.layer, Layer::Top);
+    assert_eq!(options.anchor, Anchor::TOP | Anchor::RIGHT);
+    assert_eq!(options.margin, Some((px(11.), px(7.), px(0.), px(0.))));
+    assert_eq!(options.keyboard_interactivity, KeyboardInteractivity::None);
+    assert_eq!(options.exclusive_zone, None);
+    assert_eq!(options.exclusive_edge, None);
+}
+
+#[test]
+fn layer_surface_options_maps_every_widget_layer() {
+    let cases = [
+        (WidgetLayer::Background, Layer::Background),
+        (WidgetLayer::Bottom, Layer::Bottom),
+        (WidgetLayer::Top, Layer::Top),
+        (WidgetLayer::Overlay, Layer::Overlay),
+    ];
+    for (widget, expected) in cases {
+        let options = layer_surface_options(widget, Placement9::Center, Point::default());
+        assert_eq!(options.layer, expected, "{widget:?}");
+    }
 }
 
 #[gpui_kit::test]

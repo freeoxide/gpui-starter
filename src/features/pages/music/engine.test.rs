@@ -82,6 +82,30 @@ fn play_queue_out_of_bounds_is_a_noop(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn play_queue_index_jumps_resets_and_ignores_out_of_bounds(cx: &mut TestAppContext) {
+    let engine = engine(cx);
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.play_queue(vec![T0, T1, T2], 0, cx)));
+    cx.executor()
+        .advance_clock(Duration::from_millis(2 * TICK_MS));
+    cx.run_until_parked();
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.play_queue_index(1, cx)));
+    cx.read(|cx| {
+        assert_eq!(engine.read(cx).current_ix(), Some(1));
+        assert_eq!(engine.read(cx).current_track().unwrap().id, T1);
+        assert_eq!(engine.read(cx).position_ms(), 0);
+        assert_eq!(engine.read(cx).status(), TransportStatus::Playing);
+    });
+    cx.executor().advance_clock(Duration::from_millis(TICK_MS));
+    cx.run_until_parked();
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.play_queue_index(3, cx)));
+    cx.read(|cx| {
+        assert_eq!(engine.read(cx).current_ix(), Some(1));
+        assert_eq!(engine.read(cx).position_ms(), 250);
+        assert_eq!(engine.read(cx).status(), TransportStatus::Playing);
+    });
+}
+
+#[gpui_kit::test]
 fn ticks_advance_position_while_playing(cx: &mut TestAppContext) {
     let engine = engine(cx);
     cx.update(|cx| engine.update(cx, |engine, cx| engine.play_queue(vec![T0, T1, T2], 0, cx)));
@@ -91,8 +115,8 @@ fn ticks_advance_position_while_playing(cx: &mut TestAppContext) {
     cx.read(|cx| assert_eq!(engine.read(cx).position_ms(), 750));
 }
 
-// PlayerEngine::new spawns the tick; its entity updates are legal only from
-// that task once the timer elapses, never at spawn or construction time.
+// The tick task spawns with the engine; its entity updates are legal only
+// once the timer elapses, never at construction time.
 #[gpui_kit::test]
 fn engine_updates_only_when_the_tick_timer_fires(cx: &mut TestAppContext) {
     let engine = engine(cx);
@@ -294,8 +318,108 @@ fn clear_queue_resets_everything(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn duplicate_track_ids_play_in_queue_order(cx: &mut TestAppContext) {
     let engine = engine(cx);
-    cx.update(|cx| engine.update(cx, |engine, cx| engine.play_queue(vec![T0, T0, T0], 2, cx)));
-    cx.read(|cx| assert_eq!(engine.read(cx).current_ix(), Some(2)));
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.play_queue(vec![T1, T1], 0, cx)));
+    cx.executor()
+        .advance_clock(Duration::from_millis(3 * TICK_MS));
+    cx.run_until_parked();
+    cx.read(|cx| {
+        assert_eq!(
+            engine.read(cx).current_ix(),
+            Some(1),
+            "advance must step by queue index, not dedupe by track id"
+        );
+        assert_eq!(engine.read(cx).position_ms(), 250);
+        assert_eq!(engine.read(cx).status(), TransportStatus::Playing);
+    });
+    cx.executor()
+        .advance_clock(Duration::from_millis(2 * TICK_MS));
+    cx.run_until_parked();
+    cx.read(|cx| {
+        assert_eq!(engine.read(cx).status(), TransportStatus::Stopped);
+        assert_eq!(engine.read(cx).current_ix(), Some(1));
+        assert_eq!(engine.read(cx).position_ms(), 0);
+    });
+}
+
+#[gpui_kit::test]
+fn mutators_notify_exactly_once_and_noops_stay_silent(cx: &mut TestAppContext) {
+    let engine = engine(cx);
+    let notifications = std::rc::Rc::new(std::cell::Cell::new(0usize));
+    let counter = notifications.clone();
+    cx.update(|cx| {
+        cx.observe(&engine, move |_, _| counter.set(counter.get() + 1))
+            .detach();
+    });
+
+    cx.update(|cx| {
+        engine.update(cx, |engine, cx| {
+            engine.toggle_playback(cx);
+            engine.seek_ms(1_000, cx);
+            engine.previous(cx);
+            engine.set_volume(0.8, cx);
+            engine.play_queue_index(0, cx);
+        })
+    });
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 0, "no-ops without a current track");
+
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.play_queue(vec![T0, T1, T2], 0, cx)));
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 1);
+
+    cx.update(|cx| {
+        engine.update(cx, |engine, cx| {
+            engine.seek_ms(0, cx);
+            engine.previous(cx);
+        })
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        notifications.get(),
+        1,
+        "same-position seek and previous at 0"
+    );
+
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.play_queue_index(1, cx)));
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 2);
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.toggle_playback(cx)));
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 3);
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.toggle_playback(cx)));
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 4);
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.seek_ms(250, cx)));
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 5);
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.set_volume(0.5, cx)));
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 6);
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.next(cx)));
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 7);
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.previous(cx)));
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 8);
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.enqueue(T0, cx)));
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 9);
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.clear_queue(cx)));
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 10);
+
+    // The clock moves only below, so every count above comes from the
+    // mutators alone, never a stray tick.
+    cx.executor().advance_clock(Duration::from_millis(TICK_MS));
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 10, "a stopped tick must not notify");
+
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.play_queue(vec![T0], 0, cx)));
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 11);
+    cx.executor().advance_clock(Duration::from_millis(TICK_MS));
+    cx.run_until_parked();
+    assert_eq!(notifications.get(), 12);
 }
 
 #[gpui_kit::test]

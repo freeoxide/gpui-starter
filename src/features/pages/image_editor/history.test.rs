@@ -7,8 +7,7 @@ use super::{
     DocSnapshot, EditLabel, EditOp, EditorHistory, HISTORY_ENTRY_LIMIT, HISTORY_PIXEL_BUDGET,
 };
 use crate::features::pages::image_editor::document::FilterSettings;
-use crate::ui::canvas::ShapeId;
-use crate::ui::canvas::{CanvasShape, ShapeStyle};
+use crate::ui::canvas::{CanvasShape, ShapeId, ShapeStyle};
 
 fn snapshot(base: Arc<RgbaImage>, annotations: usize) -> DocSnapshot {
     DocSnapshot {
@@ -41,6 +40,10 @@ fn op(before: DocSnapshot, after: DocSnapshot) -> EditOp {
 
 fn solid(w: u32, h: u32) -> Arc<RgbaImage> {
     Arc::new(RgbaImage::from_pixel(w, h, image::Rgba([255, 0, 0, 255])))
+}
+
+fn shaded(w: u32, h: u32, level: u8) -> Arc<RgbaImage> {
+    Arc::new(RgbaImage::from_pixel(w, h, image::Rgba([level, 0, 0, 255])))
 }
 
 #[test]
@@ -88,15 +91,37 @@ fn entry_limit_drops_the_oldest_entry() {
 #[test]
 fn pixel_budget_drops_entries_until_within_budget() {
     let mut history = EditorHistory::new();
-    for i in 0..4 {
+    for i in 0..4u32 {
         history.record_with_budget(
-            op(snapshot(solid(8, 8), i), snapshot(solid(8, 8), i + 1)),
+            op(
+                snapshot(shaded(8, 8, i as u8), i as usize),
+                snapshot(shaded(8, 8, i as u8 + 1), i as usize + 1),
+            ),
             HISTORY_ENTRY_LIMIT,
             8 * 8 * 4 * 2,
         );
     }
     assert!(history.len() < 4, "budget should have pruned entries");
     assert!(!history.past.is_empty());
+}
+
+#[test]
+fn oversized_latest_op_survives_the_pixel_budget() {
+    let mut history = EditorHistory::new();
+    history.record_with_budget(
+        op(
+            snapshot(shaded(64, 64, 10), 0),
+            snapshot(shaded(64, 64, 20), 1),
+        ),
+        HISTORY_ENTRY_LIMIT,
+        64 * 64 * 4,
+    );
+    assert_eq!(
+        history.len(),
+        1,
+        "two distinct 16KB bases exceed the budget, but the latest op stays"
+    );
+    assert!(history.can_undo());
 }
 
 #[test]
@@ -109,6 +134,23 @@ fn shared_arc_bases_count_once() {
         8 * 8 * 4,
     );
     assert_eq!(history.len(), 1, "one distinct buffer stays within budget");
+}
+
+#[test]
+fn equal_content_in_distinct_arcs_counts_once() {
+    let mut history = EditorHistory::new();
+    for i in 0..2 {
+        history.record_with_budget(
+            op(snapshot(solid(8, 8), i), snapshot(solid(8, 8), i + 1)),
+            HISTORY_ENTRY_LIMIT,
+            8 * 8 * 4 * 2,
+        );
+    }
+    assert_eq!(
+        history.len(),
+        2,
+        "four equal-pixel allocations are one distinct buffer, within budget"
+    );
 }
 
 #[test]

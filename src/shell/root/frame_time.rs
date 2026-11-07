@@ -4,8 +4,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 /// level.
 pub(crate) const SLOW_FRAME_THRESHOLD_US: u64 = 4_000;
 
-/// Last frame render time in microseconds, stored atomically so the status bar
-/// can read it without requiring a reference to `AppRoot`.
+/// AppRoot's last element-tree build time in microseconds; child views render
+/// later in layout, so this is not the full frame cost. Stored atomically so
+/// the status bar can read it without requiring a reference to `AppRoot`.
 static LAST_FRAME_TIME_US: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) fn store_frame_time(elapsed_us: u64) {

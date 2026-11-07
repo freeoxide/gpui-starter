@@ -14,6 +14,7 @@ use super::registry::{self, GallerySection};
 pub struct GalleryPage {
     search_input: Entity<InputState>,
     sections: Vec<GallerySection>,
+    matches: Vec<usize>,
     active_ix: usize,
     _subscriptions: Vec<Subscription>,
 }
@@ -23,17 +24,19 @@ impl GalleryPage {
         let search_input = cx.new(|cx| InputState::new(window, cx).placeholder("Search sections…"));
         let _subscriptions = vec![cx.subscribe(&search_input, |this, _, event, cx| {
             if matches!(event, InputEvent::Change) {
-                this.follow_search(cx);
-                cx.notify();
+                this.apply_search(cx);
             }
         })];
         let sections = registry::sections(window, cx);
-        Self {
+        let mut this = Self {
             search_input,
             sections,
+            matches: Vec::new(),
             active_ix: 0,
             _subscriptions,
-        }
+        };
+        this.apply_search(cx);
+        this
     }
 
     fn query(&self, cx: &App) -> String {
@@ -44,29 +47,28 @@ impl GalleryPage {
         self.sections
             .iter()
             .enumerate()
-            .filter(|(_, section)| {
-                section.title().to_lowercase().contains(query)
-                    || section.description().to_lowercase().contains(query)
-            })
+            .filter(|(_, section)| section.matches_query(query))
             .map(|(ix, _)| ix)
             .collect()
     }
 
-    /// Keep the current section while it still matches the query; otherwise
-    /// jump to the first match so filtering always leaves a selection.
-    fn follow_search(&mut self, cx: &App) {
-        let matches = self.matching_indexes(&self.query(cx));
-        if !matches.contains(&self.active_ix) {
-            if let Some(&first) = matches.first() {
+    /// Recompute matches for the current query and notify; keep the active
+    /// section while it matches, else jump to the first match.
+    fn apply_search(&mut self, cx: &mut Context<Self>) {
+        let query = self.query(cx);
+        self.matches = self.matching_indexes(&query);
+        if !self.matches.contains(&self.active_ix) {
+            if let Some(&first) = self.matches.first() {
                 self.active_ix = first;
             }
         }
+        cx.notify();
     }
 }
 
 impl Render for GalleryPage {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let matches = self.matching_indexes(&self.query(cx));
+        let matches = &self.matches;
 
         let nav = crate::features::tutorial::target(
             "gallery-nav",
@@ -100,7 +102,7 @@ impl Render for GalleryPage {
         );
 
         // `active_ix` always points into `matches` while it is non-empty;
-        // follow_search and item clicks only pick matching indexes.
+        // apply_search and item clicks only pick matching indexes.
         let content = if matches.is_empty() {
             v_flex()
                 .id("gallery-empty")

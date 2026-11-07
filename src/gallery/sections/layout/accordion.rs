@@ -6,7 +6,6 @@ use gpui_kit::component::{
     button::{Button, DropdownButton},
     checkbox::Checkbox,
     h_flex,
-    menu::PopupMenu,
     switch::Switch,
     tag::Tag,
     v_flex,
@@ -14,9 +13,8 @@ use gpui_kit::component::{
 use gpui_kit::{prelude::FluentBuilder as _, *};
 use serde::Deserialize;
 
+use crate::gallery::demo::{self, SizeToggle, demo_toolbar, section};
 use crate::gallery::registry::GallerySection;
-
-use super::demo::section;
 
 /// Knobs of the upstream options toolbar plus the size switcher.
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -36,54 +34,28 @@ impl DemoToggle {
     /// The size this toggle selects.
     fn size(&self) -> Option<Size> {
         match self {
-            DemoToggle::SizeXSmall => Some(Size::XSmall),
-            DemoToggle::SizeSmall => Some(Size::Small),
-            DemoToggle::SizeMedium => Some(Size::Medium),
-            DemoToggle::SizeLarge => Some(Size::Large),
+            Self::SizeXSmall => Some(Size::XSmall),
+            Self::SizeSmall => Some(Size::Small),
+            Self::SizeMedium => Some(Size::Medium),
+            Self::SizeLarge => Some(Size::Large),
             _ => None,
         }
     }
 }
 
-fn size_label(size: Size) -> &'static str {
-    match size {
-        Size::XSmall => "XSmall",
-        Size::Small => "Small",
-        Size::Medium => "Medium",
-        Size::Large => "Large",
-        Size::Size(_) => "Custom",
+impl SizeToggle for DemoToggle {
+    fn xsmall() -> Self {
+        Self::SizeXSmall
     }
-}
-
-fn add_size_items(menu: PopupMenu, size: Size) -> PopupMenu {
-    menu.menu_with_check(
-        "XSmall",
-        size == Size::XSmall,
-        Box::new(DemoToggle::SizeXSmall),
-    )
-    .menu_with_check(
-        "Small",
-        size == Size::Small,
-        Box::new(DemoToggle::SizeSmall),
-    )
-    .menu_with_check(
-        "Medium",
-        size == Size::Medium,
-        Box::new(DemoToggle::SizeMedium),
-    )
-    .menu_with_check(
-        "Large",
-        size == Size::Large,
-        Box::new(DemoToggle::SizeLarge),
-    )
-}
-
-/// The size switcher the story toolbar carried, on the published split
-/// button instead of the story crate's custom Popover trigger.
-fn size_dropdown(size: Size) -> DropdownButton {
-    DropdownButton::new("accordion-size")
-        .button(Button::new("accordion-size-trigger").label(format!("Size: {}", size_label(size))))
-        .dropdown_menu(move |menu, _, _| add_size_items(menu, size))
+    fn small() -> Self {
+        Self::SizeSmall
+    }
+    fn medium() -> Self {
+        Self::SizeMedium
+    }
+    fn large() -> Self {
+        Self::SizeLarge
+    }
 }
 
 /// The theme-derived values a settings row draws with, read once so the row
@@ -168,11 +140,6 @@ impl AccordionSection {
             show_icon: false,
         })
     }
-
-    fn toggle_accordion(&mut self, open_ixs: Vec<usize>, cx: &mut Context<Self>) {
-        self.open_ixs = open_ixs;
-        cx.notify();
-    }
 }
 
 impl Render for AccordionSection {
@@ -207,36 +174,18 @@ impl Render for AccordionSection {
                 }
                 cx.notify();
             }))
-            .child(
-                h_flex()
-                    .w_full()
-                    .justify_end()
-                    .gap_1()
-                    .child(size_dropdown(size).into_any_element())
-                    .child(
-                        DropdownButton::new("accordion-options")
-                            .button(Button::new("accordion-options-trigger").label("Options"))
-                            .dropdown_menu(move |menu, _, _| {
-                                menu.menu_with_check(
-                                    "Multiple",
-                                    multiple,
-                                    Box::new(DemoToggle::Multiple),
-                                )
-                                .menu_with_check("Icons", show_icon, Box::new(DemoToggle::Icons))
-                                .menu_with_check(
-                                    "Disabled",
-                                    disabled,
-                                    Box::new(DemoToggle::Disabled),
-                                )
-                                .menu_with_check(
-                                    "Bordered",
-                                    bordered,
-                                    Box::new(DemoToggle::Bordered),
-                                )
-                            })
-                            .into_any_element(),
-                    ),
-            )
+            .child(demo_toolbar(vec![
+                demo::size_dropdown::<DemoToggle>("accordion-size", size).into_any_element(),
+                DropdownButton::new("accordion-options")
+                    .button(Button::new("accordion-options-trigger").label("Options"))
+                    .dropdown_menu(move |menu, _, _| {
+                        menu.menu_with_check("Multiple", multiple, Box::new(DemoToggle::Multiple))
+                            .menu_with_check("Icons", show_icon, Box::new(DemoToggle::Icons))
+                            .menu_with_check("Disabled", disabled, Box::new(DemoToggle::Disabled))
+                            .menu_with_check("Bordered", bordered, Box::new(DemoToggle::Bordered))
+                    })
+                    .into_any_element(),
+            ]))
             .child(
                 section("accordion-default", "Default")
                     .description("Expand one item at a time by default.")
@@ -253,9 +202,9 @@ impl Render for AccordionSection {
                                     .title("Is it accessible?")
                                     .child(
                                         "Yes. Each item is a button with an aria-expanded \
-                                        state, so screen readers announce whether the \
-                                        section is open, and the whole group can be \
-                                        reached with the keyboard.",
+                                         state, so screen readers announce whether the \
+                                         section is open, and the whole group can be \
+                                         reached with the keyboard.",
                                     )
                             })
                             .item(|this| {
@@ -267,8 +216,8 @@ impl Render for AccordionSection {
                                             .gap_3()
                                             .child(
                                                 "An item takes any element as its content, \
-                                            not just text. The height animation measures \
-                                            whatever you put in it.",
+                                                 not just text. The height animation measures \
+                                                 whatever you put in it.",
                                             )
                                             .child(
                                                 h_flex()
@@ -290,8 +239,8 @@ impl Render for AccordionSection {
                                     .title("Is it animated?")
                                     .child(
                                         "Yes. Expanding and collapsing animates the height \
-                                    of the content, and the chevron rotates to follow. \
-                                    Items below move along with it.",
+                                         of the content, and the chevron rotates to follow. \
+                                         Items below move along with it.",
                                     )
                             })
                             .item(|this| {
@@ -300,7 +249,8 @@ impl Render for AccordionSection {
                                     .child("This item cannot be expanded.")
                             })
                             .on_toggle_click(cx.listener(|this, open_ixs: &[usize], _, cx| {
-                                this.toggle_accordion(open_ixs.to_vec(), cx);
+                                this.open_ixs = open_ixs.to_vec();
+                                cx.notify();
                             })),
                     ),
             )
@@ -308,7 +258,6 @@ impl Render for AccordionSection {
                 section("accordion-custom-style", "Custom style")
                     .w(rems(30.))
                     .child(
-                        // A tinted frame around the card.
                         div()
                             .w_full()
                             .p_1()
@@ -327,8 +276,8 @@ impl Render for AccordionSection {
                                             "Account Settings",
                                             Some(Tag::success().outline().child("New")),
                                             "Manage your account preferences, security \
-                                        settings, and personal information. You can also \
-                                        configure two-factor authentication here.",
+                                             settings, and personal information. You can also \
+                                             configure two-factor authentication here.",
                                             settings_item_style,
                                         )
                                         .open(self.styled_open_ixs.contains(&0))
@@ -340,7 +289,7 @@ impl Render for AccordionSection {
                                             "Privacy & Security",
                                             None,
                                             "Control who can see your profile and how your \
-                                        data is used.",
+                                             data is used.",
                                             settings_item_style,
                                         )
                                         .open(self.styled_open_ixs.contains(&1))
@@ -352,7 +301,7 @@ impl Render for AccordionSection {
                                             "Help & Support",
                                             None,
                                             "Browse the documentation, or get in touch with \
-                                        the support team.",
+                                             the support team.",
                                             settings_item_style,
                                         )
                                         .open(self.styled_open_ixs.contains(&2))

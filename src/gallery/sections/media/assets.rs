@@ -66,19 +66,41 @@ fn catalog_bytes(path: &str) -> Option<Cow<'static, [u8]>> {
         .flatten();
 }
 
-pub struct AssetsSection;
+pub struct AssetsSection {
+    folder_keys: String,
+    folder_files: Vec<(&'static str, Cow<'static, [u8]>)>,
+}
 
 impl AssetsSection {
     pub fn view(_window: &mut Window, cx: &mut App) -> Entity<Self> {
-        cx.new(|_| Self)
+        cx.new(|_| {
+            // Read once at page build: debug rust-embed serves every get from
+            // the live folder, which must not run per render frame.
+            Self {
+                folder_keys: GalleryAssets::iter()
+                    .map(|key| key.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                folder_files: ["icons/bot.svg", "icons/inbox.svg"]
+                    .into_iter()
+                    .map(|path| {
+                        (
+                            path,
+                            GalleryAssets::get(path)
+                                .expect("key exists in the embedded folder")
+                                .data,
+                        )
+                    })
+                    .collect(),
+            }
+        })
     }
 
-    fn folder_tile(&self, path: &'static str, cx: &App) -> impl IntoElement {
-        let file = GalleryAssets::get(path).expect("key exists in the embedded folder");
+    fn folder_tile(&self, path: &'static str, bytes: &[u8], cx: &App) -> impl IntoElement {
         v_flex()
             .gap_1()
             .items_center()
-            .child(Icon::default().data(&file.data).size_6())
+            .child(Icon::default().data(bytes).size_6())
             .child(
                 div()
                     .text_xs()
@@ -90,10 +112,6 @@ impl AssetsSection {
 
 impl Render for AssetsSection {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let keys = GalleryAssets::iter()
-            .map(|key| key.to_string())
-            .collect::<Vec<_>>()
-            .join(", ");
         let selected_tile = |path: &'static str| {
             let bytes = SelectedIcons
                 .load(path)
@@ -147,10 +165,11 @@ impl Render for AssetsSection {
                         v_flex()
                             .gap_3()
                             .child(
-                                h_flex()
-                                    .gap_6()
-                                    .child(self.folder_tile("icons/bot.svg", cx))
-                                    .child(self.folder_tile("icons/inbox.svg", cx)),
+                                h_flex().gap_6().children(
+                                    self.folder_files
+                                        .iter()
+                                        .map(|(path, bytes)| self.folder_tile(path, bytes, cx)),
+                                ),
                             )
                             .child(
                                 h_flex()
@@ -184,7 +203,7 @@ impl Render for AssetsSection {
                                 div()
                                     .text_xs()
                                     .text_color(cx.theme().muted_foreground)
-                                    .child(format!("Folder keys: {keys}")),
+                                    .child(format!("Folder keys: {}", self.folder_keys)),
                             ),
                     ),
             )

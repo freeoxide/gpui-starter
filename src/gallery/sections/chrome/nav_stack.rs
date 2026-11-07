@@ -12,7 +12,7 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 /// One page of the stack. A page knows its depth and holds the stack it lives
 /// in, so its own buttons can push over it, replace it, or pop it.
@@ -56,7 +56,6 @@ impl Render for NavPageView {
                 (stack.depth(), stack.forward_views().len())
             })
             .unwrap_or((depth, 0));
-        let strong = self.stack.clone();
 
         div()
             .size_full()
@@ -80,8 +79,8 @@ impl Render for NavPageView {
                             .when(page == depth, |this| {
                                 this.text_color(cx.theme().foreground).font_semibold()
                             })
-                            // Pages only forward can reach read dimmer than the
-                            // ones behind; opacity keeps the single token.
+                            // Pages reachable only through Forward read dimmer
+                            // than those behind; opacity keeps the single token.
                             .when(page > behind, |this| {
                                 this.text_color(cx.theme().muted_foreground.opacity(0.55))
                             })
@@ -115,10 +114,13 @@ impl Render for NavPageView {
                                 .outline()
                                 .small()
                                 .label("Pop")
-                                .on_click(move |_, _, cx| {
-                                    _ = strong.update(cx, |stack, cx| {
-                                        stack.pop(NavMotion::Animated, cx);
-                                    });
+                                .on_click({
+                                    let stack = self.stack.clone();
+                                    move |_, _, cx| {
+                                        _ = stack.update(cx, |stack, cx| {
+                                            stack.pop(NavMotion::Animated, cx);
+                                        });
+                                    }
                                 }),
                         )
                     })

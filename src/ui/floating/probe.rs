@@ -1,6 +1,10 @@
-use gpui_kit::{App, Bounds, Edges, Pixels};
+use std::cell::RefCell;
 
-#[derive(Clone, Debug)]
+use gpui_kit::{App, Bounds, Edges, Global, Pixels};
+
+use crate::capabilities::Capability;
+
+#[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct FloatingPlatformInfo {
     pub native_windows: bool,
@@ -10,7 +14,7 @@ pub struct FloatingPlatformInfo {
     pub notch: Option<NotchGeometry>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct NotchGeometry {
     /// Screen-edge insets in logical pixels; top includes the menu bar region
@@ -20,8 +24,28 @@ pub struct NotchGeometry {
     pub camera_housing: Option<Bounds<Pixels>>,
 }
 
-/// Per-platform floating support facts; live notch data on macOS.
+/// Caches platform facts so render-time callers skip per-frame native queries
+/// (NSScreen on macOS); display changes drop the cache.
+#[derive(Default)]
+struct PlatformInfoCache(RefCell<Option<FloatingPlatformInfo>>);
+
+impl Global for PlatformInfoCache {}
+
+/// Per-platform floating support facts; live notch data on macOS. Cached
+/// after the first call; computed live while the cache global is absent.
 pub fn probe(cx: &App) -> FloatingPlatformInfo {
+    let Some(cache) = cx.try_global::<PlatformInfoCache>() else {
+        return compute(cx);
+    };
+    if let Some(info) = cache.0.borrow().clone() {
+        return info;
+    }
+    let info = compute(cx);
+    *cache.0.borrow_mut() = Some(info.clone());
+    info
+}
+
+fn compute(cx: &App) -> FloatingPlatformInfo {
     #[cfg(target_family = "wasm")]
     let _ = cx;
     #[cfg(target_family = "wasm")]
@@ -54,18 +78,30 @@ pub fn probe(cx: &App) -> FloatingPlatformInfo {
 }
 
 #[cfg(not(target_family = "wasm"))]
-pub(crate) fn menu_bar_height(cx: &App) -> Option<Pixels> {
+fn menu_bar_height(cx: &App) -> Option<Pixels> {
     let display = cx.primary_display()?;
     let visible = display.visible_bounds();
     let full = display.bounds();
     Some(visible.origin.y - full.origin.y)
 }
 
+/// Installs the probe cache. Not warmed here: display enumeration can lag
+/// app start (zed#46378), so the first probe() takes the live read.
+pub(crate) fn init(cx: &mut App) {
+    cx.default_global::<PlatformInfoCache>();
+    cx.observe_displays(|_, cx| {
+        if let Some(cache) = cx.try_global::<PlatformInfoCache>() {
+            *cache.0.borrow_mut() = None;
+        }
+    })
+    .detach();
+}
+
 pub(crate) fn register_capabilities(cx: &mut App) {
     #[cfg(target_family = "wasm")]
     {
         crate::capabilities::set(
-            super::CAPABILITY_FLOATING_WINDOWS,
+            Capability::FLOATING_WINDOWS,
             crate::capabilities::CapabilityStatus {
                 supported: false,
                 enabled: true,
@@ -79,7 +115,7 @@ pub(crate) fn register_capabilities(cx: &mut App) {
             cx,
         );
         crate::capabilities::set(
-            super::CAPABILITY_ALWAYS_ON_TOP,
+            Capability::FLOATING_ALWAYS_ON_TOP,
             crate::capabilities::CapabilityStatus {
                 supported: false,
                 enabled: false,
@@ -90,7 +126,7 @@ pub(crate) fn register_capabilities(cx: &mut App) {
             cx,
         );
         crate::capabilities::set(
-            super::CAPABILITY_FLOATING_CLICK_THROUGH,
+            Capability::FLOATING_CLICK_THROUGH,
             crate::capabilities::CapabilityStatus {
                 supported: false,
                 enabled: false,
@@ -103,33 +139,33 @@ pub(crate) fn register_capabilities(cx: &mut App) {
             },
             cx,
         );
-        crate::capabilities::set(super::CAPABILITY_NOTCH_GEOMETRY, macos_only(), cx);
+        crate::capabilities::set(Capability::NOTCH_GEOMETRY, macos_only(), cx);
     }
     #[cfg(not(target_family = "wasm"))]
     {
         crate::capabilities::set(
-            super::CAPABILITY_FLOATING_WINDOWS,
+            Capability::FLOATING_WINDOWS,
             crate::capabilities::CapabilityStatus::supported_enabled(),
             cx,
         );
         crate::capabilities::set(
-            super::CAPABILITY_ALWAYS_ON_TOP,
+            Capability::FLOATING_ALWAYS_ON_TOP,
             crate::capabilities::CapabilityStatus::supported_enabled(),
             cx,
         );
         crate::capabilities::set(
-            super::CAPABILITY_FLOATING_CLICK_THROUGH,
+            Capability::FLOATING_CLICK_THROUGH,
             crate::capabilities::CapabilityStatus::supported_enabled(),
             cx,
         );
         #[cfg(target_os = "macos")]
         crate::capabilities::set(
-            super::CAPABILITY_NOTCH_GEOMETRY,
+            Capability::NOTCH_GEOMETRY,
             crate::capabilities::CapabilityStatus::supported_enabled(),
             cx,
         );
         #[cfg(not(target_os = "macos"))]
-        crate::capabilities::set(super::CAPABILITY_NOTCH_GEOMETRY, macos_only(), cx);
+        crate::capabilities::set(Capability::NOTCH_GEOMETRY, macos_only(), cx);
     }
 }
 

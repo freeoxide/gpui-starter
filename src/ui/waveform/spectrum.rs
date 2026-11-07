@@ -82,10 +82,10 @@ impl SpectrumAnalyzer {
             (bin.re * bin.re + bin.im * bin.im).sqrt() / scale
         };
 
+        let bin_hz = sample_rate as f32 / FFT_SIZE as f32;
         let mut bars = Vec::with_capacity(SPECTRUM_BARS);
         for ix in 0..SPECTRUM_BARS {
             let (edge, next) = bar_edges(ix, sample_rate, FFT_SIZE).unwrap();
-            let bin_hz = sample_rate as f32 / FFT_SIZE as f32;
             let from = ((edge / bin_hz).ceil() as usize).clamp(1, FFT_SIZE / 2);
             let to = (((next / bin_hz).ceil() as usize).max(from + 1)).min(FFT_SIZE / 2);
             let peak = (from..to).map(magnitude).fold(0_f32, f32::max);

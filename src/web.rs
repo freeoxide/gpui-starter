@@ -62,11 +62,13 @@ pub fn bootstrap() {
     // message-pump re-entrancy hazard. Never spawn from the Restart handler.
     #[cfg(not(target_family = "wasm"))]
     {
-        #[allow(clippy::collapsible_if)]
-        if crate::app::is_reload_requested() {
-            if let Err(err) = crate::app::perform_reload() {
-                eprintln!("reload failed: {err}");
-            }
+        if crate::app::is_reload_requested()
+            && let Err(err) = crate::app::perform_reload()
+        {
+            // stderr + recent-errors carry why (tracing is torn down).
+            let reason = format!("reload failed: {err:#}");
+            eprintln!("[gpui_starter::reload] {reason}");
+            crate::lifecycle::track_recent_error(reason);
         }
     }
 }

@@ -1,6 +1,6 @@
 /// Failures surfaced by the auth foundation: flow lifecycle, provider
 /// responses, storage, network, entropy, and redirect parsing.
-#[derive(Clone, Debug, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, thiserror::Error)]
 pub enum AuthError {
     #[error("no pending authorization flow")]
     NoPendingFlow,
@@ -37,12 +37,4 @@ pub enum AuthError {
     NoBrowserFlow,
     #[error("password auth is not available on this controller")]
     PasswordAuthUnavailable,
-    #[error("no challenge is pending")]
-    NoPendingChallenge,
-    #[error("challenge unknown or expired")]
-    InvalidChallenge,
-    #[error("TOTP code rejected")]
-    TotpFailed,
-    #[error("TOTP not enrolled for this account")]
-    TotpNotEnrolled,
 }

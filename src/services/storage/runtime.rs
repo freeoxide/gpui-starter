@@ -25,63 +25,69 @@ pub fn initialize(cx: &mut App) {
     use super::backend::SqliteStorage;
 
     let path = db_path(cx);
-    let backend = Arc::new(SqliteStorage::new(path.clone()));
-    let mut snapshot = StorageSnapshot {
+    let snapshot = StorageSnapshot {
         db_path: path.display().to_string(),
+        last_migration_result: Some("migrations starting".to_string()),
         ..StorageSnapshot::default()
     };
 
-    match init_db(&path) {
-        Ok(schema_version) => {
-            snapshot.available = true;
-            snapshot.schema_version = schema_version;
-            snapshot.last_migration_result =
-                Some(format!("schema version {} ready", schema_version));
-            tracing::info!(
-                target: "gpui_starter::storage",
-                db_path = %snapshot.db_path,
-                schema_version,
-                "storage initialized"
-            );
-        }
-        Err(err) => {
-            let error = err.to_string();
-            snapshot.last_error = Some(error.clone());
-            snapshot.last_migration_result = Some("migration failed".to_string());
-            tracing::error!(
-                target: "gpui_starter::storage",
-                db_path = %snapshot.db_path,
-                error = %error,
-                "storage initialization failed"
-            );
-        }
-    }
-
-    if snapshot.available {
-        // The health check runs as a spawned task and must re-derive the
-        // capability from the patched snapshot: this synchronous call sees
-        // `healthy: false`, and the registry has no observers to refresh it.
-        let backend_for_health = Arc::clone(&backend);
-        let bg = cx.background_executor().clone();
-        cx.spawn(async move |cx| {
-            let result = bg
-                .spawn(async move { backend_for_health.health_check().await })
-                .await;
-            let _ = cx.update(|cx| {
-                let updated = cx.update_global::<StorageSnapshot, _>(|snap, _cx| {
-                    record_health_result(snap, result);
-                    snap.clone()
-                });
-                set_capabilities(true, &updated, cx);
-            });
-        })
-        .detach();
-    }
-
     set_capabilities(true, &snapshot, cx);
-
     cx.set_global(snapshot);
-    cx.set_global(StorageRuntime { backend });
+
+    // Open, pragma, and the migration pass are synchronous sqlite I/O, so
+    // they run on the background executor and land via cx.update.
+    let bg = cx.background_executor().clone();
+    cx.spawn(async move |cx| {
+        let result = bg.spawn(async move { init_db(&path) }).await;
+        match result {
+            Ok((conn, schema_version)) => {
+                let backend = Arc::new(SqliteStorage::new(conn)) as Arc<dyn StorageBackend>;
+                let health_backend = Arc::clone(&backend);
+                let health = bg
+                    .spawn(async move { health_backend.health_check().await })
+                    .await;
+                let _ = cx.update(|cx| {
+                    cx.set_global(StorageRuntime { backend });
+                    let updated = cx.update_global::<StorageSnapshot, _>(|snap, _cx| {
+                        snap.available = true;
+                        snap.schema_version = schema_version;
+                        snap.last_migration_result =
+                            Some(format!("schema version {schema_version} ready"));
+                        record_health_result(snap, health);
+                        snap.clone()
+                    });
+                    // Re-derive the capability from the final snapshot; the
+                    // registry has no observers to refresh itself.
+                    set_capabilities(true, &updated, cx);
+                    tracing::info!(
+                        target: "gpui_starter::storage",
+                        db_path = %updated.db_path,
+                        schema_version,
+                        "storage initialized"
+                    );
+                });
+            }
+            Err(err) => {
+                let error = err.to_string();
+                let _ = cx.update(|cx| {
+                    let updated = cx.update_global::<StorageSnapshot, _>(|snap, _cx| {
+                        snap.last_error = Some(error.clone());
+                        snap.last_migration_result = Some("migration failed".to_string());
+                        snap.clone()
+                    });
+                    set_capabilities(true, &updated, cx);
+                    crate::lifecycle::set_startup_error(format!("migration failed: {error}"), cx);
+                    tracing::error!(
+                        target: "gpui_starter::storage",
+                        db_path = %updated.db_path,
+                        error = %error,
+                        "storage initialization failed"
+                    );
+                });
+            }
+        }
+    })
+    .detach();
 }
 
 /// Wasm: boot the OPFS sqlite worker backend (`wasm/sqlite/worker.js`).
@@ -128,8 +134,7 @@ pub fn initialize(cx: &mut App) {
     if let Some(backend) = runtime {
         cx.spawn(async move |cx| {
             // The worker queues requests until its engine is ready, so the
-            // first health/version round-trip doubles as the readiness
-            // probe: errors here mean engine/OPFS init failed.
+            // first health/version round-trip doubles as the readiness probe.
             let health = backend.health_check().await;
             let version = backend.schema_version().await;
 
@@ -176,7 +181,11 @@ pub fn initialize(cx: &mut App) {
 /// observers — every snapshot update must call this again or a healthy boot
 /// freezes in as `degraded: true`.
 fn set_capabilities(supported: bool, snapshot: &StorageSnapshot, cx: &mut App) {
-    crate::capabilities::set("storage", capability_status(supported, snapshot), cx);
+    crate::capabilities::set(
+        crate::capabilities::Capability::STORAGE,
+        capability_status(supported, snapshot),
+        cx,
+    );
 }
 
 /// Pure snapshot → capability-status derivation, unit-tested in storage.test.rs
@@ -219,13 +228,9 @@ pub fn snapshot(cx: &App) -> StorageSnapshot {
         .unwrap_or_default()
 }
 
-/// Run a health check against the storage backend without blocking the main
-/// GPUI render loop.
-///
-/// The result is written back to the global [`StorageSnapshot`] via an
-/// `cx.update` callback once the check completes. Native runs the check on
-/// a background thread (synchronous SQLite I/O); wasm awaits the worker
-/// reply on the foreground executor (message-passing, non-blocking).
+/// Health check off the UI thread; the outcome lands in [`StorageSnapshot`]
+/// when it completes. Native uses a background thread (synchronous sqlite
+/// I/O); wasm awaits the worker reply on the foreground executor.
 pub fn run_health_check(cx: &mut App) {
     let Some(runtime) = cx.try_global::<StorageRuntime>().cloned() else {
         return;
@@ -249,31 +254,31 @@ pub fn run_health_check(cx: &mut App) {
         };
 
         let _ = cx.update(|cx| {
-            cx.update_global::<StorageSnapshot, _>(|snap, _cx| match result {
-                Ok(()) => {
-                    snap.healthy = true;
-                    snap.last_error = None;
-                    if let Ok(version) = version_result {
-                        snap.schema_version = version;
+            let updated = cx.update_global::<StorageSnapshot, _>(|snap, _cx| {
+                match result {
+                    Ok(()) => {
+                        snap.healthy = true;
+                        snap.last_error = None;
+                        if let Ok(version) = version_result {
+                            snap.schema_version = version;
+                        }
+                    }
+                    Err(err) => {
+                        snap.healthy = false;
+                        snap.last_error = Some(err.to_string());
                     }
                 }
-                Err(err) => {
-                    snap.healthy = false;
-                    snap.last_error = Some(err.to_string());
-                }
+                snap.clone()
             });
+            set_capabilities(true, &updated, cx);
         });
     })
     .detach();
 }
 
-/// Run storage maintenance (e.g. `PRAGMA optimize`) without blocking the
-/// main GPUI render loop.
-///
-/// The result is written back to the global [`StorageSnapshot`] via an
-/// `cx.update` callback once maintenance completes. Native runs it on a
-/// background thread; wasm awaits the worker reply (see
-/// [`run_health_check`]).
+/// Maintenance (e.g. `PRAGMA optimize`) off the UI thread; the outcome lands
+/// in [`StorageSnapshot`] when it completes. Threading matches
+/// [`run_health_check`].
 pub fn run_maintenance(cx: &mut App) {
     let Some(runtime) = cx.try_global::<StorageRuntime>().cloned() else {
         return;
@@ -288,15 +293,19 @@ pub fn run_maintenance(cx: &mut App) {
         let result = backend.maintenance().await;
 
         let _ = cx.update(|cx| {
-            cx.update_global::<StorageSnapshot, _>(|snap, _cx| match result {
-                Ok(()) => {
-                    snap.last_maintenance_at = Some(chrono::Utc::now().to_rfc3339());
-                    snap.last_error = None;
+            let updated = cx.update_global::<StorageSnapshot, _>(|snap, _cx| {
+                match result {
+                    Ok(()) => {
+                        snap.last_maintenance_at = Some(chrono::Utc::now().to_rfc3339());
+                        snap.last_error = None;
+                    }
+                    Err(err) => {
+                        snap.last_error = Some(err.to_string());
+                    }
                 }
-                Err(err) => {
-                    snap.last_error = Some(err.to_string());
-                }
+                snap.clone()
             });
+            set_capabilities(true, &updated, cx);
         });
     })
     .detach();
@@ -319,10 +328,21 @@ fn db_path(cx: &App) -> PathBuf {
 }
 
 /// Open (or create) the database and apply migrations from `persistence` —
-/// the single source of truth for the schema.
+/// the single source of truth for the schema. The returned connection is the
+/// long-lived one the storage backend answers on.
 #[cfg(not(target_family = "wasm"))]
-pub(crate) fn init_db(path: &Path) -> anyhow::Result<i64> {
+pub(crate) fn init_db(path: &Path) -> anyhow::Result<(rusqlite::Connection, i64)> {
+    let conn = open_storage_db(path)?;
+    let version = crate::db_migrations::run_migrations(&conn)? as i64;
+    Ok((conn, version))
+}
+
+/// WAL persists in the database file; `busy_timeout` is per-connection, so a
+/// second app instance on the same data dir queues instead of failing every
+/// write with SQLITE_BUSY.
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn open_storage_db(path: &Path) -> anyhow::Result<rusqlite::Connection> {
     let conn = rusqlite::Connection::open(path)?;
-    conn.execute_batch("PRAGMA journal_mode = WAL;")?;
-    Ok(crate::db_migrations::run_migrations(&conn)? as i64)
+    conn.execute_batch("PRAGMA journal_mode = WAL;\nPRAGMA busy_timeout = 5000;")?;
+    Ok(conn)
 }

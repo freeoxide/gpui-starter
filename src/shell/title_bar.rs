@@ -23,15 +23,11 @@ pub struct AppTitleBar {
 }
 
 impl AppTitleBar {
-    pub fn new(
-        title: impl Into<SharedString>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> Self {
+    pub fn new(title: impl Into<SharedString>, cx: &mut Context<Self>) -> Self {
         let title: SharedString = title.into();
         let app_menu_bar = menus::init(title.clone(), cx);
-        let settings = cx.new(|cx| SettingsDropdown::new(window, cx));
-        let account = cx.new(|cx| AccountMenu::new(window, cx));
+        let settings = cx.new(SettingsDropdown::new);
+        let account = cx.new(AccountMenu::new);
 
         Self {
             title,
@@ -89,7 +85,7 @@ impl Render for AppTitleBar {
                                     .icon(IconName::Search)
                                     .accessibility_label(search_a11y_label(cx))
                                     .on_click(|_, _, cx| {
-                                        crate::launcher::open_launcher(cx);
+                                        crate::features::command_palette::open_launcher(cx);
                                     }),
                             )
                             .child(
@@ -105,7 +101,7 @@ impl Render for AppTitleBar {
                                         crate::events::emit(
                                             crate::events::AppEventKind::Navigate(
                                                 crate::routes::AppRoute::page(
-                                                    crate::sidebar::Page::Notifications,
+                                                    crate::page::Page::Notifications,
                                                 ),
                                             ),
                                             cx,
@@ -123,7 +119,7 @@ struct SettingsDropdown {
 }
 
 impl SettingsDropdown {
-    pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
             focus_handle: cx.focus_handle(),
         }

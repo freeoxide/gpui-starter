@@ -23,17 +23,17 @@ use serde::Deserialize;
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 /// Payload of the header company dropdown (upstream `SelectCompany`).
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = gallery_chrome, no_json)]
-pub(crate) struct SelectCompany(SharedString);
+struct SelectCompany(SharedString);
 
 /// Knobs of the upstream `SidebarStory` options menu.
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
 #[action(namespace = gallery_chrome, no_json)]
-pub(crate) enum SidebarOption {
+enum SidebarOption {
     Icon,
     Offcanvas,
     None,
@@ -347,23 +347,23 @@ impl Item {
         }
     }
 
-    fn items(&self) -> Vec<SubItem> {
+    fn items(&self) -> &'static [SubItem] {
         match self {
-            Self::Playground => vec![SubItem::History, SubItem::Starred, SubItem::Settings],
-            Self::Models => vec![SubItem::Genesis, SubItem::Explorer, SubItem::Quantum],
-            Self::Documentation => vec![
+            Self::Playground => &[SubItem::History, SubItem::Starred, SubItem::Settings],
+            Self::Models => &[SubItem::Genesis, SubItem::Explorer, SubItem::Quantum],
+            Self::Documentation => &[
                 SubItem::Introduction,
                 SubItem::GetStarted,
                 SubItem::Tutorial,
                 SubItem::Changelog,
             ],
-            Self::Settings => vec![
+            Self::Settings => &[
                 SubItem::General,
                 SubItem::Team,
                 SubItem::Billing,
                 SubItem::Limits,
             ],
-            _ => Vec::new(),
+            _ => &[],
         }
     }
 }
@@ -415,6 +415,8 @@ impl Render for SidebarSection {
         let modes_collapsible = self.modes_collapsible;
         let modes_collapsed = self.modes_collapsed;
         let modes_icon_collapsed = modes_collapsed && modes_collapsible == SidebarCollapsible::Icon;
+        let modes_toggle_collapsed =
+            modes_collapsed && modes_collapsible != SidebarCollapsible::None;
         let modes_show_toggle = modes_collapsible != SidebarCollapsible::None;
         let company = self.company.clone();
 
@@ -614,7 +616,7 @@ impl Render for SidebarSection {
                                                         })
                                                     })
                                                     .children(
-                                                        item.items().into_iter().enumerate().map(
+                                                        item.items().iter().copied().enumerate().map(
                                                             |(ix, sub_item)| {
                                                                 SidebarMenuItem::new(
                                                                     sub_item.label(),
@@ -774,6 +776,7 @@ impl Render for SidebarSection {
                                                                 |this, _, _, cx| {
                                                                     this.last_active_item =
                                                                         Item::Playground;
+                                                                    this.active_subitem = None;
                                                                     cx.notify();
                                                                 },
                                                             ),
@@ -885,7 +888,7 @@ impl Render for SidebarSection {
                                             .when(modes_show_toggle, |this| {
                                                 this.child(
                                                     SidebarToggleButton::new()
-                                                        .collapsed(modes_icon_collapsed)
+                                                        .collapsed(modes_toggle_collapsed)
                                                         .on_click(cx.listener(
                                                             |this, _, _, cx| {
                                                                 this.modes_collapsed =

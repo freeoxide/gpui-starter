@@ -1,7 +1,7 @@
 use gpui_kit::component::{ActiveTheme as _, button::Button, h_flex, v_flex};
 use gpui_kit::{prelude::*, *};
 
-use crate::capabilities::CapabilityStatus;
+use crate::capabilities::{Capability, CapabilityStatus};
 use crate::features::notch;
 use crate::gallery::registry::GallerySection;
 use crate::ui::floating::{FloatingPlatformInfo, probe};
@@ -24,7 +24,7 @@ impl Render for NotchSection {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let info = probe(cx);
         let capability = crate::capabilities::snapshot(cx)
-            .get(notch::CAPABILITY_NOTCH_FLOATER)
+            .get(&Capability::NOTCH_FLOATER)
             .cloned();
         let label = if notch::is_open(cx) {
             "Close notch floater"

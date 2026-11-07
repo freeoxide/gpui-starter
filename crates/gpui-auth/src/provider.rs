@@ -81,9 +81,8 @@ impl RedirectParams {
     }
 }
 
-// Native: Send-boxed futures (rt.spawn requires them). Wasm: (?Send) mode,
-// because JsFuture-backed provider futures are !Send. The trait object stays
-// Send + Sync on both targets.
+// Native: Send-boxed futures (rt.spawn requires them); wasm: (?Send) mode
+// because JsFuture-backed provider futures are !Send.
 #[cfg_attr(not(target_family = "wasm"), async_trait::async_trait)]
 #[cfg_attr(target_family = "wasm", async_trait::async_trait(?Send))]
 pub trait AuthProvider: Send + Sync {

@@ -1,3 +1,7 @@
+#[cfg(not(target_family = "wasm"))]
+use std::sync::Arc;
+#[cfg(not(target_family = "wasm"))]
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
 use gpui_kit::TestAppContext;
@@ -8,7 +12,7 @@ use super::{AudioEngine, PlaybackStatus};
 use crate::ui::waveform::{DEFAULT_RETENTION, WaveformState};
 
 fn loaded_sweep_engine(cx: &mut TestAppContext) -> gpui_kit::Entity<AudioEngine> {
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, cx| {
             engine.load_bytes("sweep.wav", demo::sweep_wav(1), cx)
@@ -83,7 +87,7 @@ fn failed_load_keeps_the_previous_load(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn failed_reload_keeps_the_previous_load_playable(cx: &mut TestAppContext) {
     let waveform = cx.update(|cx| cx.new(|_| WaveformState::new()));
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, cx| engine.attach_meter(&waveform, cx));
         engine.update(cx, |engine, cx| {
@@ -124,7 +128,7 @@ fn failed_reload_keeps_the_previous_load_playable(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn newer_load_wins_the_generation_race(cx: &mut TestAppContext) {
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, cx| {
             engine.load_bytes("bad.wav", b"not audio".to_vec(), cx)
@@ -134,15 +138,35 @@ fn newer_load_wins_the_generation_race(cx: &mut TestAppContext) {
         });
     });
     cx.run_until_parked();
+    // Deliver the stale decode after the newer load already committed.
     cx.update(|cx| {
-        assert_eq!(engine.read(cx).status(), Some(PlaybackStatus::Stopped));
+        engine.update(cx, |engine, cx| {
+            engine.finish_load(1, Err(super::AudioError::Decode("stale".into())), cx);
+        });
+        let engine_ref = engine.read(cx);
+        assert_eq!(engine_ref.status(), Some(PlaybackStatus::Stopped));
+        assert_eq!(engine_ref.duration(), Some(Duration::from_secs(1)));
+        assert_eq!(
+            engine_ref.meta().map(|meta| meta.source_name.as_str()),
+            Some("sweep.wav")
+        );
+    });
+    // The unload path bumps the generation too: a late decode error must not
+    // surface on an engine with nothing loaded.
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.unload(cx)));
+    cx.update(|cx| {
+        engine.update(cx, |engine, cx| {
+            engine.finish_load(2, Err(super::AudioError::Decode("stale".into())), cx);
+        });
+        assert_eq!(engine.read(cx).status(), None);
+        assert_eq!(engine.read(cx).last_error(), None);
     });
 }
 
 #[gpui_kit::test]
 fn attach_meter_feeds_and_detaches_the_widget(cx: &mut TestAppContext) {
     let waveform = cx.update(|cx| cx.new(|_| WaveformState::new()));
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, cx| engine.attach_meter(&waveform, cx));
         engine.update(cx, |engine, cx| {
@@ -161,7 +185,7 @@ fn attach_meter_feeds_and_detaches_the_widget(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn refresh_devices_and_unknown_select_are_safe(cx: &mut TestAppContext) {
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, cx| engine.refresh_devices(cx));
         engine.update(cx, |engine, cx| engine.select_device("no such device", cx));
@@ -170,12 +194,12 @@ fn refresh_devices_and_unknown_select_are_safe(cx: &mut TestAppContext) {
 }
 
 // The cpal host scan is synchronous and slow: it must never run on the
-// caller's turn, only inside the task that delivers the result (RCA 5.2.3).
+// caller's turn, only inside the task that delivers the result (RCA §5.2.3).
 #[cfg(not(target_family = "wasm"))]
 #[gpui_kit::test]
 fn refresh_devices_scans_off_the_caller_and_commits_from_a_task(cx: &mut TestAppContext) {
     let expected = super::super::output::enumerate();
-    let engine = cx.update(|cx| cx.new(|cx| AudioEngine::new(cx)));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
     cx.update(|cx| {
         engine.update(cx, |engine, cx| engine.refresh_devices(cx));
         assert!(
@@ -229,10 +253,240 @@ fn usable_output_device() -> bool {
     super::super::output::plan_stream(&device, 44_100).is_ok()
 }
 
+// In-process stand-in for the cpal stream: counts play/pause calls so the
+// lifecycle tests assert what actually reached the output device.
+#[cfg(not(target_family = "wasm"))]
+struct FakeSession {
+    plays: AtomicUsize,
+    pauses: AtomicUsize,
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl FakeSession {
+    fn new() -> Self {
+        Self {
+            plays: AtomicUsize::new(0),
+            pauses: AtomicUsize::new(0),
+        }
+    }
+
+    fn plays(&self) -> usize {
+        self.plays.load(Ordering::Relaxed)
+    }
+
+    fn pauses(&self) -> usize {
+        self.pauses.load(Ordering::Relaxed)
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl super::super::output::SessionSink for FakeSession {
+    fn play(&self) -> Result<(), super::AudioError> {
+        self.plays.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn pause(&self) -> Result<(), super::AudioError> {
+        self.pauses.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn fake_session_builder(fake: Arc<FakeSession>) -> super::SessionBuilder {
+    Arc::new(move |_request: super::SessionRequest| {
+        Ok(fake.clone() as Arc<dyn super::super::output::SessionSink>)
+    })
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn fake_loaded_engine(
+    cx: &mut TestAppContext,
+    fake: Arc<FakeSession>,
+) -> gpui_kit::Entity<AudioEngine> {
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
+    cx.update(|cx| {
+        engine.update(cx, |engine, _| {
+            engine.session_builder = fake_session_builder(fake);
+        });
+        engine.update(cx, |engine, cx| {
+            engine.load_bytes("sweep.wav", demo::sweep_wav(1), cx)
+        });
+    });
+    cx.run_until_parked();
+    engine
+}
+
+// The session seam replaces cpal and fill_buffer replaces the audio
+// callback, so the lifecycle runs the same on every host.
 #[cfg(not(target_family = "wasm"))]
 #[gpui_kit::test]
-fn native_playback_advances_pauses_and_stops(cx: &mut TestAppContext) {
-    use gpui_kit::Entity;
+fn playback_runs_without_a_meter_and_pauses_and_stops(cx: &mut TestAppContext) {
+    let fake = Arc::new(FakeSession::new());
+    let engine = fake_loaded_engine(cx, fake.clone());
+    cx.update(|cx| {
+        assert!(
+            engine.read(cx).session.is_some(),
+            "playback must not depend on an attached meter widget"
+        );
+        assert_eq!(engine.read(cx).status(), Some(PlaybackStatus::Stopped));
+    });
+
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.toggle_play(cx)));
+    cx.update(|cx| assert_eq!(engine.read(cx).status(), Some(PlaybackStatus::Playing)));
+    assert_eq!(fake.plays(), 1);
+
+    let position = cx.update(|cx| {
+        engine.update(cx, |engine, _| {
+            let load = engine.load.as_ref().expect("load landed");
+            let mut out = [0f32; 64];
+            let mut tap = Vec::new();
+            super::super::output::fill_buffer(
+                &load.render,
+                load.render_channels,
+                &load.transport,
+                &mut out,
+                &mut tap,
+            );
+            engine.position()
+        })
+    });
+    assert!(
+        position > Duration::ZERO,
+        "one callback must advance the cursor"
+    );
+
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.toggle_play(cx)));
+    cx.update(|cx| assert_eq!(engine.read(cx).status(), Some(PlaybackStatus::Paused)));
+    assert_eq!(fake.pauses(), 1);
+    // Paused streams stop calling back: the cursor freezes exactly.
+    assert_eq!(cx.update(|cx| engine.read(cx).position()), position);
+
+    cx.update(|cx| {
+        engine.update(cx, |engine, cx| engine.stop(cx));
+        assert_eq!(engine.read(cx).status(), Some(PlaybackStatus::Stopped));
+        assert_eq!(engine.read(cx).position(), Duration::ZERO);
+    });
+    assert_eq!(fake.pauses(), 2);
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
+fn stop_cancels_a_session_build_queued_by_toggle(cx: &mut TestAppContext) {
+    let fake = Arc::new(FakeSession::new());
+    let first_build_fails = Arc::new(AtomicBool::new(true));
+    let engine = cx.update(|cx| cx.new(AudioEngine::new));
+    cx.update(|cx| {
+        engine.update(cx, |engine, _| {
+            let fake = fake.clone();
+            let fail_first = first_build_fails.clone();
+            engine.session_builder = Arc::new(move |_request: super::SessionRequest| {
+                if fail_first.swap(false, Ordering::SeqCst) {
+                    Err(super::AudioError::NoOutputDevice)
+                } else {
+                    Ok(fake.clone() as Arc<dyn super::super::output::SessionSink>)
+                }
+            });
+        });
+        engine.update(cx, |engine, cx| {
+            engine.load_bytes("sweep.wav", demo::sweep_wav(1), cx)
+        });
+    });
+    cx.run_until_parked();
+    cx.update(|cx| assert!(engine.read(cx).session.is_none()));
+
+    // toggle_play queues a build; stop() must retire it before it lands.
+    cx.update(|cx| {
+        engine.update(cx, |engine, cx| engine.toggle_play(cx));
+        engine.update(cx, |engine, cx| engine.stop(cx));
+    });
+    cx.run_until_parked();
+    cx.update(|cx| {
+        let engine_ref = engine.read(cx);
+        assert_eq!(engine_ref.status(), Some(PlaybackStatus::Stopped));
+        assert!(!engine_ref.pending_play);
+        assert!(engine_ref.session.is_none());
+    });
+    assert_eq!(fake.plays(), 0, "a session built after stop must not play");
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
+fn eof_pauses_the_session_and_stops(cx: &mut TestAppContext) {
+    let fake = Arc::new(FakeSession::new());
+    let engine = fake_loaded_engine(cx, fake.clone());
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.toggle_play(cx)));
+    cx.update(|cx| {
+        engine.update(cx, |engine, cx| {
+            // Mirror the real callback: it clears playing and arms eof together.
+            let load = engine.load.as_ref().expect("load landed");
+            load.transport.set_playing(false);
+            load.transport.set_eof();
+            engine.refresh_from_transport(cx);
+        });
+        assert_eq!(engine.read(cx).status(), Some(PlaybackStatus::Stopped));
+        assert!(
+            !engine
+                .read(cx)
+                .load
+                .as_ref()
+                .unwrap()
+                .transport
+                .is_playing(),
+            "a seek while Stopped must not restart audio"
+        );
+    });
+    assert_eq!(fake.pauses(), 1, "EOF must pause the still-running stream");
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
+fn transport_stopping_under_a_playing_engine_pauses(cx: &mut TestAppContext) {
+    let fake = Arc::new(FakeSession::new());
+    let engine = fake_loaded_engine(cx, fake);
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.toggle_play(cx)));
+    cx.update(|cx| {
+        engine.update(cx, |engine, cx| {
+            let load = engine.load.as_ref().expect("load landed");
+            load.transport.set_playing(false);
+            engine.refresh_from_transport(cx);
+        });
+        assert_eq!(engine.read(cx).status(), Some(PlaybackStatus::Paused));
+    });
+}
+
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
+fn stopped_at_eof_restarts_from_zero(cx: &mut TestAppContext) {
+    let fake = Arc::new(FakeSession::new());
+    let engine = fake_loaded_engine(cx, fake);
+    cx.update(|cx| {
+        engine.update(cx, |engine, cx| engine.seek_fraction(1., cx));
+        engine.update(cx, |engine, cx| engine.toggle_play(cx));
+        assert_eq!(engine.read(cx).position(), Duration::ZERO);
+        assert_eq!(engine.read(cx).status(), Some(PlaybackStatus::Playing));
+    });
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn wait_for(deadline: Duration, mut check: impl FnMut() -> bool) -> bool {
+    let end = std::time::Instant::now() + deadline;
+    loop {
+        if check() {
+            return true;
+        }
+        if std::time::Instant::now() >= end {
+            return check();
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// Live-hardware variant; the seam tests above cover the logic everywhere.
+#[cfg(not(target_family = "wasm"))]
+#[gpui_kit::test]
+#[ignore = "needs an openable output device; run explicitly with --ignored"]
+fn live_playback_advances_pauses_and_stops(cx: &mut TestAppContext) {
     if !usable_output_device() {
         return;
     }
@@ -240,27 +494,18 @@ fn native_playback_advances_pauses_and_stops(cx: &mut TestAppContext) {
     cx.update(|cx| engine.update(cx, |engine, cx| engine.toggle_play(cx)));
     cx.run_until_parked();
     cx.update(|cx| assert_eq!(engine.read(cx).status(), Some(PlaybackStatus::Playing)));
-    let mut advanced = false;
-    for _ in 0..50 {
-        cx.executor().advance_clock(Duration::from_millis(33));
-        cx.run_until_parked();
-        if cx.update(|cx| engine.read(cx).position()) > Duration::ZERO {
-            advanced = true;
-            break;
-        }
-    }
-    assert!(advanced, "the playhead never advanced on a live device");
-    let position = cx.update(|cx| engine.read(cx).position());
-    cx.update(|cx| {
-        engine.update(cx, |engine, cx| engine.toggle_play(cx));
-        assert_eq!(engine.read(cx).status(), Some(PlaybackStatus::Paused));
+    // The cpal callback thread runs on wall clock; the fake test clock cannot
+    // drive it, so poll the playhead against a real deadline.
+    let advanced = wait_for(Duration::from_secs(2), || {
+        cx.update(|cx| engine.read(cx).position()) > Duration::ZERO
     });
-    for _ in 0..5 {
-        cx.executor().advance_clock(Duration::from_millis(33));
-        cx.run_until_parked();
-    }
+    assert!(advanced, "the playhead never advanced on a live device");
+    cx.update(|cx| engine.update(cx, |engine, cx| engine.toggle_play(cx)));
+    cx.update(|cx| assert_eq!(engine.read(cx).status(), Some(PlaybackStatus::Paused)));
+    std::thread::sleep(Duration::from_millis(120));
     let frozen = cx.update(|cx| engine.read(cx).position());
-    assert!(frozen >= position);
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(cx.update(|cx| engine.read(cx).position()), frozen);
     cx.update(|cx| {
         engine.update(cx, |engine, cx| engine.seek_fraction(0.75, cx));
         assert!(engine.read(cx).position() >= Duration::from_millis(700));
@@ -268,7 +513,6 @@ fn native_playback_advances_pauses_and_stops(cx: &mut TestAppContext) {
         assert_eq!(engine.read(cx).status(), Some(PlaybackStatus::Stopped));
         assert_eq!(engine.read(cx).position(), Duration::ZERO);
     });
-    let _engine: Entity<AudioEngine> = engine;
 }
 
 /// Runs only where the output device cannot open: the resume path fails and

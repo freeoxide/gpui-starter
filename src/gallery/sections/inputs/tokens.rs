@@ -1,12 +1,5 @@
-//! The chat composer shared by the Input and Textarea sections, ported from
-//! the upstream `input_tokens` story. Commands, images, skills and people are
-//! inserted as atomic inline tokens; the application maps a token's ID back
-//! to the resource it names. A plain-control variant beside each composer
-//! demonstrates token hover reporting.
-//!
-//! The story crate builds one copy per host story; the gallery additionally
-//! namespaces every element ID with the host section's slug, because section
-//! IDs must stay unique across the whole gallery.
+//! Inline-token composer shared by the Input and Textarea sections (upstream
+//! `input_tokens` story). Element IDs carry the host slug to stay unique.
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{
@@ -24,7 +17,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{
     App, AppContext as _, Context, Entity, IntoElement, ParentElement as _, Render, SharedString,
-    Styled, Window, div, prelude::FluentBuilder as _, rems,
+    Styled, Subscription, Window, div, prelude::FluentBuilder as _, rems,
 };
 
 /// What a token refers to, recovered from the prefix of its ID.
@@ -118,7 +111,7 @@ pub(crate) struct TokenComposer {
     readonly: bool,
     disabled: bool,
     status: SharedString,
-    _subscription: gpui_kit::Subscription,
+    _subscription: Subscription,
 }
 
 #[derive(Clone)]
@@ -193,10 +186,12 @@ impl TokenComposer {
             let start = input.selected_range().start;
             let text = input.value();
             if text[..start].ends_with(|c: char| !c.is_whitespace()) {
-                input.replace(" ", window, cx);
+                // insert() touches only the active cursor; replace() would
+                // delete every extra cursor's selection in a multiline field.
+                input.insert(" ", window, cx);
             }
             input.replace_with_token(reference.sample(), window, cx)?;
-            input.replace(" ", window, cx);
+            input.insert(" ", window, cx);
             input.focus(window, cx);
             Ok::<_, InlineTokenError>(())
         }));

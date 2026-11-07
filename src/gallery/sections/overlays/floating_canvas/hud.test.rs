@@ -10,6 +10,7 @@ use super::{HUD_SAMPLE_CAP, HudMetrics, HudPanel, sample_value, sparkline_points
 #[gpui_kit::test]
 fn tick_grows_samples_and_caps_the_ring(cx: &mut TestAppContext) {
     let metrics = cx.new(HudMetrics::new);
+    metrics.update(cx, |metrics, _| metrics.set_open_huds(1));
     metrics.update(cx, |metrics, cx| {
         for _ in 0..200 {
             metrics.tick(cx);
@@ -45,8 +46,17 @@ fn sample_value_stays_in_range_and_differs_across_ticks() {
 }
 
 #[gpui_kit::test]
-async fn producer_ticks_samples_on_the_fake_clock(cx: &mut TestAppContext) {
+async fn producer_idles_without_huds_and_ticks_on_demand(cx: &mut TestAppContext) {
     let metrics = cx.new(HudMetrics::new);
+    cx.executor().advance_clock(Duration::from_millis(250 * 8));
+    cx.run_until_parked();
+    assert_eq!(
+        cx.read(|cx| metrics.read(cx).samples().len()),
+        0,
+        "the ticker must idle while no HUD is open"
+    );
+
+    metrics.update(cx, |metrics, _| metrics.set_open_huds(1));
     cx.executor().advance_clock(Duration::from_millis(250 * 8));
     cx.run_until_parked();
     assert_eq!(cx.read(|cx| metrics.read(cx).samples().len()), 8);
@@ -80,6 +90,7 @@ fn sparkline_points_span_the_bounds() {
 fn hud_panel_refresh_keeps_exactly_one_path(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
     let metrics = cx.new(HudMetrics::new);
+    metrics.update(cx, |metrics, _| metrics.set_open_huds(1));
     metrics.update(cx, |metrics, cx| {
         for _ in 0..8 {
             metrics.tick(cx);

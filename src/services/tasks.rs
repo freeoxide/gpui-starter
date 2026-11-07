@@ -8,6 +8,9 @@ use crate::platform::clock::Instant;
 
 use crate::{ids::TaskId, time::AppTimestamp};
 
+/// Cap on retained task records; the newest are kept.
+const MAX_TASKS: usize = 200;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskStatus {
     Queued,
@@ -111,7 +114,8 @@ fn start(id: TaskId, label: String, progress: TaskProgress, cx: &mut App) {
         active_tasks_before = active_count(cx),
         "background task starting"
     );
-    cx.default_global::<TaskRegistry>().tasks.insert(
+    let registry = cx.default_global::<TaskRegistry>();
+    registry.tasks.insert(
         0,
         BackgroundTask {
             id,
@@ -123,6 +127,7 @@ fn start(id: TaskId, label: String, progress: TaskProgress, cx: &mut App) {
             error: None,
         },
     );
+    registry.tasks.truncate(MAX_TASKS);
     tracing::debug!(
         target: "gpui_starter::tasks",
         task_id = %id,

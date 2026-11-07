@@ -20,7 +20,7 @@ use gpui_kit::{
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 /// One todo row. `id` is the stable domain identity, never a position.
 struct Todo {
@@ -244,7 +244,7 @@ impl TodoSection {
             )
     }
 
-    fn row(&self, todo: &Todo, cx: &Context<Self>) -> impl IntoElement {
+    fn row(todo: &Todo, cx: &Context<Self>) -> impl IntoElement {
         let id = todo.id;
         Checkbox::new(("todo-item", todo.id))
             .checked(todo.done)
@@ -287,7 +287,7 @@ impl TodoSection {
         v_flex()
             .w_full()
             .py_1()
-            .children(self.visible().map(|todo| self.row(todo, cx)))
+            .children(self.visible().map(|todo| Self::row(todo, cx)))
     }
 
     fn empty_state(&self, cx: &Context<Self>) -> impl IntoElement {
@@ -336,7 +336,7 @@ impl Render for TodoSection {
             section("todo-app", "Todo list")
                 .description(
                     "Rebuilt from the JavaScript example on kit components; the footer \
-                         reports the storage this host grants, which is none.",
+                     reports the storage this host grants, which is none.",
                 )
                 .w(rems(30.))
                 .v_flex()

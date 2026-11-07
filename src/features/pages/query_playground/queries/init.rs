@@ -1,37 +1,29 @@
 use gpui_kit::*;
 
-use gpui_query::core::{CachePolicy, QueryError, RequestPolicy, RetryPolicy, SelectTransform};
+use gpui_query::core::{CachePolicy, RequestPolicy, RetryPolicy, SelectTransform};
 use gpui_query::hook::{
-    InfiniteQueryOptions, QueryOptions, use_infinite_query, use_mutation, use_query,
+    InfiniteQueryOptions, QueryOptions, use_infinite_query, use_mutation, use_query_manual_opts,
     use_query_select,
 };
 
-use super::super::{HttpFetchKind, PlaygroundPage, PlaygroundUser, QueryPlaygroundPage};
-// Wasm reaches run_http only through `spawn_http_local` (inside actions.rs).
-#[cfg(not(target_family = "wasm"))]
-use super::actions::run_http;
+use super::super::{PlaygroundPage, PlaygroundUser, QueryPlaygroundPage};
+use super::actions::{fabricate_page, fetch_select_roster};
 
-/// Skeleton for the standard `ensure_*` factories: early-return when populated,
-/// then call `use_query`; `$exec` is a cloned background executor.
+/// Shared `ensure_*` body: early-return when populated, else create the entity
+/// unfetched (every section fetches on click) and arm its retry policy.
 macro_rules! ensure_query {
     (
         $self:ident . $field:ident,
         $cx:expr,
         $options:expr,
-        |$exec:ident| $body:expr $(,)?
+        $retry:expr $(,)?
     ) => {{
         if $self.$field.is_some() {
             return;
         }
-        let exec = $cx.background_executor().clone();
-        $self.$field = Some(use_query(
-            $options,
-            move |_signal| {
-                let $exec = exec.clone();
-                $body
-            },
-            $cx,
-        ));
+        let (entity, subscription) = use_query_manual_opts($options, $cx);
+        entity.update($cx, |r, _| r.set_retry_policy($retry));
+        $self.$field = Some((entity, subscription));
     }};
 }
 
@@ -42,16 +34,8 @@ impl QueryPlaygroundPage {
             cx,
             QueryOptions::new("playground::simple")
                 .cache_policy(CachePolicy::NoCache)
-                .request_policy(RequestPolicy::LatestWins)
-                .retry_policy(RetryPolicy::no_retries()),
-            |exec| async move {
-                exec.timer(std::time::Duration::from_secs(1)).await;
-                Ok(PlaygroundUser {
-                    id: 1,
-                    name: "Alice".into(),
-                    email: "alice@test.com".into(),
-                })
-            }
+                .request_policy(RequestPolicy::LatestWins),
+            RetryPolicy::no_retries(),
         );
     }
 
@@ -61,16 +45,8 @@ impl QueryPlaygroundPage {
             cx,
             QueryOptions::new("playground::nocache")
                 .cache_policy(CachePolicy::NoCache)
-                .request_policy(RequestPolicy::LatestWins)
-                .retry_policy(RetryPolicy::no_retries()),
-            |exec| async move {
-                exec.timer(std::time::Duration::from_millis(500)).await;
-                Ok(PlaygroundUser {
-                    id: 2,
-                    name: "NoCache Bob".into(),
-                    email: "bob@test.com".into(),
-                })
-            }
+                .request_policy(RequestPolicy::LatestWins),
+            RetryPolicy::no_retries(),
         );
     }
 
@@ -80,16 +56,8 @@ impl QueryPlaygroundPage {
             cx,
             QueryOptions::new("playground::ttl")
                 .cache_policy(CachePolicy::Ttl { ttl_ms: 5_000 })
-                .request_policy(RequestPolicy::LatestWins)
-                .retry_policy(RetryPolicy::no_retries()),
-            |exec| async move {
-                exec.timer(std::time::Duration::from_millis(500)).await;
-                Ok(PlaygroundUser {
-                    id: 3,
-                    name: "TTL Carol".into(),
-                    email: "carol@test.com".into(),
-                })
-            }
+                .request_policy(RequestPolicy::LatestWins),
+            RetryPolicy::no_retries(),
         );
     }
 
@@ -102,16 +70,8 @@ impl QueryPlaygroundPage {
                     ttl_ms: 3_000,
                     stale_ms: 7_000,
                 })
-                .request_policy(RequestPolicy::LatestWins)
-                .retry_policy(RetryPolicy::no_retries()),
-            |exec| async move {
-                exec.timer(std::time::Duration::from_millis(500)).await;
-                Ok(PlaygroundUser {
-                    id: 4,
-                    name: "SWR Dave".into(),
-                    email: "dave@test.com".into(),
-                })
-            }
+                .request_policy(RequestPolicy::LatestWins),
+            RetryPolicy::no_retries(),
         );
     }
 
@@ -121,12 +81,8 @@ impl QueryPlaygroundPage {
             cx,
             QueryOptions::new("playground::latest_wins")
                 .cache_policy(CachePolicy::NoCache)
-                .request_policy(RequestPolicy::LatestWins)
-                .retry_policy(RetryPolicy::no_retries()),
-            |exec| async move {
-                exec.timer(std::time::Duration::from_secs(2)).await;
-                Ok("latest-wins result".into())
-            }
+                .request_policy(RequestPolicy::LatestWins),
+            RetryPolicy::no_retries(),
         );
     }
 
@@ -136,12 +92,8 @@ impl QueryPlaygroundPage {
             cx,
             QueryOptions::new("playground::ignore")
                 .cache_policy(CachePolicy::NoCache)
-                .request_policy(RequestPolicy::IgnoreWhileLoading)
-                .retry_policy(RetryPolicy::no_retries()),
-            |exec| async move {
-                exec.timer(std::time::Duration::from_secs(2)).await;
-                Ok("ignore result".into())
-            }
+                .request_policy(RequestPolicy::IgnoreWhileLoading),
+            RetryPolicy::no_retries(),
         );
     }
 
@@ -153,12 +105,8 @@ impl QueryPlaygroundPage {
             cx,
             QueryOptions::new("playground::retry")
                 .cache_policy(CachePolicy::NoCache)
-                .request_policy(RequestPolicy::LatestWins)
-                .retry_policy(RetryPolicy::new(3).with_delay(400)),
-            |exec| async move {
-                exec.timer(std::time::Duration::from_millis(300)).await;
-                Err(QueryError::response("simulated failure"))
-            }
+                .request_policy(RequestPolicy::LatestWins),
+            RetryPolicy::new(3).with_delay(400),
         );
     }
 
@@ -184,17 +132,8 @@ impl QueryPlaygroundPage {
                 let exec = exec.clone();
                 let page_num = last_page.map(|p| p.page_number + 1).unwrap_or(5);
                 async move {
-                    exec.timer(std::time::Duration::from_millis(600)).await;
-                    let items: Vec<String> = (0..5)
-                        .map(|i| format!("page {} item {}", page_num, i))
-                        .collect();
-                    Ok((
-                        PlaygroundPage {
-                            items,
-                            page_number: page_num,
-                        },
-                        page_num < 10,
-                    ))
+                    let page = fabricate_page(exec, page_num).await;
+                    Ok((page, page_num < 10))
                 }
             },
             cx,
@@ -217,26 +156,7 @@ impl QueryPlaygroundPage {
             transform,
             move |_signal| {
                 let exec = exec.clone();
-                async move {
-                    exec.timer(std::time::Duration::from_secs(1)).await;
-                    Ok(vec![
-                        PlaygroundUser {
-                            id: 10,
-                            name: "Eve".into(),
-                            email: "eve@test.com".into(),
-                        },
-                        PlaygroundUser {
-                            id: 11,
-                            name: "Frank".into(),
-                            email: "frank@test.com".into(),
-                        },
-                        PlaygroundUser {
-                            id: 12,
-                            name: "Grace".into(),
-                            email: "grace@test.com".into(),
-                        },
-                    ])
-                }
+                async move { fetch_select_roster(exec).await }
             },
             cx,
         );
@@ -251,79 +171,21 @@ impl QueryPlaygroundPage {
             cx,
             QueryOptions::new("playground::imperative")
                 .cache_policy(CachePolicy::NoCache)
-                .request_policy(RequestPolicy::LatestWins)
-                .retry_policy(RetryPolicy::no_retries()),
-            |exec| async move {
-                exec.timer(std::time::Duration::from_secs(2)).await;
-                Ok("imperative result".into())
-            }
+                .request_policy(RequestPolicy::LatestWins),
+            RetryPolicy::no_retries(),
         );
     }
 
-    /// Real HTTP query (reqwest over the tokio runtime), created lazily on the
-    /// first HTTP click. Initial fetch is GET JSON; `fetch_http` re-fetches.
+    /// Real HTTP query (reqwest over the tokio runtime), created lazily and
+    /// unfetched on the first HTTP click; every click fetches via `fetch_http`.
     pub(super) fn ensure_http_query(&mut self, cx: &mut Context<Self>) {
-        if self.http_query.is_some() {
-            return;
-        }
-        // Clone the shared client + runtime out of the global before entering
-        // the fetch closure, releasing the cx borrow.
-        let (client, runtime) = match crate::services::tokio_runtime::runtime_and_client(cx) {
-            Some((runtime, client)) => (client, runtime),
-            None => return, // fetch_http also guards and logs this
-        };
-
-        // Wasm: reqwest futures are `!Send` but `use_query` demands `Fn + Send`,
-        // so pre-spawn the single initial fetch via `spawn_http_local`.
-        #[cfg(target_family = "wasm")]
-        let http_task = std::sync::Arc::new(std::sync::Mutex::new(Some(
-            super::actions::spawn_http_local(cx, &client, &runtime, HttpFetchKind::GetJson),
-        )));
-
-        let (entity, sub) = use_query(
+        ensure_query!(
+            self.http_query,
+            cx,
             QueryOptions::new("playground::http")
                 .cache_policy(CachePolicy::NoCache)
-                .request_policy(RequestPolicy::LatestWins)
-                .retry_policy(RetryPolicy::no_retries()),
-            move |signal| {
-                #[cfg(not(target_family = "wasm"))]
-                {
-                    let client = client.clone();
-                    let runtime = runtime.clone();
-                    async move {
-                        if signal.is_cancelled() {
-                            return Err(QueryError::cancelled("cancelled before send"));
-                        }
-                        let result = run_http(&client, &runtime, HttpFetchKind::GetJson).await?;
-                        Ok(result)
-                    }
-                }
-                #[cfg(target_family = "wasm")]
-                {
-                    // The fetcher is `Fn` (re-callable), so share the cell via an
-                    // Arc clone instead of moving it into the future.
-                    let http_task = http_task.clone();
-                    async move {
-                        if signal.is_cancelled() {
-                            return Err(QueryError::cancelled("cancelled before send"));
-                        }
-                        // Take the handle before awaiting (MutexGuard is !Send); into_inner
-                        // keeps the no-unwrap rule — a poisoned cell has no invariant to break.
-                        let task = http_task
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .take();
-                        match task {
-                            Some(task) => task.await,
-                            None => Err(QueryError::response(
-                                "http query refetched; wasm bridge is single-shot",
-                            )),
-                        }
-                    }
-                }
-            },
-            cx,
+                .request_policy(RequestPolicy::LatestWins),
+            RetryPolicy::no_retries(),
         );
-        self.http_query = Some((entity, sub));
     }
 }

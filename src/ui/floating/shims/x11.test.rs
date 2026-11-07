@@ -4,7 +4,6 @@ fn atoms() -> StateAtoms {
     StateAtoms {
         net_wm_state: 10,
         above: 11,
-        below: 12,
         skip_taskbar: 13,
         sticky: 14,
     }
@@ -17,7 +16,6 @@ fn state_atom_names_are_byte_exact() {
         [
             "_NET_WM_STATE",
             "_NET_WM_STATE_ABOVE",
-            "_NET_WM_STATE_BELOW",
             "_NET_WM_STATE_SKIP_TASKBAR",
             "_NET_WM_STATE_STICKY",
         ]
@@ -25,18 +23,33 @@ fn state_atom_names_are_byte_exact() {
 }
 
 #[test]
-fn state_messages_chunks_three_states_into_two_messages() {
+fn always_on_top_states_pins_the_full_bundle() {
     let atoms = atoms();
-    let target = 4242;
+    assert_eq!(
+        always_on_top_states(&atoms),
+        [atoms.above, atoms.skip_taskbar, atoms.sticky],
+        "always-on-top is ABOVE plus SKIP_TASKBAR plus STICKY, not ABOVE alone"
+    );
+}
+
+#[test]
+fn state_action_maps_enabled_onto_the_ewmh_actions() {
+    assert_eq!(state_action(true), STATE_ADD);
+    assert_eq!(state_action(false), STATE_REMOVE);
+}
+
+#[test]
+fn the_production_bundle_chunks_into_two_messages_with_the_enabled_action() {
+    let atoms = atoms();
     let msgs = state_messages(
         &atoms,
-        STATE_ADD,
-        target,
-        &[atoms.above, atoms.skip_taskbar, atoms.sticky],
+        state_action(true),
+        4242,
+        &always_on_top_states(&atoms),
     );
     assert_eq!(msgs.len(), 2);
     assert_eq!(msgs[0].format, 32);
-    assert_eq!(msgs[0].window, target);
+    assert_eq!(msgs[0].window, 4242);
     assert_eq!(msgs[0].type_, atoms.net_wm_state);
     assert_eq!(
         msgs[0].data.as_data32(),
@@ -59,12 +72,4 @@ fn state_messages_yields_one_message_for_a_single_state() {
 #[test]
 fn state_messages_yields_nothing_for_no_states() {
     assert!(state_messages(&atoms(), STATE_ADD, 7, &[]).is_empty());
-}
-
-#[test]
-fn state_messages_carries_the_below_atom_when_requested() {
-    let atoms = atoms();
-    let msgs = state_messages(&atoms, STATE_ADD, 7, &[atoms.below]);
-    assert_eq!(msgs.len(), 1);
-    assert_eq!(msgs[0].data.as_data32(), [STATE_ADD, atoms.below, 0, 1, 0]);
 }

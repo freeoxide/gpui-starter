@@ -8,13 +8,6 @@ use crate::{
 const MAX_INBOX_ITEMS: usize = 200;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum NotificationInboxKind {
-    Attempt,
-    PermissionUpdate,
-    SettingsUpdate,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NotificationInboxItem {
     pub id: NotificationId,
     pub created_at: AppTimestamp,
@@ -22,10 +15,7 @@ pub struct NotificationInboxItem {
     pub body: String,
     pub read: bool,
     pub backend: String,
-    pub delivered_natively: bool,
-    pub degraded: bool,
     pub error_summary: Option<String>,
-    pub kind: NotificationInboxKind,
 }
 
 impl NotificationInboxItem {
@@ -47,75 +37,55 @@ pub struct NotificationInboxState {
 impl Global for NotificationInboxState {}
 
 pub fn initialize(cx: &mut App) {
-    let config = app_state::config(cx);
-    cx.set_global(NotificationInboxState {
-        items: config.notification_inbox,
-    });
+    let items = app_state::with_config(cx, |config| config.notification_inbox.clone());
+    cx.set_global(NotificationInboxState { items });
 }
 
-pub fn snapshot(cx: &App) -> Vec<NotificationInboxItem> {
-    cx.try_global::<NotificationInboxState>()
-        .map(|state| state.items.clone())
-        .unwrap_or_default()
+/// Borrow the inbox without cloning it; prefer this in render paths.
+pub fn with_items<R>(cx: &App, f: impl FnOnce(&[NotificationInboxItem]) -> R) -> R {
+    match cx.try_global::<NotificationInboxState>() {
+        Some(state) => f(&state.items),
+        None => f(&[]),
+    }
 }
 
 /// Returns the number of unread inbox items without cloning the inbox.
 pub fn unread_count(cx: &App) -> usize {
-    cx.try_global::<NotificationInboxState>()
-        .map(|state| state.items.iter().filter(|item| !item.read).count())
-        .unwrap_or(0)
+    with_items(cx, |items| items.iter().filter(|item| !item.read).count())
+}
+
+/// Single write path: the config list owns the data and the render global is
+/// rebuilt from it, so no mutator can let UI and disk diverge.
+fn write_inbox(cx: &mut App, mutate: impl FnOnce(&mut Vec<NotificationInboxItem>)) {
+    app_state::update_config(cx, |config| {
+        mutate(&mut config.notification_inbox);
+        config.notification_inbox.truncate(MAX_INBOX_ITEMS);
+    });
+    let items = app_state::with_config(cx, |config| config.notification_inbox.clone());
+    cx.set_global(NotificationInboxState { items });
 }
 
 pub fn record(item: NotificationInboxItem, cx: &mut App) {
-    // PERF: Clone the item before inserting into state so update_config can use it
-    // without re-reading from global (avoids borrowing global + config simultaneously).
-    let item_for_config = item.clone();
-    {
-        let state = cx.default_global::<NotificationInboxState>();
-        state.items.insert(0, item);
-        if state.items.len() > MAX_INBOX_ITEMS {
-            state.items.truncate(MAX_INBOX_ITEMS);
-        }
-    }
-    app_state::update_config(cx, |config| {
-        config.notification_inbox.insert(0, item_for_config);
-        config.notification_inbox.truncate(MAX_INBOX_ITEMS);
-    });
+    write_inbox(cx, |items| items.insert(0, item));
 }
 
 pub fn mark_all_read(cx: &mut App) {
-    {
-        let state = cx.default_global::<NotificationInboxState>();
-        for item in &mut state.items {
-            item.read = true;
-        }
-    }
-    // PERF: Update config in-place instead of cloning the entire items Vec.
-    app_state::update_config(cx, |config| {
-        for item in &mut config.notification_inbox {
+    write_inbox(cx, |items| {
+        for item in items {
             item.read = true;
         }
     });
 }
 
 pub fn clear_all(cx: &mut App) {
-    {
-        let state = cx.default_global::<NotificationInboxState>();
-        state.items.clear();
-    }
-    app_state::update_config(cx, |config| {
-        config.notification_inbox = Vec::new();
-    });
+    write_inbox(cx, |items| items.clear());
 }
 
 pub struct NotificationAttemptRecord {
     pub title: String,
     pub body: String,
     pub backend: NotificationBackendKind,
-    pub delivered_natively: bool,
-    pub degraded: bool,
     pub error_summary: Option<String>,
-    pub kind: NotificationInboxKind,
 }
 
 pub fn record_attempt(record_input: NotificationAttemptRecord, cx: &mut App) {
@@ -127,10 +97,7 @@ pub fn record_attempt(record_input: NotificationAttemptRecord, cx: &mut App) {
             body: record_input.body,
             read: false,
             backend: record_input.backend.to_string(),
-            delivered_natively: record_input.delivered_natively,
-            degraded: record_input.degraded,
             error_summary: record_input.error_summary,
-            kind: record_input.kind,
         },
         cx,
     );

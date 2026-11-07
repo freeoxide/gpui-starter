@@ -1,7 +1,3 @@
-// Only the native install path constructs the tool; wasm compiles the
-// module without it.
-#![cfg_attr(target_family = "wasm", allow(dead_code))]
-
 use gpui_kit::{Context, CursorStyle, WeakEntity};
 
 use super::state::ShaderState;
@@ -25,9 +21,10 @@ impl RippleTool {
     }
 
     fn forward(&self, event: &CanvasPointerEvent, cx: &mut Context<CanvasState>) {
+        // set_mouse owns the unit-square clamp; forwarding stays raw.
         let uv = (
-            (event.doc_position.x.as_f32() / self.dims.0).clamp(0.0, 1.0),
-            (event.doc_position.y.as_f32() / self.dims.1).clamp(0.0, 1.0),
+            event.doc_position.x.as_f32() / self.dims.0,
+            event.doc_position.y.as_f32() / self.dims.1,
         );
         let _ = self.shader.update(cx, |s, cx| s.set_mouse(uv, cx));
     }

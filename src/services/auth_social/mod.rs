@@ -1,18 +1,6 @@
-//! Removable social-login wiring. `install`, `start`, `sign_out`,
-//! `controller`, `snapshot`, and `route_callback` are the only public
-//! surface. Removal = delete this directory and revert the seam touches:
-//! the `route_callback` guard and the auth_social capability move in
-//! services/auth.rs (restore plan 21's original entry), the install line in
-//! app/init.rs, the cfg'd module + re-export lines in services/mod.rs and
-//! lib.rs, the oauth2/openidconnect lines in Cargo.toml's not-wasm table
-//! with a regenerated Cargo.lock, and the AccountInfo.avatar_url field in
-//! crates/gpui-auth (keyring rows keep parsing either way).
-//!
-//! Wasm posture: this module does not exist there. A web build would need an
-//! https redirect to the app's own origin, `code`/`state` read from
-//! `location.search` at boot (the wasm router reads `location.hash` only),
-//! and a token-storage decision; none of that is implemented, and the
-//! adapter's cfg'd capability entry carries the reason.
+//! Social login over `gpui-auth`: Google, GitHub, and any discovered OIDC
+//! issuer. Configure via `auth-providers.json` in the config directory
+//! (`$GPUI_AUTH_PROVIDERS` overrides); there is no wasm build of this module.
 
 pub(crate) mod config;
 pub(crate) mod flows;
@@ -77,7 +65,7 @@ pub enum RedirectMode {
     Scheme,
 }
 
-/// Per-provider state for diagnostics and plan 24's UI.
+/// Per-provider state for diagnostics and the auth UI.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SocialProviderStatus {
     pub configured: bool,

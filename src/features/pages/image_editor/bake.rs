@@ -1,25 +1,57 @@
+#[cfg(not(target_family = "wasm"))]
 use std::f32::consts::TAU;
 
-use gpui_kit::{Hsla, Pixels, Point, Rgba};
+#[cfg(not(target_family = "wasm"))]
+use gpui_kit::{Hsla, Rgba};
 use image::{DynamicImage, RgbaImage};
 
 use super::document::FilterSettings;
+#[cfg(not(target_family = "wasm"))]
 use crate::ui::canvas::CanvasShape;
 
+#[cfg(not(target_family = "wasm"))]
 pub(crate) fn apply_filters(base: &RgbaImage, filters: &FilterSettings) -> RgbaImage {
+    apply_filters_until(base, filters, &mut || false)
+        .expect("never-superseded callback reports no cancellation")
+}
+
+/// Runs each enabled filter stage, asking `superseded` before every stage;
+/// None means a later request made the remaining passes pointless.
+pub(crate) fn apply_filters_until(
+    base: &RgbaImage,
+    filters: &FilterSettings,
+    superseded: &mut (dyn FnMut() -> bool + Send),
+) -> Option<RgbaImage> {
+    if superseded() {
+        return None;
+    }
+    // No stage enabled: skip the DynamicImage round-trip and its two copies.
+    if !filters.grayscale && filters.brightness == 0 && filters.blur_sigma <= 0. {
+        return Some(base.clone());
+    }
     let mut img = DynamicImage::ImageRgba8(base.clone());
     if filters.grayscale {
+        if superseded() {
+            return None;
+        }
         img = img.grayscale();
     }
     if filters.brightness != 0 {
+        if superseded() {
+            return None;
+        }
         img = img.brighten(filters.brightness);
     }
     if filters.blur_sigma > 0. {
+        if superseded() {
+            return None;
+        }
         img = img.blur(filters.blur_sigma);
     }
-    img.to_rgba8()
+    Some(img.to_rgba8())
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn blend_pixel(buf: &mut RgbaImage, x: u32, y: u32, src: [u8; 4]) {
     let mut px = *buf.get_pixel(x, y);
     let sa = src[3] as f32 / 255.;
@@ -31,6 +63,7 @@ fn blend_pixel(buf: &mut RgbaImage, x: u32, y: u32, src: [u8; 4]) {
     buf.put_pixel(x, y, px);
 }
 
+#[cfg(not(target_family = "wasm"))]
 pub(crate) fn fill_circle(buf: &mut RgbaImage, center: (f32, f32), radius: f32, rgba: [u8; 4]) {
     let (w, h) = buf.dimensions();
     let x0 = (center.0 - radius).floor().max(0.) as i32;
@@ -48,6 +81,7 @@ pub(crate) fn fill_circle(buf: &mut RgbaImage, center: (f32, f32), radius: f32, 
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 pub(crate) fn stamp_line(
     buf: &mut RgbaImage,
     a: (f32, f32),
@@ -64,6 +98,7 @@ pub(crate) fn stamp_line(
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 pub(crate) fn stroke_ellipse(
     buf: &mut RgbaImage,
     center: (f32, f32),
@@ -84,6 +119,7 @@ pub(crate) fn stroke_ellipse(
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn hsla_to_rgba(color: Hsla) -> [u8; 4] {
     let rgba = Rgba::from(color);
     [
@@ -94,17 +130,7 @@ fn hsla_to_rgba(color: Hsla) -> [u8; 4] {
     ]
 }
 
-fn path_points(shape: &CanvasShape) -> Option<(&[Point<Pixels>], [u8; 4], f32)> {
-    match shape {
-        CanvasShape::Path { points, style } => Some((
-            points,
-            hsla_to_rgba(style.color),
-            style.width.as_f32().max(1.),
-        )),
-        _ => None,
-    }
-}
-
+#[cfg(not(target_family = "wasm"))]
 pub(crate) fn rasterize_shape(
     buf: &mut RgbaImage,
     shape: &CanvasShape,
@@ -112,11 +138,10 @@ pub(crate) fn rasterize_shape(
     fallback_width: f32,
 ) {
     match shape {
-        CanvasShape::Path { .. } => {
-            let Some((points, rgba, width)) = path_points(shape) else {
-                return;
-            };
-            match points {
+        CanvasShape::Path { points, style } => {
+            let rgba = hsla_to_rgba(style.color);
+            let width = style.width.as_f32().max(1.);
+            match points.as_slice() {
                 [p] => fill_circle(buf, (p.x.as_f32(), p.y.as_f32()), width / 2., rgba),
                 _ => {
                     for pair in points.windows(2) {
@@ -186,6 +211,7 @@ pub(crate) fn rasterize_shape(
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 pub(crate) fn compose_export(
     base: &RgbaImage,
     filters: &FilterSettings,

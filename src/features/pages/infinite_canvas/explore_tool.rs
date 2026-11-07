@@ -1,4 +1,4 @@
-use gpui_kit::{Context, CursorStyle, Pixels, Point, ScrollDelta, point, px};
+use gpui_kit::{Context, CursorStyle, MouseButton, Pixels, Point, ScrollDelta, point, px};
 
 use crate::ui::canvas::{
     CanvasPointerEvent, CanvasScrollEvent, CanvasState, CanvasTool, ToolContext,
@@ -43,12 +43,6 @@ impl ExploreTool {
     }
 }
 
-impl Default for ExploreTool {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl CanvasTool for ExploreTool {
     fn id(&self) -> &'static str {
         "explore"
@@ -65,7 +59,7 @@ impl CanvasTool for ExploreTool {
         _: &mut CanvasState,
         _: &mut Context<CanvasState>,
     ) {
-        if event.button == gpui_kit::MouseButton::Left {
+        if event.button == MouseButton::Left {
             self.dragging = true;
             self.last_screen = Some(event.screen_position);
         }

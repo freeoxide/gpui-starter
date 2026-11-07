@@ -41,6 +41,19 @@ pub(crate) fn entry_handle(id: &str, cx: &App) -> Option<FloatingHandle> {
         .map(|entry| entry.handle)
 }
 
+/// Spawn a float unless one with this id is open, in which case return its handle.
+pub(crate) fn spawn_idempotent(
+    id: &str,
+    spec: FloatingSpec,
+    build: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    cx: &mut App,
+) -> anyhow::Result<FloatingHandle> {
+    if let Some(handle) = entry_handle(id, cx) {
+        return Ok(handle);
+    }
+    spawn_screen_floating(spec, build, cx)
+}
+
 /// Close every example float this section spawned; returns how many closed.
 pub fn close_all_examples(cx: &mut App) -> usize {
     let handles: Vec<FloatingHandle> = floating_snapshot(cx)
@@ -120,10 +133,8 @@ pub(crate) fn off_window_spec() -> FloatingSpec {
 
 /// Open the no-main-window demo as a screen float; idempotent per id.
 pub fn spawn_independent(cx: &mut App) -> anyhow::Result<FloatingHandle> {
-    if let Some(handle) = entry_handle(INDEPENDENT_ID, cx) {
-        return Ok(handle);
-    }
-    spawn_screen_floating(
+    spawn_idempotent(
+        INDEPENDENT_ID,
         independent_spec(),
         |_, cx| {
             cx.new(|_| VariantDemoBody {
@@ -138,10 +149,8 @@ pub fn spawn_independent(cx: &mut App) -> anyhow::Result<FloatingHandle> {
 
 /// Open the not-window-scoped demo as a screen float; idempotent per id.
 pub fn spawn_off_window(cx: &mut App) -> anyhow::Result<FloatingHandle> {
-    if let Some(handle) = entry_handle(OFF_WINDOW_ID, cx) {
-        return Ok(handle);
-    }
-    spawn_screen_floating(
+    spawn_idempotent(
+        OFF_WINDOW_ID,
         off_window_spec(),
         |_, cx| {
             cx.new(|_| VariantDemoBody {

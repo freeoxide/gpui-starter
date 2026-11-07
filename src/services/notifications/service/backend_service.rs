@@ -23,6 +23,9 @@ use crate::services::notifications::backend::WebNotificationBackend;
 
 pub const LOG: &str = "gpui_starter::notifications";
 
+const NO_DAEMON_REASON: &str = "No notification daemon owns org.freedesktop.Notifications — \
+                                install notify-osd / dunst / mako";
+
 #[derive(Clone, Debug)]
 pub struct NotificationRuntimeSnapshot {
     pub enabled_by_user: bool,
@@ -34,19 +37,38 @@ pub struct NotificationRuntimeSnapshot {
     /// Advisory: freedesktop capabilities the daemon advertises, probed at
     /// startup; servers may ignore hints they nominally advertise.
     pub daemon_capabilities: Option<SharedString>,
+    /// Probe-owned fact feeding `recompute_degraded_reason`; `true` until the
+    /// Linux startup probe reports otherwise (macOS/Windows never probe).
+    pub daemon_present: bool,
 }
 
 impl NotificationRuntimeSnapshot {
-    pub fn new(service: &NotificationService) -> Self {
-        Self {
-            enabled_by_user: true,
+    pub fn new(service: &NotificationService, enabled_by_user: bool) -> Self {
+        let mut snapshot = Self {
+            enabled_by_user,
             permission: NotificationPermissionState::Unknown,
             active_backend: service.active_backend(),
             capabilities: service.active_capabilities(),
             last_backend_error: service.initial_error.clone().map(Into::into),
-            degraded_reason: service.initial_error.clone().map(Into::into),
+            degraded_reason: None,
             daemon_capabilities: None,
-        }
+            daemon_present: true,
+        };
+        snapshot.recompute_degraded_reason();
+        snapshot
+    }
+
+    /// Single derivation point so the user toggle, the daemon probe and send
+    /// results cannot clobber each other: user-disable outranks a missing
+    /// daemon, which outranks the last backend error.
+    pub(super) fn recompute_degraded_reason(&mut self) {
+        self.degraded_reason = if !self.enabled_by_user {
+            Some(crate::i18n::localize("notifications_degraded_disabled_by_user").into())
+        } else if !self.daemon_present {
+            Some(NO_DAEMON_REASON.into())
+        } else {
+            self.last_backend_error.clone()
+        };
     }
 }
 
@@ -62,10 +84,13 @@ pub struct NotificationService {
     pub(crate) primary: Option<Arc<dyn NotificationBackend>>,
     pub(crate) secondary: Arc<dyn NotificationBackend>,
     pub(crate) initial_error: Option<String>,
+    /// Shared tokio runtime hosting the send deadline (and any sync backend
+    /// work off the main thread); `None` on wasm, whose shim is undriven.
+    pub(crate) runtime: Option<Arc<tokio::runtime::Runtime>>,
 }
 
 impl NotificationService {
-    pub fn new() -> Self {
+    pub fn new(runtime: Option<Arc<tokio::runtime::Runtime>>) -> Self {
         tracing::info!(target: LOG, "initializing native notification service");
         #[cfg(not(target_family = "wasm"))]
         let secondary = Arc::new(NotifyRustBackend::new()) as Arc<dyn NotificationBackend>;
@@ -74,20 +99,23 @@ impl NotificationService {
         #[cfg(target_family = "wasm")]
         let secondary = Arc::new(WasmStubBackend::new()) as Arc<dyn NotificationBackend>;
         let (primary, primary_error) = select_primary_backend();
-        Self::with_backends(primary, secondary, primary_error)
+        Self::with_backends(primary, secondary, primary_error, runtime)
     }
 
     /// Construct with explicit backends (primarily a test hook): `primary` is
-    /// tried first, `secondary` is the fallback on any primary `Err` or panic.
+    /// tried first, `secondary` is the fallback on any primary `Err`, panic or
+    /// deadline miss.
     pub(crate) fn with_backends(
         primary: Option<Arc<dyn NotificationBackend>>,
         secondary: Arc<dyn NotificationBackend>,
         initial_error: Option<String>,
+        runtime: Option<Arc<tokio::runtime::Runtime>>,
     ) -> Self {
         let service = Self {
             primary,
             secondary,
             initial_error,
+            runtime,
         };
 
         tracing::info!(
@@ -198,17 +226,12 @@ impl NotificationService {
             };
         }
 
-        let mut errors = Vec::new();
+        let mut errors: Vec<String> = Vec::new();
 
         if let Some(primary) = &self.primary {
             tracing::debug!(target: LOG, backend = %primary.kind(), "attempting primary notification send");
-            // catch_unwind: a panicking backend must not abort the send task —
-            // the panic becomes a regular error so the fallback is attempted.
-            match AssertUnwindSafe(primary.send(&request))
-                .catch_unwind()
-                .await
-            {
-                Ok(Ok(())) => {
+            match try_backend(self.runtime.as_ref(), primary, &request).await {
+                Ok(()) => {
                     tracing::info!(target: LOG, backend = %primary.kind(), "primary notification send succeeded");
                     return NotificationSendResult {
                         backend_used: primary.kind(),
@@ -218,24 +241,14 @@ impl NotificationService {
                         importance: request.importance,
                     };
                 }
-                Ok(Err(err)) => {
+                Err(err) => {
                     tracing::warn!(
                         target: LOG,
                         backend = %primary.kind(),
                         error = %err,
                         "primary notification send failed"
                     );
-                    errors.push(format!("{}: {err:#}", primary.kind()));
-                }
-                Err(panic_payload) => {
-                    let msg = panic_payload_to_string(panic_payload);
-                    tracing::error!(
-                        target: LOG,
-                        backend = %primary.kind(),
-                        panic = %msg,
-                        "primary notification send panicked; falling back to secondary"
-                    );
-                    errors.push(format!("{}: panic: {msg}", primary.kind()));
+                    errors.push(err);
                 }
             }
         }
@@ -245,7 +258,7 @@ impl NotificationService {
             backend = %self.secondary.kind(),
             "attempting fallback notification send"
         );
-        match self.secondary.send(&request).await {
+        match try_backend(self.runtime.as_ref(), &self.secondary, &request).await {
             Ok(()) => {
                 tracing::info!(
                     target: LOG,
@@ -272,7 +285,7 @@ impl NotificationService {
                     error = %err,
                     "fallback notification send failed; using in-app policy"
                 );
-                errors.push(format!("{}: {err:#}", self.secondary.kind()));
+                errors.push(err);
                 NotificationSendResult {
                     backend_used: NotificationBackendKind::UiOnly,
                     degraded: true,
@@ -282,6 +295,52 @@ impl NotificationService {
                 }
             }
         }
+    }
+}
+
+/// Upper bound for one backend attempt: a daemon that owns the D-Bus name but
+/// never replies must not park the send task (or the fallback chain).
+const SEND_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Run `fut` on the shared runtime under [`SEND_DEADLINE`]; the deadline also
+/// moves sync backend work (win_toast, notify-rust `show()`) off the main
+/// thread. `None` (no runtime) runs the future inline, unbounded.
+pub(super) async fn bounded<T: Send + 'static>(
+    runtime: Option<&Arc<tokio::runtime::Runtime>>,
+    fut: impl std::future::Future<Output = T> + Send + 'static,
+) -> Result<T, String> {
+    let Some(runtime) = runtime else {
+        return Ok(fut.await);
+    };
+    match runtime
+        .spawn(async move { tokio::time::timeout(SEND_DEADLINE, fut).await })
+        .await
+    {
+        Ok(Ok(output)) => Ok(output),
+        Ok(Err(_deadline)) => Err(format!("no reply within {SEND_DEADLINE:?}")),
+        Err(join_err) => Err(format!("deadline task failed: {join_err}")),
+    }
+}
+
+/// One guarded backend attempt: a panic or a daemon that never replies becomes
+/// a regular Err so the fallback chain and in-app feedback still run.
+async fn try_backend(
+    runtime: Option<&Arc<tokio::runtime::Runtime>>,
+    backend: &Arc<dyn NotificationBackend>,
+    request: &NotificationRequest,
+) -> Result<(), String> {
+    let owned_backend = Arc::clone(backend);
+    let owned_request = request.clone();
+    let send = AssertUnwindSafe(async move { owned_backend.send(&owned_request).await });
+    match bounded(runtime, send.catch_unwind()).await {
+        Ok(Ok(Ok(()))) => Ok(()),
+        Ok(Ok(Err(err))) => Err(format!("{}: {err:#}", backend.kind())),
+        Ok(Err(panic_payload)) => Err(format!(
+            "{}: panic: {}",
+            backend.kind(),
+            panic_payload_to_string(panic_payload)
+        )),
+        Err(deadline_err) => Err(format!("{}: {deadline_err}", backend.kind())),
     }
 }
 
@@ -383,7 +442,7 @@ fn panic_payload_to_string(payload: Box<dyn std::any::Any + Send>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::NotificationService;
+    use super::{NO_DAEMON_REASON, NotificationRuntimeSnapshot, NotificationService};
     use crate::services::notifications::backend::NotificationBackend;
     #[cfg(target_os = "linux")]
     use crate::services::notifications::backend::NotifyRustBackend;
@@ -451,6 +510,7 @@ mod tests {
             )),
             fake(NotificationBackendKind::NotifyRust, SendOutcome::Ok),
             None,
+            None,
         );
         let result = runtime().block_on(async { svc.send(request(), true).await });
         assert!(result.delivered_natively, "secondary should deliver");
@@ -480,6 +540,7 @@ mod tests {
                 SendOutcome::Err("secondary-fail"),
             ),
             None,
+            None,
         );
         let result = runtime().block_on(async { svc.send(request(), true).await });
         assert!(!result.delivered_natively);
@@ -503,6 +564,7 @@ mod tests {
             )),
             fake(NotificationBackendKind::NotifyRust, SendOutcome::Ok),
             None,
+            None,
         );
         let result = runtime().block_on(async { svc.send(request(), true).await });
         assert!(
@@ -525,10 +587,75 @@ mod tests {
             Some(fake(NotificationBackendKind::UserNotify, SendOutcome::Ok)),
             fake(NotificationBackendKind::NotifyRust, SendOutcome::Ok),
             None,
+            None,
         );
         let result = runtime().block_on(async { svc.send(request(), false).await });
         assert!(!result.delivered_natively);
         assert_eq!(result.backend_used, NotificationBackendKind::UiOnly);
+    }
+
+    /// On Linux the primary is None, so the secondary is the only backend and
+    /// its panic must land in the in-app policy like any other failure.
+    #[test]
+    fn secondary_panic_degrades_to_ui_only() {
+        let svc = NotificationService::with_backends(
+            None,
+            fake(
+                NotificationBackendKind::NotifyRust,
+                SendOutcome::Panic("secondary panicked"),
+            ),
+            None,
+            None,
+        );
+        let result = runtime().block_on(async { svc.send(request(), true).await });
+        assert!(
+            !result.delivered_natively,
+            "a secondary panic must not count as delivery"
+        );
+        assert_eq!(result.backend_used, NotificationBackendKind::UiOnly);
+        assert!(result.degraded);
+        let summary = result
+            .error_summary
+            .expect("the secondary panic must be recorded");
+        assert!(
+            summary.to_lowercase().contains("panic"),
+            "error summary should mention the secondary panic: {summary}"
+        );
+    }
+
+    #[test]
+    fn degraded_reason_precedence_is_user_disable_then_daemon_then_error() {
+        let svc = NotificationService::with_backends(
+            None,
+            fake(NotificationBackendKind::NotifyRust, SendOutcome::Ok),
+            None,
+            None,
+        );
+        let mut snapshot = NotificationRuntimeSnapshot::new(&svc, true);
+        assert_eq!(snapshot.degraded_reason, None);
+
+        snapshot.last_backend_error = Some("send failed".into());
+        snapshot.recompute_degraded_reason();
+        assert_eq!(snapshot.degraded_reason.as_deref(), Some("send failed"));
+
+        // The probe's fact outranks a stale send error.
+        snapshot.daemon_present = false;
+        snapshot.recompute_degraded_reason();
+        assert_eq!(
+            snapshot.degraded_reason.as_deref(),
+            Some(NO_DAEMON_REASON),
+            "a missing daemon must outrank the last backend error"
+        );
+
+        // The user toggle outranks the probe: a late probe completion must not
+        // erase the disabled reason.
+        snapshot.enabled_by_user = false;
+        snapshot.recompute_degraded_reason();
+        assert_eq!(
+            snapshot.degraded_reason.as_deref(),
+            Some(crate::i18n::localize("notifications_degraded_disabled_by_user").as_str()),
+            "user-disable must outrank a missing daemon"
+        );
     }
 
     /// Linux skips the user-notify backend (nothing over notify-rust), so
@@ -536,7 +663,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn linux_selects_notify_rust_as_active_backend() {
-        let svc = NotificationService::new();
+        let svc = NotificationService::new(None);
         assert!(svc.primary.is_none(), "primary must be None on Linux");
         assert_eq!(svc.active_backend(), NotificationBackendKind::NotifyRust);
     }

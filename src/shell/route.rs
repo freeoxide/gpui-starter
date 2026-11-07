@@ -1,41 +1,11 @@
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{errors::AppError, sidebar::Page};
+use crate::{errors::AppError, page::Page};
 
 pub const APP_URL_SCHEME: &str = "gpui-starter";
 
-/// Valid deep-link hosts, derived from [`Page::host`](crate::sidebar::Page::host)
-/// so the parser, `to_url`, and foundation validation cannot drift.
-pub(crate) const VALID_HOSTS: &[&str] = &[
-    Page::Home.host(),
-    Page::Form.host(),
-    Page::Settings.host(),
-    Page::Notifications.host(),
-    Page::Diagnostics.host(),
-    Page::ErrorPlayground.host(),
-    Page::QueryPlayground.host(),
-    Page::QueryDevToolsV2.host(),
-    Page::About.host(),
-    Page::SystemControls.host(),
-    Page::Gallery.host(),
-    Page::CanvasShowcase.host(),
-    Page::InfiniteCanvas.host(),
-    Page::MultiuserCanvas.host(),
-    Page::FloatingUi.host(),
-    Page::ImageEditor.host(),
-    Page::Microphone.host(),
-    Page::Audio.host(),
-    Page::Analytics.host(),
-    Page::Music.host(),
-    Page::SignIn.host(),
-    Page::DesktopWidgets.host(),
-    Page::Wgpu.host(),
-    Page::ShaderCanvas.host(),
-    Page::ModelViewer.host(),
-];
-
-const INVALID_SEGMENT_CHARS: &[char] = &['/', '\\', '\0', '<', '>', '|', '"'];
+const INVALID_SEGMENT_CHARS: &[char] = &['/', '\\', '<', '>', '|', '"'];
 
 fn validate_path_segment(segment: &str) -> Result<(), AppError> {
     if segment.is_empty() {
@@ -148,12 +118,15 @@ impl AppRoute {
         }
 
         let host = url.host_str().unwrap_or_default();
-        if !VALID_HOSTS.contains(&host) {
-            return Err(AppError::invalid_deep_link(
-                input,
-                format!("unexpected host `{}`", host),
-            ));
-        }
+        let page = match Page::from_host(host) {
+            Some(page) => page,
+            None => {
+                return Err(AppError::invalid_deep_link(
+                    input,
+                    format!("unexpected host `{}`", host),
+                ));
+            }
+        };
 
         let segments: Vec<&str> = url
             .path_segments()
@@ -166,12 +139,9 @@ impl AppRoute {
 
         // Query parameters are ignored: matching consumes host + path only,
         // so unsanitized query data can never reach dispatch.
-        match (host, segments.as_slice()) {
-            (host, []) => match Page::from_host(host) {
-                Some(page) => Ok(Self::Page(page)),
-                None => Err(AppError::invalid_deep_link(input, "unknown route")),
-            },
-            (h, ["notifications"]) if h == Page::Settings.host() => Ok(Self::SettingsNotifications),
+        match (page, segments.as_slice()) {
+            (Page::Settings, ["notifications"]) => Ok(Self::SettingsNotifications),
+            (page, []) => Ok(Self::Page(page)),
             _ => Err(AppError::invalid_deep_link(input, "unknown route")),
         }
     }

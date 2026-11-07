@@ -19,3 +19,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
     select::register(sections, window, cx);
     time_field::register(sections, window, cx);
 }
+
+#[cfg(test)]
+#[path = "mod.test.rs"]
+mod mod_test;

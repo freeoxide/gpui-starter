@@ -14,7 +14,7 @@ use openidconnect::{
     RedirectUrl, RefreshToken, Scope, TokenResponse,
 };
 
-use super::{PendingRedirect, map_token_error, start_redirect, token_set};
+use super::{PendingRedirect, map_token_error, revoke_denied, start_redirect, token_set};
 use crate::services::auth_social::{OidcConfig, ProviderConfig, ProviderKind, RedirectMode};
 
 const GOOGLE_ISSUER: &str = "https://accounts.google.com";
@@ -31,6 +31,7 @@ type DiscoveredClient = CoreClient<
 
 struct PendingOidcFlow {
     redirect: PendingRedirect,
+    state: String,
     nonce: SecretString,
 }
 
@@ -49,6 +50,7 @@ pub struct OidcProvider {
     extra_auth_params: Vec<(String, String)>,
     revoke_url: Option<String>,
     pending: Mutex<Option<PendingOidcFlow>>,
+    client_cache: Mutex<Option<DiscoveredClient>>,
 }
 
 impl OidcProvider {
@@ -68,6 +70,7 @@ impl OidcProvider {
             extra_auth_params: vec![("access_type".into(), "offline".into())],
             revoke_url: Some(GOOGLE_REVOKE_URL.to_string()),
             pending: Mutex::new(None),
+            client_cache: Mutex::new(None),
         }
     }
 
@@ -88,6 +91,7 @@ impl OidcProvider {
             extra_auth_params: Vec::new(),
             revoke_url: config.revoke_url.clone(),
             pending: Mutex::new(None),
+            client_cache: Mutex::new(None),
         }
     }
 
@@ -103,6 +107,38 @@ impl OidcProvider {
     #[cfg(test)]
     pub(crate) fn pending_port(&self) -> Option<u16> {
         lock(&self.pending).as_ref()?.redirect.port
+    }
+
+    /// Discovery is two HTTP round trips; cache the client and repeat them
+    /// only after a failed use.
+    async fn discovered_client(
+        &self,
+        http: &reqwest::Client,
+    ) -> Result<DiscoveredClient, AuthError> {
+        if let Some(client) = lock(&self.client_cache).as_ref() {
+            return Ok(client.clone());
+        }
+        let client = self.discover_client(http).await?;
+        *lock(&self.client_cache) = Some(client.clone());
+        Ok(client)
+    }
+
+    fn forget_discovered_client(&self) {
+        *lock(&self.client_cache) = None;
+    }
+
+    /// The nonce is per-flow: it is spent only when `launch` is still the
+    /// pending flow, so a superseded flow cannot spend the live one's nonce.
+    fn take_pending_nonce(&self, launch: &FlowLaunch) -> Option<SecretString> {
+        let mut pending = lock(&self.pending);
+        if pending
+            .as_ref()
+            .is_some_and(|flow| flow.state == launch.state.expose())
+        {
+            pending.take().map(|flow| flow.nonce)
+        } else {
+            None
+        }
     }
 
     async fn discover_client(&self, http: &reqwest::Client) -> Result<DiscoveredClient, AuthError> {
@@ -125,6 +161,7 @@ impl OidcProvider {
         client: &DiscoveredClient,
         http: &reqwest::Client,
         response: &CoreTokenResponse,
+        nonce: Option<&SecretString>,
     ) -> Option<AccountInfo> {
         let request = client
             .user_info(response.access_token().clone(), None)
@@ -132,7 +169,7 @@ impl OidcProvider {
         let claims: openidconnect::core::CoreUserInfoClaims =
             match request.request_async(http).await {
                 Ok(claims) => claims,
-                Err(_) => return self.account_from_id_token(client, response).await,
+                Err(_) => return self.account_from_id_token(client, response, nonce).await,
             };
         Some(AccountInfo {
             id: Some(claims.subject().to_string()),
@@ -157,15 +194,11 @@ impl OidcProvider {
         &self,
         client: &DiscoveredClient,
         response: &CoreTokenResponse,
+        nonce: Option<&SecretString>,
     ) -> Option<AccountInfo> {
         let id_token = response.id_token()?;
-        let nonce = lock(&self.pending).as_ref()?.nonce.clone();
-        let claims = id_token
-            .claims(
-                &client.id_token_verifier(),
-                &Nonce::new(nonce.expose().to_string()),
-            )
-            .ok()?;
+        let nonce = Nonce::new(nonce?.expose().to_string());
+        let claims = id_token.claims(&client.id_token_verifier(), &nonce).ok()?;
         Some(AccountInfo {
             id: Some(claims.subject().to_string()),
             email: claims.email().map(|email| email.to_string()),
@@ -235,7 +268,7 @@ impl AuthProvider for OidcProvider {
     }
 
     async fn start_flow(&self, http: reqwest::Client) -> Result<FlowLaunch, AuthError> {
-        let client = self.discover_client(&http).await?;
+        let client = self.discovered_client(&http).await?;
         let (redirect, redirect_uri) = start_redirect(self.redirect)?;
         let redirect_url = RedirectUrl::new(redirect_uri.clone())
             .map_err(|err| AuthError::InvalidRedirect(err.to_string()))?;
@@ -263,6 +296,7 @@ impl AuthProvider for OidcProvider {
         let (authorize_url, _csrf, _nonce) = request.url();
         *lock(&self.pending) = Some(PendingOidcFlow {
             redirect,
+            state: state.expose().to_string(),
             nonce: SecretString::new(nonce.secret().to_string()),
         });
         Ok(FlowLaunch {
@@ -284,12 +318,13 @@ impl AuthProvider for OidcProvider {
                 "authorization response carried no code".into(),
             ));
         };
-        let client = self.discover_client(&http).await?;
+        let client = self.discovered_client(&http).await?;
         let Some(pkce) = launch.pkce.as_ref() else {
             return Err(AuthError::InvalidTokenResponse(
                 "flow launch carries no PKCE verifier".into(),
             ));
         };
+        let nonce = self.take_pending_nonce(launch);
         let redirect_url = RedirectUrl::new(launch.redirect_uri.clone())
             .map_err(|err| AuthError::InvalidRedirect(err.to_string()))?;
         let mut request = client
@@ -300,11 +335,14 @@ impl AuthProvider for OidcProvider {
         if self.client_secret.is_none() {
             request = request.add_extra_param("client_id", self.client_id.clone());
         }
-        let response = request
-            .request_async(&http)
-            .await
-            .map_err(map_token_error)?;
-        let account = self.fetch_account(&client, &http, &response).await;
+        let response = request.request_async(&http).await;
+        if response.is_err() {
+            self.forget_discovered_client();
+        }
+        let response = response.map_err(map_token_error)?;
+        let account = self
+            .fetch_account(&client, &http, &response, nonce.as_ref())
+            .await;
         Ok(self.token_response_to_set(&response, account))
     }
 
@@ -313,7 +351,7 @@ impl AuthProvider for OidcProvider {
         http: reqwest::Client,
         refresh_token: &str,
     ) -> Result<TokenSet, AuthError> {
-        let client = self.discover_client(&http).await?;
+        let client = self.discovered_client(&http).await?;
         let token = RefreshToken::new(refresh_token.to_string());
         let mut request = client
             .exchange_refresh_token(&token)
@@ -321,11 +359,12 @@ impl AuthProvider for OidcProvider {
         if self.client_secret.is_none() {
             request = request.add_extra_param("client_id", self.client_id.clone());
         }
-        let response = request
-            .request_async(&http)
-            .await
-            .map_err(map_token_error)?;
-        let account = self.fetch_account(&client, &http, &response).await;
+        let response = request.request_async(&http).await;
+        if response.is_err() {
+            self.forget_discovered_client();
+        }
+        let response = response.map_err(map_token_error)?;
+        let account = self.fetch_account(&client, &http, &response, None).await;
         Ok(self.token_response_to_set(&response, account))
     }
 
@@ -340,10 +379,9 @@ impl AuthProvider for OidcProvider {
             .await
             .map_err(|err| AuthError::Network(err.to_string()))?;
         if !response.status().is_success() {
-            return Err(AuthError::Network(format!(
-                "revocation endpoint returned {}",
-                response.status()
-            )));
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(revoke_denied(status, body));
         }
         Ok(())
     }

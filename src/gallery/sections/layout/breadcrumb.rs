@@ -8,10 +8,10 @@ use gpui_kit::{prelude::FluentBuilder as _, *};
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 pub struct BreadcrumbSection {
-    clicked_item: Option<String>,
+    clicked_item: Option<&'static str>,
 }
 
 impl BreadcrumbSection {
@@ -50,25 +50,25 @@ impl Render for BreadcrumbSection {
                                     .child("Home")
                                     .child(BreadcrumbItem::new("Documents").on_click(cx.listener(
                                         |this, _, _, cx| {
-                                            this.clicked_item = Some("Documents".to_string());
+                                            this.clicked_item = Some("Documents");
                                             cx.notify();
                                         },
                                     )))
                                     .child(BreadcrumbItem::new("Projects").on_click(cx.listener(
                                         |this, _, _, cx| {
-                                            this.clicked_item = Some("Projects".to_string());
+                                            this.clicked_item = Some("Projects");
                                             cx.notify();
                                         },
                                     )))
                                     .child(BreadcrumbItem::new("Current").on_click(cx.listener(
                                         |this, _, _, cx| {
-                                            this.clicked_item = Some("Current".to_string());
+                                            this.clicked_item = Some("Current");
                                             cx.notify();
                                         },
                                     ))),
                             )
-                            .when_some(self.clicked_item.as_ref(), |this, item| {
-                                this.child(format!("Selected: {}", item))
+                            .when_some(self.clicked_item, |this, item| {
+                                this.child(format!("Selected: {item}"))
                             }),
                     ),
             )

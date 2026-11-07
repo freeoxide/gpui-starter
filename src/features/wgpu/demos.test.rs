@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn every_wgsl_module_parses_with_naga() {
-    for (name, source) in wgsl_modules() {
+    for (name, source) in shader_modules() {
         naga::front::wgsl::parse_str(&source)
             .unwrap_or_else(|err| panic!("naga rejected {name}: {err}"));
     }
@@ -12,7 +12,7 @@ fn every_wgsl_module_parses_with_naga() {
 fn every_wgsl_module_passes_full_naga_validation() {
     // wgpu validates parse plus module inside create_shader_module; the
     // concatenated demo sources must clear both, not just the front end.
-    for (name, source) in wgsl_modules() {
+    for (name, source) in shader_modules() {
         let module = naga::front::wgsl::parse_str(&source)
             .unwrap_or_else(|err| panic!("naga rejected {name}: {err}"));
         let mut validator = naga::valid::Validator::new(Default::default(), Default::default());
@@ -23,20 +23,26 @@ fn every_wgsl_module_passes_full_naga_validation() {
 }
 
 #[test]
-fn wgsl_modules_carry_their_entry_points_and_bgra_swizzle() {
-    let modules = wgsl_modules();
+fn shader_modules_carry_their_entry_points_and_bgra_swizzle() {
+    let modules = shader_modules();
     let sources: std::collections::HashMap<&str, &str> = modules
         .iter()
         .map(|(name, source)| (*name, source.as_str()))
         .collect();
 
-    assert!(sources["particles-compute"].contains("@compute"));
-    assert!(sources["particles-draw"].contains("@vertex"));
-    assert!(sources["particles-draw"].contains("@fragment"));
-    assert!(sources["mesh"].contains("@vertex"));
-    assert!(sources["mesh"].contains("@fragment"));
-    assert!(sources["output-identity"].contains("vec4<f32>(c.b, c.g, c.r"));
-    assert!(sources["output-post"].contains("vec4<f32>(c.b, c.g, c.r"));
+    assert!(sources["wgpu-particles-compute"].contains("@compute"));
+    assert!(sources["wgpu-particles-draw"].contains("@vertex"));
+    assert!(sources["wgpu-particles-draw"].contains("@fragment"));
+    assert!(sources["wgpu-mesh"].contains("@vertex"));
+    assert!(sources["wgpu-mesh"].contains("@fragment"));
+    assert!(
+        sources["wgpu-output-identity"].contains("vec4<f32>(c.b, c.g, c.r"),
+        "the identity shader must swizzle to BGRA for RenderImage"
+    );
+    assert!(
+        sources["wgpu-output-post"].contains("vec4<f32>(c.b, c.g, c.r"),
+        "the post shader must swizzle to BGRA for RenderImage"
+    );
 }
 
 #[test]
@@ -89,11 +95,13 @@ async fn renders_a_distinct_frame_per_demo(_cx: &mut gpui_kit::TestAppContext) {
 }
 
 /// Plan 11's 1M-particle budget: median render() wall time under ~16 ms on
-/// a hardware adapter; plan risk 2 makes that a hardware target, so on
-/// software rasterizers this only proves the 1M path runs and logs the median.
+/// a hardware adapter. Software rasterizers cannot meet that budget (plan
+/// risk 2), so there the run only proves the 1M path renders real frames.
 #[gpui_kit::test]
 #[ignore = "needs a wgpu adapter; run with --ignored locally"]
-async fn renders_one_million_particles_within_the_frame_budget(_cx: &mut gpui_kit::TestAppContext) {
+async fn renders_one_million_particles_and_meets_the_budget_on_hardware(
+    _cx: &mut gpui_kit::TestAppContext,
+) {
     let engine = std::sync::Arc::new(WgpuEngine::new().await.expect("wgpu engine"));
     let adapter_label = engine.adapter_label().to_string();
     let software = {
@@ -111,6 +119,7 @@ async fn renders_one_million_particles_within_the_frame_budget(_cx: &mut gpui_ki
         height: 720,
     };
     let mut renderer = SceneRenderer::new(engine, &base).expect("scene renderer");
+    let cleared: [u8; 4] = [10, 5, 5, 255];
 
     const WARMUP: u32 = 4;
     const MEASURED: u32 = 20;
@@ -123,19 +132,22 @@ async fn renders_one_million_particles_within_the_frame_budget(_cx: &mut gpui_ki
         let started = std::time::Instant::now();
         let bytes = renderer.render(job).expect("render");
         assert_eq!(bytes.len(), 1280 * 720 * 4);
+        assert!(
+            !bytes.chunks_exact(4).all(|p| p == cleared.as_slice()),
+            "the 1M-particle frame must not be uniformly the clear color"
+        );
         if frame >= WARMUP {
             samples.push(started.elapsed().as_secs_f64() * 1000.0);
         }
     }
 
-    samples.sort_by(|a, b| a.partial_cmp(b).expect("finite sample"));
+    samples.sort_by(|a, b| a.total_cmp(b));
     let median = samples[samples.len() / 2];
     if software {
         eprintln!(
             "software adapter [{adapter_label}]: 1M-particle median render {median:.1} ms; \
              the ~16 ms budget is hardware-gated (plan 11 risk 2)"
         );
-        assert!(median.is_finite() && median > 0.0);
     } else {
         assert!(
             median < 16.0,

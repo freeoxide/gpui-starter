@@ -2,13 +2,13 @@ pub mod clock;
 #[cfg(target_os = "windows")]
 pub mod deep_link_registration;
 pub mod desktop_shell;
+#[cfg(target_os = "linux")]
 pub mod environment;
 pub mod filesystem;
 pub mod input;
 pub mod ipc;
 #[cfg(target_os = "macos")]
 pub mod liquid_glass;
-pub mod network;
 pub mod process;
 #[cfg(not(target_family = "wasm"))]
 pub mod system_controls;

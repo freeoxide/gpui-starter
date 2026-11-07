@@ -1,10 +1,10 @@
-use gpui_kit::prelude::*;
+use gpui_kit::component::slider::{SliderEvent, SliderValue};
 use gpui_kit::{SharedString, TestAppContext};
 
 use super::{BluetoothPanel, SystemControlsPage, bluetooth_panel};
 use crate::system_controls::{
-    BluetoothAccess, BluetoothStatus, ControlState, REASON_WINDOWS_BLUETOOTH,
-    SystemControlsSnapshot,
+    BluetoothAccess, BluetoothStatus, BrightnessStatus, ControlState, REASON_WINDOWS_BLUETOOTH,
+    SystemControlsSnapshot, VolumeStatus,
 };
 
 fn pending<T>() -> ControlState<T> {
@@ -101,63 +101,162 @@ fn denied_on_an_unsupported_platform_maps_to_the_platform_row() {
 }
 
 #[gpui_kit::test]
-fn page_shows_the_enable_affordance_while_not_requested(cx: &mut TestAppContext) {
-    cx.update(|cx| {
-        cx.set_global(snapshot_for(BluetoothAccess::NotRequested, pending()));
-    });
+async fn sync_sliders_moves_each_entity_only_while_its_track_is_ready(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
-    cx.add_window(|window, cx| SystemControlsPage::new(window, cx));
+    let mut entity = None;
+    cx.add_window(|window, cx| {
+        let page = SystemControlsPage::new(window, cx);
+        entity = Some(cx.entity());
+        page
+    });
+    let page = entity.expect("page entity");
     cx.read(|cx| {
-        let snapshot = crate::system_controls::snapshot(cx);
+        let page = page.read(cx);
+        assert_eq!(page.volume.read(cx).value().start(), 0.);
+        assert_eq!(page.brightness.read(cx).value().start(), 0.);
+    });
+
+    let mut ready = snapshot_for(BluetoothAccess::NotRequested, pending());
+    ready.volume = ControlState::Ready(VolumeStatus {
+        level: 0.3,
+        muted: false,
+    });
+    ready.brightness = ControlState::Ready(BrightnessStatus { level: 0.8 });
+    cx.update(|cx| cx.set_global(ready));
+    cx.read(|cx| {
+        let page = page.read(cx);
+        assert_eq!(page.volume.read(cx).value().start(), 0.3);
+        assert_eq!(page.brightness.read(cx).value().start(), 0.8);
+    });
+
+    let mut degraded = snapshot_for(BluetoothAccess::NotRequested, pending());
+    degraded.volume = pending();
+    degraded.brightness = ControlState::Ready(BrightnessStatus { level: 0.9 });
+    cx.update(|cx| cx.set_global(degraded));
+    cx.read(|cx| {
+        let page = page.read(cx);
         assert_eq!(
-            bluetooth_panel(&snapshot),
-            BluetoothPanel::Enable { busy: false }
+            page.volume.read(cx).value().start(),
+            0.3,
+            "a degraded track must not stomp its slider"
         );
-        assert!(
-            !snapshot.bluetooth.is_ready(),
-            "values must stay hidden before the opt-in"
-        );
+        assert_eq!(page.brightness.read(cx).value().start(), 0.9);
     });
 }
 
 #[gpui_kit::test]
-fn page_shows_live_values_while_active(cx: &mut TestAppContext) {
-    cx.update(|cx| {
-        cx.set_global(snapshot_for(BluetoothAccess::Active, ready_bluetooth()));
-    });
+async fn a_dragging_slider_is_not_yanked_by_a_stale_readback(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
-    cx.add_window(|window, cx| SystemControlsPage::new(window, cx));
-    cx.read(|cx| {
-        let snapshot = crate::system_controls::snapshot(cx);
-        assert_eq!(bluetooth_panel(&snapshot), BluetoothPanel::Live);
-        assert!(snapshot.bluetooth.is_ready());
+    let mut entity = None;
+    let handle = cx.add_window(|window, cx| {
+        let page = SystemControlsPage::new(window, cx);
+        entity = Some(cx.entity());
+        page
     });
+    let page = entity.expect("page entity");
+    let volume = cx.read(|cx| page.read(cx).volume.clone());
+    let seeded = || {
+        let mut snapshot = snapshot_for(BluetoothAccess::NotRequested, pending());
+        snapshot.volume = ControlState::Ready(VolumeStatus {
+            level: 0.3,
+            muted: false,
+        });
+        snapshot
+    };
+    cx.update(|cx| cx.set_global(seeded()));
+    cx.read(|cx| assert_eq!(volume.read(cx).value().start(), 0.3));
+
+    // Drag: the kit emits Change before notifying, which arms the window.
+    cx.update(|cx| {
+        handle
+            .update(cx, |_, window, cx| {
+                volume.update(cx, |state, cx| {
+                    cx.emit(SliderEvent::Change(SliderValue::Single(0.5)));
+                    state.set_value(0.5, window, cx);
+                });
+            })
+            .unwrap();
+    });
+    cx.update(|cx| cx.set_global(seeded()));
+    cx.read(|cx| {
+        assert_eq!(
+            volume.read(cx).value().start(),
+            0.5,
+            "a stale readback must not yank a dragged slider"
+        );
+    });
+
+    // Once the window passes, the poll owns the thumb again.
+    cx.update(|cx| {
+        page.update(cx, |page, _| {
+            assert!(
+                page.suppress_until.is_some(),
+                "the drag must arm the window"
+            );
+            page.suppress_until = None;
+        })
+    });
+    let mut fresh = snapshot_for(BluetoothAccess::NotRequested, pending());
+    fresh.volume = ControlState::Ready(VolumeStatus {
+        level: 0.6,
+        muted: false,
+    });
+    cx.update(|cx| cx.set_global(fresh));
+    cx.read(|cx| assert_eq!(volume.read(cx).value().start(), 0.6));
 }
 
 #[gpui_kit::test]
-fn page_shows_guidance_and_retry_while_denied(cx: &mut TestAppContext) {
-    cx.update(|cx| {
-        cx.set_global(snapshot_for(
-            BluetoothAccess::Denied {
-                reason: SharedString::from("tcc denied"),
-            },
-            ControlState::Unavailable {
-                error: SharedString::from("tcc denied"),
-            },
-        ));
-    });
+async fn an_a11y_value_change_commits_and_survives_the_next_sync(cx: &mut TestAppContext) {
     cx.update(gpui_kit::component::theme::init);
-    cx.add_window(|window, cx| SystemControlsPage::new(window, cx));
+    cx.update(crate::error_surface::initialize);
+    let mut entity = None;
+    let handle = cx.add_window(|window, cx| {
+        let page = SystemControlsPage::new(window, cx);
+        entity = Some(cx.entity());
+        page
+    });
+    let page = entity.expect("page entity");
+    let volume = cx.read(|cx| page.read(cx).volume.clone());
+    let mut ready = snapshot_for(BluetoothAccess::NotRequested, pending());
+    ready.volume = ControlState::Ready(VolumeStatus {
+        level: 0.3,
+        muted: false,
+    });
+    cx.update(|cx| cx.set_global(ready));
+    cx.read(|cx| assert_eq!(volume.read(cx).value().start(), 0.3));
+
+    // The kit's a11y Increment/Decrement call set_value with no SliderEvent.
+    cx.update(|cx| {
+        handle
+            .update(cx, |_, window, cx| {
+                volume.update(cx, |state, cx| state.set_value(0.42, window, cx));
+            })
+            .unwrap();
+    });
     cx.read(|cx| {
-        let snapshot = crate::system_controls::snapshot(cx);
         assert_eq!(
-            bluetooth_panel(&snapshot),
-            BluetoothPanel::Denied {
-                reason: SharedString::from("tcc denied"),
-            },
-            "a denied gate must show guidance plus a manual retry, never auto-enable"
+            crate::system_controls::snapshot(cx).volume,
+            ControlState::Ready(VolumeStatus {
+                level: 0.42,
+                muted: false
+            }),
+            "the a11y adjustment must reach the control"
         );
-        assert!(!snapshot.bluetooth.is_ready());
+        assert_eq!(volume.read(cx).value().start(), 0.42);
+    });
+
+    let mut stale = snapshot_for(BluetoothAccess::NotRequested, pending());
+    stale.volume = ControlState::Ready(VolumeStatus {
+        level: 0.3,
+        muted: false,
+    });
+    cx.update(|cx| cx.set_global(stale));
+    cx.read(|cx| {
+        assert_eq!(
+            volume.read(cx).value().start(),
+            0.42,
+            "the committed a11y value must not be reverted within the window"
+        )
     });
 }
 

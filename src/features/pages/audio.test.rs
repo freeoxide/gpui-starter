@@ -1,12 +1,21 @@
 use std::time::Duration;
 
-use gpui_kit::TestAppContext;
-use gpui_kit::prelude::*;
-use gpui_kit::{Bounds, Pixels, point, px, size};
+use gpui_kit::{Bounds, Entity, TestAppContext, point, px, size};
 
 use super::{AudioPage, format_time, fraction_at, transport_idle};
 use crate::audio::PlaybackStatus;
 use crate::ui::waveform::WaveformMode;
+
+fn open_page(cx: &mut TestAppContext) -> Entity<AudioPage> {
+    cx.update(gpui_kit::component::theme::init);
+    let mut page = None;
+    cx.add_window(|window, cx| {
+        let view = AudioPage::new(window, cx);
+        page = Some(cx.entity());
+        view
+    });
+    page.unwrap()
+}
 
 #[test]
 fn format_time_renders_minutes_and_seconds() {
@@ -37,14 +46,7 @@ fn transport_controls_are_disabled_until_a_load_lands() {
 
 #[gpui_kit::test]
 fn page_renders_unloaded_without_a_capability_entry(cx: &mut TestAppContext) {
-    cx.update(gpui_kit::component::theme::init);
-    let mut page = None;
-    cx.add_window(|window, cx| {
-        let view = AudioPage::new(window, cx);
-        page = Some(cx.entity());
-        view
-    });
-    let page = page.unwrap();
+    let page = open_page(cx);
     cx.read(|cx| {
         let status = page.read(cx).engine.read(cx).status();
         assert_eq!(status, None);
@@ -68,14 +70,7 @@ fn page_renders_unloaded_without_a_capability_entry(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn loaded_page_attaches_the_live_monitor(cx: &mut TestAppContext) {
-    cx.update(gpui_kit::component::theme::init);
-    let mut page = None;
-    cx.add_window(|window, cx| {
-        let view = AudioPage::new(window, cx);
-        page = Some(cx.entity());
-        view
-    });
-    let page = page.unwrap();
+    let page = open_page(cx);
     cx.update(|cx| {
         page.update(cx, |page, cx| {
             page.engine.update(cx, |engine, cx| {
@@ -87,10 +82,7 @@ fn loaded_page_attaches_the_live_monitor(cx: &mut TestAppContext) {
     cx.read(|cx| {
         let page = page.read(cx);
         assert!(page.waveform.read(cx).has_source());
-        assert_eq!(
-            page.engine.read(cx).status(),
-            Some(crate::audio::PlaybackStatus::Stopped)
-        );
+        assert_eq!(page.engine.read(cx).status(), Some(PlaybackStatus::Stopped));
         assert_eq!(
             page.engine.read(cx).duration(),
             Some(Duration::from_secs(1))
@@ -100,14 +92,7 @@ fn loaded_page_attaches_the_live_monitor(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn spectrum_switch_flips_the_monitor_mode(cx: &mut TestAppContext) {
-    cx.update(gpui_kit::component::theme::init);
-    let mut page = None;
-    cx.add_window(|window, cx| {
-        let view = AudioPage::new(window, cx);
-        page = Some(cx.entity());
-        view
-    });
-    let page = page.unwrap();
+    let page = open_page(cx);
     cx.update(|cx| {
         page.update(cx, |page, cx| page.set_spectrum(true, cx));
     });
@@ -128,18 +113,11 @@ fn spectrum_switch_flips_the_monitor_mode(cx: &mut TestAppContext) {
     });
 }
 
-// RCA 5.2.4: eager demo loads must defer their work off the invoking turn;
-// the click itself may not decode or touch the engine synchronously.
+// Demo loads must defer their work off the invoking turn; the click itself
+// may not decode or touch the engine synchronously.
 #[gpui_kit::test]
 fn load_demo_touches_the_engine_only_after_the_click_turn(cx: &mut TestAppContext) {
-    cx.update(gpui_kit::component::theme::init);
-    let mut page = None;
-    cx.add_window(|window, cx| {
-        let view = AudioPage::new(window, cx);
-        page = Some(cx.entity());
-        view
-    });
-    let page = page.unwrap();
+    let page = open_page(cx);
     cx.update(|cx| {
         page.update(cx, |page, cx| {
             page.load_demo("sine-sweep.wav", 1, crate::audio::sweep_wav, cx);

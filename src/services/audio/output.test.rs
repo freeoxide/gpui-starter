@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::{
     SharedTransport, adapt_to_channels, fill_buffer, pick_channels_index, pick_rate,
     resample_linear,
@@ -71,7 +73,8 @@ fn fill_buffer_preserves_stereo_interleaving() {
 fn resample_is_identity_when_rates_match() {
     let src = vec![0.25f32, -0.5, 0.75];
     let out = resample_linear(&src, 1, 48_000, 48_000);
-    assert_eq!(out, src);
+    assert_eq!(&*out, &src[..]);
+    assert!(matches!(out, Cow::Borrowed(_)));
 }
 
 #[test]
@@ -115,9 +118,11 @@ fn resample_keeps_stereo_channels_separate() {
 #[test]
 fn adapt_duplicates_mono_and_averages_stereo() {
     assert_eq!(
-        adapt_to_channels(&[0.5, -0.25], 1, 2),
-        [0.5, 0.5, -0.25, -0.25]
+        &*adapt_to_channels(&[0.5, -0.25], 1, 2),
+        &[0.5, 0.5, -0.25, -0.25]
     );
-    assert_eq!(adapt_to_channels(&[0.5, -0.25], 2, 1), [0.125]);
-    assert_eq!(adapt_to_channels(&[1., 2.], 2, 2), [1., 2.]);
+    assert_eq!(&*adapt_to_channels(&[0.5, -0.25], 2, 1), &[0.125]);
+    let passthrough = adapt_to_channels(&[1., 2.], 2, 2);
+    assert_eq!(&*passthrough, &[1., 2.]);
+    assert!(matches!(passthrough, Cow::Borrowed(_)));
 }

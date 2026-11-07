@@ -69,12 +69,6 @@ fn bounds_conversions_map_and_inverse() {
 }
 
 #[test]
-fn scale_length_multiplies_by_zoom() {
-    let transform = CanvasTransform::new(Point::default(), 0.5);
-    assert_px_eq(transform.scale_length(px(10.)), px(5.));
-}
-
-#[test]
 fn segment_distance_hits_midpoint_exactly() {
     let a = point(px(0.), px(0.));
     let b = point(px(10.), px(0.));

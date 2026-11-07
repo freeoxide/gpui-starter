@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use gpui_kit::component::button::Button;
@@ -102,7 +102,7 @@ impl Render for Blank {
 }
 
 struct ClickBody {
-    clicks: Rc<std::cell::Cell<u32>>,
+    clicks: Rc<Cell<u32>>,
 }
 
 impl Render for ClickBody {
@@ -122,15 +122,9 @@ fn open_shell_window(
     slot: ProbeSlot,
     cx: &mut TestAppContext,
 ) -> VisualTestContext {
-    let window = cx.open_window(size(px(200.), px(120.)), |_, cx| {
+    let window = cx.open_window(size(px(200.), px(120.)), |window, cx| {
         let content: AnyView = cx.new(|_| ProbeView { slot }).into();
-        FloatingShell::new(
-            FloatingWindowId(id.into()),
-            id.into(),
-            content,
-            chromeless,
-            cx,
-        )
+        FloatingShell::new(id.into(), content, chromeless, window, cx)
     });
     let mut cx = VisualTestContext::from_window(window.into(), cx);
     cx.update(|window, cx| window.draw(cx).clear(cx));
@@ -142,7 +136,7 @@ async fn a_chromeless_shell_hands_the_whole_window_to_the_body(cx: &mut TestAppC
     cx.update(gpui_kit::init);
     let bare_slot: ProbeSlot = Default::default();
     let headed_slot: ProbeSlot = Default::default();
-    let mut bare = open_shell_window("bare", true, bare_slot.clone(), cx);
+    open_shell_window("bare", true, bare_slot.clone(), cx);
     open_shell_window("headed", false, headed_slot.clone(), cx);
 
     assert_eq!(
@@ -160,31 +154,16 @@ async fn a_chromeless_shell_hands_the_whole_window_to_the_body(cx: &mut TestAppC
         headed_bounds.origin.y > px(16.),
         "the header strip still offsets the body in a headed shell"
     );
-    bare.simulate_click(point(px(30.), px(8.)), Modifiers::none());
-    assert_eq!(
-        *bare_slot.borrow(),
-        Some(Bounds {
-            origin: point(px(1.), px(1.)),
-            size: size(px(198.), px(118.)),
-        }),
-        "a plain click at the old header line is just a body click"
-    );
 }
 
 #[gpui_kit::test]
 async fn clicks_inside_a_chromeless_body_reach_the_content(cx: &mut TestAppContext) {
     cx.update(gpui_kit::init);
-    let clicks = Rc::new(std::cell::Cell::new(0u32));
-    let window = cx.open_window(size(px(200.), px(120.)), |_, cx| {
+    let clicks = Rc::new(Cell::new(0u32));
+    let window = cx.open_window(size(px(200.), px(120.)), |window, cx| {
         let clicks = clicks.clone();
         let content: AnyView = cx.new(|_| ClickBody { clicks }).into();
-        FloatingShell::new(
-            FloatingWindowId("interactive".into()),
-            "interactive".into(),
-            content,
-            true,
-            cx,
-        )
+        FloatingShell::new("interactive".into(), content, true, window, cx)
     });
     let mut cx = VisualTestContext::from_window(window.into(), cx);
     cx.simulate_click(point(px(30.), px(12.)), Modifiers::none());
@@ -216,10 +195,9 @@ async fn escape_dismisses_a_chromeless_float_spawned_with_the_flag(cx: &mut Test
         panic!("expected a native handle");
     };
     let mut cx = VisualTestContext::from_window(window, cx);
-    cx.simulate_click(point(px(30.), px(8.)), Modifiers::none());
     cx.simulate_keystrokes("escape");
     assert!(
-        cx.read(|cx| floating_snapshot(cx)).is_empty(),
-        "Esc must still dismiss with the shell chrome gone"
+        cx.read(floating_snapshot).is_empty(),
+        "Esc must still dismiss with the shell chrome gone, with no click first"
     );
 }

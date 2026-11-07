@@ -8,9 +8,11 @@ use super::super::render_error::TriggerRenderError;
 use super::ErrorPlaygroundPage;
 use super::helpers::{ResultMsg, action_row, result_inline, test_card};
 
-/// Parameter bundle for the unified HTTP/timeout error block renderer. The
-/// `*_key` fields are catalog keys; all fields are `Copy`, so one value can be
-/// captured by the click closure.
+/// The fs card's read target; guaranteed absent, so the read must fail.
+pub(super) const FS_CHECK_PATH: &str = "/tmp/gpui-error-playground-nonexistent.txt";
+
+/// Parameters for `render_error_block`; `*_key` fields are catalog keys. Every
+/// field is `Copy`, so one value can be captured by the click closure.
 #[derive(Clone, Copy)]
 struct ErrorBlockCtx {
     id: &'static str,
@@ -36,7 +38,7 @@ impl ErrorPlaygroundPage {
         let error_msg = error_message.to_string();
         let button_id = SharedString::from(format!("ep-{id}"));
         test_card(id, &title, &description, true, cx).child(
-            action_row(cx).child(
+            action_row().child(
                 Button::new(button_id)
                     .primary()
                     .label(button_label)
@@ -66,7 +68,7 @@ impl ErrorPlaygroundPage {
 
         card.child(
             v_flex().gap_2().px_4().pb_3().child(
-                action_row(cx)
+                action_row()
                     .child(
                         Button::new("ep-bg-panic")
                             .primary()
@@ -77,11 +79,13 @@ impl ErrorPlaygroundPage {
                                 ));
                                 cx.notify();
 
-                                let rt = cx
-                                    .global::<crate::services::tokio_runtime::TokioRuntimeGlobal>()
-                                    .0
-                                    .runtime
-                                    .clone();
+                                let Some(rt) = crate::services::tokio_runtime::handle(cx) else {
+                                    this.background_panic_result = Some(ResultMsg::error(
+                                        crate::i18n::localize("error_playground_runtime_missing"),
+                                    ));
+                                    cx.notify();
+                                    return;
+                                };
                                 rt.spawn(async move {
                                     panic!("error playground: background panic");
                                 });
@@ -125,39 +129,43 @@ impl ErrorPlaygroundPage {
 
         card.child(
             v_flex().gap_2().px_4().pb_3().child(
-                action_row(cx)
+                action_row()
                     .child(
                         Button::new("ep-fs-error")
                             .primary()
                             .label(crate::i18n::localize("error_playground_fs_button"))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                let path = "/tmp/gpui-error-playground-nonexistent.txt";
-                                match std::fs::read_to_string(path) {
-                                    Ok(_contents) => {
-                                        this.fs_result = Some(ResultMsg::info(format!(
-                                            "{} {path}",
-                                            crate::i18n::localize(
-                                                "error_playground_fs_unexpected_success"
-                                            )
-                                        )));
-                                    }
-                                    Err(e) => {
-                                        this.fs_result = Some(ResultMsg::error(format!(
-                                            "{}: {e}",
-                                            crate::i18n::localize(
-                                                "error_playground_fs_error_prefix"
-                                            )
-                                        )));
-                                    }
-                                }
-                                cx.notify();
-                            })),
+                            .on_click(cx.listener(|this, _, _, cx| this.run_fs_check(cx))),
                     )
                     .when_some(result_text, |el, text| {
                         el.child(result_inline("fs", &text, cx))
                     }),
             ),
         )
+    }
+
+    /// The read target is world-writable /tmp, so a planted large file must
+    /// never block paint: the read runs off the UI thread.
+    pub(super) fn run_fs_check(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move { std::fs::read_to_string(FS_CHECK_PATH) })
+                .await;
+            this.update(cx, |this, cx| {
+                this.fs_result = Some(match result {
+                    Ok(_contents) => ResultMsg::info(format!(
+                        "{} {FS_CHECK_PATH}",
+                        crate::i18n::localize("error_playground_fs_unexpected_success")
+                    )),
+                    Err(e) => ResultMsg::error(format!(
+                        "{} {FS_CHECK_PATH}: {e}",
+                        crate::i18n::localize("error_playground_fs_error_prefix")
+                    )),
+                });
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     pub(super) fn render_async_timeout(&mut self, cx: &mut Context<Self>) -> Stateful<Div> {
@@ -197,7 +205,7 @@ impl ErrorPlaygroundPage {
 
         card.child(
             v_flex().gap_2().px_4().pb_3().child(
-                action_row(cx)
+                action_row()
                     .child(
                         Button::new(SharedString::from(format!("ep-{}", ctx.id)))
                             .primary()
@@ -211,12 +219,23 @@ impl ErrorPlaygroundPage {
                                 );
                                 cx.notify();
 
-                                let tokio_rt = cx
-                                    .global::<crate::services::tokio_runtime::TokioRuntimeGlobal>();
-                                // The wasm tokio runtime is an undriven shim; only the client is needed there.
+                                let Some((runtime, client)) =
+                                    crate::services::tokio_runtime::runtime_and_client(cx)
+                                else {
+                                    set_result(
+                                        this,
+                                        Some(ResultMsg::error(crate::i18n::localize(
+                                            "error_playground_runtime_missing",
+                                        ))),
+                                    );
+                                    cx.notify();
+                                    return;
+                                };
+                                // The wasm tokio runtime is an undriven shim; only the client is used there.
                                 #[cfg(not(target_family = "wasm"))]
-                                let rt = tokio_rt.0.runtime.clone();
-                                let client = tokio_rt.0.http_client.clone();
+                                let rt = runtime;
+                                #[cfg(target_family = "wasm")]
+                                let _ = runtime;
 
                                 cx.spawn(async move |this, cx| {
                                     // Native: reqwest needs the driven tokio runtime, so spawn
@@ -321,18 +340,20 @@ impl ErrorPlaygroundPage {
         );
 
         card.child(
-            action_row(cx).child(
+            action_row().child(
                 Button::new("ep-clear")
                     .outline()
                     .label(crate::i18n::localize("error_playground_clear_button"))
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.http_result = None;
-                        this.fs_result = None;
-                        this.async_result = None;
-                        this.background_panic_result = None;
-                        cx.notify();
-                    })),
+                    .on_click(cx.listener(|this, _, _, cx| this.clear_results(cx))),
             ),
         )
+    }
+
+    pub(super) fn clear_results(&mut self, cx: &mut Context<Self>) {
+        self.http_result = None;
+        self.fs_result = None;
+        self.async_result = None;
+        self.background_panic_result = None;
+        cx.notify();
     }
 }

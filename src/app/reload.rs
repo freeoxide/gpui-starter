@@ -1,10 +1,6 @@
-//! Self-reload support for native targets: a flag set via [`request_reload`],
-//! polled post-shutdown to relaunch the same binary with the original argv —
-//! exec() in place on Unix, spawn-and-exit on Windows. Relaunches are
-//! rate-limited per RCA §5.4 so a crash-prone build stops instead of
-//! flickering through rapid restarts.
-
-#![cfg(not(target_family = "wasm"))]
+//! Native self-relaunch: [`request_reload`] arms a flag the host polls after
+//! GPUI shutdown; [`perform_reload`] execs (Unix) or spawns (Windows) the same
+//! argv. RCA §5.4 rate limits keep a crashing build from restart-looping.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -21,10 +17,8 @@ static RELOAD_REQUESTED: AtomicBool = AtomicBool::new(false);
 /// lock while the old process dies.
 pub const RESTART_HANDOFF_ENV: &str = "GPUI_STARTER_RESTART_HANDOFF";
 
-/// Restart timestamps (unix millis, comma-separated) set child-only by the
-/// spawners. In-process statics reset across exec, so the env var is the only
-/// memory a relaunched child has of the restart chain; a fresh user launch
-/// inherits none.
+/// Restart timestamps (unix millis, comma-separated), set child-only: statics
+/// reset across exec, so this env var is the child's only memory of the chain.
 const RESTART_HISTORY_ENV: &str = "GPUI_STARTER_RESTART_HISTORY";
 
 const RESTART_WINDOW_MS: u64 = 60_000;
@@ -33,9 +27,7 @@ const BACKOFF_BASE_MS: u64 = 1_000;
 /// Bounds the sleep if MAX_RESTARTS_PER_WINDOW ever grows past the shift width.
 const BACKOFF_CAP_MS: u64 = 10_000;
 
-/// What [`perform_reload`] should do given the recent restart history. A UI
-/// safe-mode surface would branch on [`RelaunchVerdict::SafeMode`] and render
-/// guidance instead of another relaunch attempt.
+/// What [`perform_reload`] should do given the recent restart history.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RelaunchVerdict {
     /// The relaunch may proceed after waiting out `delay_ms`.
@@ -63,16 +55,13 @@ pub fn relaunch_verdict(now_ms: u64, prior_restarts_ms: &[u64]) -> RelaunchVerdi
     RelaunchVerdict::Proceed { delay_ms }
 }
 
-/// The current verdict against the real clock; the Restart handler consults
-/// this before arming so a capped restart keeps the app running instead of
-/// quitting into a refused relaunch.
+/// [`relaunch_verdict`] against the real clock and the inherited history.
 pub fn relaunch_verdict_now() -> RelaunchVerdict {
     relaunch_verdict(now_unix_ms(), &inherited_restarts())
 }
 
-/// Request an in-place relaunch after shutdown; call [`perform_reload`] only
-/// once GPUI has fully torn down. Arming stays cheap: the budget is enforced
-/// again inside [`perform_reload`], so a stray caller cannot bypass the cap.
+/// Arm a relaunch; the host calls [`perform_reload`] once GPUI is torn down,
+/// and that re-checks the budget, so arming alone cannot bypass the cap.
 pub fn request_reload() {
     RELOAD_REQUESTED.store(true, Ordering::SeqCst);
     info!(target: LOG, "reload requested");
@@ -82,9 +71,8 @@ pub fn is_reload_requested() -> bool {
     RELOAD_REQUESTED.load(Ordering::SeqCst)
 }
 
-/// Relaunch after GPUI shutdown, rate-limited per RCA §5.4: backoff sleeps
-/// before the exec/spawn, safe mode skips the relaunch entirely. exec in place
-/// on Unix, spawn-and-return on Windows.
+/// Relaunch after GPUI shutdown: sleeps out the backoff, then execs (Unix) or
+/// spawns and returns (Windows); safe mode returns Ok without relaunching.
 pub fn perform_reload() -> Result<()> {
     let history = inherited_restarts();
     match relaunch_verdict(now_unix_ms(), &history) {
@@ -159,7 +147,7 @@ fn inherited_restarts() -> Vec<u64> {
 #[cfg(windows)]
 fn spawn_reload(restart_history: &str) -> Result<()> {
     let exe = std::env::current_exe().context("failed to resolve current executable path")?;
-    let mut cmd = std::process::Command::new(&exe);
+    let mut cmd = std::process::Command::new(exe);
     // Skip argv[0] (the program name) since Command::new already supplies
     // argv[0] from `exe`; args_os round-trips non-UTF8 argv where args() panics.
     cmd.args(std::env::args_os().skip(1));
@@ -186,9 +174,9 @@ fn exec_reload(restart_history: &str) -> Result<()> {
     let exe = std::env::current_exe().context("failed to resolve current executable path")?;
 
     // Skip argv[0] (the program name) since Command::new already supplies
-    // argv[0] from `exe`.
-    let mut cmd = std::process::Command::new(&exe);
-    cmd.args(std::env::args().skip(1));
+    // argv[0] from `exe`; args_os round-trips non-UTF8 argv where args() panics.
+    let mut cmd = std::process::Command::new(exe);
+    cmd.args(std::env::args_os().skip(1));
     cmd.env(RESTART_HISTORY_ENV, restart_history);
 
     let err = cmd.exec();

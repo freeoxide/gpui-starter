@@ -42,28 +42,28 @@ impl ProgressSection {
     fn start_animation(&mut self, cx: &mut Context<Self>) {
         self.value = 0.;
 
-        self._task = Some(cx.spawn({
-            let entity = cx.entity();
-            async move |_, cx| {
-                loop {
-                    cx.background_executor()
-                        .timer(Duration::from_millis(15))
-                        .await;
+        self._task = Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(15))
+                    .await;
 
-                    let mut need_break = false;
-                    _ = entity.update(cx, |this, cx| {
+                let done = this
+                    .update(cx, |this, cx| {
                         this.value = (this.value + 2.).min(100.);
                         cx.notify();
 
                         if this.value >= 100. {
                             this._task = None;
-                            need_break = true;
                         }
-                    });
 
-                    if need_break {
-                        break;
-                    }
+                        this.value >= 100.
+                    })
+                    // A failed update means the section is gone; stop the timer.
+                    .unwrap_or(true);
+
+                if done {
+                    break;
                 }
             }
         }));
@@ -148,7 +148,7 @@ impl Render for ProgressSection {
                                         div()
                                             .text_sm()
                                             .text_color(cx.theme().muted_foreground)
-                                            .child(format!("{}%", value)),
+                                            .child(format!("{value}%")),
                                     ),
                             )
                             .child(
@@ -198,7 +198,7 @@ impl Render for ProgressSection {
                                                 .items_center()
                                                 .justify_center()
                                                 .font_weight(FontWeight::SEMIBOLD)
-                                                .child(format!("{}%", value)),
+                                                .child(format!("{value}%")),
                                         )
                                     }),
                             )

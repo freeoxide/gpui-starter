@@ -1,55 +1,44 @@
 use super::{PEAK_COLUMNS, PeakColumn, WaveformPeaks};
 
-fn expected_column(samples: &[f32], channels: usize, column: usize) -> PeakColumn {
-    let frames = samples.len() / channels;
-    let start = frames * column / PEAK_COLUMNS;
-    let end = frames * (column + 1) / PEAK_COLUMNS;
-    let mut min = f32::INFINITY;
-    let mut max = f32::NEG_INFINITY;
-    let mut sq_sum = 0f32;
-    let mut count = 0usize;
-    for frame in start..end {
-        for channel in 0..channels {
-            let sample = samples[frame * channels + channel];
-            min = min.min(sample);
-            max = max.max(sample);
-            sq_sum += sample * sample;
-            count += 1;
-        }
-    }
-    if count == 0 {
-        PeakColumn {
-            min: 0.,
-            max: 0.,
-            rms: 0.,
-        }
-    } else {
-        PeakColumn {
-            min,
-            max,
-            rms: (sq_sum / count as f32).sqrt(),
-        }
+#[test]
+fn ramp_columns_track_their_own_frame() {
+    // One frame per column: column i must hold exactly sample i.
+    let samples: Vec<f32> = (0..PEAK_COLUMNS)
+        .map(|i| i as f32 / PEAK_COLUMNS as f32)
+        .collect();
+    let peaks = WaveformPeaks::from_interleaved(&samples, 1);
+    for column in [0, 1, 1024, 2047] {
+        let expected = column as f32 / PEAK_COLUMNS as f32;
+        let peak = peaks.peak(column).unwrap();
+        assert_eq!(peak.min, expected);
+        assert_eq!(peak.max, expected);
+        assert!((peak.rms - expected).abs() < 1e-6);
     }
 }
 
 #[test]
-fn ramp_decimates_to_expected_columns() {
+fn ramp_max_increases_and_ends_on_the_global_max() {
+    // Two frames per column: no empty columns, so column maxes climb.
+    let samples: Vec<f32> = (0..PEAK_COLUMNS * 2)
+        .map(|i| i as f32 / (PEAK_COLUMNS * 2) as f32)
+        .collect();
+    let peaks = WaveformPeaks::from_interleaved(&samples, 1);
+    let mut previous = f32::NEG_INFINITY;
+    for column in 0..PEAK_COLUMNS {
+        let max = peaks.peak(column).unwrap().max;
+        assert!(max > previous, "column {column} max must strictly increase");
+        previous = max;
+    }
+    let last = peaks.peak(2047).unwrap();
+    assert_eq!(Some(last.max), samples.last().copied());
+}
+
+#[test]
+fn sparse_ramp_keeps_the_global_max_in_the_last_column() {
+    // Fewer frames than columns leaves empty columns; the tail bucket must
+    // still cover the final (loudest) frame.
     let samples: Vec<f32> = (0..1000).map(|i| i as f32 / 1000.).collect();
     let peaks = WaveformPeaks::from_interleaved(&samples, 1);
-    for column in [0, 1, 1024, 2047] {
-        assert_eq!(
-            peaks.peak(column).unwrap().min,
-            expected_column(&samples, 1, column).min
-        );
-        assert_eq!(
-            peaks.peak(column).unwrap().max,
-            expected_column(&samples, 1, column).max
-        );
-        assert_eq!(
-            peaks.peak(column).unwrap().rms,
-            expected_column(&samples, 1, column).rms
-        );
-    }
     let last = peaks.peak(2047).unwrap();
     assert_eq!(last.min, 0.999);
     assert_eq!(last.max, 0.999);

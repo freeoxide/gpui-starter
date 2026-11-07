@@ -48,11 +48,10 @@ impl TimeFieldSection {
         let disabled = field(TimePrecision::Minute, HourCycle::H23, window, cx);
         let invalid = field(TimePrecision::Minute, HourCycle::H23, window, cx);
 
-        let _subscriptions = vec![cx.subscribe(&minute, |this, _, event, cx| match event {
-            TimeFieldEvent::Change(time) => {
-                this.value = *time;
-                cx.notify();
-            }
+        let _subscriptions = vec![cx.subscribe(&minute, |this, _, event, cx| {
+            let TimeFieldEvent::Change(time) = event;
+            this.value = *time;
+            cx.notify();
         })];
 
         Self {

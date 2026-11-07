@@ -6,13 +6,51 @@ use gpui_kit::component::{VirtualListScrollHandle, v_flex, v_virtual_list};
 use gpui_kit::{prelude::*, *};
 
 /// Width is `px(0.)` so each row's flex layout controls it.
-pub fn uniform_item_sizes(count: usize, height: Pixels) -> Rc<Vec<Size<Pixels>>> {
+fn uniform_item_sizes(count: usize, height: Pixels) -> Rc<Vec<Size<Pixels>>> {
     Rc::new(vec![size(px(0.), height); count])
 }
 
 /// Width is `px(0.)` as above.
-pub fn variable_item_sizes(heights: &[Pixels]) -> Rc<Vec<Size<Pixels>>> {
+fn variable_item_sizes(heights: &[Pixels]) -> Rc<Vec<Size<Pixels>>> {
     Rc::new(heights.iter().map(|&h| size(px(0.), h)).collect())
+}
+
+/// A view's memoized size table: hands back the same `Rc` until the
+/// requested sizes change, so steady-state renders allocate nothing.
+#[derive(Default)]
+pub struct ItemSizeCache {
+    sizes: Option<Rc<Vec<Size<Pixels>>>>,
+}
+
+impl ItemSizeCache {
+    /// A uniform table is fully determined by `count` plus `height`, so the
+    /// cached first row's height is enough to detect a change.
+    pub fn uniform(&mut self, count: usize, height: Pixels) -> Rc<Vec<Size<Pixels>>> {
+        if let Some(sizes) = &self.sizes
+            && sizes.len() == count
+            && sizes.first().is_some_and(|s| s.height == height)
+        {
+            return sizes.clone();
+        }
+        let sizes = uniform_item_sizes(count, height);
+        self.sizes = Some(sizes.clone());
+        sizes
+    }
+
+    pub fn variable(&mut self, heights: &[Pixels]) -> Rc<Vec<Size<Pixels>>> {
+        if let Some(sizes) = &self.sizes
+            && sizes.len() == heights.len()
+            && sizes
+                .iter()
+                .zip(heights.iter())
+                .all(|(s, &h)| s.height == h)
+        {
+            return sizes.clone();
+        }
+        let sizes = variable_item_sizes(heights);
+        self.sizes = Some(sizes.clone());
+        sizes
+    }
 }
 
 pub fn bounded_list_height(item_sizes: &[Size<Pixels>], gap: Pixels, max_height: Pixels) -> Pixels {
@@ -21,11 +59,8 @@ pub fn bounded_list_height(item_sizes: &[Size<Pixels>], gap: Pixels, max_height:
     px((content_h + gap_total).min(max_height.as_f32()))
 }
 
-/// Precondition: items pinned to declared heights.
-///
-/// An inner node carries `Role::List` because the scrollable list element has
-/// no role of its own; items get their `Role::ListItem` from
-/// [`virtual_list_item`]. The container stays a plain `Div` for callers.
+/// Precondition: items pinned to declared heights. `Role::List` sits on an inner
+/// node (the kit list has none); items get `Role::ListItem` from [`virtual_list_item`].
 pub fn render_virtual_list<R, V>(
     cx: &mut Context<V>,
     id: impl Into<ElementId>,
@@ -34,7 +69,7 @@ pub fn render_virtual_list<R, V>(
     gap: Pixels,
     scroll_handle: &VirtualListScrollHandle,
     show_scrollbar: bool,
-    render_items: impl 'static + Fn(&mut V, Range<usize>, &mut Window, &mut Context<V>) -> Vec<R>,
+    render_items: impl Fn(&mut V, Range<usize>, &mut Window, &mut Context<V>) -> Vec<R> + 'static,
 ) -> Div
 where
     R: IntoElement + 'static,
@@ -68,14 +103,12 @@ where
     v_flex().relative().w_full().h(list_height).child(region)
 }
 
-/// A virtualized-list row: `Role::ListItem` announcing "item N of M". The
-/// label is required because plain text children produce no accessibility
-/// nodes; render the visible content inside and pass the same text as `label`.
+/// A `Role::ListItem` row at 0-based `index`; its setsize comes from the nearest
+/// `Role::List` ancestor. Text children get no a11y node, so pass that text as `label`.
 pub fn virtual_list_item(
     id: impl Into<ElementId>,
     label: impl Into<SharedString>,
     index: usize,
-    total: usize,
 ) -> Stateful<Div> {
     div()
         .id(id)
@@ -84,7 +117,6 @@ pub fn virtual_list_item(
         // accesskit stores position_in_set 0-based; AT bridges report the
         // stored value +1.
         .aria_position_in_set(index)
-        .aria_size_of_set(total)
 }
 
 #[cfg(test)]

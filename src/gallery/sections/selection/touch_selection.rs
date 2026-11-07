@@ -5,7 +5,7 @@
 use std::{cell::Cell, rc::Rc};
 
 use gpui_kit::component::{
-    ActiveTheme as _,
+    ActiveTheme as _, ElementExt as _,
     button::Button,
     h_flex,
     input::{Input, InputState, Textarea, TextareaState},
@@ -19,7 +19,7 @@ use crate::gallery::registry::GallerySection;
 pub struct TouchSelectionSection {
     input: Entity<InputState>,
     textarea: Entity<TextareaState>,
-    /// Where each control was painted this frame, so a press can land in it.
+    // Where each control was painted this frame, so a press can land in it.
     input_bounds: Rc<Cell<Bounds<Pixels>>>,
     textarea_bounds: Rc<Cell<Bounds<Pixels>>>,
     text_bounds: Rc<Cell<Bounds<Pixels>>>,
@@ -52,11 +52,9 @@ impl TouchSelectionSection {
     /// Wraps a control so its painted bounds are known to the press button.
     fn measured(control: impl IntoElement, bounds: &Rc<Cell<Bounds<Pixels>>>) -> impl IntoElement {
         let bounds = bounds.clone();
-        div().relative().child(control).child(
-            canvas(move |painted, _, _| bounds.set(painted), |_, _, _, _| {})
-                .absolute()
-                .inset_0(),
-        )
+        div()
+            .on_prepaint(move |painted, _, _| bounds.set(painted))
+            .child(control)
     }
 
     /// A long press a finger's width into the control's first line of text.
@@ -74,9 +72,8 @@ impl TouchSelectionSection {
             .on_click(move |_, window, cx| {
                 let bounds = bounds.get();
                 let position = point(bounds.left() + px(48.), bounds.top() + first_line);
-                // The click that runs this is itself being dispatched; an
-                // event sent from inside it would find no listeners. Send the
-                // gesture once the click is over.
+                // This click is still being dispatched, so an event sent now
+                // finds no listeners; the gesture goes out once it is over.
                 window.defer(cx, move |window, cx| {
                     for phase in [TouchPhase::Started, TouchPhase::Ended] {
                         window.dispatch_event(

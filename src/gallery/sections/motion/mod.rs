@@ -1,7 +1,6 @@
 //! Motion sections, ported from the upstream base examples: the motion demo
 //! stage and scroll bounce.
 
-mod demo;
 mod demos;
 mod scroll_bounce;
 

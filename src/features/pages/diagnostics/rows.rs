@@ -1,8 +1,8 @@
 use gpui_kit::*;
 
 use crate::{
-    accessibility, app_state, capabilities, commands, connectivity, crash_report, desktop_actions,
-    error_surface,
+    accessibility, app_state, auth_ui, capabilities, commands, connectivity, crash_report,
+    desktop_actions, error_surface,
     lifecycle::{LifecycleStage, LifecycleState},
     logging, notifications, secure_storage, session, shortcuts, storage, telemetry, undo_stack,
 };
@@ -26,24 +26,24 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
     let shortcuts = shortcuts::snapshot(cx);
     let desktop_actions = desktop_actions::snapshot(cx);
     let undo = undo_stack::snapshot(cx);
-    let auth = crate::auth_ui::snapshot(cx);
+    let auth = auth_ui::snapshot(cx);
     let latest_error = error_surface::latest(cx);
     let crash_snap = crash_report::snapshot(cx);
 
     let none_label = crate::i18n::localize("diagnostics_none");
-    let command_registry = commands::registry();
-    let mut command_titles = Vec::with_capacity(command_registry.len());
-    let mut command_states = Vec::with_capacity(command_registry.len());
-    for command in &command_registry {
-        command_titles.push(command.title.to_string());
+    let mut command_titles = Vec::with_capacity(commands::REGISTRY.len());
+    let mut command_states = Vec::with_capacity(commands::REGISTRY.len());
+    for command in commands::REGISTRY {
+        let title = crate::i18n::localize(command.title_key);
         let availability = commands::availability(command.id, cx);
         let reason = availability
             .disabled_reason
             .map(|value| value.to_string())
             .unwrap_or_else(|| crate::i18n::localize("diagnostics_no_reason"));
+        command_titles.push(title.clone());
         command_states.push(format!(
             "{}: enabled={} reason={}",
-            command.title, availability.enabled, reason
+            title, availability.enabled, reason
         ));
     }
     let command_titles = command_titles.join(", ");
@@ -83,7 +83,7 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
         }
     };
     let lifecycle_panic_summary =
-        crate::lifecycle::last_panic_summary().unwrap_or(none_label.clone());
+        crate::lifecycle::last_panic_summary().unwrap_or_else(|| none_label.clone());
 
     let mut rows: Vec<Stateful<Div>> = vec![
         row("diagnostics_app", env!("CARGO_PKG_NAME")),
@@ -107,13 +107,6 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
             "diagnostics_lifecycle_startup_error",
             lifecycle
                 .last_startup_error
-                .as_deref()
-                .unwrap_or(none_label.as_str()),
-        ),
-        row(
-            "diagnostics_lifecycle_shutdown_error",
-            lifecycle
-                .last_shutdown_error
                 .as_deref()
                 .unwrap_or(none_label.as_str()),
         ),
@@ -164,11 +157,14 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
         row("diagnostics_auth_provider", &auth.provider_id),
         row(
             "diagnostics_auth_token_expiry",
-            &crate::auth_ui::format_expiry(auth.expires_at)
+            &auth_ui::format_expiry(auth.expires_at)
                 .unwrap_or_else(|| crate::i18n::localize("auth_no_expiry")),
         ),
         row("diagnostics_auth_store", auth.store_backend),
-        row("diagnostics_commands", &command_registry.len().to_string()),
+        row(
+            "diagnostics_commands",
+            &commands::REGISTRY.len().to_string(),
+        ),
         row("diagnostics_command_titles", &command_titles),
         row("diagnostics_command_availability", &command_states),
         row(
@@ -233,13 +229,6 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
             "diagnostics_telemetry_error",
             telemetry
                 .last_error
-                .as_deref()
-                .unwrap_or(none_label.as_str()),
-        ),
-        row(
-            "diagnostics_telemetry_export_error",
-            telemetry
-                .last_export_error
                 .as_deref()
                 .unwrap_or(none_label.as_str()),
         ),
@@ -393,7 +382,7 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
         ));
     }
 
-    for (name, status) in capabilities {
+    for (capability, status) in capabilities.iter() {
         let value = format!(
             "supported={} enabled={} degraded={} reason={} error={}",
             status.supported,
@@ -402,7 +391,7 @@ pub fn build_diagnostic_rows(cx: &App) -> Vec<Stateful<Div>> {
             status.reason.as_deref().unwrap_or("-"),
             status.last_error.as_deref().unwrap_or("-")
         );
-        rows.push(capability_row(&name, &value));
+        rows.push(capability_row(*capability, &value));
     }
 
     rows

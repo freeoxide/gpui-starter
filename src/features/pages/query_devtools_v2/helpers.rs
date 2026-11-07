@@ -1,5 +1,5 @@
 use gpui_kit::component::{Selectable, button::Button};
-use gpui_kit::*;
+use gpui_kit::prelude::*;
 use gpui_query::core::QueryStatus;
 
 use super::dashboard::QueryDevToolsV2Page;
@@ -26,10 +26,10 @@ pub(super) fn sort_button(
     if active {
         btn = btn.selected(true);
     }
-    btn.on_click(cx.listener(move |this, _, _, _cx| {
+    btn.on_click(cx.listener(move |this, _, _, cx| {
         this.sort_by = target;
         this.expanded_key = None;
-        _cx.notify();
+        cx.notify();
     }))
 }
 
@@ -53,10 +53,10 @@ pub(super) fn filter_button(
     if active {
         btn = btn.selected(true);
     }
-    btn.on_click(cx.listener(move |this, _, _, _cx| {
+    btn.on_click(cx.listener(move |this, _, _, cx| {
         this.status_filter = target;
         this.expanded_key = None;
-        _cx.notify();
+        cx.notify();
     }))
 }
 

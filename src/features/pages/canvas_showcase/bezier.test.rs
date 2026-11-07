@@ -13,14 +13,14 @@ use crate::ui::canvas::{
 use super::BezierDemo;
 use super::geometry::sample_cubic_bezier;
 
+type Point = gpui_kit::Point<Pixels>;
+
 const SEED: [Point; 4] = [
     point(px(120.), px(260.)),
     point(px(200.), px(80.)),
     point(px(360.), px(440.)),
     point(px(460.), px(260.)),
 ];
-
-type Point = gpui_kit::Point<Pixels>;
 
 fn pointer(doc: (f32, f32), button: MouseButton, modifiers: Modifiers) -> CanvasPointerEvent {
     let position = point(px(doc.0), px(doc.1));

@@ -35,12 +35,11 @@ impl ColorPickerSection {
             cx.new(|cx| ColorPickerState::new(window, cx).default_value(default_color));
         let empty_select_color = cx.new(|cx| ColorPickerState::new(window, cx));
 
-        let _subscriptions = vec![cx.subscribe(&color, |this, _, ev, cx| match ev {
-            ColorPickerEvent::Change(color) => {
-                this.selected_color = *color;
-                // The swatch preview reads this field, so the owner must repaint.
-                cx.notify();
-            }
+        let _subscriptions = vec![cx.subscribe(&color, |this, _, ev, cx| {
+            let ColorPickerEvent::Change(color) = ev;
+            this.selected_color = *color;
+            // The swatch preview reads this field, so the owner must repaint.
+            cx.notify();
         })];
 
         Self {

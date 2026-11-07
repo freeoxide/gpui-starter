@@ -9,7 +9,7 @@ use gpui_kit::component::{
     skeleton::Skeleton,
     v_flex,
 };
-use gpui_kit::{Axis, Task, *};
+use gpui_kit::*;
 
 use crate::i18n::localize;
 

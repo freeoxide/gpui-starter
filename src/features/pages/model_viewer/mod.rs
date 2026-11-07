@@ -4,7 +4,7 @@
 //! seam touches: the `mod model_viewer;` line and the
 //! `pub use model_viewer::ModelViewerPage;` re-export in
 //! features/pages/mod.rs, the Page::ModelViewer arms and all() entry in
-//! shell/sidebar.rs, the VALID_HOSTS entry in shell/route.rs, the AppRoot
+//! shell/page.rs, the VALID_HOSTS entry in shell/route.rs, the AppRoot
 //! wiring in shell/root/app_root/state.rs, the page count in
 //! tests/e2e_navigation.rs, and the model_viewer_* and nav_model_viewer
 //! keys in both locale files. The wgpu bridge it mounts is the shaders
@@ -41,23 +41,25 @@ const ORBIT_SENSITIVITY: f32 = 0.01;
 #[cfg(not(target_family = "wasm"))]
 const LOG: &str = "gpui_starter::model_viewer";
 
+/// The page's whole native-only state behind one wasm fence: the engine and
+/// renderer, their init tasks, and the orbit-drag anchor.
+#[cfg(not(target_family = "wasm"))]
+#[derive(Default)]
+struct NativeRuntime {
+    engine: Option<Arc<WgpuEngine>>,
+    // The engine Arc this clone fences frames against lives in each task.
+    renderer: Option<Arc<Mutex<renderer::ModelRenderer>>>,
+    init_started: bool,
+    init_task: Option<Task<()>>,
+    init_watchdog: Option<Task<()>>,
+    orbit_drag: Option<Point<Pixels>>,
+    _open_task: Option<Task<()>>,
+}
+
 pub struct ModelViewerPage {
     state: Entity<ViewerState>,
     #[cfg(not(target_family = "wasm"))]
-    engine: Option<Arc<WgpuEngine>>,
-    // The engine Arc this clone fences frames against lives in each task.
-    #[cfg(not(target_family = "wasm"))]
-    renderer: Option<Arc<Mutex<renderer::ModelRenderer>>>,
-    #[cfg(not(target_family = "wasm"))]
-    init_started: bool,
-    #[cfg(not(target_family = "wasm"))]
-    init_task: Option<Task<()>>,
-    #[cfg(not(target_family = "wasm"))]
-    init_watchdog: Option<Task<()>>,
-    #[cfg(not(target_family = "wasm"))]
-    orbit_drag: Option<Point<Pixels>>,
-    #[cfg(not(target_family = "wasm"))]
-    _open_task: Option<Task<()>>,
+    native: NativeRuntime,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -70,19 +72,7 @@ impl ModelViewerPage {
         Self {
             state,
             #[cfg(not(target_family = "wasm"))]
-            engine: None,
-            #[cfg(not(target_family = "wasm"))]
-            renderer: None,
-            #[cfg(not(target_family = "wasm"))]
-            init_started: false,
-            #[cfg(not(target_family = "wasm"))]
-            init_task: None,
-            #[cfg(not(target_family = "wasm"))]
-            init_watchdog: None,
-            #[cfg(not(target_family = "wasm"))]
-            orbit_drag: None,
-            #[cfg(not(target_family = "wasm"))]
-            _open_task: None,
+            native: NativeRuntime::default(),
             _subscriptions,
         }
     }
@@ -91,13 +81,13 @@ impl ModelViewerPage {
     fn start_runtime(&mut self, cx: &mut Context<Self>) {
         // Engine init and the renderer build both run behind the fence (a
         // wedged thread detaches); the drops stop the watchdog and free the engine.
-        self.init_task = None;
-        self.init_watchdog = None;
-        self.renderer = None;
-        self.engine = None;
+        self.native.init_task = None;
+        self.native.init_watchdog = None;
+        self.native.renderer = None;
+        self.native.engine = None;
         self.state.update(cx, |s, cx| s.clear_error(cx));
         let state = self.state.clone();
-        self.init_task = Some(cx.spawn(async move |this, cx| {
+        self.native.init_task = Some(cx.spawn(async move |this, cx| {
             let mesh = state.read_with(cx, |s, _| s.mesh_for_restart());
             let built = cx
                 .background_executor()
@@ -117,8 +107,8 @@ impl ModelViewerPage {
                 .await;
             let _ = this.update(cx, |page, cx| match built {
                 Ok((engine, renderer)) => {
-                    page.engine = Some(engine);
-                    page.renderer = Some(renderer);
+                    page.native.engine = Some(engine);
+                    page.native.renderer = Some(renderer);
                     // A slow success landing after the watchdog must dismiss
                     // the timeout panel, not stack a renderer under it.
                     page.state.update(cx, |s, cx| s.clear_error(cx));
@@ -131,12 +121,12 @@ impl ModelViewerPage {
                 }
             });
         }));
-        self.init_watchdog = Some(cx.spawn(async move |this, cx| {
+        self.native.init_watchdog = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(INIT_TIMEOUT).await;
             let _ = this.update(cx, |page, cx| {
                 // A landed attempt carries a renderer or an error; only a
                 // hung init still has neither when the deadline passes.
-                if page.renderer.is_some() || page.state.read(cx).runtime_error().is_some() {
+                if page.native.renderer.is_some() || page.state.read(cx).runtime_error().is_some() {
                     return;
                 }
                 let err = anyhow::anyhow!(
@@ -153,7 +143,7 @@ impl ModelViewerPage {
     #[cfg(not(target_family = "wasm"))]
     fn open_model(&mut self, cx: &mut Context<Self>) {
         let state = self.state.clone();
-        self._open_task = Some(cx.spawn(async move |this, cx| {
+        self.native._open_task = Some(cx.spawn(async move |this, cx| {
             let Some(path) = crate::desktop_actions::pick_file(cx).await else {
                 return;
             };
@@ -163,7 +153,7 @@ impl ModelViewerPage {
                 .unwrap_or_default();
             let _ = state.update(cx, |s, cx| s.set_loading(true, cx));
             let bytes = cx
-                .background_spawn(async move { std::fs::read(&path).map_err(|e| e.to_string()) })
+                .background_spawn(async move { std::fs::read(path).map_err(|e| e.to_string()) })
                 .await;
             let parsed = match bytes {
                 Ok(bytes) => {
@@ -236,8 +226,8 @@ impl ModelViewerPage {
     fn render_native(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Lazy engine start: construction stays GPU-free; the first visit
         // (this render) kicks exactly one init attempt.
-        if !self.init_started {
-            self.init_started = true;
+        if !self.native.init_started {
+            self.native.init_started = true;
             self.start_runtime(cx);
         }
         let (auto_rotate, loading, error, frames, fps, displayed, has_model, mesh_name, mesh_stats) = {
@@ -299,28 +289,19 @@ impl ModelViewerPage {
                     ),
             );
 
-        let stats = if !has_model {
-            crate::i18n::localize_with_args(
-                "model_viewer_stats",
-                &[
-                    (
-                        "name",
-                        crate::i18n::localize("model_viewer_default_name").as_str(),
-                    ),
-                    ("tris", mesh_stats.triangles.to_string().as_str()),
-                    ("verts", mesh_stats.vertices.to_string().as_str()),
-                ],
-            )
+        let display_name = if has_model {
+            mesh_name
         } else {
-            crate::i18n::localize_with_args(
-                "model_viewer_stats",
-                &[
-                    ("name", mesh_name.as_str()),
-                    ("tris", mesh_stats.triangles.to_string().as_str()),
-                    ("verts", mesh_stats.vertices.to_string().as_str()),
-                ],
-            )
+            crate::i18n::localize("model_viewer_default_name")
         };
+        let stats = crate::i18n::localize_with_args(
+            "model_viewer_stats",
+            &[
+                ("name", display_name.as_str()),
+                ("tris", mesh_stats.triangles.to_string().as_str()),
+                ("verts", mesh_stats.vertices.to_string().as_str()),
+            ],
+        );
         let stats_row = div()
             .text_sm()
             .text_color(cx.theme().muted_foreground)
@@ -405,15 +386,15 @@ impl ModelViewerPage {
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, event: &MouseDownEvent, _, _| {
-                        this.orbit_drag = Some(event.position);
+                        this.native.orbit_drag = Some(event.position);
                     }),
                 )
                 .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
-                    let Some(last) = this.orbit_drag else {
+                    let Some(last) = this.native.orbit_drag else {
                         return;
                     };
                     let delta = event.position - last;
-                    this.orbit_drag = Some(event.position);
+                    this.native.orbit_drag = Some(event.position);
                     this.state.update(cx, |s, cx| {
                         s.orbit_by(
                             delta.x.as_f32() * ORBIT_SENSITIVITY,
@@ -425,7 +406,7 @@ impl ModelViewerPage {
                 .on_mouse_up(
                     MouseButton::Left,
                     cx.listener(|this, _: &MouseUpEvent, _, _| {
-                        this.orbit_drag = None;
+                        this.native.orbit_drag = None;
                     }),
                 )
                 .on_scroll(cx.listener(|this, event: &ScrollEvent, _, cx| {
@@ -488,9 +469,10 @@ impl ModelViewerPage {
                         return;
                     };
                     let page_view = page.read(cx);
-                    let (Some(engine), Some(renderer)) =
-                        (page_view.engine.clone(), page_view.renderer.clone())
-                    else {
+                    let (Some(engine), Some(renderer)) = (
+                        page_view.native.engine.clone(),
+                        page_view.native.renderer.clone(),
+                    ) else {
                         return;
                     };
                     let still_eligible = {
@@ -539,7 +521,9 @@ async fn frame_task(
         .background_executor()
         .spawn(async move {
             engine.render_fenced(move || {
-                let mut guard = renderer.lock().expect("model renderer mutex");
+                let mut guard = renderer
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 guard.render(job)
             })
         })

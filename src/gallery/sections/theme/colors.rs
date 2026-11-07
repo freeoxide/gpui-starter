@@ -2,12 +2,12 @@
 //! theme picker plus a two-pane color browser (category tree and swatch
 //! list over a transparency checkerboard).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::rc::Rc;
 
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, IndexPath, StyledExt as _, Theme, ThemeColor, ThemeRegistry,
-    ThemeStyled as _, WindowExt as _,
+    ActiveTheme as _, Icon, IconName, IndexPath, StyledExt as _, Theme, ThemeColor,
+    ThemeConfigColors, ThemeRegistry, ThemeStyled as _, WindowExt as _,
     button::{Button, ButtonVariants as _, DropdownButton},
     clipboard::Clipboard,
     h_flex,
@@ -62,6 +62,18 @@ impl ThemeItem {
     }
 }
 
+/// Select items for every registered theme, checkmark on the active one.
+fn theme_items(cx: &App) -> Vec<ThemeItem> {
+    let active_theme_name = cx.theme().theme_name().clone();
+    let mut items: Vec<ThemeItem> = ThemeRegistry::global(cx)
+        .sorted_themes()
+        .into_iter()
+        .map(|theme| ThemeItem::new(theme.name.clone(), theme.name == active_theme_name))
+        .collect();
+    items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    items
+}
+
 impl SelectItem for ThemeItem {
     type Value = SharedString;
 
@@ -102,8 +114,8 @@ pub struct ThemeColorsSection {
     force_open_state: Option<bool>,
     filter_by_value: Option<Hsla>,
     filter_input: Entity<InputState>,
-    all_categories: Vec<ColorCategory>,
-    categories: Vec<ColorCategory>,
+    all_categories: Rc<Vec<ColorCategory>>,
+    categories: Rc<Vec<ColorCategory>>,
     list_state: ListState,
 }
 
@@ -113,32 +125,23 @@ impl ThemeColorsSection {
     }
 
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let registry = ThemeRegistry::global(cx);
-        let mut themes = registry.sorted_themes();
-
-        themes.sort_by_key(|theme| theme.name.to_lowercase());
-
         let active_theme_name = cx.theme().theme_name().clone();
-        let items: Vec<ThemeItem> = themes
-            .iter()
-            .map(|theme| ThemeItem::new(theme.name.clone(), theme.name == active_theme_name))
-            .collect();
+        let items: Vec<ThemeItem> = theme_items(cx);
 
-        let current_theme = active_theme_name.clone();
-        let selected_index = items.iter().position(|item| item.name == current_theme);
+        let selected_index = items.iter().position(|item| item.name == active_theme_name);
         let selected_path = selected_index.map(|idx| IndexPath::default().row(idx));
         let select_state = cx.new(|cx| SelectState::new(items, selected_path, window, cx));
 
         let mut this = Self {
             select_state: select_state.clone(),
-            selected_theme_name: current_theme,
+            selected_theme_name: active_theme_name,
             show_all_colors: false,
             sidebar_render_key: 0,
             force_open_state: None,
             filter_by_value: None,
             filter_input: cx.new(|cx| InputState::new(window, cx).placeholder("Search…")),
-            all_categories: Vec::new(),
-            categories: Vec::new(),
+            all_categories: Rc::new(Vec::new()),
+            categories: Rc::new(Vec::new()),
             list_state: ListState::new(0, ListAlignment::Top, px(1000.)),
         };
 
@@ -149,7 +152,7 @@ impl ThemeColorsSection {
                 if let Some(theme_name) = theme_name {
                     this.selected_theme_name = theme_name.clone();
                     this.filter_by_value = None;
-                    this.all_categories.clear();
+                    Rc::make_mut(&mut this.all_categories).clear();
                     this.compute_categories(cx);
                     cx.notify();
                 }
@@ -162,6 +165,17 @@ impl ThemeColorsSection {
                 this.compute_categories(cx);
                 cx.notify();
             }
+        })
+        .detach();
+
+        // The themes-dir watcher clears and repopulates the registry behind
+        // this section's back, so the cache and the item list must follow.
+        cx.observe_global_in::<ThemeRegistry>(window, |this, window, cx| {
+            Rc::make_mut(&mut this.all_categories).clear();
+            this.select_state
+                .update(cx, |state, cx| state.set_items(theme_items(cx), window, cx));
+            this.compute_categories(cx);
+            cx.notify();
         })
         .detach();
 
@@ -223,53 +237,60 @@ impl ThemeColorsSection {
             let registry = ThemeRegistry::global(cx);
             let theme_config = registry.themes().get(&self.selected_theme_name).cloned();
 
-            self.all_categories =
-                format_colors(&theme, theme_config.as_ref().map(|config| &config.colors));
+            self.all_categories = Rc::new(format_colors(
+                &theme,
+                theme_config.as_ref().map(|config| &config.colors),
+            ));
         }
 
         let mut categories = self.all_categories.clone();
 
         if let Some(filter_value) = self.filter_by_value {
-            categories = filter_categories(categories, |entry| {
+            categories = Rc::new(filter_categories(&categories, |entry| {
                 colors_equal_u8(entry.color, filter_value)
-            });
+            }));
         } else if !self.show_all_colors {
-            categories = filter_categories(categories, |entry| entry.is_explicit);
+            categories = Rc::new(filter_categories(&categories, |entry| entry.is_explicit));
         }
 
         let query = self.filter_input.read(cx).value().trim().to_lowercase();
         if !query.is_empty() {
             let normalized_query = query.strip_prefix('#').unwrap_or(&query);
-            categories = categories
-                .into_iter()
-                .filter_map(
-                    |ColorCategory {
-                         name: category,
-                         entries: colors,
-                     }| {
-                        let category_matches = category.to_lowercase().contains(&query);
-                        let filtered_colors: Vec<_> = colors
-                            .into_iter()
-                            .filter(|entry| {
-                                if category_matches || entry.name.to_lowercase().contains(&query) {
-                                    return true;
-                                }
+            categories = Rc::new(
+                categories
+                    .iter()
+                    .filter_map(
+                        |ColorCategory {
+                             name: category,
+                             entries: colors,
+                         }| {
+                            let category_matches = category.to_lowercase().contains(&query);
+                            let filtered_colors: Vec<_> = colors
+                                .iter()
+                                .filter(|entry| {
+                                    if category_matches
+                                        || entry.name.to_lowercase().contains(&query)
+                                    {
+                                        return true;
+                                    }
 
-                                entry.hex.starts_with(normalized_query)
-                            })
-                            .collect();
+                                    entry.hex.starts_with(normalized_query)
+                                })
+                                .cloned()
+                                .collect();
 
-                        if filtered_colors.is_empty() {
-                            None
-                        } else {
-                            Some(ColorCategory {
-                                name: category,
-                                entries: filtered_colors,
-                            })
-                        }
-                    },
-                )
-                .collect();
+                            if filtered_colors.is_empty() {
+                                None
+                            } else {
+                                Some(ColorCategory {
+                                    name: category.clone(),
+                                    entries: filtered_colors,
+                                })
+                            }
+                        },
+                    )
+                    .collect(),
+            );
         }
 
         self.categories = categories;
@@ -504,7 +525,7 @@ impl ThemeColorsSection {
                                     let ColorCategory {
                                         name: category_name,
                                         entries: colors,
-                                    } = categories[ix].clone();
+                                    } = &categories[ix];
                                     let is_last = categories_count > 0
                                         && ix == categories_count.saturating_sub(1);
 
@@ -548,14 +569,11 @@ impl ThemeColorsSection {
     }
 }
 
-fn format_colors(
-    theme: &ThemeColor,
-    config: Option<&gpui_kit::component::theme::ThemeConfigColors>,
-) -> Vec<ColorCategory> {
+fn format_colors(theme: &ThemeColor, config: Option<&ThemeConfigColors>) -> Vec<ColorCategory> {
     let json_theme = serde_json::to_value(theme).unwrap_or(serde_json::Value::Null);
     let mut categories: BTreeMap<String, Vec<ColorEntry>> = BTreeMap::new();
 
-    let config_keys: Option<std::collections::HashSet<String>> = config.map(|c| {
+    let config_keys: Option<HashSet<String>> = config.map(|c| {
         let json_config = serde_json::to_value(c).unwrap_or(serde_json::Value::Null);
         if let serde_json::Value::Object(map) = json_config {
             map.into_iter()
@@ -563,7 +581,7 @@ fn format_colors(
                 .map(|(k, _)| k)
                 .collect()
         } else {
-            std::collections::HashSet::new()
+            HashSet::new()
         }
     });
 
@@ -654,22 +672,22 @@ fn colors_equal_u8(c1: Hsla, c2: Hsla) -> bool {
 
 /// Filters categories by a predicate on color entries, removing empty ones.
 fn filter_categories(
-    categories: Vec<ColorCategory>,
+    categories: &[ColorCategory],
     predicate: impl Fn(&ColorEntry) -> bool,
 ) -> Vec<ColorCategory> {
     categories
-        .into_iter()
+        .iter()
         .filter_map(
             |ColorCategory {
                  name: category,
                  entries: colors,
              }| {
-                let filtered: Vec<_> = colors.into_iter().filter(|e| predicate(e)).collect();
+                let filtered: Vec<_> = colors.iter().filter(|e| predicate(e)).cloned().collect();
                 if filtered.is_empty() {
                     None
                 } else {
                     Some(ColorCategory {
-                        name: category,
+                        name: category.clone(),
                         entries: filtered,
                     })
                 }
@@ -727,24 +745,8 @@ impl Render for ThemeColorsSection {
 
                                             // The select items carry the active checkmark,
                                             // so they must be rebuilt after the switch.
-                                            let active_theme_name = cx.theme().theme_name().clone();
-                                            let mut items: Vec<ThemeItem> =
-                                                ThemeRegistry::global(cx)
-                                                    .sorted_themes()
-                                                    .into_iter()
-                                                    .map(|theme| {
-                                                        ThemeItem::new(
-                                                            theme.name.clone(),
-                                                            theme.name == active_theme_name,
-                                                        )
-                                                    })
-                                                    .collect();
-                                            items.sort_by(|a, b| {
-                                                a.name.to_lowercase().cmp(&b.name.to_lowercase())
-                                            });
-
                                             this.select_state.update(cx, |state, cx| {
-                                                state.set_items(items, window, cx)
+                                                state.set_items(theme_items(cx), window, cx)
                                             });
                                         }
                                     })),

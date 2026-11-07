@@ -106,6 +106,12 @@ fn generic_flow_against_the_fake_idp() {
                 .body
                 .contains(&format!("redirect_uri=http%3A%2F%2F127.0.0.1%3A{port}%2F"))
         );
+        let discoveries = fake.requests_with_path("/.well-known/openid-configuration");
+        assert_eq!(
+            discoveries.len(),
+            1,
+            "discovery is cached across start and complete"
+        );
     });
 }
 
@@ -117,13 +123,39 @@ fn refresh_mints_a_new_access_token() {
         let provider =
             OidcProvider::generic(&fake_oidc_config(&fake.origin()), RedirectMode::Loopback);
         let http = reqwest::Client::new();
+        let launch = provider.start_flow(http.clone()).await.expect("start flow");
+        let port = provider.pending_port().expect("loopback listener bound");
+        let redirect = RedirectParams::from_url(&format!(
+            "http://127.0.0.1:{port}/?code=fake-code&state={}",
+            launch.state.expose()
+        ))
+        .expect("redirect parses");
+        let signed_in = provider
+            .complete_callback(http.clone(), redirect, &launch)
+            .await
+            .expect("complete callback");
+        assert_eq!(signed_in.access_token.expose(), "fake-access-1");
+
         let tokens = provider
             .refresh(http, "fake-refresh-1")
             .await
             .expect("refresh");
-        assert_eq!(tokens.access_token.expose(), "fake-access-1");
+        assert_eq!(
+            tokens.access_token.expose(),
+            "fake-access-2",
+            "the refresh mints a new token"
+        );
         assert!(tokens.account.is_some(), "userinfo keeps the account label");
         assert_eq!(provider.refresh_policy(), RefreshPolicy::Rotated);
+
+        let token_requests = fake.requests_with_path("/token");
+        assert_eq!(token_requests.len(), 2);
+        assert!(token_requests[1].body.contains("grant_type=refresh_token"));
+        assert!(
+            token_requests[1]
+                .body
+                .contains("refresh_token=fake-refresh-1")
+        );
     });
 }
 
@@ -176,6 +208,29 @@ fn revoke_without_an_endpoint_makes_no_http_call() {
 }
 
 #[test]
+fn revoke_failure_status_maps_to_provider_denied() {
+    let rt = scratch_runtime();
+    rt.block_on(async {
+        let fake = FakeIdP::spawn(rt.handle());
+        fake.disable_userinfo();
+        let mut config = fake_oidc_config(&fake.origin());
+        config.revoke_url = Some(format!("{}/userinfo", fake.origin()));
+        let provider = OidcProvider::generic(&config, RedirectMode::Loopback);
+        let error = provider
+            .revoke(reqwest::Client::new(), "token-to-revoke")
+            .await
+            .expect_err("revoke endpoint 404s while userinfo is disabled");
+        assert!(
+            matches!(
+                error,
+                gpui_auth::AuthError::ProviderDenied { ref error, .. } if error.contains("404")
+            ),
+            "got: {error:?}"
+        );
+    });
+}
+
+#[test]
 fn scheme_mode_authorize_url_uses_the_deep_link() {
     let rt = scratch_runtime();
     rt.block_on(async {
@@ -214,6 +269,48 @@ fn missing_userinfo_endpoint_falls_back_to_no_account() {
             .expect("sign-in still succeeds");
         assert_eq!(tokens.access_token.expose(), "fake-access-1");
         assert!(tokens.account.is_none());
+    });
+}
+
+#[test]
+fn missing_userinfo_falls_back_to_id_token_claims() {
+    let rt = scratch_runtime();
+    rt.block_on(async {
+        let fake = FakeIdP::spawn(rt.handle());
+        fake.disable_userinfo();
+        fake.enable_id_tokens();
+        let provider =
+            OidcProvider::generic(&fake_oidc_config(&fake.origin()), RedirectMode::Loopback);
+        let http = reqwest::Client::new();
+        let launch = provider.start_flow(http.clone()).await.expect("start flow");
+        let port = provider.pending_port().expect("loopback listener bound");
+        // Play the browser: hitting the authorize URL is how the IdP learns
+        // the nonce it must echo in the id_token.
+        reqwest::get(&launch.authorize_url)
+            .await
+            .expect("authorize request")
+            .text()
+            .await
+            .expect("authorize body");
+        let redirect = RedirectParams::from_url(&format!(
+            "http://127.0.0.1:{port}/?code=fake-code&state={}",
+            launch.state.expose()
+        ))
+        .expect("redirect parses");
+        let tokens = provider
+            .complete_callback(http, redirect, &launch)
+            .await
+            .expect("sign-in still succeeds");
+        assert_eq!(tokens.access_token.expose(), "fake-access-1");
+        let account = tokens.account.expect("account from id_token claims");
+        assert_eq!(account.id.as_deref(), Some("fake-sub-2"));
+        assert_eq!(account.email.as_deref(), Some("idtoken-user@example.test"));
+        assert_eq!(account.display_name.as_deref(), Some("ID Token User"));
+        assert_eq!(
+            account.avatar_url.as_deref(),
+            Some("https://fake.example.test/idtoken.png")
+        );
+        assert!(tokens.id_token.is_some(), "the id_token is retained");
     });
 }
 

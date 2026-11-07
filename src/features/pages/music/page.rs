@@ -6,11 +6,11 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
-use gpui_kit::{StyledImage as _, prelude::*, *};
+use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
 use crate::ui::widgets::{
-    bounded_list_height, render_virtual_list, uniform_item_sizes, virtual_list_item,
+    ItemSizeCache, bounded_list_height, render_virtual_list, virtual_list_item,
 };
 
 use super::model::{AlbumId, PlaylistId, TrackId, format_time, move_within};
@@ -22,6 +22,10 @@ pub(crate) enum DetailSource {
     Playlist(PlaylistId),
 }
 
+// `v_virtual_list` positions rows purely from `item_sizes`, so the row
+// renderer must stay pinned to this height.
+const TRACK_ROW_H: f32 = 40.0;
+
 /// Library view with an albums grid and playlist detail. `player` is observed
 /// for re-render; playback state itself lives in the engine.
 pub struct MusicPage {
@@ -31,6 +35,7 @@ pub struct MusicPage {
     orders: HashMap<PlaylistId, Vec<TrackId>>,
     queue_panel_open: bool,
     detail_scroll: VirtualListScrollHandle,
+    detail_size_cache: ItemSizeCache,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -44,6 +49,7 @@ impl MusicPage {
             orders: HashMap::new(),
             queue_panel_open: false,
             detail_scroll: VirtualListScrollHandle::new(),
+            detail_size_cache: ItemSizeCache::default(),
             _subscriptions: subscriptions,
         }
     }
@@ -255,7 +261,7 @@ impl MusicPage {
             .on_click(cx.listener(|this, _, _, cx| this.toggle_queue_panel(cx)))
     }
 
-    fn render_detail(&self, source: DetailSource, cx: &mut Context<Self>) -> Div {
+    fn render_detail(&mut self, source: DetailSource, cx: &mut Context<Self>) -> Div {
         let title = match source {
             DetailSource::Album(id) => self
                 .library
@@ -268,14 +274,13 @@ impl MusicPage {
         };
         let order = self.detail_order();
         let track_count = order.len();
-        let item_sizes = uniform_item_sizes(track_count, px(40.));
+        let item_sizes = self.detail_size_cache.uniform(track_count, px(TRACK_ROW_H));
         let list_height = bounded_list_height(&item_sizes, px(0.), px(480.));
         let is_playlist = matches!(source, DetailSource::Playlist(_));
         let source_key = match source {
             DetailSource::Album(id) => id.0,
             DetailSource::Playlist(id) => id.0,
         };
-        let scroll_handle = self.detail_scroll.clone();
 
         v_flex()
             .gap_4()
@@ -329,7 +334,7 @@ impl MusicPage {
                         item_sizes,
                         list_height,
                         px(0.),
-                        &scroll_handle,
+                        &self.detail_scroll,
                         true,
                         move |this: &mut Self, visible, _window, cx| {
                             let order = this.detail_order();
@@ -347,28 +352,24 @@ impl MusicPage {
                                         track.artist,
                                         duration
                                     );
-                                    let row =
-                                        virtual_list_item(("music-track", ix), label, ix, total)
-                                            .h(px(40.))
-                                            .on_click(cx.listener(move |this, _, _, cx| {
+                                    let row = virtual_list_item(("music-track", ix), label, ix)
+                                        .h(px(TRACK_ROW_H))
+                                        .on_click(cx.listener(move |this, _, _, cx| {
+                                            this.play_detail_at(ix, cx);
+                                        }))
+                                        .on_a11y_action(AccessibleAction::Click, move |_, _, cx| {
+                                            page.update(cx, |this, cx| {
                                                 this.play_detail_at(ix, cx);
-                                            }))
-                                            .on_a11y_action(
-                                                AccessibleAction::Click,
-                                                move |_, _, cx| {
-                                                    page.update(cx, |this, cx| {
-                                                        this.play_detail_at(ix, cx);
-                                                    });
-                                                },
-                                            )
-                                            .child(render_track_row(
-                                                track.title.clone(),
-                                                duration,
-                                                is_playlist,
-                                                ix,
-                                                total,
-                                                cx,
-                                            ));
+                                            });
+                                        })
+                                        .child(render_track_row(
+                                            track.title.clone(),
+                                            duration,
+                                            is_playlist,
+                                            ix,
+                                            total,
+                                            cx,
+                                        ));
                                     Some(row.into_any_element())
                                 })
                                 .collect()

@@ -8,7 +8,6 @@ use gpui_kit::component::{
     v_flex,
 };
 use gpui_kit::{prelude::*, *};
-use serde::{Deserialize, Serialize};
 
 use gpui_query::client::QueryClient;
 use gpui_query::core::{
@@ -16,15 +15,16 @@ use gpui_query::core::{
 };
 
 use crate::accessibility::A11yExt as _;
+use crate::ui::widgets::ItemSizeCache;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PlaygroundUser {
     pub id: u32,
     pub name: String,
     pub email: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PlaygroundPage {
     pub items: Vec<String>,
     pub page_number: u32,
@@ -32,7 +32,7 @@ pub struct PlaygroundPage {
 
 /// A real httpbin response captured by the HTTP Fetching section, used to demo
 /// gpui-query managing live network requests (reqwest over the tokio runtime).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct HttpFetchResult {
     pub method: String,
     pub label: String,
@@ -118,9 +118,6 @@ pub struct QueryPlaygroundPage {
         Subscription,
     )>,
     pub(super) mutation_input_state: Entity<InputState>,
-    // Locale the mutation placeholder was rendered under; InputState captures
-    // the placeholder string, so a switch is re-applied in render.
-    pub(super) placeholder_locale: SharedString,
     pub(super) infinite_entity: Option<(
         Entity<InfiniteQueryResource<PlaygroundPage, QueryError>>,
         Subscription,
@@ -136,6 +133,7 @@ pub struct QueryPlaygroundPage {
     )>,
     pub(super) activity_log: Vec<String>,
     pub(super) log_scroll_handle: VirtualListScrollHandle,
+    pub(super) log_size_cache: ItemSizeCache,
     // Mutation callbacks run without a context; they send here and the
     // page-owned drain task folds the messages into the activity log.
     pub(super) callback_log_tx: tokio::sync::mpsc::UnboundedSender<String>,
@@ -148,6 +146,20 @@ impl QueryPlaygroundPage {
         subs.push(cx.observe_global_in::<QueryClient>(window, |_, _, cx| {
             cx.notify();
         }));
+        subs.push(
+            cx.observe_global_in::<crate::app::LocaleState>(window, |this, window, cx| {
+                // InputState captures the placeholder string, so re-apply it
+                // per locale instead of mutating it during render.
+                this.mutation_input_state.update(cx, |state, cx| {
+                    state.set_placeholder(
+                        crate::i18n::localize("query_playground_mutation_variables_placeholder"),
+                        window,
+                        cx,
+                    );
+                });
+                cx.notify();
+            }),
+        );
 
         let mutation_input_state = cx.new(|cx| {
             InputState::new(window, cx).placeholder(crate::i18n::localize(
@@ -183,7 +195,6 @@ impl QueryPlaygroundPage {
 
         Self {
             _subscriptions: subs,
-            placeholder_locale: crate::app::current_locale(cx),
             simple_query: None,
             nocache_query: None,
             ttl_query: None,
@@ -201,6 +212,7 @@ impl QueryPlaygroundPage {
             http_query: None,
             activity_log: Vec::new(),
             log_scroll_handle: VirtualListScrollHandle::new(),
+            log_size_cache: ItemSizeCache::default(),
             callback_log_tx,
             _callback_log_drain: callback_log_drain,
         }
@@ -212,7 +224,6 @@ impl QueryPlaygroundPage {
 
     pub(super) fn log(&mut self, msg: impl Into<String>) {
         self.activity_log.push(msg.into());
-        // Cap at 30 entries to limit DOM overhead.
         if self.activity_log.len() > 30 {
             self.activity_log.drain(0..self.activity_log.len() - 30);
         }
@@ -220,18 +231,7 @@ impl QueryPlaygroundPage {
 }
 
 impl Render for QueryPlaygroundPage {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let locale = crate::app::current_locale(cx);
-        if self.placeholder_locale != locale {
-            self.mutation_input_state.update(cx, |state, cx| {
-                state.set_placeholder(
-                    crate::i18n::localize("query_playground_mutation_variables_placeholder"),
-                    window,
-                    cx,
-                );
-            });
-            self.placeholder_locale = locale;
-        }
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let radius_lg = theme.radius_lg;
         let border = theme.border;

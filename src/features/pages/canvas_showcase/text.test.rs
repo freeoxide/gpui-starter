@@ -35,8 +35,8 @@ fn seeded_texts_carry_theme_derived_colors(cx: &mut TestAppContext) {
     let demo = handle.root(cx).expect("demo root entity");
     let state = cx.read(|cx| demo.read(cx).state.clone());
     let (foreground, muted_foreground, primary) = cx.read(|cx| {
-        let cx = gpui_kit::component::ActiveTheme::theme(cx);
-        (cx.foreground, cx.muted_foreground, cx.primary)
+        let theme = gpui_kit::component::ActiveTheme::theme(cx);
+        (theme.foreground, theme.muted_foreground, theme.primary)
     });
     let texts = cx.read(|cx| state.read(cx).document().layers()[0].shapes()[1..].to_vec());
     for ((_, shape), (_, _, _, expected)) in texts.iter().zip(TEXT_SEEDS) {

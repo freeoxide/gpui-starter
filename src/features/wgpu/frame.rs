@@ -18,19 +18,6 @@ pub fn padded_bytes_per_row(width: u32) -> usize {
     (width as usize * 4 + BYTES_PER_ROW_ALIGNMENT - 1) & !(BYTES_PER_ROW_ALIGNMENT - 1)
 }
 
-/// Swizzles `width`x`height` RGBA rows laid out at `padded_bytes_per_row`
-/// stride into tightly packed BGRA bytes, dropping the row padding.
-pub fn rgba_to_bgra(padded_rows: &[u8], width: u32, height: u32) -> Vec<u8> {
-    let padded = padded_bytes_per_row(width);
-    let mut out = Vec::with_capacity(width as usize * height as usize * 4);
-    for row in padded_rows.chunks_exact(padded).take(height as usize) {
-        for chunk in row.as_chunks::<4>().0.iter().take(width as usize) {
-            out.extend_from_slice(&[chunk[2], chunk[1], chunk[0], chunk[3]]);
-        }
-    }
-    out
-}
-
 /// Builds a displayable image from tightly packed BGRA bytes; panics unless
 /// `bgra` holds exactly width*height*4 bytes.
 #[cfg(not(target_family = "wasm"))]
@@ -41,8 +28,8 @@ pub fn bgra_to_render_image(width: u32, height: u32, bgra: Vec<u8>) -> Arc<Rende
     Arc::new(RenderImage::new([image::Frame::new(buffer)]))
 }
 
-/// [`bgra_to_render_image`] after swizzling tightly packed RGBA input
-/// (unlike [`rgba_to_bgra`], the input carries no row padding).
+/// [`bgra_to_render_image`] after swizzling tightly packed RGBA input (the
+/// input carries no row padding).
 #[cfg(not(target_family = "wasm"))]
 pub fn rgba_to_render_image(width: u32, height: u32, rgba: Vec<u8>) -> Arc<RenderImage> {
     let mut bgra = Vec::with_capacity(rgba.len());

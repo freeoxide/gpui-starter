@@ -6,13 +6,12 @@ use gpui_kit::component::{
 use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
-use crate::features::tutorial::mask;
 use crate::features::tutorial::target::{resolve, set_subscriber};
 use crate::features::tutorial::tour::{TourDefinition, TourProgress, TourStep, demo_tour};
+use crate::features::tutorial::{LOG, mask};
 
 const TOUR_CONTEXT: &str = "Tour";
 const TOUR_VIEWPORT: &str = "tour-viewport";
-const LOG: &str = "gpui_starter::tutorial";
 
 #[derive(Action, Clone, PartialEq, Eq, serde::Deserialize)]
 #[action(namespace = tutorial, no_json)]
@@ -142,7 +141,7 @@ pub fn start(cx: &mut App) {
 
 /// Start `definition` in the root window; a logged no-op when the root
 /// window or the controller is not up yet.
-pub fn start_tour(definition: TourDefinition, cx: &mut App) {
+fn start_tour(definition: TourDefinition, cx: &mut App) {
     let Some(controller) = cx.try_global::<TourHandle>().map(|handle| handle.0.clone()) else {
         tracing::warn!(target: LOG, "tour requested before the root window exists");
         return;
@@ -156,19 +155,6 @@ pub fn start_tour(definition: TourDefinition, cx: &mut App) {
     });
 }
 
-/// Close the active tour from App level (same path as Escape/Skip).
-pub fn dismiss(cx: &mut App) {
-    let Some(controller) = cx.try_global::<TourHandle>().map(|handle| handle.0.clone()) else {
-        return;
-    };
-    let Some(root) = crate::app::window::root_window(cx) else {
-        return;
-    };
-    let _ = root.update(cx, |_, window, cx| {
-        controller.update(cx, |tour, cx| tour.close(window, cx, "dismissed"));
-    });
-}
-
 impl Render for TourController {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(tour) = &self.active else {
@@ -176,9 +162,8 @@ impl Render for TourController {
         };
         let step = &tour.definition.steps[tour.progress.ix()];
 
-        // Renders read prepaint-published bounds one frame behind (gpui lays
-        // out the whole tree before prepaint), so an unresolved target here
-        // is the first frame after a route-changing step, not a bug.
+        // Bounds publish at prepaint, one frame behind layout, so an unresolved
+        // target is just the first frame after a route-changing step.
         let Some(viewport) = resolve(TOUR_VIEWPORT, cx) else {
             return self.overlay(cx, waiting_placeholder());
         };
@@ -231,9 +216,8 @@ impl Render for TourController {
 }
 
 impl TourController {
-    // Action dispatch bubbles along the focused handle's ancestor chain
-    // only (gpui key_dispatch.rs), and the trap tracks the handle here, so
-    // the key context and handlers must live on this same node.
+    // Actions bubble only along the focused handle's ancestors (gpui
+    // key_dispatch.rs), so key context and handlers must sit on the trap node.
     fn overlay(&self, cx: &Context<Self>, child: impl IntoElement) -> AnyElement {
         div()
             .focus_trap("tour", &self.focus_handle)
@@ -330,7 +314,7 @@ fn render_card(
                         .a11y_live(accesskit::Live::Polite)
                         .text_xs()
                         .text_color(cx.theme().muted_foreground)
-                        .child(format!("{}/{}", ix + 1, total)),
+                        .child(format!("{step_num}/{total_num}")),
                 ),
         )
         .child(

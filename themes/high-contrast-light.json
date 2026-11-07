@@ -16,16 +16,12 @@
         "danger.foreground": "#FFFFFF",
         "foreground": "#000000",
         "input.border": "#000000",
-        "link.active.foreground": "#003399",
-        "link.foreground": "#003399",
-        "link.hover.foreground": "#002266",
         "list.active.background": "#0055FF22",
         "list.hover.background": "#E8E8E8",
         "list.active.border": "#0055FF",
         "list.even.background": "#F5F5F5",
         "muted.background": "#E0E0E066",
         "muted.foreground": "#4D4D4D",
-        "panel.background": "#F0F0F0",
         "popover.background": "#FFFFFF",
         "popover.foreground": "#000000",
         "primary.active.background": "#0044CC",
@@ -52,7 +48,10 @@
         "base.yellow": "#664D00",
         "base.blue": "#0055FF",
         "base.magenta": "#770077",
-        "base.cyan": "#006666"
+        "base.cyan": "#006666",
+        "link": "#003399",
+        "link.active": "#003399",
+        "link.hover": "#002266"
       },
       "highlight": {
         "editor.foreground": "#000000",

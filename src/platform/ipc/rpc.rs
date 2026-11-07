@@ -17,7 +17,7 @@ pub fn encode_line<T: serde::Serialize>(value: &T) -> Result<String, serde_json:
 
 /// Decode one JSON value from a line; blank lines yield `Ok(None)` so
 /// keepalives can be skipped without a protocol error.
-pub fn decode_line<T: DeserializeOwned>(line: &str) -> Result<Option<T>, serde_json::Error> {
+pub(crate) fn decode_line<T: DeserializeOwned>(line: &str) -> Result<Option<T>, serde_json::Error> {
     let trimmed = line.trim();
     if trimmed.is_empty() {
         return Ok(None);

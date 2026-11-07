@@ -9,11 +9,11 @@ use gpui_kit::component::{
     ActiveTheme as _, Disableable as _, IconName, Sizable as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
     dock::{
-        BasePanel, ClosePanel, DockArea, DockAreaState, DockEvent, DockLayout, DockPlacement,
-        DockSkin, Panel, PanelEvent, ToggleZoom, panel_handle, register_panel,
+        ClosePanel, DockArea, DockAreaState, DockEvent, DockLayout, DockPlacement, DockSkin,
+        ToggleZoom, panel_handle, register_panel,
     },
     h_flex,
-    menu::{DropdownMenu as _, PopupMenu},
+    menu::DropdownMenu as _,
     status_bar::StatusBar,
     v_flex,
 };
@@ -22,7 +22,8 @@ use serde::Deserialize;
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use super::demo::{DemoPanel, PanelInfo, PanelSpec};
+use crate::gallery::demo::section;
 
 /// Payload of the add-panel menu, carried by the placement it lands at.
 #[derive(Action, Clone, PartialEq, Eq, Deserialize)]
@@ -34,14 +35,13 @@ pub(crate) struct AddPanel(DockPlacement);
 #[action(namespace = gallery_dock, no_json)]
 pub(crate) struct TogglePanelVisible(SharedString);
 
-actions!(gallery_dock, [ToggleDockToggleButton, PanelInfo]);
+actions!(gallery_dock, [ToggleDockToggleButton]);
 
 /// The dock subtree that owns focus while the keybindings are live; the kit's
 /// own dock actions handle them from there.
 const CONTEXT: &str = "gallery-dock-workspace";
 
-/// The example debounces its disk write by ten seconds; one is enough to show
-/// the trailing-save pattern in a demo.
+/// Layout edits batch into one snapshot this long after the last change.
 const SAVE_DEBOUNCE: Duration = Duration::from_secs(1);
 
 const WORKSPACE_DOCK: DockAreaTab = DockAreaTab {
@@ -52,12 +52,6 @@ const WORKSPACE_DOCK: DockAreaTab = DockAreaTab {
 struct DockAreaTab {
     id: &'static str,
     version: usize,
-}
-
-struct PanelSpec {
-    name: &'static str,
-    title: &'static str,
-    body: &'static str,
 }
 
 const EDITOR: PanelSpec = PanelSpec {
@@ -110,97 +104,18 @@ const PANELS: &[PanelSpec] = &[
 const TOGGLE_PANELS: [&PanelSpec; 4] = [&EXPLORER, &SEARCH, &OUTLINE, &INSPECTOR];
 
 /// Panels hidden through the workspace menu. A global because a registry-built
-/// panel has no other route back to the section (upstream keeps it in app state).
+/// panel has no other route back to the section.
 struct HiddenPanels(Entity<Vec<SharedString>>);
 
 impl Global for HiddenPanels {}
-
-struct DemoPanel {
-    spec: &'static PanelSpec,
-    focus_handle: FocusHandle,
-}
-
-impl DemoPanel {
-    fn new(spec: &'static PanelSpec, cx: &mut App) -> Entity<Self> {
-        cx.new(|cx| Self {
-            spec,
-            focus_handle: cx.focus_handle(),
-        })
-    }
-}
-
-impl EventEmitter<PanelEvent> for DemoPanel {}
-
-impl Focusable for DemoPanel {
-    fn focus_handle(&self, _: &App) -> FocusHandle {
-        self.focus_handle.clone()
-    }
-}
-
-impl BasePanel for DemoPanel {
-    fn panel_name(&self) -> &'static str {
-        self.spec.name
-    }
-
-    fn visible(&self, cx: &App) -> bool {
-        !cx.global::<HiddenPanels>()
-            .0
-            .read(cx)
-            .iter()
-            .any(|name| name.as_ref() == self.spec.name)
-    }
-}
-
-impl Panel for DemoPanel {
-    fn title(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        self.spec.title
-    }
-
-    fn dropdown_menu(
-        &mut self,
-        menu: PopupMenu,
-        _: &mut Window,
-        _: &mut Context<Self>,
-    ) -> PopupMenu {
-        menu.menu("Info", Box::new(PanelInfo))
-    }
-
-    fn toolbar_buttons(&mut self, _: &mut Window, _: &mut Context<Self>) -> Option<Vec<Button>> {
-        Some(vec![
-            Button::new(SharedString::from(format!("{}-info", self.spec.name)))
-                .icon(IconName::Info)
-                .on_click(|_, window, cx| {
-                    window.push_notification("You clicked the info button.", cx);
-                }),
-            Button::new(SharedString::from(format!("{}-search", self.spec.name)))
-                .icon(IconName::Search)
-                .on_click(|_, window, cx| {
-                    window.push_notification("You clicked the search button.", cx);
-                }),
-        ])
-    }
-}
-
-impl Render for DemoPanel {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .size_full()
-            .p_4()
-            .text_color(cx.theme().foreground)
-            .child(self.spec.body)
-    }
-}
 
 pub fn init(cx: &mut App) {
     let hidden = cx.new(|_| Vec::new());
     cx.set_global(HiddenPanels(hidden));
     for spec in PANELS {
         register_panel(cx, spec.name, |_, _, cx| {
-            let panel = cx.new(|cx| DemoPanel {
-                spec,
-                focus_handle: cx.focus_handle(),
-            });
-            panel_handle(panel)
+            let hidden = cx.global::<HiddenPanels>().0.clone();
+            panel_handle(DemoPanel::with_toolbar(spec, hidden, cx))
         });
     }
     cx.bind_keys([
@@ -250,37 +165,62 @@ impl WorkspaceSection {
     }
 
     fn reset_default_layout(dock_area: &Entity<DockArea>, window: &mut Window, cx: &mut App) {
+        let hidden = cx.global::<HiddenPanels>().0.clone();
         let center = DockLayout::v_split().child(
             DockLayout::tabs()
-                .panel_view(panel_handle(DemoPanel::new(&EDITOR, cx)), cx)
-                .panel_view(panel_handle(DemoPanel::new(&PREVIEW, cx)), cx),
+                .panel_view(
+                    panel_handle(DemoPanel::with_toolbar(&EDITOR, hidden.clone(), cx)),
+                    cx,
+                )
+                .panel_view(
+                    panel_handle(DemoPanel::with_toolbar(&PREVIEW, hidden.clone(), cx)),
+                    cx,
+                ),
             None,
         );
 
         let left_panels = DockLayout::v_split()
             .child(
-                DockLayout::tabs().panel_view(panel_handle(DemoPanel::new(&EXPLORER, cx)), cx),
+                DockLayout::tabs().panel_view(
+                    panel_handle(DemoPanel::with_toolbar(&EXPLORER, hidden.clone(), cx)),
+                    cx,
+                ),
                 None,
             )
             .child(
-                DockLayout::tabs().panel_view(panel_handle(DemoPanel::new(&SEARCH, cx)), cx),
+                DockLayout::tabs().panel_view(
+                    panel_handle(DemoPanel::with_toolbar(&SEARCH, hidden.clone(), cx)),
+                    cx,
+                ),
                 Some(px(160.)),
             );
 
         let bottom_panels = DockLayout::v_split().child(
             DockLayout::tabs()
-                .panel_view(panel_handle(DemoPanel::new(&TERMINAL, cx)), cx)
-                .panel_view(panel_handle(DemoPanel::new(&PROBLEMS, cx)), cx),
+                .panel_view(
+                    panel_handle(DemoPanel::with_toolbar(&TERMINAL, hidden.clone(), cx)),
+                    cx,
+                )
+                .panel_view(
+                    panel_handle(DemoPanel::with_toolbar(&PROBLEMS, hidden.clone(), cx)),
+                    cx,
+                ),
             None,
         );
 
         let right_panels = DockLayout::v_split()
             .child(
-                DockLayout::tabs().panel_view(panel_handle(DemoPanel::new(&OUTLINE, cx)), cx),
+                DockLayout::tabs().panel_view(
+                    panel_handle(DemoPanel::with_toolbar(&OUTLINE, hidden.clone(), cx)),
+                    cx,
+                ),
                 None,
             )
             .child(
-                DockLayout::tabs().panel_view(panel_handle(DemoPanel::new(&INSPECTOR, cx)), cx),
+                DockLayout::tabs().panel_view(
+                    panel_handle(DemoPanel::with_toolbar(&INSPECTOR, hidden.clone(), cx)),
+                    cx,
+                ),
                 None,
             );
 
@@ -300,7 +240,7 @@ impl WorkspaceSection {
     fn save_layout_later(&mut self, cx: &mut Context<Self>) {
         let dock_area = self.dock_area.clone();
         // Replacing the pending task cancels its timer, so only the last edit
-        // of a burst reaches the snapshot (the example debounces this way).
+        // of a burst reaches the snapshot.
         self._save_task = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(SAVE_DEBOUNCE).await;
             let _ = this.update(cx, |this, cx| this.save_layout(&dock_area, cx));
@@ -323,15 +263,16 @@ impl WorkspaceSection {
     }
 
     fn on_click_load(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(json) = self.saved_json.clone() else {
+        let Some(json) = self.saved_json.as_ref() else {
             return;
         };
-        let restored = serde_json::from_str::<DockAreaState>(&json).map_err(|err| err.to_string());
-        let restored = restored.and_then(|state| {
-            self.dock_area.update(cx, |area, cx| {
-                area.load(state, window, cx).map_err(|err| err.to_string())
-            })
-        });
+        let restored = serde_json::from_str::<DockAreaState>(json)
+            .map_err(|err| err.to_string())
+            .and_then(|state| {
+                self.dock_area.update(cx, |area, cx| {
+                    area.load(state, window, cx).map_err(|err| err.to_string())
+                })
+            });
         if let Err(message) = restored {
             window.push_notification(format!("Couldn't restore the layout: {message}"), cx);
         }
@@ -349,11 +290,10 @@ impl WorkspaceSection {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // The example picks a panel at random; a rotation over the catalog
-        // keeps the demo deterministic.
+        // A rotation over the catalog keeps the demo deterministic.
         let spec = &PANELS[self.next_panel_ix % PANELS.len()];
         self.next_panel_ix += 1;
-        let panel = panel_handle(DemoPanel::new(spec, cx));
+        let panel = panel_handle(DemoPanel::with_toolbar(spec, self.hidden.clone(), cx));
         self.dock_area.update(cx, |area, cx| {
             area.add_panel_view(panel, action.0, None, window, cx);
         });

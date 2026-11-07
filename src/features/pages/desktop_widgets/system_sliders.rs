@@ -109,15 +109,15 @@ impl SystemSlidersWidget {
     }
 
     fn commit(&mut self, target: SliderTarget, percent: f32, cx: &mut App) {
-        match target {
-            SliderTarget::Brightness => {
-                crate::system_controls::set_brightness(level_of(percent), cx);
-            }
-            SliderTarget::Volume => {
-                crate::system_controls::set_volume(level_of(percent), cx);
-            }
-        }
         self.suppress_until = Some(suppress_window());
+        // Deferred: writing the global notifies this widget's snapshot
+        // observer synchronously, which would re-enter the entity mid-update.
+        cx.defer(move |cx| match target {
+            SliderTarget::Brightness => {
+                crate::system_controls::set_brightness(level_of(percent), cx)
+            }
+            SliderTarget::Volume => crate::system_controls::set_volume(level_of(percent), cx),
+        });
     }
 
     fn sync_from_snapshot(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -166,7 +166,7 @@ impl SystemSlidersWidget {
                             div()
                                 .text_sm()
                                 .text_color(cx.theme().foreground)
-                                .child(format!("{:.0}%", percent)),
+                                .child(format!("{percent:.0}%")),
                         ),
                     )
                     .child(Slider::new(slider).horizontal())

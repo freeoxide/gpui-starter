@@ -1,5 +1,6 @@
 use std::io::Cursor;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use symphonia::core::codecs::audio::AudioDecoderOptions;
@@ -11,7 +12,7 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::default::{get_codecs, get_probe};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, thiserror::Error)]
 #[non_exhaustive]
 pub enum AudioError {
     #[error("decode failed: {0}")]
@@ -34,7 +35,7 @@ pub struct DecodedAudio {
     source_name: String,
     sample_rate: u32,
     channels: usize,
-    samples: Vec<f32>,
+    samples: Arc<[f32]>,
 }
 
 impl DecodedAudio {
@@ -61,6 +62,11 @@ impl DecodedAudio {
     pub fn samples(&self) -> &[f32] {
         &self.samples
     }
+
+    /// Cheap `Arc` clone of the sample buffer; no copy.
+    pub fn share_samples(&self) -> Arc<[f32]> {
+        self.samples.clone()
+    }
 }
 
 /// Synchronous decode. `name` supplies the extension hint (".wav" routes to
@@ -78,11 +84,15 @@ pub fn decode_bytes(name: &str, bytes: Vec<u8>) -> Result<DecodedAudio, AudioErr
     if samples.is_empty() {
         return Err(AudioError::NoAudioTrack);
     }
+    // A zero rate makes every duration computation divide by zero.
+    if sample_rate == 0 {
+        return Err(AudioError::Decode("sample rate must be nonzero".into()));
+    }
     Ok(DecodedAudio {
         source_name: name.to_string(),
         sample_rate,
         channels,
-        samples,
+        samples: Arc::from(samples),
     })
 }
 

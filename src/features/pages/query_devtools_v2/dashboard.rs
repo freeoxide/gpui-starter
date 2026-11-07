@@ -1,6 +1,6 @@
 use gpui_kit::component::{
-    ActiveTheme as _, Disableable, Icon, IconName, VirtualListScrollHandle, button::Button, h_flex,
-    v_flex,
+    ActiveTheme as _, Disableable as _, Icon, IconName, VirtualListScrollHandle, button::Button,
+    h_flex, v_flex,
 };
 use gpui_kit::{prelude::*, *};
 
@@ -45,7 +45,6 @@ impl Render for QueryDevToolsV2Page {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let diagnostic = cx.try_global::<QueryClient>().map(|c| c.diagnostics(cx));
 
-        let scroll_handle = self.scroll_handle.clone();
         let content = if diagnostic.is_some() {
             render_dashboard(
                 &diagnostic,
@@ -53,7 +52,7 @@ impl Render for QueryDevToolsV2Page {
                 self.sort_by,
                 &self.status_filter,
                 &mut self.row_cache,
-                &scroll_handle,
+                &self.scroll_handle,
                 cx,
             )
         } else {
@@ -122,7 +121,7 @@ fn render_dashboard(
         .map(|d| {
             d.queries
                 .iter()
-                .filter(|q| q.status == gpui_query::core::QueryStatus::Success)
+                .filter(|q| q.status == QueryStatus::Success)
                 .count()
         })
         .unwrap_or(0);
@@ -131,7 +130,7 @@ fn render_dashboard(
         .map(|d| {
             d.queries
                 .iter()
-                .filter(|q| q.status == gpui_query::core::QueryStatus::Failure)
+                .filter(|q| q.status == QueryStatus::Failure)
                 .count()
         })
         .unwrap_or(0);

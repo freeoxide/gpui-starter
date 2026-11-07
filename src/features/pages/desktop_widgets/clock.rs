@@ -1,7 +1,14 @@
 use gpui_kit::component::{ActiveTheme as _, v_flex};
 use gpui_kit::{prelude::*, *};
 
-pub(crate) fn clock_parts(now: chrono::DateTime<chrono::Local>) -> (SharedString, SharedString) {
+/// Generic over the zone so tests can pin a fixed offset instead of the
+/// host timezone.
+pub(crate) fn clock_parts<Tz: chrono::TimeZone>(
+    now: chrono::DateTime<Tz>,
+) -> (SharedString, SharedString)
+where
+    Tz::Offset: std::fmt::Display,
+{
     (
         now.format("%H:%M").to_string().into(),
         now.format("%Y-%m-%d").to_string().into(),

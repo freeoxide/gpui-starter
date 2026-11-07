@@ -1,17 +1,16 @@
-//! Shared scaffolding for the button-family sections: the titled demo box
-//! (ported from the story crate's `section()` helper), the common demo-state
-//! knobs, and the toolbar dropdowns that drive them.
+//! Shared scaffolding for the button-family sections: the common demo-state
+//! knobs and the toolbar dropdowns that drive them.
 
 use gpui_kit::component::{
     ActiveTheme as _, Size,
     button::{Button, DropdownButton},
-    group_box::{GroupBox, GroupBoxVariants as _},
-    h_flex,
-    menu::PopupMenu,
-    v_flex,
 };
-use gpui_kit::{prelude::FluentBuilder as _, *};
+use gpui_kit::*;
 use serde::Deserialize;
+
+use crate::gallery::demo::{self, SizeToggle};
+
+pub(crate) use crate::gallery::demo::{demo_toolbar, section, size_label};
 
 /// Knobs the upstream stories expose through their options menu; several
 /// sections drive every control they render from one copy of this state.
@@ -50,6 +49,21 @@ impl DemoToggle {
             DemoToggle::SizeLarge => Some(Size::Large),
             _ => None,
         }
+    }
+}
+
+impl SizeToggle for DemoToggle {
+    fn xsmall() -> Self {
+        Self::SizeXSmall
+    }
+    fn small() -> Self {
+        Self::SizeSmall
+    }
+    fn medium() -> Self {
+        Self::SizeMedium
+    }
+    fn large() -> Self {
+        Self::SizeLarge
     }
 }
 
@@ -99,48 +113,9 @@ impl DemoState {
     }
 }
 
-pub(crate) fn size_label(size: Size) -> &'static str {
-    match size {
-        Size::XSmall => "XSmall",
-        Size::Small => "Small",
-        Size::Medium => "Medium",
-        Size::Large => "Large",
-        Size::Size(_) => "Custom",
-    }
-}
-
-fn add_size_items(menu: PopupMenu, size: Size) -> PopupMenu {
-    menu.menu_with_check(
-        "XSmall",
-        size == Size::XSmall,
-        Box::new(DemoToggle::SizeXSmall),
-    )
-    .menu_with_check(
-        "Small",
-        size == Size::Small,
-        Box::new(DemoToggle::SizeSmall),
-    )
-    .menu_with_check(
-        "Medium",
-        size == Size::Medium,
-        Box::new(DemoToggle::SizeMedium),
-    )
-    .menu_with_check(
-        "Large",
-        size == Size::Large,
-        Box::new(DemoToggle::SizeLarge),
-    )
-}
-
-/// The size switcher every story toolbar carried, on the published split
-/// button instead of the story crate's custom Popover trigger.
+/// The size switcher over this area's toggle namespace.
 pub(crate) fn size_dropdown(id: &'static str, size: Size) -> DropdownButton {
-    DropdownButton::new(id)
-        .button(
-            Button::new(SharedString::from(format!("{id}-trigger")))
-                .label(format!("Size: {}", size_label(size))),
-        )
-        .dropdown_menu(move |menu, _, _| add_size_items(menu, size))
+    demo::size_dropdown::<DemoToggle>(id, size)
 }
 
 /// The `Options` menu carrying the shared demo knobs.
@@ -150,7 +125,7 @@ pub(crate) fn options_dropdown(id: &'static str, demo: &DemoState) -> DropdownBu
     let selected = demo.selected;
     let compact = demo.compact;
     DropdownButton::new(id)
-        .button(Button::new(SharedString::from(format!("{id}-trigger"))).label("Options"))
+        .button(Button::new(format!("{id}-trigger")).label("Options"))
         .dropdown_menu(move |menu, _, cx| {
             menu.menu_with_check("Disabled", disabled, Box::new(DemoToggle::Disabled))
                 .menu_with_check("Loading", loading, Box::new(DemoToggle::Loading))
@@ -159,94 +134,4 @@ pub(crate) fn options_dropdown(id: &'static str, demo: &DemoState) -> DropdownBu
                 .separator()
                 .menu_with_check("Shadow", cx.theme().shadow, Box::new(DemoToggle::Shadow))
         })
-}
-
-/// Toolbar row for a section, right-aligned like the upstream
-/// `story_toolbar_group()`.
-pub(crate) fn demo_toolbar(children: Vec<AnyElement>) -> Div {
-    h_flex().w_full().justify_end().gap_1().children(children)
-}
-
-/// One titled demo box, ported from the story crate's `section()` (a
-/// GroupBox with a title, optional description, and centered content).
-#[derive(IntoElement)]
-pub(crate) struct DemoSection {
-    id: SharedString,
-    title: &'static str,
-    description: Option<&'static str>,
-    base: Div,
-    children: Vec<AnyElement>,
-}
-
-pub(crate) fn section(id: &'static str, title: &'static str) -> DemoSection {
-    DemoSection {
-        id: id.into(),
-        title,
-        description: None,
-        base: h_flex()
-            .w_full()
-            .flex_wrap()
-            .justify_center()
-            .items_center()
-            .gap_4(),
-        children: vec![],
-    }
-}
-
-impl DemoSection {
-    pub(crate) fn description(mut self, description: &'static str) -> Self {
-        self.description = Some(description);
-        self
-    }
-}
-
-impl ParentElement for DemoSection {
-    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
-        self.children.extend(elements);
-    }
-}
-
-impl Styled for DemoSection {
-    fn style(&mut self) -> &mut StyleRefinement {
-        self.base.style()
-    }
-}
-
-impl RenderOnce for DemoSection {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        GroupBox::new()
-            .id(self.id)
-            .outline()
-            .mb_6()
-            .title(
-                h_flex()
-                    .justify_between()
-                    .items_start()
-                    .w_full()
-                    .gap_4()
-                    .child(
-                        v_flex()
-                            .min_w_0()
-                            .flex_1()
-                            .gap_1()
-                            .child(div().font_weight(FontWeight::MEDIUM).child(self.title))
-                            .when_some(self.description, |this, description| {
-                                this.child(
-                                    div()
-                                        .text_xs()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child(description),
-                                )
-                            }),
-                    ),
-            )
-            .content_style(
-                StyleRefinement::default()
-                    .rounded(cx.theme().radius_lg)
-                    .overflow_x_hidden()
-                    .items_center()
-                    .justify_center(),
-            )
-            .child(self.base.children(self.children))
-    }
 }

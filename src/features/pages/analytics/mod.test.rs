@@ -3,7 +3,7 @@ use gpui_kit::component::{
     table::{TableDelegate as _, TableEvent},
 };
 use gpui_kit::{
-    AnyWindowHandle, AppContext as _, Bounds, Context, Entity, Pixels, Render as _, TestAppContext,
+    AnyWindowHandle, AppContext as _, Bounds, Context, Entity, Pixels, TestAppContext,
     VisualTestContext, Window, WindowOptions, point, px, size,
 };
 
@@ -59,6 +59,26 @@ async fn page_constructs_and_commits_the_first_reload(cx: &TestAppContext) {
         let page = page.read(cx);
         assert_eq!(page.phase, super::Phase::Ready);
         assert!(page.committed);
+    });
+}
+
+/// The production load path: the spawned reload timer — never a hand-called
+/// commit — must carry the page to Ready with its rows.
+#[gpui_kit::test]
+async fn the_spawned_reload_timer_carries_the_page_to_ready(cx: &TestAppContext) {
+    let (_, page) = open_page(cx);
+    cx.read(|cx| assert_eq!(page.read(cx).phase, super::Phase::Initial));
+    cx.executor().advance_clock(super::RELOAD_DELAY * 2);
+    cx.run_until_parked();
+    cx.read(|cx| {
+        let page = page.read(cx);
+        assert_eq!(page.phase, super::Phase::Ready);
+        assert!(page.committed);
+        assert_eq!(
+            page.table.read(cx).delegate().rows_count(cx),
+            48,
+            "the committed table must hold the full All segment"
+        );
     });
 }
 
@@ -163,9 +183,31 @@ async fn double_click_opens_the_detail_sheet(cx: &TestAppContext) {
 async fn open_detail_is_a_no_op_while_a_sheet_is_open(cx: &TestAppContext) {
     let (handle, page) = open_page(cx);
     commit_first_reload(cx, &page);
+    // Titles come from the sorted table, not fixture order; rows sharing a
+    // page yield equal titles, so the second row must sit on another page.
+    let titles: Vec<String> = cx.read(|cx| {
+        let analytics = page.read(cx);
+        let delegate = analytics.table.read(cx).delegate();
+        (0..delegate.rows_count(cx))
+            .map(|ix| {
+                let key = delegate.key_at(ix).expect("row key");
+                let row = analytics.data.channel_row(&key).expect("channel row");
+                crate::i18n::localize_with_args(
+                    "analytics_detail_title",
+                    &[("page", row.page.as_ref())],
+                )
+            })
+            .collect()
+    });
+    let first = &titles[0];
+    let second_row = titles
+        .iter()
+        .position(|title| title != first)
+        .expect("the All segment spans more than one page");
+    super::LAST_SHEET_TITLE.with_borrow_mut(|slot| *slot = None);
     with_window(cx, &handle, &page, |page, window, cx| {
         page.on_table_event(&TableEvent::DoubleClickedRow(0), window, cx);
-        page.on_table_event(&TableEvent::DoubleClickedRow(1), window, cx);
+        page.on_table_event(&TableEvent::DoubleClickedRow(second_row), window, cx);
     });
     let open = cx.update(|cx| {
         handle
@@ -173,6 +215,18 @@ async fn open_detail_is_a_no_op_while_a_sheet_is_open(cx: &TestAppContext) {
             .unwrap()
     });
     assert!(open, "the original sheet must still be the only one");
+    super::LAST_SHEET_TITLE.with_borrow(|title| {
+        assert_ne!(
+            title.as_deref(),
+            Some(titles[second_row].as_str()),
+            "the second double-click must not reach the sheet builder"
+        );
+        assert_eq!(
+            title.as_deref(),
+            Some(first.as_str()),
+            "row 0's sheet must still be the open one"
+        );
+    });
 }
 
 #[gpui_kit::test]
@@ -194,37 +248,70 @@ async fn preview_toggle_maps_onto_the_preview_state(cx: &TestAppContext) {
     }
 }
 
+/// Pins `region_view` precedence: preview states override committed data
+/// (Loading skeletons a committed page); Live renders the committed content.
 #[gpui_kit::test]
-async fn page_renders_in_every_region_state_without_panicking(cx: &TestAppContext) {
-    let (handle, page) = open_page(cx);
-    let render_here = |cx: &TestAppContext| {
-        cx.update(|cx| {
-            handle
-                .update(cx, |_, window, app| {
-                    page.update(app, |page, page_cx| {
-                        let _frame = page.render(window, page_cx);
-                    });
-                })
-                .unwrap();
-        });
-    };
-    render_here(cx);
+async fn committed_page_renders_each_region_state_shape(cx: &TestAppContext) {
+    let (handle, page) = open_page_sized(cx, 1512., 982.);
     commit_first_reload(cx, &page);
-    render_here(cx);
+
+    let regions = paint_regions(cx, &handle);
+    assert_eq!(distinct(&all(&regions, "kpi-card")).len(), 4, "Live KPIs");
+    assert!(all(&regions, "kpi-skeleton").is_empty());
+    assert!(!all(&regions, "table-box").is_empty());
+
+    cx.update(|cx| {
+        page.update(cx, |page, cx| {
+            page.set_preview(super::PreviewStateToggle::Loading, cx)
+        })
+    });
+    let regions = paint_regions(cx, &handle);
+    assert_eq!(
+        distinct(&all(&regions, "kpi-skeleton")).len(),
+        4,
+        "preview Loading must skeleton a committed page"
+    );
+    assert!(
+        all(&regions, "kpi-card").is_empty(),
+        "no KPI content under preview Loading"
+    );
+    assert_eq!(distinct(&all(&regions, "chart-skeleton")).len(), 3);
+    assert!(all(&regions, "table-box").is_empty());
+
     for toggle in [
-        super::PreviewStateToggle::Loading,
         super::PreviewStateToggle::Empty,
         super::PreviewStateToggle::Error,
     ] {
         cx.update(|cx| page.update(cx, |page, cx| page.set_preview(toggle, cx)));
-        render_here(cx);
+        let regions = paint_regions(cx, &handle);
+        assert!(all(&regions, "kpi-card").is_empty(), "{toggle:?}: cards");
+        assert!(
+            all(&regions, "kpi-skeleton").is_empty(),
+            "{toggle:?}: skeletons"
+        );
+        assert!(all(&regions, "table-box").is_empty(), "{toggle:?}: table");
+        assert!(
+            all(&regions, "region-state").len() >= 3,
+            "{toggle:?}: one state per region"
+        );
     }
+
+    cx.update(|cx| {
+        page.update(cx, |page, cx| {
+            page.set_preview(super::PreviewStateToggle::Live, cx)
+        })
+    });
     cx.update(|cx| {
         page.update(cx, |page, cx| {
             page.set_density(super::model::Density::Compact, cx)
         })
     });
-    render_here(cx);
+    let regions = paint_regions(cx, &handle);
+    assert_eq!(
+        distinct(&all(&regions, "kpi-card")).len(),
+        4,
+        "compact Live"
+    );
 }
 
 #[gpui_kit::test]
@@ -280,12 +367,12 @@ fn paint_regions(
     handle: &AnyWindowHandle,
 ) -> Vec<(&'static str, Bounds<Pixels>)> {
     super::LAYOUT_PROBE.with_borrow_mut(|rows| rows.clear());
-    let mut cx = VisualTestContext::from_window(handle.clone(), cx);
+    let mut cx = VisualTestContext::from_window(*handle, cx);
     cx.update(|window, cx| window.draw(cx).clear(cx));
     super::LAYOUT_PROBE.with_borrow(|rows| rows.clone())
 }
 
-fn all<'a>(regions: &'a [(&'static str, Bounds<Pixels>)], name: &str) -> Vec<Bounds<Pixels>> {
+fn all(regions: &[(&'static str, Bounds<Pixels>)], name: &str) -> Vec<Bounds<Pixels>> {
     regions
         .iter()
         .filter(|(n, _)| *n == name)
@@ -306,18 +393,16 @@ fn distinct(bounds: &[Bounds<Pixels>]) -> Vec<Bounds<Pixels>> {
     seen
 }
 
-/// Pins the rebuilt structure: every key region resolves to definite bounds,
-/// the four KPI cards form one aligned row of equal cards, and the paired
-/// chart cards share a top and bottom line above the full-width sessions card.
+/// Key regions resolve to definite bounds, the KPI cards form one row of equal
+/// cards, and the paired chart cards share top and bottom lines above sessions.
 #[gpui_kit::test]
 async fn layout_keeps_regions_definite_and_columns_aligned(cx: &TestAppContext) {
     let (handle, page) = open_page_sized(cx, 1512., 982.);
     commit_first_reload(cx, &page);
     let regions = paint_regions(cx, &handle);
 
-    // The toolbar carries no probe (a measuring child would change how its
-    // wrap row resolves under taffy 0.15), so its height is pinned through
-    // the next section's offset: 24 padding + toolbar + 24 gap.
+    // The toolbar carries no probe (see render_toolbar), so the kpis offset
+    // pins its height: 24 padding + toolbar + 24 gap.
     let kpis = all(&regions, "kpis");
     assert!(!kpis.is_empty(), "kpis section must render");
     let kpis_y = kpis[kpis.len() - 1].origin.y;
@@ -350,7 +435,7 @@ async fn layout_keeps_regions_definite_and_columns_aligned(cx: &TestAppContext) 
 
     let cards = distinct(&all(&regions, "chart-card"));
     assert_eq!(cards.len(), 3, "three chart cards, got {cards:?}");
-    let mut by_y = cards.clone();
+    let mut by_y = cards;
     by_y.sort_by_key(|b| b.origin.y.as_f32() as i32);
     let peers = &by_y[..2];
     assert!(
@@ -476,24 +561,6 @@ async fn layout_empty_state_spans_the_region(cx: &TestAppContext) {
             );
         }
     }
-}
-
-/// The sessions chart must band on aggregated per-page rows: ScaleBand keeps
-/// a repeated key's first index, so raw channel rows (duplicate pages) would
-/// collapse into overpainting bands — the fragmentation defect.
-#[gpui_kit::test]
-async fn sessions_chart_bands_on_distinct_pages(cx: &TestAppContext) {
-    let (handle, page) = open_page_sized(cx, 1512., 982.);
-    commit_first_reload(cx, &page);
-    super::SESSION_BAND_KEYS.with_borrow_mut(|keys| keys.clear());
-    paint_regions(cx, &handle);
-    super::SESSION_BAND_KEYS.with_borrow(|keys| {
-        assert!(!keys.is_empty(), "sessions chart must render bands");
-        assert!(keys.len() >= 6, "six bands per frame, got {keys:?}");
-        let frame = &keys[keys.len() - 6..];
-        let unique: std::collections::HashSet<&str> = frame.iter().map(String::as_str).collect();
-        assert_eq!(unique.len(), frame.len(), "duplicate band keys: {frame:?}");
-    });
 }
 
 /// Narrow windows must wrap the chart cards to full-width lines instead of

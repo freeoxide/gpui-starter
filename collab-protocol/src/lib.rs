@@ -139,6 +139,10 @@ pub struct ShapeEntry {
 pub struct SnapshotMsg {
     pub peers: Vec<Peer>,
     pub shapes: Vec<ShapeEntry>,
+    /// Deletions the joiner inherits so a stale relayed op cannot resurrect
+    /// a shape; older servers omit the field.
+    #[serde(default)]
+    pub tombstones: Vec<(ShapeKey, Version)>,
 }
 
 /// Sent on the `peer_leave` event.
@@ -229,15 +233,25 @@ impl Board {
         self.shapes.values()
     }
 
+    pub fn tombstones(&self) -> impl Iterator<Item = (ShapeKey, Version)> + '_ {
+        self.tombstones
+            .iter()
+            .map(|(key, version)| (*key, *version))
+    }
+
     /// Swap the whole board for a snapshot's contents. The lamport clock
     /// becomes `max(own, every seen lamport)`, so the next `next_version`
     /// outranks everything in the snapshot and post-snapshot local ops win.
-    pub fn replace_all(&mut self, shapes: Vec<ShapeEntry>) {
+    pub fn replace_all(&mut self, shapes: Vec<ShapeEntry>, tombstones: Vec<(ShapeKey, Version)>) {
         self.shapes.clear();
         self.tombstones.clear();
         for entry in shapes {
             self.lamport = self.lamport.max(entry.version.lamport);
             self.shapes.insert(entry.key, entry);
+        }
+        for (key, version) in tombstones {
+            self.lamport = self.lamport.max(version.lamport);
+            self.tombstones.insert(key, version);
         }
     }
 

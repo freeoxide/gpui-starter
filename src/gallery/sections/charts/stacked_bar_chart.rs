@@ -30,7 +30,6 @@ pub(super) struct StackedBarChart {
 
 impl StackedBarChart {
     pub(super) fn new(data: Vec<DailyDevice>) -> Self {
-        // 1. Calculate the stacked data
         let series = Stack::new()
             .data(data.clone())
             .keys(vec!["desktop", "mobile", "tablet", "watch"])
@@ -49,6 +48,27 @@ impl StackedBarChart {
             appear: PlotAppear::complete(),
         }
     }
+
+    /// Shared by `paint`, `tooltip_state` and `tooltip` so hovering hits the
+    /// column `paint` drew.
+    fn band_scale(&self, extent: f32) -> ScaleBand<SharedString> {
+        ScaleBand::new(self.data.iter().map(|v| v.date.clone()), [0., extent])
+            .max_band_width(30.)
+            .padding_inner(0.4)
+            .padding_outer(0.2)
+    }
+
+    /// Shared by `paint` and `tooltip` so tooltip rows match bar colors.
+    fn color_scale(&self, cx: &App) -> ScaleOrdinal<String, Hsla> {
+        let keys = self.series.iter().map(|s| s.key.clone()).collect();
+        let colors = vec![
+            cx.theme().chart_4,
+            cx.theme().chart_3,
+            cx.theme().chart_2,
+            cx.theme().chart_1,
+        ];
+        ScaleOrdinal::new(keys, colors)
+    }
 }
 
 impl Plot for StackedBarChart {
@@ -56,11 +76,7 @@ impl Plot for StackedBarChart {
         let width = bounds.size.width.as_f32();
         let height = bounds.size.height.as_f32() - axis_gap();
 
-        // 2. Calculate X/Y scales
-        let x = ScaleBand::new(self.data.iter().map(|v| v.date.clone()), [0., width])
-            .max_band_width(30.)
-            .padding_inner(0.4)
-            .padding_outer(0.2);
+        let x = self.band_scale(width);
         let band_width = x.band_width();
 
         let max = self
@@ -71,7 +87,6 @@ impl Plot for StackedBarChart {
 
         let y = ScaleLinear::new(vec![0., max], [height, 10.]);
 
-        // 3. Draw X axis labels
         let x_label = self.data.iter().filter_map(|d| {
             x.tick(&d.date.clone()).map(|x_tick| {
                 AxisText::new(
@@ -88,25 +103,15 @@ impl Plot for StackedBarChart {
             .stroke(cx.theme().border)
             .paint(&bounds, window, cx);
 
-        // 4. Setup color scale
-        let keys = self.series.iter().map(|s| s.key.clone()).collect();
-        let colors = vec![
-            cx.theme().chart_4,
-            cx.theme().chart_3,
-            cx.theme().chart_2,
-            cx.theme().chart_1,
-        ];
-        let ordinal = ScaleOrdinal::new(keys, colors);
+        let ordinal = self.color_scale(cx);
 
-        // 5. Draw grid lines
         Grid::new()
             .y((0..=3).map(|i| height * i as f32 / 4.0))
             .stroke(cx.theme().border)
             .dash_array(&[px(4.), px(2.)])
             .paint(&bounds, window);
 
-        // 6. Draw stacked bars. Columns grow out of the zero line as the
-        // chart appears.
+        // Columns grow out of the zero line as the chart appears.
         let appear = self.appear.progress();
         for series in self.series.iter() {
             let x = x.clone();
@@ -151,14 +156,7 @@ impl Plot for StackedBarChart {
         bounds: Bounds<Pixels>,
         _cx: &App,
     ) -> Option<TooltipState> {
-        // Band scale matches `paint`.
-        let x = ScaleBand::new(
-            self.data.iter().map(|v| v.date.clone()),
-            [0., bounds.size.width.as_f32()],
-        )
-        .max_band_width(30.)
-        .padding_inner(0.4)
-        .padding_outer(0.2);
+        let x = self.band_scale(bounds.size.width.as_f32());
         let band_width = x.band_width();
 
         // Ignore the x-axis label gutter so hovering the labels doesn't show a tooltip.
@@ -186,28 +184,11 @@ impl Plot for StackedBarChart {
         cx: &mut App,
     ) -> Option<AnyElement> {
         let d = self.data.get(state.index)?;
+        let ordinal = self.color_scale(cx);
 
-        // Same color mapping as `paint`.
-        let ordinal = ScaleOrdinal::new(
-            self.series.iter().map(|s| s.key.clone()).collect(),
-            vec![
-                cx.theme().chart_4,
-                cx.theme().chart_3,
-                cx.theme().chart_2,
-                cx.theme().chart_1,
-            ],
-        );
-
-        // Highlight the hovered column with a translucent band the width of the bars,
-        // confined to the plot height so it doesn't cover the x-axis labels.
-        let band_width = ScaleBand::new(
-            self.data.iter().map(|v| v.date.clone()),
-            [0., bounds.size.width.as_f32()],
-        )
-        .max_band_width(30.)
-        .padding_inner(0.4)
-        .padding_outer(0.2)
-        .band_width();
+        // The band is confined to the plot height so it doesn't cover the
+        // x-axis labels.
+        let band_width = self.band_scale(bounds.size.width.as_f32()).band_width();
 
         // The overlay fades in and out with the hover, and the band glides
         // between columns, on its own.
@@ -230,12 +211,12 @@ impl Plot for StackedBarChart {
                 .map(|p| p.y1 - p.y0)
                 .unwrap_or(0.);
             total += value;
-            tooltip = tooltip.row(color, series.key.clone(), format!("{}", value));
+            tooltip = tooltip.row(color, series.key.clone(), value.to_string());
         }
 
         Some(
             tooltip
-                .plain_row("total", format!("{}", total))
+                .plain_row("total", total.to_string())
                 .into_any_element(),
         )
     }

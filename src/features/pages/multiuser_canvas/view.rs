@@ -15,7 +15,7 @@ use super::{ClearBoard, DeleteSelection, MultiuserCanvasPage};
 
 pub(crate) const IS_LIVE_AVAILABLE: bool = !cfg!(target_family = "wasm");
 
-pub(crate) fn render_header(status: Status, _cx: &App) -> impl IntoElement {
+pub(crate) fn render_header(status: Status) -> impl IntoElement {
     let (icon, label_key) = match status {
         Status::Demo => (IconName::Bot, "multiuser_status_demo"),
         Status::Offline => (IconName::Ban, "multiuser_status_offline"),
@@ -293,8 +293,8 @@ pub(crate) fn render_cursor_overlay(
             Some(
                 h_flex()
                     .absolute()
-                    .left(px(screen.x.as_f32()))
-                    .top(px(screen.y.as_f32()))
+                    .left(screen.x)
+                    .top(screen.y)
                     .gap_1()
                     .items_start()
                     .child(div().size_2().rounded_full().bg(color))

@@ -48,14 +48,19 @@ pub fn init(cx: &mut App) {
 
     crate::lifecycle::install_panic_hook();
 
+    // First subscriber wins, so this must precede every other startup step:
+    // tracing events emitted before it are dropped silently.
+    startup_step!(cx, "logging_init", {
+        crate::logging::initialize(cx);
+    });
+
     // Must precede any kit usage.
     startup_step!(cx, "component_init", {
         gpui_kit::init(cx);
     });
 
-    // After gpui_kit::init: devtools registers its inspector renderer last
-    // so kit-provided renderers stay available. No-op unless the feature is
-    // compiled in; toggle with ctrl-alt-i (cmd-alt-i on macOS).
+    // After gpui_kit::init so kit-provided renderers stay available; no-op
+    // unless the devtools feature is compiled in.
     #[cfg(feature = "devtools")]
     startup_step!(cx, "devtools_init", {
         gpui_devtools::init(cx);
@@ -79,10 +84,6 @@ pub fn init(cx: &mut App) {
     }
     crate::lifecycle::write_crash_marker();
 
-    startup_step!(cx, "logging_init", {
-        crate::logging::initialize(cx);
-    });
-
     // Best-effort per-user gpui-starter:// registration; never block startup.
     #[cfg(target_os = "windows")]
     startup_step!(cx, "deep_link_registration", {
@@ -100,27 +101,28 @@ pub fn init(cx: &mut App) {
         crate::capabilities::initialize(cx);
     });
 
-    const DEFAULT_ENABLED_CAPABILITIES: &[&str] = &[
-        "app_state",
-        "deep_links",
-        "diagnostics",
-        "notification_inbox",
-        "background_tasks",
-        "status_bar",
-        "connectivity",
-        "session",
-        "first_run",
-        "launcher",
-        "app_menu",
-        "command_registry",
-        "wgpu_embed",
-        "canvas_shaders",
-        "music_playback",
-        "tutorial",
+    use crate::capabilities::Capability;
+    const DEFAULT_ENABLED_CAPABILITIES: &[Capability] = &[
+        Capability::APP_STATE,
+        Capability::DEEP_LINKS,
+        Capability::DIAGNOSTICS,
+        Capability::NOTIFICATION_INBOX,
+        Capability::BACKGROUND_TASKS,
+        Capability::STATUS_BAR,
+        Capability::CONNECTIVITY,
+        Capability::SESSION,
+        Capability::FIRST_RUN,
+        Capability::LAUNCHER,
+        Capability::APP_MENU,
+        Capability::COMMAND_REGISTRY,
+        Capability::WGPU_EMBED,
+        Capability::CANVAS_SHADERS,
+        Capability::MUSIC_PLAYBACK,
+        Capability::TUTORIAL,
     ];
-    for &name in DEFAULT_ENABLED_CAPABILITIES {
+    for capability in DEFAULT_ENABLED_CAPABILITIES {
         crate::capabilities::set(
-            name,
+            *capability,
             crate::capabilities::CapabilityStatus::supported_enabled(),
             cx,
         );
@@ -130,7 +132,7 @@ pub fn init(cx: &mut App) {
     // Offscreen wgpu is native-only; the wasm page renders a reason panel.
     #[cfg(target_family = "wasm")]
     crate::capabilities::set(
-        crate::features::wgpu::CAPABILITY_WGPU,
+        crate::capabilities::Capability::WGPU_EMBED,
         crate::capabilities::CapabilityStatus {
             supported: false,
             enabled: false,
@@ -146,7 +148,7 @@ pub fn init(cx: &mut App) {
     // The shader canvas rides the same native-only bridge.
     #[cfg(target_family = "wasm")]
     crate::capabilities::set(
-        crate::views::CAPABILITY_SHADERS,
+        crate::capabilities::Capability::CANVAS_SHADERS,
         crate::capabilities::CapabilityStatus {
             supported: false,
             enabled: false,
@@ -168,18 +170,15 @@ pub fn init(cx: &mut App) {
     gpui_form::i18n::init(cx);
 
     let persisted = crate::app_state::config(cx);
-    let locale_to_use = if persisted.locale.is_empty() {
-        system_locale
-    } else {
-        persisted.locale.clone()
-    };
+    // None = follow the OS locale until a locale is chosen explicitly.
+    let locale_to_use = persisted.locale.unwrap_or(system_locale);
     set_locale(&locale_to_use, cx);
 
     // After set_locale so the wasm reason string is captured already
     // localized; the default-list loop above runs before it.
     #[cfg(target_family = "wasm")]
     crate::capabilities::set(
-        "image_editor",
+        crate::capabilities::Capability::IMAGE_EDITOR,
         crate::capabilities::CapabilityStatus::degraded(crate::i18n::localize(
             "image_editor_no_picker",
         )),
@@ -187,18 +186,17 @@ pub fn init(cx: &mut App) {
     );
     #[cfg(not(target_family = "wasm"))]
     crate::capabilities::set(
-        "image_editor",
+        crate::capabilities::Capability::IMAGE_EDITOR,
         crate::capabilities::CapabilityStatus::supported_enabled(),
         cx,
     );
 
     // Embedded themes are the bundle's only portable theme source; they
     // register before any registry lookup, on native and wasm alike.
-    let persisted_theme = persisted.theme.clone();
     crate::app::theme::register_embedded_themes(cx);
     if let Some(theme) = gpui_kit::component::ThemeRegistry::global(cx)
         .themes()
-        .get(persisted_theme.as_str())
+        .get(persisted.theme.as_str())
         .cloned()
     {
         gpui_kit::component::Theme::update(cx, |t| t.apply_config(&theme));
@@ -228,8 +226,7 @@ pub fn init(cx: &mut App) {
     }
 
     if let Some(show) = persisted.scrollbar_show {
-        // set_scrollbar_mode routes through Theme::update, which projects the
-        // mode onto the Base scrollbar and refreshes windows.
+        // Routes through Theme::update, which already refreshes every window.
         gpui_kit::component::Theme::set_scrollbar_mode(show, cx);
     }
 
@@ -260,7 +257,7 @@ pub fn init(cx: &mut App) {
     });
 
     cx.set_global(crate::events::AppEventQueue::default());
-    cx.set_global(crate::launcher::LauncherOpen(false));
+    cx.set_global(crate::features::command_palette::LauncherOpen(false));
     startup_step!(cx, "runtime_services_init", {
         crate::tasks::initialize(cx);
         crate::error_surface::initialize(cx);
@@ -286,47 +283,10 @@ pub fn init(cx: &mut App) {
         crate::audio::initialize(cx);
         crate::features::tutorial::initialize(cx);
 
-        // SQLite is native-only; wasm storage is never available.
+        // SQLite is native-only; storage::initialize migrates on a background
+        // task and reports its own outcome and startup errors.
         #[cfg(not(target_family = "wasm"))]
-        {
-            crate::lifecycle::set_startup_step("db_migrations", cx);
-            let migrations_t = std::time::Instant::now();
-            if let Some(snapshot) = cx.try_global::<crate::storage::StorageSnapshot>()
-                && snapshot.available
-            {
-                let db_path = std::path::PathBuf::from(snapshot.db_path.clone());
-                match rusqlite::Connection::open(&db_path) {
-                    Ok(conn) => match crate::db_migrations::run_migrations(&conn) {
-                        Ok(version) => {
-                            tracing::info!(
-                                target: "gpui_starter::startup",
-                                version,
-                                elapsed_ms = migrations_t.elapsed().as_millis() as u64,
-                                "db_migrations complete"
-                            );
-                        }
-                        Err(err) => {
-                            tracing::error!(
-                                target: "gpui_starter::startup",
-                                error = %err,
-                                "db_migrations failed"
-                            );
-                            crate::lifecycle::set_startup_error(
-                                format!("migration failed: {err}"),
-                                cx,
-                            );
-                        }
-                    },
-                    Err(err) => {
-                        tracing::error!(
-                            target: "gpui_starter::startup",
-                            error = %err,
-                            "failed to open db for migrations"
-                        );
-                    }
-                }
-            }
-        }
+        crate::lifecycle::set_startup_step("db_migrations", cx);
 
         crate::telemetry::initialize(cx);
     });
@@ -336,8 +296,25 @@ pub fn init(cx: &mut App) {
         .detach();
     crate::app::window::install_close_tracker(cx);
     crate::crash_report::initialize(cx);
-    if previous_crash.is_some() {
-        crate::crash_report::upload_pending_reports(cx);
+    // The panic hook writes files; only the sqlite table feeds the uploader.
+    // Native storage boots in the background, so these wait for its global.
+    #[cfg(not(target_family = "wasm"))]
+    {
+        let had_previous_crash = previous_crash.is_some();
+        cx.observe_global::<crate::storage::StorageRuntime>(move |cx| {
+            crate::crash_report::ingest_pending_reports(cx);
+            if had_previous_crash {
+                crate::crash_report::upload_pending_reports(cx);
+            }
+        })
+        .detach();
+    }
+    #[cfg(target_family = "wasm")]
+    {
+        crate::crash_report::ingest_pending_reports(cx);
+        if previous_crash.is_some() {
+            crate::crash_report::upload_pending_reports(cx);
+        }
     }
     crate::telemetry::record_event("app_runtime_initialized", cx);
     crate::notifications::inbox::initialize(cx);
@@ -347,10 +324,6 @@ pub fn init(cx: &mut App) {
     crate::features::pages::desktop_widgets::init(cx);
     crate::features::notch::init(cx);
     crate::features::pages::floating_ui::init(cx);
-    crate::notifications::set_native_notifications_enabled(
-        persisted.native_notifications_enabled,
-        cx,
-    );
     crate::services::updater::initialize(cx);
     crate::services::updater::check_pending_swap(cx);
 
@@ -363,7 +336,8 @@ pub fn init(cx: &mut App) {
 
     cx.bind_keys([
         crate::app::keys::binding(crate::app::keys::TOGGLE_SEARCH, ToggleSearch, None, cx),
-        KeyBinding::new("/", ToggleSearch, None),
+        // !Input: a bare "/" must type into a text field, not open the launcher.
+        KeyBinding::new("/", ToggleSearch, Some("!Input")),
         crate::app::keys::binding(
             crate::app::keys::TOGGLE_QUICK_FLOAT,
             crate::shortcuts::ToggleQuickFloat,
@@ -384,13 +358,40 @@ pub fn init(cx: &mut App) {
         crate::shortcuts::trigger(crate::shortcuts::QUICK_FLOAT, cx);
     });
 
+    // Runs on every quit path (Quit action, last window close, tray); the
+    // sync body executes before App::shutdown clears the window list.
+    cx.on_app_quit(|cx| {
+        crate::lifecycle::set_stage(crate::lifecycle::LifecycleStage::ShuttingDown, cx);
+        crate::lifecycle::set_shutdown_step("flush_window_bounds", cx);
+        crate::root::flush_window_bounds(cx);
+        crate::lifecycle::set_shutdown_step("stop_ipc", cx);
+        crate::single_instance::shutdown(cx);
+        crate::lifecycle::set_shutdown_step("stop_watchers", cx);
+        crate::desktop_actions::shutdown(cx);
+        crate::lifecycle::set_shutdown_step("unregister_shortcuts", cx);
+        crate::shortcuts::shutdown(cx);
+        crate::lifecycle::set_shutdown_step("flush_config", cx);
+        crate::app_state::force_save(cx);
+        crate::lifecycle::set_shutdown_step("flush_storage", cx);
+        crate::storage::shutdown(cx);
+        crate::lifecycle::set_shutdown_step("flush_telemetry", cx);
+        crate::telemetry::record_event("app_shutdown_requested", cx);
+        crate::telemetry::shutdown(cx);
+        crate::lifecycle::set_shutdown_step("flush_logs", cx);
+        crate::logging::shutdown(cx);
+        crate::lifecycle::set_shutdown_step("flush_crash_reports", cx);
+        // Returned as the quit future: App::shutdown awaits it (bounded
+        // internally) so the process cannot exit mid-upload.
+        let crash_flush = crate::crash_report::shutdown(cx);
+        crate::lifecycle::set_shutdown_step("remove_crash_marker", cx);
+        crate::lifecycle::remove_crash_marker();
+        crash_flush
+    })
+    .detach();
+
     cx.on_action(|_: &Quit, cx| {
         crate::lifecycle::set_shutdown_step("begin_shutdown", cx);
         crate::lifecycle::set_stage(crate::lifecycle::LifecycleStage::ShuttingDown, cx);
-
-        // Persist the final window position even if the debounce has not fired.
-        crate::lifecycle::set_shutdown_step("flush_window_bounds", cx);
-        crate::root::flush_window_bounds(cx);
 
         crate::lifecycle::set_shutdown_step("drain_tasks", cx);
 
@@ -399,26 +400,12 @@ pub fn init(cx: &mut App) {
         cx.spawn(async move |cx| {
             drain.await;
 
+            // The final crash flush is awaited here because on_app_quit
+            // futures only get gpui's 200ms SHUTDOWN_TIMEOUT.
+            let crash_flush = cx.update(crate::crash_report::shutdown);
+            crash_flush.await;
+
             cx.update(|cx| {
-                crate::lifecycle::set_shutdown_step("stop_ipc", cx);
-                crate::single_instance::shutdown(cx);
-                crate::lifecycle::set_shutdown_step("stop_watchers", cx);
-                crate::desktop_actions::shutdown(cx);
-                crate::lifecycle::set_shutdown_step("unregister_shortcuts", cx);
-                crate::shortcuts::shutdown(cx);
-                crate::lifecycle::set_shutdown_step("flush_config", cx);
-                crate::app_state::force_save(cx);
-                crate::lifecycle::set_shutdown_step("flush_storage", cx);
-                crate::storage::shutdown(cx);
-                crate::lifecycle::set_shutdown_step("flush_telemetry", cx);
-                crate::telemetry::record_event("app_shutdown_requested", cx);
-                crate::telemetry::shutdown(cx);
-                crate::lifecycle::set_shutdown_step("flush_logs", cx);
-                crate::logging::shutdown(cx);
-                crate::lifecycle::set_shutdown_step("flush_crash_reports", cx);
-                crate::crash_report::shutdown(cx);
-                crate::lifecycle::set_shutdown_step("remove_crash_marker", cx);
-                crate::lifecycle::remove_crash_marker();
                 crate::lifecycle::set_shutdown_step("quit", cx);
                 cx.quit();
             });
@@ -493,13 +480,13 @@ pub fn init(cx: &mut App) {
     cx.on_action(|_: &OpenDiagnostics, cx| {
         crate::events::emit(
             crate::events::AppEventKind::Navigate(crate::routes::AppRoute::page(
-                crate::sidebar::Page::Diagnostics,
+                crate::page::Page::Diagnostics,
             )),
             cx,
         );
     });
     #[cfg(debug_assertions)]
-    cx.on_action(|_: &TriggerTestPanic, _cx| {
+    cx.on_action(|_: &TriggerTestPanic, _| {
         panic!("gpui-starter test panic action");
     });
     cx.on_action(|command: &ExecuteCommand, cx| {

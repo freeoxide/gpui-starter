@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use gpui_kit::{App, BorrowAppContext as _, Global};
 use opentelemetry::global;
+use serde::{Deserialize, Serialize};
 
 use sink::{DisabledSink, LocalSink, RemoteSink};
 
@@ -17,8 +18,9 @@ const ENV_OTLP_ENDPOINT: &str = "OTEL_EXPORTER_OTLP_ENDPOINT";
 #[cfg(feature = "otlp")]
 const SERVICE_NAME: &str = "gpui-starter";
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TelemetryMode {
+    #[default]
     Disabled,
     LocalOnly,
     Remote,
@@ -32,20 +34,18 @@ pub struct TelemetrySnapshot {
     pub mode: TelemetryMode,
     pub endpoint_redacted: Option<String>,
     pub events_recorded: u64,
-    pub last_export_error: Option<String>,
     pub last_error: Option<String>,
 }
 
 impl Default for TelemetrySnapshot {
     fn default() -> Self {
         Self {
-            compiled: true,
+            compiled: cfg!(feature = "otlp"),
             consented: false,
             enabled: false,
             mode: TelemetryMode::Disabled,
             endpoint_redacted: None,
             events_recorded: 0,
-            last_export_error: None,
             last_error: None,
         }
     }
@@ -83,6 +83,12 @@ pub fn initialize(cx: &mut App) {
     set_capability(&snapshot, cx);
     cx.set_global(snapshot);
     cx.set_global(runtime);
+    // Consent is persisted; re-apply it so an opt-in survives restarts.
+    // with_config falls back to Disabled (the opt-in default) without a store.
+    let persisted = crate::app_state::with_config(cx, |config| config.telemetry_mode.clone());
+    if persisted != TelemetryMode::Disabled {
+        set_mode(persisted, true, None, cx);
+    }
 }
 
 pub fn snapshot(cx: &App) -> TelemetrySnapshot {
@@ -97,34 +103,39 @@ pub fn set_mode(mode: TelemetryMode, consented: bool, endpoint: Option<&str>, cx
     let resolved = resolve_otlp_endpoint(endpoint);
     let endpoint_redacted = redact_endpoint(&resolved);
     let enabled = consented && mode != TelemetryMode::Disabled;
+    let compiled = cfg!(feature = "otlp");
 
-    let (sink, connection_error): (Arc<dyn TelemetrySink>, Option<String>) =
-        match (&mode, consented) {
-            (TelemetryMode::Disabled, _) | (_, false) => (Arc::new(DisabledSink), None),
-            (TelemetryMode::LocalOnly, true) => (Arc::new(LocalSink), None),
-            (TelemetryMode::Remote, true) => {
-                // install_batch spawns its batching task on the ambient tokio
-                // runtime; GPUI threads run outside any, so hand it the shared one.
-                let shared = crate::services::tokio_runtime::handle(cx);
-                let sink = RemoteSink::new(&resolved, shared.map(|rt| rt.handle().clone()));
-                let err = if sink.connected {
-                    None
-                } else {
-                    Some(format!("failed to connect OTLP exporter to {resolved}"))
-                };
-                (Arc::new(sink), err)
-            }
-        };
+    crate::app_state::update_config(cx, |config| config.telemetry_mode = mode.clone());
+
+    let (sink, install_error): (Arc<dyn TelemetrySink>, Option<String>) = match (&mode, consented) {
+        (TelemetryMode::Disabled, _) | (_, false) => (Arc::new(DisabledSink), None),
+        (TelemetryMode::LocalOnly, true) => (Arc::new(LocalSink), None),
+        (TelemetryMode::Remote, true) => {
+            // install_batch spawns its batching task on the ambient tokio
+            // runtime; GPUI threads run outside any, so hand it the shared one.
+            let shared = crate::services::tokio_runtime::handle(cx);
+            let sink = RemoteSink::new(&resolved, shared.map(|rt| rt.handle().clone()));
+            let err = if sink.provider_installed {
+                None
+            } else if compiled {
+                Some(format!("failed to install OTLP exporter for {resolved}"))
+            } else {
+                Some(format!(
+                    "OTLP export not compiled in (rebuild with --features otlp); endpoint {resolved} unused"
+                ))
+            };
+            (Arc::new(sink), err)
+        }
+    };
 
     let next = TelemetrySnapshot {
-        compiled: true,
+        compiled,
         consented,
         enabled,
-        mode: mode.clone(),
+        mode,
         endpoint_redacted,
         events_recorded: snapshot(cx).events_recorded,
-        last_export_error: connection_error,
-        last_error: None,
+        last_error: install_error,
     };
 
     tracing::info!(
@@ -164,19 +175,30 @@ pub fn set_user_property(key: &str, value: &str, cx: &mut App) {
     });
 }
 
+/// Flush off the UI thread: the OTLP force_flush blocks on the collector, so
+/// the outcome is written back to the snapshot when the background work ends.
 pub fn flush(cx: &mut App) {
     with_runtime(cx, |runtime, cx| {
-        cx.update_global::<TelemetrySnapshot, _>(|snap, _cx| {
-            if let Err(err) = runtime.sink.flush() {
-                snap.last_export_error = Some(err.to_string());
-                snap.last_error = Some(err.to_string());
-            }
-        });
+        let sink = runtime.sink.clone();
+        let executor = cx.background_executor().clone();
+        cx.spawn(async move |cx| {
+            let result = executor.spawn(async move { sink.flush() }).await;
+            let outcome = match result {
+                Ok(()) => None,
+                Err(err) => Some(err.to_string()),
+            };
+            let _ = cx.update(|cx| {
+                cx.update_global::<TelemetrySnapshot, _>(|snap, _cx| snap.last_error = outcome);
+                set_capability(&snapshot(cx), cx);
+            });
+        })
+        .detach();
     });
 }
 
 /// Flush pending telemetry and permanently shut down the global tracer
-/// provider. Safe to call repeatedly; later calls are no-ops.
+/// provider. Safe to call repeatedly; later calls are no-ops. The flush is
+/// fire-and-forget: quit never waits on the collector.
 pub fn shutdown(cx: &mut App) {
     let state = snapshot(cx);
     tracing::debug!(
@@ -187,6 +209,8 @@ pub fn shutdown(cx: &mut App) {
         "telemetry shutdown requested"
     );
     flush(cx);
+    #[cfg(feature = "otlp")]
+    sink::shutdown_pipeline();
     // The only place shutdown_tracer_provider() may be called.
     global::shutdown_tracer_provider();
 }
@@ -216,16 +240,14 @@ fn handle_record_result(result: Result<(), TelemetryError>, cx: &mut App) {
             snap.events_recorded = snap.events_recorded.saturating_add(1);
             snap.last_error = None;
         }
-        Err(err) => {
-            snap.last_export_error = Some(err.to_string());
-            snap.last_error = Some(err.to_string());
-        }
+        Err(err) => snap.last_error = Some(err.to_string()),
     });
+    set_capability(&snapshot(cx), cx);
 }
 
 fn set_capability(snapshot: &TelemetrySnapshot, cx: &mut App) {
     crate::capabilities::set(
-        "telemetry",
+        crate::capabilities::Capability::TELEMETRY,
         crate::capabilities::CapabilityStatus {
             supported: snapshot.compiled,
             enabled: snapshot.enabled,

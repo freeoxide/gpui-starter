@@ -9,6 +9,7 @@ pub(crate) enum SystemOp {
     SetBrightness {
         level: f32,
     },
+    // Only the Linux backend reads `powered`; the others no-op the op.
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     SetBluetoothPowered {
         powered: bool,

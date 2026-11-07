@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
@@ -63,7 +63,19 @@ pub struct DesktopActionsState {
 
 struct DesktopActionsInner {
     next_watcher_id: u64,
-    watchers: BTreeMap<u64, RecommendedWatcher>,
+    // Keyed by canonical path so repeated clicks reuse one OS watcher.
+    watchers: BTreeMap<PathBuf, WatcherEntry>,
+    // Linux X11/Wayland host the clipboard inside the owning instance; one
+    // retained Clipboard keeps copied text pasteable for the app's lifetime.
+    #[cfg(not(target_family = "wasm"))]
+    clipboard: Option<Clipboard>,
+}
+
+struct WatcherEntry {
+    id: u64,
+    // Held alive to keep notify watching; nothing reads it.
+    #[allow(dead_code)]
+    watcher: RecommendedWatcher,
 }
 
 impl Global for DesktopActionsState {}
@@ -72,7 +84,9 @@ pub fn initialize(cx: &mut App) {
     // Wasm swaps in `navigator.clipboard` (see platform::web::clipboard) and
     // compiles out `open`; path prompts report unavailable, watchers never fire.
     #[cfg(not(target_family = "wasm"))]
-    let clipboard_ok = Clipboard::new().is_ok();
+    let clipboard = Clipboard::new();
+    #[cfg(not(target_family = "wasm"))]
+    let clipboard_ok = clipboard.is_ok();
     #[cfg(target_family = "wasm")]
     let clipboard_ok = crate::platform::web::clipboard::is_available();
     let mut snapshot = DesktopActionsSnapshot {
@@ -88,12 +102,14 @@ pub fn initialize(cx: &mut App) {
         Some(err) => crate::capabilities::CapabilityStatus::degraded(err),
         None => crate::capabilities::CapabilityStatus::supported_enabled(),
     };
-    crate::capabilities::set("desktop_actions", status, cx);
+    crate::capabilities::set(crate::capabilities::Capability::DESKTOP_ACTIONS, status, cx);
     cx.set_global(DesktopActionsState {
         snapshot,
         inner: Arc::new(Mutex::new(DesktopActionsInner {
             next_watcher_id: 1,
             watchers: BTreeMap::new(),
+            #[cfg(not(target_family = "wasm"))]
+            clipboard: clipboard.ok(),
         })),
     });
 }
@@ -115,9 +131,7 @@ pub fn copy_text(text: &str, cx: &mut App) -> Result<(), DesktopActionError> {
     }
     #[cfg(not(target_family = "wasm"))]
     {
-        let result = Clipboard::new()
-            .and_then(|mut clipboard| clipboard.set_text(text.to_string()))
-            .map_err(DesktopActionError::from);
+        let result = copy_via_retained_clipboard(text, cx);
         update_result(
             "clipboard_copy",
             result.as_ref().err().map(|e| e.to_string()),
@@ -125,6 +139,24 @@ pub fn copy_text(text: &str, cx: &mut App) -> Result<(), DesktopActionError> {
         );
         result
     }
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn copy_via_retained_clipboard(text: &str, cx: &mut App) -> Result<(), DesktopActionError> {
+    let state = cx
+        .try_global::<DesktopActionsState>()
+        .ok_or(DesktopActionError::Unavailable)?;
+    let mut inner = state
+        .inner
+        .lock()
+        .map_err(|_| DesktopActionError::LockPoisoned)?;
+    let clipboard = inner
+        .clipboard
+        .as_mut()
+        .ok_or(DesktopActionError::Unavailable)?;
+    clipboard
+        .set_text(text.to_string())
+        .map_err(DesktopActionError::from)
 }
 
 pub fn copy_diagnostics(cx: &mut App) -> Result<(), DesktopActionError> {
@@ -343,6 +375,20 @@ fn commit_pick_outcome(
 }
 
 fn watch_path(path: PathBuf, cx: &mut App) -> Result<u64, DesktopActionError> {
+    let result = register_watcher(&path, cx);
+    match &result {
+        Ok(watcher_id) => tracing::info!(
+            target: "gpui_starter::desktop_actions",
+            watcher_id,
+            path = %path.display(),
+            "watcher registered"
+        ),
+        Err(err) => update_result("watch_path", Some(err.to_string()), cx),
+    }
+    result
+}
+
+fn register_watcher(path: &Path, cx: &mut App) -> Result<u64, DesktopActionError> {
     let state = cx
         .try_global::<DesktopActionsState>()
         .ok_or(DesktopActionError::Unavailable)?;
@@ -350,6 +396,11 @@ fn watch_path(path: PathBuf, cx: &mut App) -> Result<u64, DesktopActionError> {
         .inner
         .lock()
         .map_err(|_| DesktopActionError::LockPoisoned)?;
+    // Canonicalize fails for a missing directory; `watch` reports that below.
+    let key = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    if let Some(entry) = inner.watchers.get(&key) {
+        return Ok(entry.id);
+    }
     let watcher_id = inner.next_watcher_id;
     inner.next_watcher_id += 1;
 
@@ -371,16 +422,21 @@ fn watch_path(path: PathBuf, cx: &mut App) -> Result<u64, DesktopActionError> {
         })
         .map_err(DesktopActionError::from)?;
     watcher
-        .watch(&path, RecursiveMode::NonRecursive)
+        .watch(path, RecursiveMode::NonRecursive)
         .map_err(DesktopActionError::from)?;
-    inner.watchers.insert(watcher_id, watcher);
+    inner.watchers.insert(
+        key,
+        WatcherEntry {
+            id: watcher_id,
+            watcher,
+        },
+    );
     let active_watchers = inner.watchers.len();
     drop(inner);
     cx.update_global::<DesktopActionsState, _>(|state, _cx| {
         state.snapshot.active_watchers = active_watchers;
         state.snapshot.last_error = None;
     });
-    tracing::info!(target: "gpui_starter::desktop_actions", watcher_id, path = %path.display(), "watcher registered");
     Ok(watcher_id)
 }
 
@@ -406,37 +462,21 @@ pub fn watch_config_dir(cx: &mut App) -> Result<u64, DesktopActionError> {
     watch_path(path, cx)
 }
 
-fn unwatch_path(id: u64, cx: &mut App) -> bool {
-    let Some(state) = cx.try_global::<DesktopActionsState>() else {
-        return false;
+pub fn unwatch_all(cx: &mut App) -> usize {
+    let Some(state) = cx.try_global::<DesktopActionsState>().cloned() else {
+        return 0;
     };
-    let (removed, active_watchers) = if let Ok(mut inner) = state.inner.lock() {
-        let removed = inner.watchers.remove(&id).is_some();
-        (removed, inner.watchers.len())
-    } else {
-        return false;
+    let count = match state.inner.lock() {
+        Ok(mut inner) => {
+            let count = inner.watchers.len();
+            inner.watchers.clear();
+            count
+        }
+        Err(_) => 0,
     };
     cx.update_global::<DesktopActionsState, _>(|state, _cx| {
-        state.snapshot.active_watchers = active_watchers;
+        state.snapshot.active_watchers = 0;
     });
-    removed
-}
-
-pub fn unwatch_all(cx: &mut App) -> usize {
-    let state = match cx.try_global::<DesktopActionsState>().cloned() {
-        Some(state) => state,
-        None => return 0,
-    };
-    let watcher_ids = state
-        .inner
-        .lock()
-        .ok()
-        .map(|inner| inner.watchers.keys().copied().collect::<Vec<_>>())
-        .unwrap_or_default();
-    let count = watcher_ids.len();
-    for watcher_id in watcher_ids {
-        let _ = unwatch_path(watcher_id, cx);
-    }
     count
 }
 
@@ -533,6 +573,7 @@ fn update_result(action: &str, error: Option<String>, cx: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gpui_kit::TestAppContext;
 
     #[test]
     fn pick_file_options_requests_a_single_file() {
@@ -580,5 +621,46 @@ mod tests {
             path_outcome(Err(anyhow::anyhow!("no panel"))),
             PickOutcome::Failed(_)
         ));
+    }
+
+    #[gpui_kit::test]
+    async fn watching_the_same_path_twice_keeps_one_watcher(cx: &mut TestAppContext) {
+        let first_dir = tempfile::tempdir().expect("temp dir");
+        let second_dir = tempfile::tempdir().expect("temp dir");
+        cx.update(|app| {
+            crate::error_surface::initialize(app);
+            initialize(app);
+            let first = watch_path(first_dir.path().to_path_buf(), app).expect("first watch");
+            let repeat = watch_path(first_dir.path().to_path_buf(), app).expect("repeat watch");
+            assert_eq!(first, repeat, "a repeated path must reuse its watcher");
+            let second = watch_path(second_dir.path().to_path_buf(), app).expect("second watch");
+            assert_ne!(first, second, "distinct paths need distinct watcher ids");
+            assert_eq!(snapshot(app).active_watchers, 2);
+            assert_eq!(unwatch_all(app), 2);
+            assert_eq!(snapshot(app).active_watchers, 0);
+        });
+    }
+
+    #[gpui_kit::test]
+    async fn watching_a_missing_directory_reports_the_failure(cx: &mut TestAppContext) {
+        cx.update(|app| {
+            crate::error_surface::initialize(app);
+            initialize(app);
+            let missing = std::env::temp_dir().join("gpui-starter-desktop-actions-missing");
+            let result = watch_path(missing, app);
+            assert!(result.is_err(), "watching a missing directory must fail");
+            let snap = snapshot(app);
+            assert_eq!(snap.active_watchers, 0);
+            let error = snap.last_error.expect("failure must land in last_error");
+            assert!(error.contains("watcher"), "unexpected error: {error}");
+            let surface = app
+                .try_global::<crate::error_surface::ErrorSurfaceState>()
+                .expect("error surface state");
+            assert_eq!(
+                surface.records.len(),
+                1,
+                "failure must reach the error surface"
+            );
+        });
     }
 }

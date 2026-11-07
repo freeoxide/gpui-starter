@@ -2,7 +2,7 @@
 //! public surface; the session, tools, net thread, and fake peers stay
 //! private. Removal = delete this directory, the collab-protocol and
 //! collab-server workspace members, and revert the seam touches: the
-//! Page::MultiuserCanvas arms and all() entry in shell/sidebar.rs, the
+//! Page::MultiuserCanvas arms and all() entry in shell/page.rs, the
 //! VALID_HOSTS entry in shell/route.rs, the AppRoot wiring in
 //! shell/root/app_root/state.rs, the mod/pub use lines in
 //! features/pages/mod.rs, the nav/multiuser locale keys, the page count in
@@ -20,8 +20,7 @@ pub(crate) mod net;
 
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::{h_flex, v_flex};
-use gpui_kit::prelude::*;
-use gpui_kit::*;
+use gpui_kit::{prelude::*, *};
 
 use crate::ui::canvas::CanvasState;
 
@@ -130,7 +129,7 @@ impl Render for MultiuserCanvasPage {
                     .p_6()
                     .gap_4()
                     .flex_shrink_0()
-                    .child(view::render_header(status, cx))
+                    .child(view::render_header(status))
                     .child(view::render_toolbar(
                         &self.session,
                         &self.canvas,

@@ -20,7 +20,7 @@ pub(crate) fn publish(id: &'static str, bounds: Bounds<Pixels>, cx: &mut App) ->
         let registry = cx.default_global::<TargetRegistry>();
         if registry
             .bounds
-            .get(&id)
+            .get(id)
             .is_some_and(|stored| *stored == bounds)
         {
             return false;
@@ -67,8 +67,8 @@ impl IntoElement for TourTarget {
     }
 }
 
-// Delegation shape from gpui-pre 0.3.9 elements/animation.rs: returning the
-// child's LayoutId makes the bounds passed to this prepaint the child's own.
+// Delegation shape from gpui's elements/animation.rs: returning the child's
+// LayoutId makes the bounds passed to this prepaint the child's own.
 impl Element for TourTarget {
     type RequestLayoutState = AnyElement;
     type PrepaintState = ();

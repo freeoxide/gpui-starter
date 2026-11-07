@@ -26,11 +26,8 @@ pub fn write_text_fire_and_forget(text: &str) {
 /// property `undefined` in insecure contexts despite the web-sys typing.
 fn clipboard_handle() -> Option<web_sys::Clipboard> {
     let navigator = web_sys::window()?.navigator();
-    let has_clipboard = js_sys::Reflect::has(
-        &JsValue::from(navigator.clone()),
-        &JsValue::from_str("clipboard"),
-    )
-    .unwrap_or(false);
+    let has_clipboard =
+        js_sys::Reflect::has(navigator.as_ref(), &JsValue::from_str("clipboard")).unwrap_or(false);
     if has_clipboard {
         Some(navigator.clipboard())
     } else {
@@ -38,8 +35,8 @@ fn clipboard_handle() -> Option<web_sys::Clipboard> {
     }
 }
 
-/// Attach a rejection logger; the closure is leaked so it outlives the
-/// pending Promise, with nothing to reclaim afterwards.
+/// Attach a rejection logger. Ownership of the closure passes to the JS GC:
+/// the promise reaction holds the only reference once this returns.
 fn log_rejection(promise: &Promise, what: &'static str) {
     let on_reject: Closure<dyn FnMut(JsValue)> = Closure::new(move |err: JsValue| {
         tracing::warn!(
@@ -50,5 +47,5 @@ fn log_rejection(promise: &Promise, what: &'static str) {
         );
     });
     let _ = promise.catch(&on_reject);
-    on_reject.forget();
+    drop(on_reject.into_js_value());
 }

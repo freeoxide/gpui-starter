@@ -1,14 +1,6 @@
 //! Removable desktop-widgets manager. `DesktopWidgetsPage`, `WidgetKind`,
-//! and the spawn setters are the only public surfaces. Removal = delete this
-//! directory and revert its seam touches: the `pub mod desktop_widgets;` and
-//! `pub use` lines in features/pages/mod.rs, the Page::DesktopWidgets arms
-//! and all() entry in shell/sidebar.rs, the VALID_HOSTS entry in
-//! shell/route.rs, the AppRoot wiring in shell/root/app_root/state.rs, the
-//! init call in app/init.rs, the widgets_layout field in
-//! state/config_store.rs plus the snapshot fixtures, the
-//! OpenDesktopWidgets command arms in services/commands.rs, the page count
-//! in tests/e2e_navigation.rs, and the widgets_*/nav_desktop_widgets/
-//! command_desktop_widgets* keys in both locale files.
+//! and the spawn setters are the only public surfaces; the removal recipe
+//! lives in docs/plans/27-desktop-widgets.md.
 
 use std::collections::BTreeMap;
 
@@ -19,11 +11,9 @@ use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex
 use gpui_kit::{prelude::*, *};
 
 use crate::accessibility::A11yExt as _;
+use crate::capabilities::Capability;
 use crate::features::tutorial;
-use crate::ui::floating::{
-    CAPABILITY_ALWAYS_ON_TOP, CAPABILITY_FLOATING_CLICK_THROUGH, CAPABILITY_FLOATING_WINDOWS,
-    CAPABILITY_LAYER_SHELL_INPUT_PASSTHROUGH, CAPABILITY_LAYER_SHELL_WIDGETS, Placement9,
-};
+use crate::ui::floating::Placement9;
 
 mod battery;
 pub mod catalog;
@@ -38,15 +28,13 @@ pub use spawn::{
     set_widget_placement, spawn_persisted, widget_id,
 };
 
-pub const CAPABILITY_DESKTOP_WIDGETS: &str = "desktop_widgets";
-
-const CAPABILITY_KEYS: [&str; 6] = [
-    CAPABILITY_DESKTOP_WIDGETS,
-    CAPABILITY_FLOATING_WINDOWS,
-    CAPABILITY_ALWAYS_ON_TOP,
-    CAPABILITY_FLOATING_CLICK_THROUGH,
-    CAPABILITY_LAYER_SHELL_WIDGETS,
-    CAPABILITY_LAYER_SHELL_INPUT_PASSTHROUGH,
+const CAPABILITY_KEYS: [Capability; 6] = [
+    Capability::DESKTOP_WIDGETS,
+    Capability::FLOATING_WINDOWS,
+    Capability::FLOATING_ALWAYS_ON_TOP,
+    Capability::FLOATING_CLICK_THROUGH,
+    Capability::LAYER_SHELL_WIDGETS,
+    Capability::LAYER_SHELL_INPUT_PASSTHROUGH,
 ];
 
 pub(crate) fn row_kinds(_cx: &App) -> Vec<WidgetKind> {
@@ -293,7 +281,7 @@ impl DesktopWidgetsPage {
                 .child(crate::i18n::localize("widgets_capabilities")),
         );
         for key in CAPABILITY_KEYS {
-            let Some(status) = snapshot.get(key) else {
+            let Some(status) = snapshot.get(&key) else {
                 continue;
             };
             let (state_key, color) = if !status.supported || !status.enabled {
@@ -382,7 +370,7 @@ fn kind_icon(kind: WidgetKind) -> Option<IconName> {
     }
 }
 
-/// Registers CAPABILITY_DESKTOP_WIDGETS (native supported_enabled; wasm
+/// Registers the desktop_widgets row (native supported_enabled; wasm
 /// supported:false, enabled, degraded, overlay reason) and, native only,
 /// runs spawn_persisted. Called once from app::init after floating::init.
 pub fn init(cx: &mut App) {
@@ -396,7 +384,7 @@ pub fn init(cx: &mut App) {
     };
     #[cfg(not(target_family = "wasm"))]
     let status = crate::capabilities::CapabilityStatus::supported_enabled();
-    crate::capabilities::set(CAPABILITY_DESKTOP_WIDGETS, status, cx);
+    crate::capabilities::set(Capability::DESKTOP_WIDGETS, status, cx);
     #[cfg(not(target_family = "wasm"))]
     spawn_persisted(cx);
 }

@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use rusqlite::Connection;
 
 struct Migration {
@@ -61,7 +61,23 @@ const MIGRATIONS: &[Migration] = &[
     },
 ];
 
+/// Recorded schema version, 0 when no migrations are applied. COALESCE over
+/// an aggregate always returns a row, so an error is a real database failure.
+pub(crate) fn schema_version(conn: &Connection) -> rusqlite::Result<u32> {
+    conn.query_row(
+        "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
+        [],
+        |row| row.get(0),
+    )
+}
+
 pub fn run_migrations(conn: &Connection) -> Result<u32> {
+    run_migrations_with(conn, MIGRATIONS)
+}
+
+// `migrations` is a parameter so tests can exercise failure paths the fixed
+// production list cannot reach.
+fn run_migrations_with(conn: &Connection, migrations: &[Migration]) -> Result<u32> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migrations (
             version INTEGER PRIMARY KEY,
@@ -69,24 +85,29 @@ pub fn run_migrations(conn: &Connection) -> Result<u32> {
         );",
     )?;
 
-    let current_version: u32 = conn
-        .query_row(
-            "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
-            [],
-            |row| row.get(0),
-        )
+    let current_version = schema_version(conn)?;
+
+    let latest = migrations
+        .last()
+        .map(|migration| migration.version)
         .unwrap_or(0);
+    if current_version > latest {
+        bail!(
+            "schema version {current_version} is newer than the newest migration ({latest}); \
+             this database was written by a newer build"
+        );
+    }
 
     tracing::info!(
         target: "gpui_starter::db_migrations",
         current_version,
-        pending = MIGRATIONS.len().saturating_sub(current_version as usize),
+        pending = migrations.len().saturating_sub(current_version as usize),
         "checking migrations"
     );
 
     let mut applied = current_version;
 
-    for migration in MIGRATIONS {
+    for migration in migrations {
         if migration.version <= current_version {
             continue;
         }

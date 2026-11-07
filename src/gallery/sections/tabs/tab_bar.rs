@@ -42,11 +42,11 @@ fn max_width_dropdown(ix: usize) -> DropdownButton {
         )
         .dropdown_menu(move |menu: PopupMenu, _, _| {
             MAX_WIDTHS
-                .iter()
+                .into_iter()
                 .enumerate()
                 .fold(menu, |menu, (width_ix, width)| {
                     menu.menu_with_check(
-                        max_width_label(*width),
+                        max_width_label(width),
                         width_ix == ix,
                         max_width_action(width_ix),
                     )

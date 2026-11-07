@@ -1,3 +1,5 @@
+#[cfg(not(target_family = "wasm"))]
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -6,7 +8,7 @@ use gpui_kit::*;
 
 use super::decode::{AudioError, DecodedAudio, decode_bytes};
 #[cfg(not(target_family = "wasm"))]
-use super::output::{self, OutputSession};
+use super::output;
 use super::peaks::WaveformPeaks;
 use super::transport::SharedTransport;
 use crate::ui::waveform::{DEFAULT_RETENTION, SampleProducer, WaveformState};
@@ -33,6 +35,8 @@ pub struct AudioMeta {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OutputDevice {
+    /// Stable cpal device key; two devices may share a display name.
+    pub id: String,
     pub name: String,
     pub is_default: bool,
 }
@@ -40,7 +44,7 @@ pub struct OutputDevice {
 struct LoadState {
     meta: AudioMeta,
     decoded: Arc<DecodedAudio>,
-    render: Arc<Vec<f32>>,
+    render: Arc<[f32]>,
     render_rate: u32,
     render_channels: usize,
     #[cfg(not(target_family = "wasm"))]
@@ -51,12 +55,45 @@ struct LoadState {
 }
 
 struct PreparedRender {
-    render: Arc<Vec<f32>>,
+    render: Arc<[f32]>,
     render_rate: u32,
     render_channels: usize,
     #[cfg(not(target_family = "wasm"))]
     plan: Option<super::output::StreamPlan>,
-    plan_error: Option<String>,
+    plan_error: Option<AudioError>,
+}
+
+/// Everything a session build needs; the builder runs off-thread.
+#[cfg(not(target_family = "wasm"))]
+struct SessionRequest {
+    wanted_device: Option<String>,
+    render: Arc<[f32]>,
+    render_channels: usize,
+    source_rate: u32,
+    plan: Option<super::output::StreamPlan>,
+    transport: Arc<SharedTransport>,
+    producer: Option<SampleProducer>,
+}
+
+#[cfg(not(target_family = "wasm"))]
+type SessionBuilder =
+    Arc<dyn Fn(SessionRequest) -> Result<Arc<dyn output::SessionSink>, AudioError> + Send + Sync>;
+
+#[cfg(not(target_family = "wasm"))]
+fn native_session(request: SessionRequest) -> Result<Arc<dyn output::SessionSink>, AudioError> {
+    let device = output::find_output_device(request.wanted_device.as_deref())?;
+    let plan = match request.plan {
+        Some(plan) => plan,
+        None => output::plan_stream(&device, request.source_rate)?,
+    };
+    output::build_session(
+        &device,
+        request.render,
+        request.render_channels,
+        plan,
+        request.transport,
+        request.producer,
+    )
 }
 
 enum PlayAction {
@@ -76,12 +113,13 @@ pub struct AudioEngine {
     selected_device: Option<String>,
     meter: Option<Entity<WaveformState>>,
     load_generation: u64,
-    loading: Option<String>,
-    last_error: Option<String>,
+    last_error: Option<AudioError>,
     cached_position_ms: u64,
-    _tick: Task<()>,
+    tick: Option<Task<()>>,
     #[cfg(not(target_family = "wasm"))]
-    session: Option<OutputSession>,
+    session: Option<Arc<dyn output::SessionSink>>,
+    #[cfg(not(target_family = "wasm"))]
+    session_builder: SessionBuilder,
     #[cfg(not(target_family = "wasm"))]
     pending_play: bool,
     #[cfg(not(target_family = "wasm"))]
@@ -90,17 +128,6 @@ pub struct AudioEngine {
 
 impl AudioEngine {
     pub fn new(cx: &mut Context<Self>) -> Self {
-        let tick = cx.spawn(async move |this, cx| {
-            loop {
-                cx.background_executor().timer(TICK_INTERVAL).await;
-                if this
-                    .update(cx, |engine, cx| engine.refresh_from_transport(cx))
-                    .is_err()
-                {
-                    break;
-                }
-            }
-        });
         Self {
             load: None,
             status: None,
@@ -109,12 +136,13 @@ impl AudioEngine {
             selected_device: None,
             meter: None,
             load_generation: 0,
-            loading: None,
             last_error: None,
             cached_position_ms: 0,
-            _tick: tick,
+            tick: Some(Self::spawn_tick(cx)),
             #[cfg(not(target_family = "wasm"))]
             session: None,
+            #[cfg(not(target_family = "wasm"))]
+            session_builder: Arc::new(native_session),
             #[cfg(not(target_family = "wasm"))]
             pending_play: false,
             #[cfg(not(target_family = "wasm"))]
@@ -122,38 +150,56 @@ impl AudioEngine {
         }
     }
 
-    /// Async load: sets Loading, decodes and builds peaks off-thread, then
-    /// prepares the render buffer. Replaces any previous load; decode
-    /// failures land in `last_error` and leave the previous load intact.
+    fn spawn_tick(cx: &mut Context<Self>) -> Task<()> {
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(TICK_INTERVAL).await;
+                let still_live = this
+                    .update(cx, |engine, cx| engine.refresh_from_transport(cx))
+                    .unwrap_or(false);
+                if !still_live {
+                    break;
+                }
+            }
+        })
+    }
+
+    /// Restarts the tick after it parked itself; call whenever playback starts.
+    fn wake_tick(&mut self, cx: &mut Context<Self>) {
+        if self.tick.is_none() {
+            self.tick = Some(Self::spawn_tick(cx));
+        }
+    }
+
+    /// Sets Loading, decodes and builds peaks off-thread, then prepares the render.
+    /// Success replaces the current load; a decode failure keeps it and sets `last_error`.
     pub fn load_bytes(&mut self, name: &str, bytes: Vec<u8>, cx: &mut Context<Self>) {
         let owned_name = name.to_string();
         let task =
             cx.background_spawn(async move { decode_bytes(&owned_name, bytes).map(with_peaks) });
-        self.start_load(cx, name.to_string(), task);
+        self.start_load(cx, task);
         cx.notify();
     }
 
-    /// Native only; wasm callers get `last_error()` = Unavailable.
+    /// Native only: reads the file off-thread, then loads it like [`Self::load_bytes`].
     #[cfg(not(target_family = "wasm"))]
     pub fn load_path(&mut self, path: PathBuf, cx: &mut Context<Self>) {
         let name = path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
-        let owned_name = name.clone();
         let task = cx.background_spawn(async move {
             std::fs::read(&path)
                 .map_err(|err| AudioError::Decode(err.to_string()))
-                .and_then(|bytes| decode_bytes(&owned_name, bytes))
+                .and_then(|bytes| decode_bytes(&name, bytes))
                 .map(with_peaks)
         });
-        self.start_load(cx, name, task);
+        self.start_load(cx, task);
         cx.notify();
     }
 
     pub fn unload(&mut self, cx: &mut Context<Self>) {
         self.load_generation += 1;
-        self.loading = None;
         self.last_error = None;
         #[cfg(not(target_family = "wasm"))]
         {
@@ -178,7 +224,7 @@ impl AudioEngine {
                     let mut paused = true;
                     if let Some(session) = &self.session {
                         if let Err(err) = session.pause() {
-                            self.last_error = Some(err.to_string());
+                            self.last_error = Some(err);
                             paused = false;
                         }
                     }
@@ -205,17 +251,22 @@ impl AudioEngine {
         }
         #[cfg(target_family = "wasm")]
         {
-            self.last_error = Some(AudioError::Unavailable.to_string());
+            self.last_error = Some(AudioError::Unavailable);
         }
         cx.notify();
     }
 
     pub fn stop(&mut self, cx: &mut Context<Self>) {
         #[cfg(not(target_family = "wasm"))]
-        if let Some(session) = &self.session {
-            if let Err(err) = session.pause() {
-                self.last_error = Some(err.to_string());
+        {
+            if let Some(session) = &self.session {
+                if let Err(err) = session.pause() {
+                    self.last_error = Some(err);
+                }
             }
+            // Cancel any queued build: it must not honor a stale pending_play.
+            self.session_generation += 1;
+            self.pending_play = false;
         }
         if let Some(load) = &self.load {
             load.transport.set_playing(false);
@@ -285,8 +336,8 @@ impl AudioEngine {
         self.volume
     }
 
-    pub fn meta(&self) -> Option<AudioMeta> {
-        self.load.as_ref().map(|load| load.meta.clone())
+    pub fn meta(&self) -> Option<&AudioMeta> {
+        self.load.as_ref().map(|load| &load.meta)
     }
 
     pub fn peaks(&self) -> Option<Arc<WaveformPeaks>> {
@@ -294,12 +345,12 @@ impl AudioEngine {
     }
 
     /// Read once per render; cleared on the next successful action.
-    pub fn last_error(&self) -> Option<String> {
-        self.last_error.clone()
+    pub fn last_error(&self) -> Option<&AudioError> {
+        self.last_error.as_ref()
     }
 
-    pub fn devices(&self) -> Vec<OutputDevice> {
-        self.devices.clone()
+    pub fn devices(&self) -> &[OutputDevice] {
+        &self.devices
     }
 
     pub fn selected_device(&self) -> Option<String> {
@@ -327,14 +378,16 @@ impl AudioEngine {
         }
     }
 
-    /// Rebuilds the session on `name` at the saved position. The device
-    /// query, channel adapt, and resample all run off-thread.
+    /// Rebuilds the session on the device whose display name is `name`, keeping
+    /// the position; the device query, channel adapt, and resample run off-thread.
     pub fn select_device(&mut self, name: &str, cx: &mut Context<Self>) {
         #[cfg(not(target_family = "wasm"))]
         {
-            if self.selected_device.as_deref() == Some(name)
-                || !self.devices.iter().any(|device| device.name == name)
-            {
+            let Some(device) = self.devices.iter().find(|device| device.name == name) else {
+                return;
+            };
+            let id = device.id.clone();
+            if self.selected_device.as_deref() == Some(id.as_str()) {
                 return;
             }
             let decoded = self.load.as_ref().map(|load| load.decoded.clone());
@@ -345,15 +398,17 @@ impl AudioEngine {
             let position_secs = self.position_secs();
             self.session = None;
             self.session_generation += 1;
-            self.selected_device = Some(name.to_string());
+            self.selected_device = Some(id.clone());
             if let Some(decoded) = decoded {
                 let generation = self.load_generation;
-                let task = self.spawn_prepare(&decoded, Some(name.to_string()), cx);
+                let replan_device = id.clone();
+                let task = self.spawn_prepare(&decoded, Some(id), cx);
                 cx.spawn(async move |this, cx| {
                     let prepared = task.await;
                     this.update(cx, |engine, cx| {
                         engine.finish_replan(
                             generation,
+                            replan_device,
                             decoded,
                             prepared,
                             position_secs,
@@ -382,9 +437,12 @@ impl AudioEngine {
         }
     }
 
-    fn refresh_from_transport(&mut self, cx: &mut Context<Self>) {
+    /// Mirrors transport state into status. Returns false when nothing is
+    /// playing; the tick then parks until `wake_tick`.
+    fn refresh_from_transport(&mut self, cx: &mut Context<Self>) -> bool {
         let Some(load) = &self.load else {
-            return;
+            self.tick = None;
+            return false;
         };
         let position_ms = (load.transport.cursor_frames() as f64 / load.render_rate as f64 * 1000.)
             .round() as u64;
@@ -395,6 +453,14 @@ impl AudioEngine {
                 .status
                 .is_some_and(|status| status != PlaybackStatus::Stopped)
         {
+            // The stream keeps running silently at EOF; pause it so a later
+            // seek cannot emit audio while the UI reports Stopped.
+            #[cfg(not(target_family = "wasm"))]
+            if let Some(session) = &self.session {
+                if let Err(err) = session.pause() {
+                    self.last_error = Some(err);
+                }
+            }
             self.status = Some(PlaybackStatus::Stopped);
             changed = true;
         } else if self.status == Some(PlaybackStatus::Playing) && !load.transport.is_playing() {
@@ -404,17 +470,20 @@ impl AudioEngine {
         if changed {
             cx.notify();
         }
+        let live = load.transport.is_playing();
+        if !live {
+            self.tick = None;
+        }
+        live
     }
 
     fn start_load(
         &mut self,
         cx: &mut Context<Self>,
-        name: String,
         task: Task<Result<(Arc<DecodedAudio>, Arc<WaveformPeaks>), AudioError>>,
     ) {
         self.load_generation += 1;
         let generation = self.load_generation;
-        self.loading = Some(name);
         self.last_error = None;
         self.status = Some(PlaybackStatus::Loading);
         #[cfg(not(target_family = "wasm"))]
@@ -440,10 +509,9 @@ impl AudioEngine {
         if generation != self.load_generation {
             return;
         }
-        self.loading = None;
         match result {
             Err(err) => {
-                self.last_error = Some(err.to_string());
+                self.last_error = Some(err);
                 if self.load.is_some() {
                     self.status = Some(PlaybackStatus::Stopped);
                     #[cfg(not(target_family = "wasm"))]
@@ -482,6 +550,14 @@ impl AudioEngine {
             return;
         }
         self.detach_meter_source(cx);
+        let PreparedRender {
+            render,
+            render_rate,
+            render_channels,
+            #[cfg(not(target_family = "wasm"))]
+            plan,
+            plan_error,
+        } = prepared;
         let meta = AudioMeta {
             source_name: decoded.source_name().to_string(),
             sample_rate: decoded.sample_rate(),
@@ -491,16 +567,16 @@ impl AudioEngine {
         self.load = Some(LoadState {
             meta,
             decoded,
-            render: prepared.render,
-            render_rate: prepared.render_rate,
-            render_channels: prepared.render_channels,
+            render,
+            render_rate,
+            render_channels,
             #[cfg(not(target_family = "wasm"))]
-            plan: prepared.plan,
+            plan,
             peaks,
             transport: Arc::new(SharedTransport::new(self.volume)),
             producer: None,
         });
-        if let Some(err) = prepared.plan_error {
+        if let Some(err) = plan_error {
             self.last_error = Some(err);
         }
         self.status = Some(PlaybackStatus::Stopped);
@@ -515,6 +591,7 @@ impl AudioEngine {
     fn finish_replan(
         &mut self,
         generation: u64,
+        device: String,
         decoded: Arc<DecodedAudio>,
         prepared: PreparedRender,
         position_secs: f64,
@@ -524,6 +601,10 @@ impl AudioEngine {
         if generation != self.load_generation {
             return;
         }
+        // A newer select_device repointed the engine: this plan is stale.
+        if self.selected_device.as_deref() != Some(device.as_str()) {
+            return;
+        }
         let replanable = self
             .load
             .as_ref()
@@ -531,16 +612,23 @@ impl AudioEngine {
         if !replanable {
             return;
         }
-        if let Some(err) = &prepared.plan_error {
-            self.last_error = Some(err.clone());
+        let PreparedRender {
+            render,
+            render_rate,
+            render_channels,
+            plan,
+            plan_error,
+        } = prepared;
+        if let Some(err) = plan_error {
+            self.last_error = Some(err);
         }
         if let Some(load) = &mut self.load {
-            load.render = prepared.render;
-            load.render_rate = prepared.render_rate;
-            load.render_channels = prepared.render_channels;
-            load.plan = prepared.plan;
+            load.render = render;
+            load.render_rate = render_rate;
+            load.render_channels = render_channels;
+            load.plan = plan;
             load.transport
-                .set_cursor((position_secs * prepared.render_rate as f64) as u64);
+                .set_cursor((position_secs * render_rate as f64) as u64);
             load.transport.set_playing(false);
         }
         self.reconnect_meter(cx);
@@ -554,8 +642,7 @@ impl AudioEngine {
     fn spawn_prepare(
         &mut self,
         decoded: &Arc<DecodedAudio>,
-        #[cfg(not(target_family = "wasm"))] wanted: Option<String>,
-        #[cfg(target_family = "wasm")] wanted: Option<String>,
+        wanted: Option<String>,
         cx: &mut Context<Self>,
     ) -> Task<PreparedRender> {
         let decoded = decoded.clone();
@@ -571,18 +658,31 @@ impl AudioEngine {
                     });
                 let adapted =
                     output::adapt_to_channels(decoded.samples(), decoded.channels(), out_channels);
-                let render = Arc::new(output::resample_linear(
-                    &adapted,
-                    out_channels,
-                    decoded.sample_rate(),
-                    out_rate,
-                ));
-                let plan_error = plan.as_ref().err().map(|err| err.to_string());
+                let render = if out_rate == decoded.sample_rate() {
+                    match adapted {
+                        Cow::Borrowed(_) => decoded.share_samples(),
+                        Cow::Owned(owned) => Arc::from(owned),
+                    }
+                } else {
+                    Arc::from(
+                        output::resample_linear(
+                            &adapted,
+                            out_channels,
+                            decoded.sample_rate(),
+                            out_rate,
+                        )
+                        .into_owned(),
+                    )
+                };
+                let (plan, plan_error) = match plan {
+                    Ok(plan) => (Some(plan), None),
+                    Err(err) => (None, Some(err)),
+                };
                 PreparedRender {
                     render,
                     render_rate: out_rate,
                     render_channels: out_channels,
-                    plan: plan.ok(),
+                    plan,
                     plan_error,
                 }
             })
@@ -591,7 +691,7 @@ impl AudioEngine {
         {
             let _ = wanted;
             cx.background_spawn(async move {
-                let render = Arc::new(decoded.samples().to_vec());
+                let render = decoded.share_samples();
                 PreparedRender {
                     render,
                     render_rate: decoded.sample_rate(),
@@ -651,13 +751,14 @@ impl AudioEngine {
         match &self.session {
             Some(session) => {
                 if let Err(err) = session.play() {
-                    self.last_error = Some(err.to_string());
+                    self.last_error = Some(err);
                     return false;
                 }
                 if let Some(load) = &self.load {
                     load.transport.set_playing(true);
                 }
                 self.status = Some(PlaybackStatus::Playing);
+                self.wake_tick(cx);
                 true
             }
             None => {
@@ -670,39 +771,25 @@ impl AudioEngine {
 
     #[cfg(not(target_family = "wasm"))]
     fn connect_session(&mut self, cx: &mut Context<Self>) {
-        let (render, render_channels, transport, source_rate, plan) = match &self.load {
-            Some(load) => (
-                load.render.clone(),
-                load.render_channels,
-                load.transport.clone(),
-                load.decoded.sample_rate(),
-                load.plan.clone(),
-            ),
+        // A meter is optional: with no producer the stream plays unmetered.
+        let producer = self.load.as_mut().and_then(|load| load.producer.take());
+        let request = match &self.load {
+            Some(load) => SessionRequest {
+                wanted_device: self.selected_device.clone(),
+                render: load.render.clone(),
+                render_channels: load.render_channels,
+                source_rate: load.decoded.sample_rate(),
+                plan: load.plan.clone(),
+                transport: load.transport.clone(),
+                producer,
+            },
             None => return,
         };
-        let producer = match self.load.as_mut().and_then(|load| load.producer.take()) {
-            Some(producer) => producer,
-            None => return,
-        };
-        let wanted = self.selected_device.clone();
+        let transport = request.transport.clone();
+        let builder = self.session_builder.clone();
         self.session_generation += 1;
         let token = self.session_generation;
-        let build_transport = transport.clone();
-        let task = cx.background_spawn(async move {
-            let device = output::find_output_device(wanted.as_deref())?;
-            let plan = match plan {
-                Some(plan) => plan,
-                None => output::plan_stream(&device, source_rate)?,
-            };
-            output::build_session(
-                &device,
-                render,
-                render_channels,
-                plan,
-                build_transport,
-                producer,
-            )
-        });
+        let task = cx.background_spawn(async move { builder(request) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |engine, cx| {
@@ -718,7 +805,7 @@ impl AudioEngine {
         &mut self,
         token: u64,
         transport: Arc<SharedTransport>,
-        result: Result<OutputSession, AudioError>,
+        result: Result<Arc<dyn output::SessionSink>, AudioError>,
         cx: &mut Context<Self>,
     ) {
         if token != self.session_generation {
@@ -733,27 +820,26 @@ impl AudioEngine {
         }
         match result {
             Ok(session) => {
-                self.session = Some(session);
                 transport.set_playing(false);
                 if self.pending_play {
                     self.pending_play = false;
-                    let played = self
-                        .session
-                        .as_ref()
-                        .map(|session| session.play().map_err(|err| err.to_string()));
-                    match played {
-                        Some(Ok(())) => {
+                    match session.play() {
+                        Ok(()) => {
                             transport.set_playing(true);
                             self.status = Some(PlaybackStatus::Playing);
                             self.last_error = None;
+                            self.wake_tick(cx);
                         }
-                        Some(Err(err)) => self.last_error = Some(err),
-                        None => {}
+                        Err(err) => self.last_error = Some(err),
                     }
                 }
+                self.session = Some(session);
             }
             Err(err) => {
-                self.last_error = Some(err.to_string());
+                // The queued play cannot happen on this build; do not leave
+                // pending_play armed for some later session to honor.
+                self.pending_play = false;
+                self.last_error = Some(err);
                 self.reconnect_meter(cx);
             }
         }

@@ -1,6 +1,5 @@
 //! Shell sections: the native todo-list port and the script-surface punts.
 
-mod demo;
 mod js_story;
 mod shell_story;
 mod todo_list;

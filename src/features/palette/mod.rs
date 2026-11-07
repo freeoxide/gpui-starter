@@ -4,5 +4,5 @@
 mod filter;
 mod items;
 
-pub use filter::{FuzzyMatchConfig, ItemFilter};
+pub use filter::ItemFilter;
 pub use items::PaletteEntry;

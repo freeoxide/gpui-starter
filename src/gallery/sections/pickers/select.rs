@@ -294,10 +294,10 @@ impl SelectItem for Country {
 /// upstream chunk_by grouping (not one group per distinct prefix).
 fn country_groups() -> SearchableVec<SelectGroup<Country>> {
     let mut groups: Vec<SelectGroup<Country>> = Vec::new();
-    for (name, code) in COUNTRIES {
+    for &(name, code) in COUNTRIES {
         let country = Country {
-            name: (*name).into(),
-            code: (*code).into(),
+            name: name.into(),
+            code: code.into(),
         };
         let prefix = country.letter_prefix().to_string();
         match groups.last_mut() {
@@ -364,38 +364,44 @@ impl SelectSection {
             "Avocado",
         ]);
         let fruit_select = cx.new(|cx| SelectState::new(fruits, None, window, cx).searchable(true));
+        let simple_select1 = cx.new(|cx| {
+            SelectState::new(
+                vec![
+                    "GPUI", "Iced", "egui", "Makepad", "Slint", "QT", "ImGui", "Cocoa", "WinUI",
+                ],
+                Some(IndexPath::default()),
+                window,
+                cx,
+            )
+        });
+        let simple_select2 = cx.new(|cx| {
+            let mut select =
+                SelectState::new(SearchableVec::new(vec![]), None, window, cx).searchable(true);
 
-        // The Values readout reads this state, so a commit must repaint.
-        let _subscriptions =
-            vec![cx.subscribe(&country_select, |_, _, _: &SelectEvent<_>, cx| cx.notify())];
+            select.set_items(
+                SearchableVec::new(vec!["Rust", "Go", "C++", "JavaScript"]),
+                window,
+                cx,
+            );
+
+            select
+        });
+
+        // The Values readout reads these states, so a commit must repaint.
+        let _subscriptions = vec![
+            cx.subscribe(&country_select, |_, _, _: &SelectEvent<_>, cx| cx.notify()),
+            cx.subscribe(&fruit_select, |_, _, _: &SelectEvent<_>, cx| cx.notify()),
+            cx.subscribe(&simple_select1, |_, _, _: &SelectEvent<_>, cx| cx.notify()),
+            cx.subscribe(&simple_select2, |_, _, _: &SelectEvent<_>, cx| cx.notify()),
+        ];
 
         Self {
             disabled: false,
             size: Size::Medium,
             country_select,
             fruit_select,
-            simple_select1: cx.new(|cx| {
-                SelectState::new(
-                    vec![
-                        "GPUI", "Iced", "egui", "Makepad", "Slint", "QT", "ImGui", "Cocoa", "WinUI",
-                    ],
-                    Some(IndexPath::default()),
-                    window,
-                    cx,
-                )
-            }),
-            simple_select2: cx.new(|cx| {
-                let mut select =
-                    SelectState::new(SearchableVec::new(vec![]), None, window, cx).searchable(true);
-
-                select.set_items(
-                    SearchableVec::new(vec!["Rust", "Go", "C++", "JavaScript"]),
-                    window,
-                    cx,
-                );
-
-                select
-            }),
+            simple_select1,
+            simple_select2,
             simple_select3: cx
                 .new(|cx| SelectState::new(Vec::<SharedString>::new(), None, window, cx)),
             menu_max_h_select: cx.new(|cx| {
@@ -618,3 +624,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
         SelectSection::view(window, cx),
     ));
 }
+
+#[cfg(test)]
+#[path = "select.test.rs"]
+mod select_test;

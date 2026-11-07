@@ -4,14 +4,13 @@ use gpui_kit::component::{
     AxisExt as _, Sizable as _, Size,
     button::{Button, DropdownButton},
     description_list::{DescriptionItem, DescriptionList},
-    h_flex,
-    menu::PopupMenu,
     text::TextView,
     v_flex,
 };
 use gpui_kit::*;
 use serde::Deserialize;
 
+use crate::gallery::demo::{self, SizeToggle, demo_toolbar};
 use crate::gallery::registry::GallerySection;
 
 /// Toolbar checks for the section: the two list options plus the shared size
@@ -31,55 +30,28 @@ impl DemoToggle {
     /// The size this toggle selects; `None` for the list options.
     fn size(&self) -> Option<Size> {
         match self {
-            DemoToggle::SizeXSmall => Some(Size::XSmall),
-            DemoToggle::SizeSmall => Some(Size::Small),
-            DemoToggle::SizeMedium => Some(Size::Medium),
-            DemoToggle::SizeLarge => Some(Size::Large),
+            Self::SizeXSmall => Some(Size::XSmall),
+            Self::SizeSmall => Some(Size::Small),
+            Self::SizeMedium => Some(Size::Medium),
+            Self::SizeLarge => Some(Size::Large),
             _ => None,
         }
     }
 }
 
-fn size_label(size: Size) -> &'static str {
-    match size {
-        Size::XSmall => "XSmall",
-        Size::Small => "Small",
-        Size::Medium => "Medium",
-        Size::Large => "Large",
-        Size::Size(_) => "Custom",
+impl SizeToggle for DemoToggle {
+    fn xsmall() -> Self {
+        Self::SizeXSmall
     }
-}
-
-fn add_size_items(menu: PopupMenu, size: Size) -> PopupMenu {
-    menu.menu_with_check(
-        "XSmall",
-        size == Size::XSmall,
-        Box::new(DemoToggle::SizeXSmall),
-    )
-    .menu_with_check(
-        "Small",
-        size == Size::Small,
-        Box::new(DemoToggle::SizeSmall),
-    )
-    .menu_with_check(
-        "Medium",
-        size == Size::Medium,
-        Box::new(DemoToggle::SizeMedium),
-    )
-    .menu_with_check(
-        "Large",
-        size == Size::Large,
-        Box::new(DemoToggle::SizeLarge),
-    )
-}
-
-/// The size switcher the story toolbar carried, on the published split button
-/// instead of the story crate's custom Popover trigger.
-fn size_dropdown(size: Size) -> DropdownButton {
-    DropdownButton::new("description-list-size").button(
-        Button::new(SharedString::from("description-list-size-trigger"))
-            .label(format!("Size: {}", size_label(size))),
-    )
+    fn small() -> Self {
+        Self::SizeSmall
+    }
+    fn medium() -> Self {
+        Self::SizeMedium
+    }
+    fn large() -> Self {
+        Self::SizeLarge
+    }
 }
 
 pub struct DescriptionListSection {
@@ -153,34 +125,16 @@ impl Render for DescriptionListSection {
                 }
                 cx.notify();
             }))
-            .child(
-                h_flex()
-                    .w_full()
-                    .justify_end()
-                    .gap_1()
-                    .child(
-                        size_dropdown(size)
-                            .dropdown_menu(move |menu, _, _| add_size_items(menu, size)),
-                    )
-                    .child(
-                        DropdownButton::new("description-list-options")
-                            .button(
-                                Button::new("description-list-options-trigger").label("Options"),
-                            )
-                            .dropdown_menu(move |menu, _, _| {
-                                menu.menu_with_check(
-                                    "Vertical",
-                                    vertical,
-                                    Box::new(DemoToggle::Vertical),
-                                )
-                                .menu_with_check(
-                                    "Bordered",
-                                    bordered,
-                                    Box::new(DemoToggle::Bordered),
-                                )
-                            }),
-                    ),
-            )
+            .child(demo_toolbar(vec![
+                demo::size_dropdown::<DemoToggle>("description-list-size", size).into_any_element(),
+                DropdownButton::new("description-list-options")
+                    .button(Button::new("description-list-options-trigger").label("Options"))
+                    .dropdown_menu(move |menu, _, _| {
+                        menu.menu_with_check("Vertical", vertical, Box::new(DemoToggle::Vertical))
+                            .menu_with_check("Bordered", bordered, Box::new(DemoToggle::Bordered))
+                    })
+                    .into_any_element(),
+            ]))
             .child(
                 div().w(rems(45.)).child(
                     DescriptionList::new()

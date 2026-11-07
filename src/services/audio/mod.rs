@@ -3,12 +3,11 @@
 //! this directory and revert its seam touches: the `pub mod audio;` line in
 //! services/mod.rs, the `audio` name in lib.rs's services re-export, the
 //! AudioPage module/pub use in features/pages/mod.rs, the Page::Audio arms
-//! and all() entry in shell/sidebar.rs, the VALID_HOSTS entry in
-//! shell/route.rs, the AppRoot wiring in shell/root/app_root/state.rs, the
-//! page count in tests/e2e_navigation.rs, the audio_* and nav_audio keys in
-//! both locale files, the initialize call in app/init.rs, and the
-//! hound/symphonia/cpal entries plus regenerated Cargo.lock in Cargo.toml.
-//! Consumers of the Interface Contract (plans 13/18) must be ported first.
+//! and all() entry in shell/page.rs, the AppRoot wiring in
+//! shell/root/app_root/state.rs, the page count in tests/e2e_navigation.rs,
+//! the audio_* and nav_audio keys in both locale files, the initialize call
+//! in app/init.rs, and the hound/symphonia/cpal entries in Cargo.toml plus
+//! regenerated Cargo.lock.
 
 use gpui_kit::{App, AppContext as _};
 
@@ -29,13 +28,12 @@ pub use peaks::{PEAK_COLUMNS, PeakColumn, WaveformPeaks};
 #[path = "mod.test.rs"]
 mod mod_test;
 
-/// Registers the "audio_playback" capability; call once from app init.
-/// Native: the device probe runs on the background executor and the entry
-/// lands when it completes.
+/// Registers the "audio_playback" capability; call once from app init. On native
+/// the entry lands once the background device probe completes.
 pub fn initialize(cx: &mut App) {
     #[cfg(target_family = "wasm")]
     crate::capabilities::set(
-        "audio_playback",
+        crate::capabilities::Capability::AUDIO_PLAYBACK,
         crate::capabilities::CapabilityStatus {
             supported: false,
             enabled: false,
@@ -55,7 +53,9 @@ pub fn initialize(cx: &mut App) {
         } else {
             crate::capabilities::CapabilityStatus::supported_enabled()
         };
-        cx.update(|cx| crate::capabilities::set("audio_playback", status, cx));
+        cx.update(|cx| {
+            crate::capabilities::set(crate::capabilities::Capability::AUDIO_PLAYBACK, status, cx)
+        });
     })
     .detach();
 }

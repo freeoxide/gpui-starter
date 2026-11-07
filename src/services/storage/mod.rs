@@ -37,11 +37,18 @@ impl Global for StorageSnapshot {}
 
 /// Target-neutral storage error. `rusqlite::Error` exists only natively, so
 /// that variant is compiled out on wasm; the web backend reports through
-/// [`StorageError::Web`]. Callers format both the same way.
+/// [`StorageError::Web`]. Callers format the variants the same way.
 #[derive(Debug)]
 pub enum StorageError {
+    /// The named storage operation failed; `op` rides along so logs and
+    /// surfaced records name the call site that failed.
     #[cfg(not(target_family = "wasm"))]
-    Sqlite(rusqlite::Error),
+    Sqlite {
+        op: &'static str,
+        source: rusqlite::Error,
+    },
+    /// A stored row failed to decode (id, timestamp, or JSON-encoded field).
+    Decode(String),
     /// Web backend failure: worker transport, OPFS, or worker-side SQL
     /// error text.
     Web(String),
@@ -51,7 +58,8 @@ impl std::fmt::Display for StorageError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             #[cfg(not(target_family = "wasm"))]
-            Self::Sqlite(err) => write!(f, "{err}"),
+            Self::Sqlite { op, source } => write!(f, "{op}: {source}"),
+            Self::Decode(message) => write!(f, "decode failed: {message}"),
             Self::Web(message) => write!(f, "{message}"),
         }
     }
@@ -61,23 +69,22 @@ impl std::error::Error for StorageError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             #[cfg(not(target_family = "wasm"))]
-            Self::Sqlite(err) => Some(err),
-            Self::Web(_) => None,
+            Self::Sqlite { source, .. } => Some(source),
+            Self::Decode(_) | Self::Web(_) => None,
         }
     }
 }
 
 #[cfg(not(target_family = "wasm"))]
-impl From<rusqlite::Error> for StorageError {
-    fn from(err: rusqlite::Error) -> Self {
-        Self::Sqlite(err)
+impl StorageError {
+    /// Attach the failing operation name; every sqlite error carries one.
+    pub(crate) fn sqlite(op: &'static str, source: rusqlite::Error) -> Self {
+        Self::Sqlite { op, source }
     }
 }
 
-// async_trait's generated wrapper fns carry #[must_use] and return boxed
-// futures (already #[must_use]) — new nightly clippy flags the generated
-// code as double_must_use. The attribute is macro-emitted, so the allow
-// lives here at the macro use site (same as NotificationBackend).
+// Nightly clippy flags async_trait's macro-emitted wrapper fns as
+// double_must_use; the allow must live at the macro use site.
 #[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait StorageBackend: Send + Sync {

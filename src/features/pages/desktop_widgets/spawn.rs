@@ -115,9 +115,7 @@ pub fn set_widget_enabled(kind: WidgetKind, on: bool, cx: &mut App) -> bool {
     if on {
         spawn_open(kind, cx)
     } else {
-        open_handle(kind, cx)
-            .map(|handle| close_floating(&handle, cx))
-            .unwrap_or(false)
+        open_handle(kind, cx).is_some_and(|handle| close_floating(&handle, cx))
     }
 }
 

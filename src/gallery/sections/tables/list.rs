@@ -93,6 +93,8 @@ struct Company {
     change_percent_str: SharedString,
     last_done_str: SharedString,
     prev_close_str: SharedString,
+    /// Cached by `prepare()` so each keystroke's filter needs no allocation.
+    name_lower: String,
 }
 
 impl Company {
@@ -101,6 +103,7 @@ impl Company {
         self.change_percent_str = format!("{:.2}%", self.change_percent).into();
         self.last_done_str = format!("{:.2}", self.last_done).into();
         self.prev_close_str = format!("{:.2}", self.prev_close).into();
+        self.name_lower = self.name.to_lowercase();
         self
     }
 }
@@ -298,23 +301,17 @@ impl CompanyListDelegate {
         for companies in &mut self.matched_companies {
             companies.clear();
         }
-        let companies: Vec<Rc<Company>> = self
+        let query = self.query.to_lowercase();
+        for company in self
             .companies
             .iter()
-            .filter(|company| {
-                company
-                    .name
-                    .to_lowercase()
-                    .contains(&self.query.to_lowercase())
-            })
-            .cloned()
-            .collect();
-        for company in companies.into_iter() {
+            .filter(|company| company.name_lower.contains(query.as_str()))
+        {
             if let Some(ix) = self.industries.iter().position(|s| s == &company.industry) {
-                self.matched_companies[ix].push(company);
+                self.matched_companies[ix].push(company.clone());
             } else {
                 self.industries.push(company.industry.clone());
-                self.matched_companies.push(vec![company]);
+                self.matched_companies.push(vec![company.clone()]);
             }
         }
     }
@@ -356,32 +353,69 @@ impl CompanyListDelegate {
         }
     }
 
-    /// Move the company at `from` to before or after the company at `to`.
-    fn move_company(&mut self, from: IndexPath, to: IndexPath, position: DropPosition) {
+    /// Move the company at `from` to before or after the company at `to`,
+    /// returning its landing index, or `None` when the move is a no-op.
+    fn move_company(
+        &mut self,
+        from: IndexPath,
+        to: IndexPath,
+        position: DropPosition,
+    ) -> Option<IndexPath> {
         self.drop_target = None;
         if from == to {
-            return;
+            return None;
         }
 
-        let Some(company) = self
+        let original = self
             .matched_companies
             .get_mut(from.section)
             .filter(|companies| from.row < companies.len())
-            .map(|companies| companies.remove(from.row))
-        else {
-            return;
-        };
+            .map(|companies| companies.remove(from.row))?;
 
         let mut row = position.gap(to.row);
         if from.section == to.section && from.row < row {
             row -= 1;
         }
 
-        if let Some(companies) = self.matched_companies.get_mut(to.section) {
-            let row = row.min(companies.len());
-            companies.insert(row, company);
-            self.selected_index = Some(IndexPath::new(row).section(to.section));
+        let target = self.matched_companies.get_mut(to.section)?;
+        let row = row.min(target.len());
+
+        // A cross-section move re-groups the company under the target
+        // industry, or the next prepare() pulls it back to its old section.
+        let company = if from.section != to.section {
+            let industry = self.industries[to.section].clone();
+            let mut moved = (*original).clone();
+            moved.industry = industry;
+            Rc::new(moved)
+        } else {
+            original.clone()
+        };
+
+        target.insert(row, company.clone());
+
+        // Mirror the move into the source vec, or the next prepare() rebuilds
+        // the old order. Keyed by Rc identity; the insert lands next to the
+        // neighbor the dropped row took in the matched view.
+        if let Some(pos) = self.companies.iter().position(|c| Rc::ptr_eq(c, &original)) {
+            self.companies.remove(pos);
         }
+        let section_rows = &self.matched_companies[to.section];
+        let insert_at = if row > 0 {
+            self.companies
+                .iter()
+                .position(|c| Rc::ptr_eq(c, &section_rows[row - 1]))
+                .map(|p| p + 1)
+        } else {
+            self.companies
+                .iter()
+                .position(|c| Rc::ptr_eq(c, &section_rows[row + 1]))
+        };
+        match insert_at {
+            Some(at) => self.companies.insert(at, company),
+            None => self.companies.push(company),
+        }
+
+        Some(IndexPath::new(row).section(to.section))
     }
 }
 
@@ -393,11 +427,6 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn items_count(&self, section: usize, _: &App) -> usize {
-        if matches!(section, 0 | 2 | 3) {
-            // Return some empty sections for testing.
-            return 0;
-        }
-
         self.matched_companies[section].len()
     }
 
@@ -541,7 +570,7 @@ impl ListDelegate for CompanyListDelegate {
                                 cx.notify();
                             }
                         }),
-                        cx.listener(move |this, drag: &DragCompany, _, cx| {
+                        cx.listener(move |this, drag: &DragCompany, window, cx| {
                             let Some(position) = this
                                 .delegate()
                                 .drop_target
@@ -551,7 +580,10 @@ impl ListDelegate for CompanyListDelegate {
                                 return;
                             };
 
-                            this.delegate_mut().move_company(drag.ix, ix, position);
+                            let moved_to = this.delegate_mut().move_company(drag.ix, ix, position);
+                            // Select through the list state so its copy and the
+                            // delegate's stay in agreement.
+                            this.set_selected_index(moved_to, window, cx);
                             cx.notify();
                         }),
                     )
@@ -580,22 +612,32 @@ impl ListDelegate for CompanyListDelegate {
     }
 
     fn load_more(&mut self, window: &mut Window, cx: &mut Context<ListState<Self>>) {
-        if !self.lazy_load {
+        if !self.lazy_load || self.loading || self.eof {
             return;
         }
 
+        self.loading = true;
+        cx.notify();
+
         cx.spawn_in(window, async move |view, window| {
-            // Simulate network request, delay 1s to load data.
+            // Stands in for a network fetch; the delay makes the loading state visible.
             window
                 .background_executor()
                 .timer(Duration::from_secs(1))
                 .await;
 
-            _ = view.update_in(window, move |view, window, cx| {
-                let query = view.delegate().query.clone();
-                view.delegate_mut().extend_more(200);
-                _ = view.delegate_mut().perform_search(&query, window, cx);
-                view.delegate_mut().eof = view.delegate().companies.len() >= 6000;
+            _ = view.update_in(window, move |view, _, cx| {
+                let delegate = view.delegate_mut();
+                if !delegate.lazy_load || delegate.eof {
+                    delegate.loading = false;
+                    cx.notify();
+                    return;
+                }
+                // extend_more re-prepares the filtered view itself.
+                delegate.extend_more(200);
+                delegate.eof = delegate.companies.len() >= 6000;
+                delegate.loading = false;
+                cx.notify();
             });
         })
         .detach();

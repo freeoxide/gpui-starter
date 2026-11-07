@@ -24,6 +24,9 @@ const ICON_SIZE: u32 = 64;
 /// Last applied favicon inputs — skips canvas redraws on no-op updates.
 static LAST: Mutex<Option<(usize, ConnectivityState)>> = Mutex::new(None);
 
+/// Last applied title — skips document.title writes on no-op updates.
+static LAST_TITLE: Mutex<Option<String>> = Mutex::new(None);
+
 /// Asset-source path of the embedded 64px branded PNG drawn as canvas base.
 const BASE_ICON_PATH: &str = "app-icon/hicolor/64x64/apps/gpui-starter.png";
 
@@ -105,8 +108,8 @@ fn load_base_image(cx: &App) {
             .add_event_listener_with_callback(event, handler.as_ref().unchecked_ref())
             .is_ok();
         if registered {
-            // Leaked intentionally: must outlive the one-shot load event
-            // (house pattern; see connectivity.rs).
+            // Leaked for the page lifetime, past the one-shot load event
+            // (see web::connectivity).
             handler.forget();
         } else {
             tracing::warn!(target: LOG, event, "favicon base listener not installed");
@@ -123,7 +126,17 @@ fn update(cx: &App) {
     let unread = crate::notifications::inbox::unread_count(cx);
     let state = crate::connectivity::snapshot(cx).state;
 
-    set_title(&compose_title(&route_title, unread, &state));
+    let title = compose_title(&route_title, unread, &state);
+    let title_changed = match LAST_TITLE.lock().as_deref() {
+        Ok(Some(last)) => *last != title,
+        _ => true,
+    };
+    if title_changed {
+        set_title(&title);
+        if let Ok(mut last) = LAST_TITLE.lock() {
+            *last = Some(title);
+        }
+    }
 
     let changed = match LAST.lock().as_deref() {
         Ok(Some(last)) => *last != (unread, state.clone()),

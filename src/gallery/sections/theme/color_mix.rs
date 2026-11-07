@@ -10,7 +10,7 @@ use gpui_kit::{
 
 use crate::gallery::registry::GallerySection;
 
-use super::demo::section;
+use crate::gallery::demo::section;
 
 pub struct ColorMixSection;
 
