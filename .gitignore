@@ -31,8 +31,6 @@ com.gpui-starter.app.instance
 *.tsbuildinfo
 .xwin-cache/
 
-# Machine-local MSVC env for this checkout (linker, INCLUDE/LIB, CC, RC)
-.cargo/config.toml
 
 # Local working artifacts (UI-audit captures and session reports)
 /out/
