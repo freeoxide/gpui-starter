@@ -1,0 +1,4 @@
+# Kit 0.10's layout/paint recursion crosses the 2 MiB default test-thread
+# stack on a debug-build first frame; gallery render tests abort without this.
+[env]
+RUST_MIN_STACK = "8388608"

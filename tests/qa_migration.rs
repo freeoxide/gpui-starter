@@ -1,4 +1,4 @@
-//! Kit 0.8.1 migration invariants the compiler cannot check: manifest
+//! Kit 0.10.0 migration invariants the compiler cannot check: manifest
 //! pins, the single-kit lock graph, the gpui-form re-pin, and the facade.
 
 #[allow(dead_code)]
@@ -80,12 +80,12 @@ fn manifest_declares_only_justified_kit_deps() {
     // gpui stays beside gpui-kit for one reason: the pinned gpui-form rev's
     // derives emit ::gpui::Entity/Window/Context into this crate.
     assert!(
-        manifest.contains("package = \"gpui-pre\", version = \"0.3.10\""),
-        "gpui (gpui-pre) must stay on the kit-0.8.1 snapshot"
+        manifest.contains("package = \"gpui-pre\", version = \"0.3.12\""),
+        "gpui (gpui-pre) must stay on the kit-0.10.0 snapshot"
     );
     assert!(
-        manifest.contains("\ngpui-kit = \"0.8.1\""),
-        "Cargo.toml must pin gpui-kit to 0.8.1"
+        manifest.contains("\ngpui-kit = \"0.10.0\""),
+        "Cargo.toml must pin gpui-kit to 0.10.0"
     );
     // The layer crates are reached through gpui-kit's own re-exports; the
     // anchor is line start so Cargo.toml's comment prose cannot trip this.
@@ -103,13 +103,13 @@ fn lock_graph_holds_one_kit_family() {
     let lock = committed_file("Cargo.lock");
 
     for (package, version) in [
-        ("gpui-kit", "0.8.1"),
-        ("gpui-component", "0.8.1"),
-        ("gpui-component-macros", "0.8.1"),
-        ("gpui-base", "0.8.1"),
-        ("gpui-kit-assets", "0.8.1"),
-        ("gpui-pre", "0.3.10"),
-        ("gpui-pre-platform", "0.3.10"),
+        ("gpui-kit", "0.10.0"),
+        ("gpui-component", "0.10.0"),
+        ("gpui-component-macros", "0.10.0"),
+        ("gpui-base", "0.10.0"),
+        ("gpui-kit-assets", "0.10.0"),
+        ("gpui-pre", "0.3.12"),
+        ("gpui-pre-platform", "0.3.12"),
     ] {
         assert_single_version(&lock, package, version);
     }
@@ -177,8 +177,8 @@ fn gpui_pre_snapshot_family_is_unified() {
             continue;
         }
         assert!(
-            block.contains("\nversion = \"0.3.10\""),
-            "{name} must sit on the unified 0.3.10 snapshot"
+            block.contains("\nversion = \"0.3.12\""),
+            "{name} must sit on the unified 0.3.12 snapshot"
         );
     }
 }
@@ -188,10 +188,10 @@ fn gpui_form_pins_migrated_freeoxide_repo() {
     let manifest = repo_file("Cargo.toml");
     assert!(
         manifest.contains(
-            "gpui-form = { package = \"freeoxide-gpui-form\", git = \"https://github.com/freeoxide/gpui-form\", \
-             rev = \"62a8b7daef1de69df4de9b7e0175c1a6eb25f19e\" }"
+            "gpui-form = { package = \"freeoxide-gpui-form\", git = \"https://github.com/hmziqagent/gpui-form\", \
+             rev = \"d4f703e057a54ab35a43516fab14bd93350c60af\" }"
         ),
-        "gpui-form must pin the freeoxide kit-0.8.1 tracking merge byte-exact \
+        "gpui-form must pin the hmziqagent kit-0.10.0 tracking branch byte-exact \
          (package renamed freeoxide-gpui-form; lib name gpui_form)"
     );
     assert!(
@@ -316,7 +316,7 @@ fn satellites_stay_on_form_repo_registry_lines() {
     );
     assert!(
         i18n[0].contains("\nversion = \"4."),
-        "rust-i18n must resolve to major 4, the line gpui-kit 0.8.1 builds against"
+        "rust-i18n must resolve to major 4, the line gpui-kit 0.10.0 builds against"
     );
 }
 
@@ -324,7 +324,7 @@ fn satellites_stay_on_form_repo_registry_lines() {
 fn gpui_form_resolves_from_freeoxide_git_unpatched() {
     let manifest = repo_file("Cargo.toml");
     assert!(
-        !manifest.contains("[patch.\"https://github.com/freeoxide/gpui-form\"]"),
+        !manifest.contains("[patch.\"https://github.com/hmziqagent/gpui-form\"]"),
         "the retired gpui-form [patch] table must not reappear; the pinned \
          rev is reachable upstream and resolves from git without it"
     );
@@ -338,9 +338,9 @@ fn gpui_form_resolves_from_freeoxide_git_unpatched() {
     );
     assert!(
         blocks[0].contains(
-            "source = \"git+https://github.com/freeoxide/gpui-form?rev=62a8b7daef1de69df4de9b7e0175c1a6eb25f19e"
+            "source = \"git+https://github.com/hmziqagent/gpui-form?rev=d4f703e057a54ab35a43516fab14bd93350c60af"
         ),
-        "gpui-form must resolve from the freeoxide git source at the pinned rev"
+        "gpui-form must resolve from the hmziqagent git source at the pinned rev"
     );
 }
 

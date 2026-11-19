@@ -219,6 +219,9 @@ pub(crate) fn parse_theme_key(key: &str) -> ParsedKey {
         "list_active_border" => ("List", "Active Border", "list.active.border"),
         "list_even" => ("List", "Even Background", "list.even.background"),
         "list_head" => ("List", "Head Background", "list.head.background"),
+        "list_highlight_foreground" => {
+            ("List", "Highlight Foreground", "list.highlight.foreground")
+        }
         "list_hover" => ("List", "Hover Background", "list.hover.background"),
 
         // Table
