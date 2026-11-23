@@ -38,14 +38,6 @@ pub struct CanvasElement {
     state: Entity<CanvasState>,
 }
 
-impl IntoElement for CanvasElement {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
 fn pointer_event(
     position: Point<Pixels>,
     button: MouseButton,

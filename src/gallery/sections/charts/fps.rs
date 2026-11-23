@@ -238,8 +238,8 @@ fn paint_gradient_curve(window: &mut Window, projected: &[Point<f32>], colors: &
     while start + 1 < projected.len() {
         let end = (start + SEGMENT_POINTS).min(projected.len() - 1);
         let run = &projected[start..=end];
-        // The tessellator asserts on non-finite coordinates, so a run that
-        // picked one up is dropped rather than aborting the process.
+        // A non-finite coordinate fails the whole path build, so a run that
+        // picked one up is dropped rather than taking the rest with it.
         if run.iter().any(|v| !v.x.is_finite() || !v.y.is_finite()) {
             start = end;
             continue;

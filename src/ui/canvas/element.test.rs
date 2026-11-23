@@ -63,12 +63,6 @@ fn assert_px_eq(actual: Pixels, expected: Pixels) {
     );
 }
 
-/// Reads the newest stroke path the canvas cache built. Element state is only
-/// reachable mid-paint, so the perf probe mirrors the built path for tests.
-fn last_built_path() -> Option<gpui_kit::Path<Pixels>> {
-    crate::ui::canvas::perf_probe::last_path_build()
-}
-
 #[gpui_kit::test]
 fn pan_tool_drag_through_real_window_events(cx: &mut TestAppContext) {
     let (state, mut cx) = mounted_host(cx);
@@ -301,55 +295,43 @@ fn offscreen_shapes_cull_before_the_path_cache(cx: &mut TestAppContext) {
     assert!(hashes >= 1, "a revealed, changed shape must rehash its key");
 }
 
+/// A gpui path is opaque and cannot be moved once built, so the cache stores
+/// each path at its paint origin: an idle repaint builds nothing, and a pan
+/// rebuilds the visible paths at their new origins without rehashing them.
 #[gpui_kit::test]
-fn path_vertices_scale_by_zoom_around_the_doc_bounds_origin(cx: &mut TestAppContext) {
+fn idle_repaints_rebuild_nothing_and_pans_rebuild_paths_without_rehashing(cx: &mut TestAppContext) {
+    use crate::ui::canvas::perf_probe;
+
     let (state, mut cx) = mounted_host(cx);
     state.update(&mut cx, |s, cx| {
         let layer = s.add_layer(cx);
-        let stroke = crate::ui::canvas::StrokeStyle {
-            width: px(2.),
-            ..Default::default()
-        };
         s.add_shape(
             layer,
-            CanvasShape::path(
-                vec![
-                    point(px(10.), px(10.)),
-                    point(px(60.), px(10.)),
-                    point(px(60.), px(60.)),
-                ],
-                stroke,
+            CanvasShape::rect(
+                rect_doc_bounds(),
+                ShapeStyle::stroked(crate::ui::canvas::StrokeStyle::default()),
             ),
             cx,
         )
         .unwrap();
     });
-    state.update(&mut cx, |s, cx| s.set_zoom(2., cx));
     cx.update(|window, cx| window.draw(cx).clear(cx));
-    let path = last_built_path().expect("scaled stroke built");
-    // Doc points (10,10)-(60,60) minus the half-stroke origin (9,9), times zoom 2,
-    // land at (2,2)-(102,102); the 4px stroke and its joins add a few px at most.
-    let b = path.bounds;
-    // Butt caps end exactly on the centerline and contains() excludes the far
-    // edge, so the hull gets float-noise slack.
-    let slack = px(0.05);
-    let hull = Bounds {
-        origin: b.origin - point(slack, slack),
-        size: b.size + size(slack * 2., slack * 2.),
-    };
-    for corner in [
-        point(px(2.), px(2.)),
-        point(px(102.), px(2.)),
-        point(px(2.), px(102.)),
-        point(px(102.), px(102.)),
-    ] {
-        assert!(
-            hull.contains(&corner),
-            "centerline corner {corner:?} outside {b:?}"
-        );
-    }
-    assert!((100. ..=112.).contains(&b.size.width.as_f32()), "{b:?}");
-    assert!((100. ..=112.).contains(&b.size.height.as_f32()), "{b:?}");
+
+    perf_probe::reset();
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let [path_builds, key_hashes, ..] = perf_probe::snapshot();
+    assert_eq!(path_builds, 0, "an idle repaint reuses the stored path");
+    assert_eq!(key_hashes, 0, "an idle repaint never rehashes");
+
+    perf_probe::reset();
+    state.update(&mut cx, |s, cx| s.pan_by(point(px(7.), px(5.)), cx));
+    cx.update(|window, cx| window.draw(cx).clear(cx));
+    let [path_builds, key_hashes, ..] = perf_probe::snapshot();
+    assert!(
+        path_builds > 0,
+        "a pan rebuilds the stroked rect at its new origin"
+    );
+    assert_eq!(key_hashes, 0, "a pan keeps the generation's content key");
 }
 
 #[gpui_kit::test]

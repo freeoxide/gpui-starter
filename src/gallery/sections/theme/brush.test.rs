@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use gpui_kit::{Modifiers, MouseButton, TestAppContext, point, px};
 
 use super::*;
@@ -172,22 +170,10 @@ fn clicking_without_moving_leaves_a_dot(cx: &mut TestAppContext) {
     cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
     cx.run_until_parked();
 
-    let cached = cx.update(|_, cx| section.update(cx, |state, _| state.stroke_paths.clone()));
-    cx.run_until_parked();
-
     cx.update(|_, cx| {
         section.update(cx, |state, _| {
             assert_eq!(state.strokes.len(), 1, "a click commits a one-point stroke");
             assert_eq!(state.strokes[0].points.len(), 1);
-            assert_eq!(
-                state.stroke_paths.len(),
-                state.strokes.len(),
-                "committed strokes are tessellated"
-            );
-            assert!(
-                Rc::ptr_eq(&cached, &state.stroke_paths),
-                "a repaint without new strokes reuses the tessellated paths"
-            );
         });
     });
 }

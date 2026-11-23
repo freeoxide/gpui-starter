@@ -1,7 +1,7 @@
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::*;
 
-use super::cache::{CanvasCaches, selection_key, shape_key};
+use super::cache::{CanvasCaches, build_path, selection_key, shape_key};
 use super::geometry::CanvasTransform;
 use super::scene::{CanvasDocument, CanvasShape, ShapeId, StrokeStyle};
 use super::state::CanvasGrid;
@@ -104,8 +104,8 @@ pub(crate) fn paint_grid(
     }
 }
 
-/// Smallest dash handed to gpui, in screen px: its dash walker stalls on
-/// non-positive lengths and divides by the array length, so empty arrays skip it.
+/// Smallest dash handed to gpui, in screen px: dashes below a pixel vanish
+/// at low zoom.
 const MIN_SCREEN_DASH: f32 = 1.;
 
 fn stroke_builder(stroke: &StrokeStyle, zoom: f32) -> PathBuilder {
@@ -129,26 +129,14 @@ fn stroke_builder(stroke: &StrokeStyle, zoom: f32) -> PathBuilder {
     }
 }
 
-fn build_path(builder: PathBuilder) -> Option<Path<Pixels>> {
-    match builder.build() {
-        Ok(path) => Some(path),
-        Err(err) => {
-            tracing::warn!("canvas path build failed: {err}");
-            None
-        }
-    }
-}
-
-/// Per-build point cap: gpui tessellates into u16 index buffers, so longer
-/// strokes paint as overlapping chunks that cannot overflow one build.
-const MAX_STROKE_BUILD_POINTS: usize = 2048;
-
-/// Chunk ranges for an oversized stroke: each chunk starts at the previous
-/// chunk's last point so the painted sub-strokes stay connected.
-fn stroke_chunk_ranges(len: usize) -> impl Iterator<Item = std::ops::Range<usize>> {
-    (0..len - 1)
-        .step_by(MAX_STROKE_BUILD_POINTS - 1)
-        .map(move |start| start..(start + MAX_STROKE_BUILD_POINTS).min(len))
+/// Stroke points in screen space, measured from the shape's doc-bounds origin;
+/// the paint origin then places the built path.
+fn scaled_stroke_points(
+    points: &[Point<Pixels>],
+    doc_origin: Point<Pixels>,
+    zoom: f32,
+) -> Vec<Point<Pixels>> {
+    points.iter().map(|p| (*p - doc_origin) * zoom).collect()
 }
 
 fn stroke_into(builder: &mut PathBuilder, scaled: &[Point<Pixels>]) {
@@ -263,7 +251,7 @@ pub(crate) fn paint_shape(
                     || {
                         let mut builder = stroke_builder(stroke, zoom);
                         rect_outline_into(&mut builder, width, height);
-                        build_path(builder)
+                        builder
                     },
                 ) {
                     window.paint_path(path, stroke.color);
@@ -285,7 +273,7 @@ pub(crate) fn paint_shape(
                     || {
                         let mut builder = PathBuilder::fill();
                         ellipse_outline_into(&mut builder, radius_x, radius_y);
-                        build_path(builder)
+                        builder
                     },
                 ) {
                     window.paint_path(path, fill_color);
@@ -299,7 +287,7 @@ pub(crate) fn paint_shape(
                     || {
                         let mut builder = stroke_builder(stroke, zoom);
                         ellipse_outline_into(&mut builder, radius_x, radius_y);
-                        build_path(builder)
+                        builder
                     },
                 ) {
                     window.paint_path(path, stroke.color);
@@ -321,7 +309,7 @@ pub(crate) fn paint_shape(
                     || {
                         let mut builder = PathBuilder::fill();
                         triangle_outline_into(&mut builder, width, height);
-                        build_path(builder)
+                        builder
                     },
                 ) {
                     window.paint_path(path, fill_color);
@@ -335,7 +323,7 @@ pub(crate) fn paint_shape(
                     || {
                         let mut builder = stroke_builder(stroke, zoom);
                         triangle_outline_into(&mut builder, width, height);
-                        build_path(builder)
+                        builder
                     },
                 ) {
                     window.paint_path(path, stroke.color);
@@ -353,31 +341,15 @@ pub(crate) fn paint_shape(
             }
             let doc_origin = doc_bounds.origin;
             let origin = bounds.origin + transform.to_screen(doc_origin);
-            if points.len() > MAX_STROKE_BUILD_POINTS {
-                // Rare enough that rebuilding per frame beats growing the
-                // slot cache; every other stroke stays cached.
-                let scaled: Vec<Point<Pixels>> =
-                    points.iter().map(|p| (*p - doc_origin) * zoom).collect();
-                for range in stroke_chunk_ranges(scaled.len()) {
-                    let mut builder = stroke_builder(style, zoom);
-                    stroke_into(&mut builder, &scaled[range]);
-                    builder.translate(origin);
-                    if let Some(path) = build_path(builder) {
-                        window.paint_path(path, style.color);
-                    }
-                }
-                return;
-            }
             if let Some(path) = caches.slot(stroke_slot).get_path(
                 generation,
                 || shape_key(shape, zoom),
                 origin,
                 || {
-                    let scaled: Vec<Point<Pixels>> =
-                        points.iter().map(|p| (*p - doc_origin) * zoom).collect();
+                    let scaled = scaled_stroke_points(points, doc_origin, zoom);
                     let mut builder = stroke_builder(style, zoom);
                     stroke_into(&mut builder, &scaled);
-                    build_path(builder)
+                    builder
                 },
             ) {
                 window.paint_path(path, style.color);
@@ -472,7 +444,7 @@ pub(crate) fn paint_selection(
             || {
                 let mut builder = PathBuilder::stroke(px(1.));
                 rect_outline_into(&mut builder, width, height);
-                build_path(builder)
+                builder
             },
         ) {
             window.paint_path(path, color);

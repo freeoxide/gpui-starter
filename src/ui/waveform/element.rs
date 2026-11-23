@@ -58,14 +58,6 @@ pub struct WaveformElement {
     accent: Option<Hsla>,
 }
 
-impl IntoElement for WaveformElement {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
 fn hairline(
     origin: Point<Pixels>,
     length: Pixels,
@@ -191,7 +183,7 @@ fn build_line_path(
     window_samples: usize,
     lane: Bounds<Pixels>,
     scale: f32,
-) -> Option<Path<Pixels>> {
+) -> Option<Path> {
     let points = oscilloscope_line_points(samples, window_samples, lane, scale);
     if points.is_empty() {
         return None;
@@ -211,7 +203,7 @@ struct PaintCaches {
     grid_key: Option<u64>,
     grid_xs: Vec<Pixels>,
     line_keys: Vec<Option<u64>>,
-    line_paths: Vec<Option<Path<Pixels>>>,
+    line_paths: Vec<Option<Path>>,
 }
 
 impl PaintCaches {
@@ -231,8 +223,8 @@ impl PaintCaches {
         &mut self,
         lane: usize,
         key: u64,
-        build: impl FnOnce() -> Option<Path<Pixels>>,
-    ) -> Option<Path<Pixels>> {
+        build: impl FnOnce() -> Option<Path>,
+    ) -> Option<Path> {
         if self.line_keys.len() <= lane {
             self.line_keys.resize(lane + 1, None);
             self.line_paths.resize(lane + 1, None);

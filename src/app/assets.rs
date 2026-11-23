@@ -58,7 +58,7 @@ pub fn app_icon_png(size: u16) -> Option<image::RgbaImage> {
 }
 
 /// 48px branded PNG for `WindowOptions.icon` (X11 `_NET_WM_ICON`); Wayland has
-/// no icon path in gpui-pre 0.3.12 and resolves it from the desktop entry.
+/// no icon path in gpui-pre 0.3.14 and resolves it from the desktop entry.
 #[cfg(target_os = "linux")]
 pub fn window_icon() -> Option<std::sync::Arc<image::RgbaImage>> {
     app_icon_png(48).map(std::sync::Arc::new)

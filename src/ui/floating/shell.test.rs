@@ -22,14 +22,6 @@ struct BoundsProbe {
     slot: ProbeSlot,
 }
 
-impl IntoElement for BoundsProbe {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
 impl Element for BoundsProbe {
     type RequestLayoutState = ();
     type PrepaintState = ();

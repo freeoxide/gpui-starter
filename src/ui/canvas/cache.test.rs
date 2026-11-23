@@ -3,27 +3,20 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use gpui_kit::{Path, PathBuilder, Pixels, Point, black, point, px, size};
+use gpui_kit::{PathBuilder, Pixels, Point, black, point, px, size};
 
 use super::ShapeCache;
 use crate::ui::canvas::{CanvasShape, ShapeStyle, StrokeStyle};
 
-fn diagonal(width: Pixels) -> Option<Path<Pixels>> {
+fn diagonal(width: Pixels) -> PathBuilder {
     let mut builder = PathBuilder::stroke(width);
     builder.move_to(point(px(0.), px(0.)));
     builder.line_to(point(px(10.), px(10.)));
-    builder.build().ok()
-}
-
-fn assert_px_eq(actual: Pixels, expected: Pixels) {
-    assert!(
-        (actual.as_f32() - expected.as_f32()).abs() < 0.01,
-        "expected ~{expected:?}, got {actual:?}"
-    );
+    builder
 }
 
 #[test]
-fn path_builds_once_per_generation_and_not_on_origin_change() {
+fn path_builds_once_per_generation_and_origin() {
     let mut cache = ShapeCache::default();
     let builds = Rc::new(Cell::new(0));
     let hashes = Rc::new(Cell::new(0));
@@ -54,14 +47,29 @@ fn path_builds_once_per_generation_and_not_on_origin_change() {
             .is_some()
     );
     cache
-        .get_path(1, &key, point(px(50.), px(50.)), &build)
+        .get_path(1, &key, point(px(5.), px(5.)), &build)
         .unwrap();
-    cache.get_path(1, &key, Point::default(), &build).unwrap();
-    assert_eq!(builds.get(), 1);
+    assert_eq!(
+        builds.get(),
+        1,
+        "an unchanged origin reuses the stored path"
+    );
     assert_eq!(hashes.get(), 1, "same generation never rehashes");
 
-    cache.get_path(2, &key, Point::default(), &build).unwrap();
-    assert_eq!(builds.get(), 1);
+    cache
+        .get_path(1, &key, point(px(50.), px(50.)), &build)
+        .unwrap();
+    assert_eq!(builds.get(), 2, "a moved origin rebuilds the path there");
+    assert_eq!(hashes.get(), 1, "a move keeps the generation's content key");
+
+    cache
+        .get_path(2, &key, point(px(50.), px(50.)), &build)
+        .unwrap();
+    assert_eq!(
+        builds.get(),
+        2,
+        "a new generation with unchanged content keeps the path"
+    );
     assert_eq!(hashes.get(), 2);
 }
 
@@ -102,45 +110,6 @@ fn path_rebuilds_when_generation_and_content_both_change() {
         .get_path(2, || super::shape_key(&moved, 1.), Point::default(), &build)
         .unwrap();
     assert_eq!(builds.get(), 2);
-}
-
-#[test]
-fn returned_vertices_differ_by_exactly_the_origin_delta() {
-    let mut cache = ShapeCache::default();
-    let content = CanvasShape::rect(
-        gpui_kit::Bounds {
-            origin: point(px(0.), px(0.)),
-            size: size(px(10.), px(10.)),
-        },
-        ShapeStyle::default(),
-    );
-    let stored = cache
-        .get_path(
-            7,
-            || super::shape_key(&content, 1.),
-            Point::default(),
-            || diagonal(px(2.)),
-        )
-        .unwrap();
-    let moved = cache
-        .get_path(
-            7,
-            || super::shape_key(&content, 1.),
-            point(px(10.), px(4.)),
-            || diagonal(px(2.)),
-        )
-        .unwrap();
-    assert_eq!(stored.vertices.len(), moved.vertices.len());
-    for (stored_vertex, moved_vertex) in stored.vertices.iter().zip(&moved.vertices) {
-        assert_px_eq(
-            moved_vertex.xy_position.x - stored_vertex.xy_position.x,
-            px(10.),
-        );
-        assert_px_eq(
-            moved_vertex.xy_position.y - stored_vertex.xy_position.y,
-            px(4.),
-        );
-    }
 }
 
 #[test]
