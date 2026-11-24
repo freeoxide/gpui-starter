@@ -3,10 +3,11 @@ members = ["collab-protocol", "collab-server", "crates/gpui-auth"]
 
 [workspace.dependencies]
 # gpui-form from the freeoxide fork (package freeoxide-gpui-form, lib name
-# gpui_form); rev = the hmziqagent kit-0.11.0 tracking branch ahead of the
-# freeoxide merge (master still pins gpui-kit 0.8.1, which cannot unify with
-# the 0.11.0 line). Re-pin to the freeoxide master merge once it lands.
-gpui-form = { package = "freeoxide-gpui-form", git = "https://github.com/hmziqagent/gpui-form", rev = "602d5d5aca582992fd70aeee24ac95b527e4a8eb" }
+# gpui_form); rev = the hmziqagent jiff-1.0 branch, the kit-0.11.0 tracking
+# branch plus the fork's own jiff 1.0 bump (one jiff in the graph), ahead of
+# the freeoxide merge (master still pins gpui-kit 0.8.1, which cannot unify
+# with the 0.11.0 line). Re-pin to the freeoxide master merge once it lands.
+gpui-form = { package = "freeoxide-gpui-form", git = "https://github.com/hmziqagent/gpui-form", rev = "9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7" }
 
 # GPUI ecosystem — gpui-kit is the single application-facing dependency
 # (`use gpui_kit::*`; layers: component / base / assets / platform).
