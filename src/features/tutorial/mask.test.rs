@@ -1,6 +1,6 @@
 use gpui_kit::{Bounds, PathBuilder, Pixels, point, px, size};
 
-use super::{cutout_bounds, place_card, rounded_rect_path};
+use super::{cutout_bounds, place_card, rounded_rect_corners, rounded_rect_path};
 
 fn rect(x: f32, y: f32, w: f32, h: f32) -> Bounds<Pixels> {
     Bounds {
@@ -79,37 +79,34 @@ fn place_card_clamps_to_viewport() {
 }
 
 #[test]
-fn cutout_subpath_adds_hole_geometry_to_the_mask_path() {
+fn cutout_subpath_builds_and_stays_inset_by_the_corner_radius() {
     let viewport = rect(0., 0., 800., 600.);
     let cutout = cutout_bounds(rect(100., 100., 200., 80.), px(8.));
 
-    let bare_square = {
-        let mut builder = PathBuilder::fill();
-        viewport_square(&mut builder, viewport);
-        builder.build().expect("the viewport square must build")
-    };
-    let with_cutout = {
-        let mut builder = PathBuilder::fill();
-        viewport_square(&mut builder, viewport);
-        rounded_rect_path(&mut builder, cutout, px(8.));
-        builder.build().expect("the cutout mask path must build")
-    };
+    let mut builder = PathBuilder::fill();
+    viewport_square(&mut builder, viewport);
+    rounded_rect_path(&mut builder, cutout, px(8.));
+    builder.build().expect("the cutout mask path must build");
 
-    assert!(
-        with_cutout.vertices.len() > bare_square.vertices.len(),
-        "rounded_rect_path must add vertices beyond the bare viewport square"
-    );
-    assert!(
-        with_cutout
-            .vertices
-            .iter()
-            .any(|vertex| cutout.contains(&vertex.xy_position)),
-        "the cutout contour must contribute vertices inside the cutout rect"
-    );
+    // Clockwise from the top edge: the cutout is (92, 92)-(308, 188), and each
+    // point sits the corner radius along an edge from its nearest corner.
+    let expected = [
+        (100., 92.),
+        (300., 92.),
+        (308., 100.),
+        (308., 180.),
+        (300., 188.),
+        (100., 188.),
+        (92., 180.),
+        (92., 100.),
+    ];
+    for (corner, (x, y)) in rounded_rect_corners(cutout, px(8.)).iter().zip(expected) {
+        assert_px_eq(corner.x, x, "corner x");
+        assert_px_eq(corner.y, y, "corner y");
+    }
 }
 
-// The outer subpath paint_spotlight writes before punching the cutout; kept
-// here so the test above varies only rounded_rect_path's output.
+// The outer subpath paint_spotlight writes before punching the cutout.
 fn viewport_square(builder: &mut PathBuilder, viewport: Bounds<Pixels>) {
     builder.move_to(viewport.origin);
     builder.line_to(point(viewport.right(), viewport.origin.y));

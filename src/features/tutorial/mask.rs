@@ -38,42 +38,44 @@ pub(crate) fn place_card(
     }
 }
 
+/// The eight points a rounded-rect subpath passes through, clockwise from the
+/// top edge: each straight edge ends `radius` short of a corner and each arc
+/// lands `radius` past it.
+pub(crate) fn rounded_rect_corners(rect: Bounds<Pixels>, radius: Pixels) -> [Point<Pixels>; 8] {
+    [
+        point(rect.origin.x + radius, rect.origin.y),
+        point(rect.right() - radius, rect.origin.y),
+        point(rect.right(), rect.origin.y + radius),
+        point(rect.right(), rect.bottom() - radius),
+        point(rect.right() - radius, rect.bottom()),
+        point(rect.origin.x + radius, rect.bottom()),
+        point(rect.origin.x, rect.bottom() - radius),
+        point(rect.origin.x, rect.origin.y + radius),
+    ]
+}
+
 /// Rounded-rect subpath (four arc_to corners) appended to `builder`.
 pub(crate) fn rounded_rect_path(builder: &mut PathBuilder, rect: Bounds<Pixels>, radius: Pixels) {
+    let [
+        start,
+        top_right,
+        right_top,
+        right_bottom,
+        bottom_right,
+        bottom_left,
+        left_bottom,
+        left_top,
+    ] = rounded_rect_corners(rect, radius);
     let radii = point(radius, radius);
-    builder.move_to(point(rect.origin.x + radius, rect.origin.y));
-    builder.line_to(point(rect.right() - radius, rect.origin.y));
-    builder.arc_to(
-        radii,
-        px(0.),
-        false,
-        true,
-        point(rect.right(), rect.origin.y + radius),
-    );
-    builder.line_to(point(rect.right(), rect.bottom() - radius));
-    builder.arc_to(
-        radii,
-        px(0.),
-        false,
-        true,
-        point(rect.right() - radius, rect.bottom()),
-    );
-    builder.line_to(point(rect.origin.x + radius, rect.bottom()));
-    builder.arc_to(
-        radii,
-        px(0.),
-        false,
-        true,
-        point(rect.origin.x, rect.bottom() - radius),
-    );
-    builder.line_to(point(rect.origin.x, rect.origin.y + radius));
-    builder.arc_to(
-        radii,
-        px(0.),
-        false,
-        true,
-        point(rect.origin.x + radius, rect.origin.y),
-    );
+    builder.move_to(start);
+    builder.line_to(top_right);
+    builder.arc_to(radii, px(0.), false, true, right_top);
+    builder.line_to(right_bottom);
+    builder.arc_to(radii, px(0.), false, true, bottom_right);
+    builder.line_to(bottom_left);
+    builder.arc_to(radii, px(0.), false, true, left_bottom);
+    builder.line_to(left_top);
+    builder.arc_to(radii, px(0.), false, true, start);
     builder.close();
 }
 
@@ -87,11 +89,11 @@ pub(crate) fn paint_spotlight(
     rem: Pixels,
 ) {
     let radius = cx.theme().radius_lg;
-    // EvenOdd is lyon's default fill rule; restating it keeps the
+    // EvenOdd is gpui's default fill rule; restating it keeps the
     // hole-punching intent visible at the only site that depends on it.
-    let mut builder = PathBuilder::fill().with_style(PathStyle::Fill(
-        FillOptions::default().with_fill_rule(FillRule::EvenOdd),
-    ));
+    let mut builder = PathBuilder::fill().with_style(PathStyle::Fill(FillOptions {
+        fill_rule: FillRule::EvenOdd,
+    }));
     builder.move_to(viewport.origin);
     builder.line_to(point(viewport.right(), viewport.origin.y));
     builder.line_to(point(viewport.right(), viewport.bottom()));

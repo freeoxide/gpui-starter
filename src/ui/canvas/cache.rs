@@ -11,7 +11,8 @@ use super::scene::{CanvasShape, ShapeId, ShapeStyle, StrokeStyle};
 pub(crate) struct ShapeCache {
     generation: Option<u64>,
     content_key: Option<u64>,
-    path: Option<Path<Pixels>>,
+    origin: Option<Point<Pixels>>,
+    path: Option<Path>,
     line: Option<Box<ShapedLine>>,
 }
 
@@ -31,23 +32,25 @@ impl ShapeCache {
         changed
     }
 
+    /// Builds `builder` at `origin`. A gpui path is opaque and cannot be moved
+    /// once built, so a changed origin rebuilds without rehashing the content.
     pub(crate) fn get_path(
         &mut self,
         generation: u64,
         content_key: impl FnOnce() -> u64,
         origin: Point<Pixels>,
-        build: impl FnOnce() -> Option<Path<Pixels>>,
-    ) -> Option<Path<Pixels>> {
-        if self.invalidated(generation, content_key) {
+        builder: impl FnOnce() -> PathBuilder,
+    ) -> Option<Path> {
+        if self.invalidated(generation, content_key) || self.origin != Some(origin) {
             #[cfg(test)]
             super::perf_probe::add_path_build();
-            self.path = None;
+            let mut builder = builder();
+            builder.translate(origin);
             self.line = None;
-            self.path = build();
-            #[cfg(test)]
-            super::perf_probe::set_last_path_build(self.path.as_ref());
+            self.path = build_path(builder);
+            self.origin = Some(origin);
         }
-        self.path.as_ref().map(|path| translated(path, origin))
+        self.path.clone()
     }
 
     pub(crate) fn get_line(
@@ -60,6 +63,7 @@ impl ShapeCache {
             #[cfg(test)]
             super::perf_probe::add_text_shaping();
             self.path = None;
+            self.origin = None;
             self.line = None;
             self.line = Some(Box::new(build()));
         }
@@ -67,13 +71,14 @@ impl ShapeCache {
     }
 }
 
-fn translated(path: &Path<Pixels>, offset: Point<Pixels>) -> Path<Pixels> {
-    let mut path = path.clone();
-    path.bounds.origin += offset;
-    for vertex in &mut path.vertices {
-        vertex.xy_position += offset;
+pub(crate) fn build_path(builder: PathBuilder) -> Option<Path> {
+    match builder.build() {
+        Ok(path) => Some(path),
+        Err(err) => {
+            tracing::warn!("canvas path build failed: {err}");
+            None
+        }
     }
-    path
 }
 
 #[derive(Default)]
@@ -177,7 +182,7 @@ pub(crate) fn shape_key(shape: &CanvasShape, zoom: f32) -> u64 {
 }
 
 /// Key for a cached selection outline: identity plus screen-space size. Panning
-/// moves only the paint origin, so it reuses the stored path untouched.
+/// moves only the paint origin, so the path rebuilds there without a rekey.
 pub(crate) fn selection_key(id: ShapeId, width: Pixels, height: Pixels) -> u64 {
     #[cfg(test)]
     super::perf_probe::add_key_hash();

@@ -369,7 +369,7 @@ research and decisions live in
   sits at the tray module's cfg gate.
 - Linux window icon: X11 windows get `_NET_WM_ICON` from the embedded 48px
   brand PNG via `WindowOptions.icon`, so un-installed runs are branded
-  too. Wayland has no icon path in gpui-pre 0.3.9; compositors resolve
+  too. Wayland has no icon path in gpui-pre 0.3.14; compositors resolve
   the icon from the desktop entry through the `gpui-starter` app_id.
 - macOS tray: the brand-G silhouette drawn in code as a 36px template
   image, so macOS recolors it for light, dark and highlight states.

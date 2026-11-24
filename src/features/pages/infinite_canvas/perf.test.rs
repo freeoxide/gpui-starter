@@ -59,12 +59,16 @@ fn set_zoom(page: &Entity<InfiniteCanvasPage>, vcx: &mut VisualTestContext, zoom
     vcx.update(|window, cx| window.draw(cx).clear(cx));
 }
 
-fn assert_quiet_pans(page: &Entity<InfiniteCanvasPage>, vcx: &mut VisualTestContext) {
+/// A gpui path cannot be moved once built, so a pan rebuilds the visible
+/// paths; content keys, labels and anchors depend on document and zoom only.
+fn assert_content_work_skipped_on_pan(
+    page: &Entity<InfiniteCanvasPage>,
+    vcx: &mut VisualTestContext,
+) {
     perf_probe::reset();
     minimap_probe::reset();
     pan_pair(page, vcx);
-    let [path_builds, key_hashes, text_shapings, _dot_paints] = perf_probe::snapshot();
-    assert_eq!(path_builds, 0, "steady pan must not rebuild cached paths");
+    let [_, key_hashes, text_shapings, _dot_paints] = perf_probe::snapshot();
     assert_eq!(key_hashes, 0, "steady pan must not rehash shape content");
     assert_eq!(text_shapings, 0, "steady pan must not reshape labels");
     assert_eq!(
@@ -72,12 +76,20 @@ fn assert_quiet_pans(page: &Entity<InfiniteCanvasPage>, vcx: &mut VisualTestCont
         0,
         "steady pan must not reproject minimap anchors"
     );
+
+    perf_probe::reset();
+    vcx.update(|window, cx| window.draw(cx).clear(cx));
+    let [path_builds, key_hashes, text_shapings, _dot_paints] = perf_probe::snapshot();
+    assert_eq!(
+        path_builds, 0,
+        "a repaint at an unchanged origin reuses the stored paths"
+    );
+    assert_eq!(key_hashes, 0, "an unchanged generation never rehashes");
+    assert_eq!(text_shapings, 0, "an unchanged generation never reshapes");
 }
 
-/// Pan must not rebuild paths, rehash content, reshape labels, or reproject
-/// minimap anchors: those depend on document and zoom only.
 #[gpui_kit::test]
-fn pan_frames_reuse_every_paint_cache(cx: &mut TestAppContext) {
+fn pan_frames_rebuild_paths_but_nothing_else(cx: &mut TestAppContext) {
     let (page, mut vcx) = drawn_page(cx);
     page.update(&mut vcx, |page, cx| page.fit_view(cx));
     set_zoom(&page, &mut vcx, 0.6);
@@ -86,11 +98,11 @@ fn pan_frames_reuse_every_paint_cache(cx: &mut TestAppContext) {
         crate::ui::canvas::last_paint_us() > 0,
         "the canvas element must record its paint duration"
     );
-    assert_quiet_pans(&page, &mut vcx);
+    assert_content_work_skipped_on_pan(&page, &mut vcx);
 
     // A redundant zoom write keeps the generation, so nothing revalidates.
     set_zoom(&page, &mut vcx, 0.6);
-    assert_quiet_pans(&page, &mut vcx);
+    assert_content_work_skipped_on_pan(&page, &mut vcx);
 
     // A real zoom change revalidates every visible shape exactly once...
     perf_probe::reset();
@@ -107,7 +119,7 @@ fn pan_frames_reuse_every_paint_cache(cx: &mut TestAppContext) {
         "zoom does not move minimap anchors"
     );
     // ...and the new generation is then steady across pans.
-    assert_quiet_pans(&page, &mut vcx);
+    assert_content_work_skipped_on_pan(&page, &mut vcx);
 
     // A document edit bumps the revision; the revalidating paint keeps
     // unchanged shapes cached, and pans stay quiet afterwards.
@@ -118,7 +130,7 @@ fn pan_frames_reuse_every_paint_cache(cx: &mut TestAppContext) {
         })
     });
     vcx.update(|window, cx| window.draw(cx).clear(cx));
-    assert_quiet_pans(&page, &mut vcx);
+    assert_content_work_skipped_on_pan(&page, &mut vcx);
 }
 
 /// Wall-clock guard: medians are per `window.draw` (the harness paints the

@@ -59,14 +59,6 @@ pub fn target(key: &'static str, child: impl IntoElement) -> TourTarget {
     }
 }
 
-impl IntoElement for TourTarget {
-    type Element = Self;
-
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
 // Delegation shape from gpui's elements/animation.rs: returning the child's
 // LayoutId makes the bounds passed to this prepaint the child's own.
 impl Element for TourTarget {

@@ -1135,13 +1135,22 @@ impl Render for DataTableSection {
                 this.table.update(cx, |table, cx| table.clear_selection(cx));
             }))
             .on_action(cx.listener(|this, action: &TableGoTo, _, cx| {
+                // set_selected_cell does not scroll; the scroll calls reveal the cell.
                 this.table.update(cx, |table, cx| match action {
                     TableGoTo::Top => table.scroll_to_row(0, cx),
                     TableGoTo::Bottom => {
                         table.scroll_to_row(table.delegate().rows_count(cx) - 1, cx)
                     }
-                    TableGoTo::Cell53 => table.set_selected_cell(5, 3, cx),
-                    TableGoTo::Cell107 => table.set_selected_cell(10, 7, cx),
+                    TableGoTo::Cell53 => {
+                        table.set_selected_cell(5, 3, cx);
+                        table.scroll_to_row(5, cx);
+                        table.scroll_to_col(3, cx);
+                    }
+                    TableGoTo::Cell107 => {
+                        table.set_selected_cell(10, 7, cx);
+                        table.scroll_to_row(10, cx);
+                        table.scroll_to_col(7, cx);
+                    }
                 });
             }))
             .on_action(
@@ -1455,3 +1464,7 @@ pub fn register(sections: &mut Vec<GallerySection>, window: &mut Window, cx: &mu
         DataTableSection::view(window, cx),
     ));
 }
+
+#[cfg(test)]
+#[path = "data_table.test.rs"]
+mod data_table_test;

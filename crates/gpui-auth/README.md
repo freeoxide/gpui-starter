@@ -99,5 +99,5 @@ documented test/mock-only convention.
   in the host manifest to ship without it.
 - README: this file.
 - Publish path: flip `publish`, set a version, keep the gpui-pre pin aligned
-  with the consumer's kit (`gpui-kit` pins the gpui-pre family to `=0.3.9`),
-  then `cargo publish` from this directory.
+  with the consumer's kit (`gpui-kit` pins the gpui-pre family to one exact
+  snapshot), then `cargo publish` from this directory.

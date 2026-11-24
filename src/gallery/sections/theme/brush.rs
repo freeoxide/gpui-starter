@@ -46,11 +46,9 @@ pub struct BrushSection {
     brush_size: Entity<SliderState>,
     brush_opacity: Entity<SliderState>,
     brush_color: Hsla,
+    /// Stored as points, not built paths: a gpui path is opaque and cannot be
+    /// moved once built, so every paint strokes them at the canvas origin.
     strokes: Rc<Vec<Stroke>>,
-    /// Tessellated committed strokes at a zero origin, rebuilt only when the
-    /// stroke set changes, then translated to the canvas origin per paint.
-    stroke_paths: Rc<Vec<(Path<Pixels>, Hsla)>>,
-    stroke_paths_source: Rc<Vec<Stroke>>,
     current_stroke: Option<Stroke>,
     is_drawing: bool,
     show_grid: bool,
@@ -84,8 +82,6 @@ impl BrushSection {
             brush_opacity,
             brush_color: black(),
             strokes: Rc::new(vec![]),
-            stroke_paths: Rc::new(vec![]),
-            stroke_paths_source: Rc::new(vec![]),
             current_stroke: None,
             is_drawing: false,
             show_grid: false,
@@ -182,23 +178,6 @@ impl BrushSection {
         cx.notify();
     }
 
-    /// Rebuild the tessellated paths only when the committed stroke set
-    /// changed; repaints then translate them instead of re-tessellating.
-    fn refresh_stroke_paths(&mut self) {
-        if Rc::ptr_eq(&self.stroke_paths_source, &self.strokes) {
-            return;
-        }
-        let paths = self
-            .strokes
-            .iter()
-            .filter_map(|stroke| {
-                build_stroke_path(stroke, Point::default()).map(|path| (path, stroke.color))
-            })
-            .collect();
-        self.stroke_paths = Rc::new(paths);
-        self.stroke_paths_source = self.strokes.clone();
-    }
-
     fn clear_canvas(&mut self, cx: &mut Context<Self>) {
         self.strokes = Rc::new(vec![]);
         self.current_stroke = None;
@@ -266,18 +245,15 @@ impl BrushSection {
             .child(
                 canvas(
                     move |_, _window, cx| {
-                        let paths = canvas_entity.update(cx, |state, _| {
-                            state.refresh_stroke_paths();
-                            state.stroke_paths.clone()
-                        });
+                        let strokes = canvas_entity.update(cx, |state, _| state.strokes.clone());
                         (
-                            paths,
+                            strokes,
                             current_stroke_for_prepaint,
                             show_grid_for_prepaint,
                             theme_for_prepaint,
                         )
                     },
-                    move |bounds, (paths, current_stroke, show_grid, theme), window, _| {
+                    move |bounds, (strokes, current_stroke, show_grid, theme), window, _| {
                         let origin = bounds.origin;
                         let size = bounds.size;
 
@@ -285,8 +261,8 @@ impl BrushSection {
                             let grid_color = theme.border.opacity(0.2);
                             let grid_size = 40.0;
 
-                            // One subpath per line, so the whole grid
-                            // tessellates into a single painted path.
+                            // One subpath per line, so the whole grid builds
+                            // into a single painted path.
                             let mut builder = PathBuilder::stroke(px(1.0));
                             let mut x = 0.0;
                             while px(x) <= size.width {
@@ -308,8 +284,10 @@ impl BrushSection {
                             }
                         }
 
-                        for (path, color) in paths.iter() {
-                            window.paint_path(translated(path, origin), *color);
+                        for stroke in strokes.iter() {
+                            if let Some(path) = build_stroke_path(stroke, origin) {
+                                window.paint_path(path, stroke.color);
+                            }
                         }
 
                         if let Some(ref stroke) = current_stroke {
@@ -325,18 +303,7 @@ impl BrushSection {
     }
 }
 
-/// `path` moved by `offset`: a finished path is only its bounds and vertices,
-/// so shifting them costs a copy, not a re-tessellation.
-fn translated(path: &Path<Pixels>, offset: Point<Pixels>) -> Path<Pixels> {
-    let mut path = path.clone();
-    path.bounds.origin += offset;
-    for vertex in &mut path.vertices {
-        vertex.xy_position += offset;
-    }
-    path
-}
-
-fn build_stroke_path(stroke: &Stroke, origin: Point<Pixels>) -> Option<Path<Pixels>> {
+fn build_stroke_path(stroke: &Stroke, origin: Point<Pixels>) -> Option<Path> {
     let first = stroke.points.first()?;
 
     let mut builder = PathBuilder::stroke(px(stroke.size));
