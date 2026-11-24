@@ -363,6 +363,7 @@ fn dirty_state(state_file: &std::path::Path) -> AppState {
         dirty: true,
         last_flushed_bytes: Vec::new(),
         flush_generation: Arc::new(AtomicU64::new(0)),
+        save_scheduled: false,
         in_flight_save: None,
     }
 }
@@ -510,7 +511,6 @@ fn read_persisted(state_file: &std::path::Path) -> AppConfig {
 // harness and hold the App borrow only for each cx.update call.
 #[gpui_kit::test]
 async fn update_config_persists_after_the_debounce_window(cx: &TestAppContext) {
-    let _guard = debounce_test_lock();
     let dir = tempdir().unwrap();
     let state_file = dir.path().join("state.json");
     cx.update(|cx| cx.set_global(clean_state(&state_file)));
@@ -530,9 +530,31 @@ async fn update_config_persists_after_the_debounce_window(cx: &TestAppContext) {
     assert!(!cx.read(|cx| cx.global::<AppState>().dirty));
 }
 
+// The schedule belongs to the App, not the process: a save armed in another
+// App must not keep this one from arming its own.
+#[gpui_kit::test]
+async fn an_armed_save_in_another_app_does_not_block_this_one(cx: &mut TestAppContext) {
+    let other = TestAppContext::single();
+    other.update(|cx| {
+        install_for_tests(AppConfig::default(), cx);
+        update_config(cx, |config| config.theme = "Other".to_string());
+    });
+    let dir = tempdir().unwrap();
+    let state_file = dir.path().join("state.json");
+    cx.update(|cx| cx.set_global(clean_state(&state_file)));
+
+    cx.update(|cx| update_config(cx, |config| config.sidebar_collapsed = true));
+
+    cx.executor()
+        .advance_clock(std::time::Duration::from_millis(DEBOUNCE_MS));
+    cx.executor().run_until_parked();
+
+    let loaded = read_persisted(&state_file);
+    assert!(loaded.sidebar_collapsed, "this App's own timer must fire");
+}
+
 #[gpui_kit::test]
 async fn a_burst_of_updates_lands_as_the_final_value(cx: &TestAppContext) {
-    let _guard = debounce_test_lock();
     let dir = tempdir().unwrap();
     let state_file = dir.path().join("state.json");
     cx.update(|cx| cx.set_global(clean_state(&state_file)));
@@ -555,7 +577,6 @@ async fn a_burst_of_updates_lands_as_the_final_value(cx: &TestAppContext) {
 
 #[gpui_kit::test]
 async fn an_unchanged_update_skips_the_write_entirely(cx: &TestAppContext) {
-    let _guard = debounce_test_lock();
     let dir = tempdir().unwrap();
     let state_file = dir.path().join("state.json");
     cx.update(|cx| cx.set_global(clean_state(&state_file)));
@@ -574,7 +595,6 @@ async fn an_unchanged_update_skips_the_write_entirely(cx: &TestAppContext) {
 
 #[gpui_kit::test]
 async fn update_config_repairs_an_unknown_locale_in_place(cx: &TestAppContext) {
-    let _guard = debounce_test_lock();
     let dir = tempdir().unwrap();
     let state_file = dir.path().join("state.json");
     let mut state = clean_state(&state_file);
@@ -588,7 +608,6 @@ async fn update_config_repairs_an_unknown_locale_in_place(cx: &TestAppContext) {
         cx.read(|cx| cx.global::<AppState>().config.locale.as_deref() == Some(LOCALE_EN)),
         "the mutation path must repair an unknown locale"
     );
-    // Let the armed timer fire so SAVE_SCHEDULED is released for later tests.
     cx.executor()
         .advance_clock(std::time::Duration::from_millis(DEBOUNCE_MS));
     cx.executor().run_until_parked();
@@ -601,7 +620,6 @@ async fn update_config_repairs_an_unknown_locale_in_place(cx: &TestAppContext) {
 
 #[gpui_kit::test]
 async fn force_save_flushes_immediately_and_cancels_the_debounce(cx: &TestAppContext) {
-    let _guard = debounce_test_lock();
     let dir = tempdir().unwrap();
     let state_file = dir.path().join("state.json");
     cx.update(|cx| cx.set_global(clean_state(&state_file)));
@@ -621,12 +639,14 @@ async fn force_save_flushes_immediately_and_cancels_the_debounce(cx: &TestAppCon
         task_cancelled,
         "the debounce task must be cancelled, not left to fire after shutdown"
     );
-    assert!(!SAVE_SCHEDULED.load(Ordering::Relaxed));
+    assert!(
+        !cx.read(|cx| cx.global::<AppState>().save_scheduled),
+        "force_save must leave no save scheduled"
+    );
 }
 
 #[gpui_kit::test]
 async fn a_failed_write_is_not_retried_until_the_next_mutation(cx: &TestAppContext) {
-    let _guard = debounce_test_lock();
     let dir = tempdir().unwrap();
     // A regular file where the state file's parent dir would be makes every
     // write fail at ensure_parent_dir.

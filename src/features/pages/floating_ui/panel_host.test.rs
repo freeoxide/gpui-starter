@@ -81,7 +81,6 @@ async fn open_panel_slots_render_one_pane_each(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 async fn reopening_a_note_panel_reseeds_its_content_from_persistence(cx: &mut TestAppContext) {
-    let _guard = crate::app_state::debounce_test_lock();
     cx.update(gpui_kit::init);
     cx.update(init_floating);
     cx.update(|cx| {

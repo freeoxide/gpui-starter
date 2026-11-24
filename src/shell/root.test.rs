@@ -4,8 +4,7 @@ use super::super::frame_time::is_slow_frame;
 use super::{flush_window_bounds, persisted_bounds};
 use crate::app::window::RootWindow;
 use crate::app_state::{
-    AppConfig, PersistedWindowBounds, PersistedWindowState, config, debounce_test_lock, force_save,
-    install_for_tests,
+    AppConfig, PersistedWindowBounds, PersistedWindowState, config, install_for_tests,
 };
 use gpui_kit::{
     AnyWindowHandle, Bounds, Context, IntoElement, Render, TestAppContext, Window, WindowBounds,
@@ -70,7 +69,6 @@ async fn flush_window_bounds_persists_the_recorded_root_not_the_active_palette(
     cx: &mut TestAppContext,
 ) {
     cx.update(gpui_kit::init);
-    let _guard = debounce_test_lock();
     cx.update(|cx| install_for_tests(AppConfig::default(), cx));
 
     let root = cx.open_window(size(px(1024.), px(768.)), |_, _| Blank);
@@ -106,14 +104,11 @@ async fn flush_window_bounds_persists_the_recorded_root_not_the_active_palette(
         }),
         "the recorded root's geometry must be persisted, not the active palette's"
     );
-    // Release the process-global debounce flag for later tests.
-    cx.update(force_save);
 }
 
 #[gpui_kit::test]
 async fn flush_window_bounds_persists_the_geometry_after_a_resize(cx: &mut TestAppContext) {
     cx.update(gpui_kit::init);
-    let _guard = debounce_test_lock();
     cx.update(|cx| install_for_tests(AppConfig::default(), cx));
 
     let root = cx.open_window(size(px(800.), px(600.)), |_, _| Blank);
@@ -149,6 +144,4 @@ async fn flush_window_bounds_persists_the_geometry_after_a_resize(cx: &mut TestA
         }),
         "a geometry change must reach the persisted bounds, not a stale snapshot"
     );
-    // Release the process-global debounce flag for later tests.
-    cx.update(force_save);
 }

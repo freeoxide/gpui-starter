@@ -84,9 +84,15 @@ impl WgpuEngine {
     /// Requests a surface-less adapter and device with default limits.
     /// Async; poll on any executor. Errors name the failing step.
     pub async fn new() -> Result<Self> {
+        // The debug flags (object naming, validation layers) crash the software
+        // Vulkan driver when the suite drives several devices in parallel.
+        #[cfg(test)]
+        let flags = wgpu::InstanceFlags::empty();
+        #[cfg(not(test))]
+        let flags = wgpu::InstanceFlags::default();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
-            flags: wgpu::InstanceFlags::default(),
+            flags,
             backend_options: wgpu::BackendOptions::default(),
             memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
             display: None,

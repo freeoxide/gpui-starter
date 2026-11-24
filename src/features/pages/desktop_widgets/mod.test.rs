@@ -3,7 +3,7 @@ use gpui_kit::{AppContext as _, TestAppContext, WindowOptions};
 use super::{
     DesktopWidgetsPage, WidgetKind, catalog, init, open_map, row_kinds, set_widget_enabled,
 };
-use crate::app_state::{AppConfig, debounce_test_lock, force_save, install_for_tests};
+use crate::app_state::{AppConfig, force_save, install_for_tests};
 use crate::features::pages::desktop_widgets::catalog::PersistedWidget;
 
 #[gpui_kit::test]
@@ -17,7 +17,6 @@ async fn open_map_starts_false_and_flips_with_the_registry(cx: &mut TestAppConte
     cx.update(gpui_kit::init);
     cx.update(crate::ui::floating::init);
     assert_eq!(cx.read(open_map).get(&WidgetKind::Clock), Some(&false));
-    let _guard = debounce_test_lock();
     cx.update(|cx| install_for_tests(AppConfig::default(), cx));
     cx.update(|cx| set_widget_enabled(WidgetKind::Clock, true, cx));
     assert_eq!(cx.read(open_map).get(&WidgetKind::Clock), Some(&true));

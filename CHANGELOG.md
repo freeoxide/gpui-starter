@@ -50,6 +50,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deleted the manual sheet/dialog/notification layer rendering (`Root::render_*_layer` is gone in 0.7); the root plugin auto-hosts every overlay layer above app content
 - Theme mutations go through `Theme::update` / `Theme::set_scrollbar_mode`, which reconcile tokens, rebuild the Base projection, and refresh every window — no `Theme::global_mut` mutation sites remain
 
+### Fixed
+
+- Fixed two failures that made the parallel test suite unreliable on a machine with a GPU. The config store's "save scheduled" flag was a process-global atomic, and the suite gives each test its own `App`, so another test's pending save could keep this one from arming its timer. The flag is now per-app state and `an_armed_save_in_another_app_does_not_block_this_one` covers it. Test engines are built without wgpu's debug flags: in debug builds they turn on object naming and the validation layers, which crash the software Vulkan driver (llvmpipe) when several test threads create resources at once, with the fault in `vkSetDebugUtilsObjectNameEXT`. The engines still acquire a real device, so the tests that need one still run their assertions. Measured on the library suite run in parallel: before, 4 segfaults in 12 runs and 1 config-store failure in 12; after, 0 of either in 100. `debounce_test_lock` and its call sites are gone with the global flag.
+
 ## [0.3.0] - 2026-06-05
 
 ### Added
