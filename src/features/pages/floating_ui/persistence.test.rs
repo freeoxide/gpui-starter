@@ -2,7 +2,7 @@ use super::*;
 
 use gpui_kit::TestAppContext;
 
-use crate::app_state::{AppConfig, debounce_test_lock, force_save, install_for_tests};
+use crate::app_state::{AppConfig, force_save, install_for_tests};
 
 fn entry(id: &str) -> PersistedPalette {
     PersistedPalette {
@@ -90,7 +90,6 @@ fn persisted_palette_serde_round_trip() {
 
 #[gpui_kit::test]
 async fn update_slot_merges_its_fields_without_clobbering_the_rest(cx: &mut TestAppContext) {
-    let _guard = debounce_test_lock();
     let mut seeded = entry("note");
     seeded.note = Some("seeded".to_string());
     cx.update(|cx| {

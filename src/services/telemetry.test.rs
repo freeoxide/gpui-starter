@@ -93,11 +93,8 @@ fn remote_sink_without_runtime_stays_uninstalled() {
     assert!(!sink.provider_installed);
 }
 
-// set_mode arms the config debounce; SAVE_SCHEDULED is process-global, so
-// tests that persist hold the shared lock and drain the timer before ending.
 #[gpui_kit::test]
 async fn initialize_applies_the_persisted_telemetry_mode(cx: &TestAppContext) {
-    let _guard = crate::app_state::debounce_test_lock();
     cx.update(|cx| {
         crate::app_state::install_for_tests(
             crate::app_state::AppConfig {
@@ -114,10 +111,6 @@ async fn initialize_applies_the_persisted_telemetry_mode(cx: &TestAppContext) {
         assert_eq!(snap.mode, TelemetryMode::LocalOnly);
         assert!(snap.enabled);
     });
-
-    cx.executor()
-        .advance_clock(std::time::Duration::from_millis(400));
-    cx.executor().run_until_parked();
 }
 
 #[gpui_kit::test]
@@ -137,7 +130,6 @@ async fn initialize_keeps_telemetry_disabled_by_default(cx: &TestAppContext) {
 
 #[gpui_kit::test]
 async fn set_mode_persists_the_decision(cx: &TestAppContext) {
-    let _guard = crate::app_state::debounce_test_lock();
     cx.update(|cx| {
         crate::app_state::install_for_tests(crate::app_state::AppConfig::default(), cx);
         initialize(cx);
@@ -150,15 +142,10 @@ async fn set_mode_persists_the_decision(cx: &TestAppContext) {
             TelemetryMode::LocalOnly
         );
     });
-
-    cx.executor()
-        .advance_clock(std::time::Duration::from_millis(400));
-    cx.executor().run_until_parked();
 }
 
 #[gpui_kit::test]
 async fn set_mode_remote_without_consent_keeps_recording(cx: &TestAppContext) {
-    let _guard = crate::app_state::debounce_test_lock();
     cx.update(|cx| {
         crate::app_state::install_for_tests(crate::app_state::AppConfig::default(), cx);
         initialize(cx);
@@ -187,15 +174,10 @@ async fn set_mode_remote_without_consent_keeps_recording(cx: &TestAppContext) {
             Some("telemetry disabled until consent")
         );
     });
-
-    cx.executor()
-        .advance_clock(std::time::Duration::from_millis(400));
-    cx.executor().run_until_parked();
 }
 
 #[gpui_kit::test]
 async fn set_mode_local_only_with_consent_records_events(cx: &TestAppContext) {
-    let _guard = crate::app_state::debounce_test_lock();
     cx.update(|cx| {
         crate::app_state::install_for_tests(crate::app_state::AppConfig::default(), cx);
         initialize(cx);
@@ -212,10 +194,6 @@ async fn set_mode_local_only_with_consent_records_events(cx: &TestAppContext) {
         assert!(snap.last_error.is_none());
         assert!(!crate::capabilities::snapshot(cx)[&Capability::TELEMETRY].degraded);
     });
-
-    cx.executor()
-        .advance_clock(std::time::Duration::from_millis(400));
-    cx.executor().run_until_parked();
 }
 
 #[gpui_kit::test]

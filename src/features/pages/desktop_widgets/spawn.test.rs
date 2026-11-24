@@ -1,7 +1,7 @@
 use gpui_kit::{Modifiers, TestAppContext, VisualTestContext, point, px};
 
 use super::*;
-use crate::app_state::{AppConfig, debounce_test_lock, force_save, install_for_tests};
+use crate::app_state::{AppConfig, force_save, install_for_tests};
 use crate::features::pages::desktop_widgets::catalog::widget_layout;
 use crate::ui::floating::{FloatingHandle, floating_snapshot, init as floating_init};
 
@@ -24,7 +24,6 @@ fn clock_entry() -> PersistedWidget {
 
 #[gpui_kit::test]
 async fn enabling_a_widget_spawns_a_native_float_and_persists_it(cx: &mut TestAppContext) {
-    let _guard = debounce_test_lock();
     boot(cx);
     assert!(cx.update(|cx| set_widget_enabled(WidgetKind::Clock, true, cx)));
     let snapshot = cx.read(floating_snapshot);
@@ -41,7 +40,6 @@ async fn enabling_a_widget_spawns_a_native_float_and_persists_it(cx: &mut TestAp
 async fn disabling_a_widget_closes_its_float_and_reports_false_once_closed(
     cx: &mut TestAppContext,
 ) {
-    let _guard = debounce_test_lock();
     boot(cx);
     cx.update(|cx| set_widget_enabled(WidgetKind::Clock, true, cx));
     assert!(cx.update(|cx| set_widget_enabled(WidgetKind::Clock, false, cx)));
@@ -56,7 +54,6 @@ async fn disabling_a_widget_closes_its_float_and_reports_false_once_closed(
 
 #[gpui_kit::test]
 async fn enabling_the_battery_renders_headless_without_panic(cx: &mut TestAppContext) {
-    let _guard = debounce_test_lock();
     boot(cx);
     assert!(cx.update(|cx| set_widget_enabled(WidgetKind::Battery, true, cx)));
     let snapshot = cx.read(floating_snapshot);
@@ -67,7 +64,6 @@ async fn enabling_the_battery_renders_headless_without_panic(cx: &mut TestAppCon
 
 #[gpui_kit::test]
 async fn a_placement_change_respawns_the_single_entry_and_persists(cx: &mut TestAppContext) {
-    let _guard = debounce_test_lock();
     boot(cx);
     cx.update(|cx| set_widget_enabled(WidgetKind::Clock, true, cx));
     assert!(
@@ -81,7 +77,6 @@ async fn a_placement_change_respawns_the_single_entry_and_persists(cx: &mut Test
 
 #[gpui_kit::test]
 async fn click_through_returns_the_shim_bool_and_persists_the_choice(cx: &mut TestAppContext) {
-    let _guard = debounce_test_lock();
     boot(cx);
     cx.update(|cx| set_widget_enabled(WidgetKind::Clock, true, cx));
     let applied = cx.update(|cx| set_widget_click_through(WidgetKind::Clock, true, cx));
@@ -92,7 +87,6 @@ async fn click_through_returns_the_shim_bool_and_persists_the_choice(cx: &mut Te
 
 #[gpui_kit::test]
 async fn always_on_top_respawns_when_the_runtime_apply_fails(cx: &mut TestAppContext) {
-    let _guard = debounce_test_lock();
     boot(cx);
     cx.update(|cx| set_widget_enabled(WidgetKind::Clock, true, cx));
     let result = cx.update(|cx| set_widget_always_on_top(WidgetKind::Clock, false, cx));
@@ -134,7 +128,6 @@ async fn spawn_persisted_with_an_empty_config_spawns_nothing(cx: &mut TestAppCon
 
 #[gpui_kit::test]
 async fn setters_tolerate_a_closed_widget_and_reject_unknown_layers(cx: &mut TestAppContext) {
-    let _guard = debounce_test_lock();
     boot(cx);
     assert!(cx.update(|cx| set_widget_layer(WidgetKind::Metrics, "pinned", cx)));
     assert_eq!(cx.read(widget_layout)[0].layer, "pinned");
@@ -147,7 +140,6 @@ async fn setters_tolerate_a_closed_widget_and_reject_unknown_layers(cx: &mut Tes
 
 #[gpui_kit::test]
 async fn a_spawned_widget_window_is_chromeless_but_esc_dismisses_it(cx: &mut TestAppContext) {
-    let _guard = debounce_test_lock();
     boot(cx);
     assert!(cx.update(|cx| set_widget_enabled(WidgetKind::Clock, true, cx)));
     let FloatingHandle::Native(window) = cx.read(floating_snapshot)[0].handle.clone() else {

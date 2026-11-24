@@ -5,7 +5,7 @@ use crate::platform::system_controls::SystemOp;
 use std::sync::{Arc, Mutex};
 
 #[cfg(not(target_family = "wasm"))]
-use crate::app_state::{AppConfig, debounce_test_lock, force_save, install_for_tests};
+use crate::app_state::{AppConfig, force_save, install_for_tests};
 #[cfg(not(target_family = "wasm"))]
 use gpui_kit::TestAppContext;
 
@@ -269,7 +269,6 @@ async fn refresh_never_reads_bluetooth_before_the_gate_opens(cx: &TestAppContext
 #[cfg(not(target_family = "wasm"))]
 #[gpui_kit::test]
 async fn enable_handshake_activates_polling_and_persists_the_optin(cx: &TestAppContext) {
-    let _guard = debounce_test_lock();
     cx.update(|cx| install_for_tests(AppConfig::default(), cx));
     let (readers, bluetooth_reads) = mock_readers(ready_bluetooth());
     cx.update(|cx| cx.set_global(pending_snapshot()));
@@ -303,7 +302,6 @@ async fn enable_handshake_activates_polling_and_persists_the_optin(cx: &TestAppC
 #[cfg(not(target_family = "wasm"))]
 #[gpui_kit::test]
 async fn denied_handshake_never_repolls_automatically(cx: &TestAppContext) {
-    let _guard = debounce_test_lock();
     cx.update(|cx| install_for_tests(AppConfig::default(), cx));
     let (readers, bluetooth_reads) = mock_readers(ControlState::Unavailable {
         error: "tcc denied".into(),
@@ -342,7 +340,6 @@ async fn denied_handshake_never_repolls_automatically(cx: &TestAppContext) {
 #[cfg(not(target_family = "wasm"))]
 #[gpui_kit::test]
 async fn disable_returns_the_gate_to_not_requested(cx: &TestAppContext) {
-    let _guard = debounce_test_lock();
     cx.update(|cx| install_for_tests(AppConfig::default(), cx));
     let (readers, _) = mock_readers(ready_bluetooth());
     cx.update(|cx| cx.set_global(pending_snapshot()));
@@ -361,7 +358,6 @@ async fn disable_returns_the_gate_to_not_requested(cx: &TestAppContext) {
 #[cfg(not(target_family = "wasm"))]
 #[gpui_kit::test]
 async fn inflight_handshake_read_cannot_reactivate_a_disabled_gate(cx: &TestAppContext) {
-    let _guard = debounce_test_lock();
     cx.update(|cx| install_for_tests(AppConfig::default(), cx));
     let (readers, bluetooth_reads) = mock_readers(ready_bluetooth());
     cx.update(|cx| cx.set_global(pending_snapshot()));
@@ -394,7 +390,6 @@ async fn inflight_handshake_read_cannot_reactivate_a_disabled_gate(cx: &TestAppC
 #[cfg(not(target_family = "wasm"))]
 #[gpui_kit::test]
 async fn the_newest_handshake_owns_the_gate_after_a_reenable(cx: &TestAppContext) {
-    let _guard = debounce_test_lock();
     cx.update(|cx| install_for_tests(AppConfig::default(), cx));
     let reads = Arc::new(Mutex::new(0usize));
     let counted = reads.clone();
@@ -438,7 +433,6 @@ async fn the_newest_handshake_owns_the_gate_after_a_reenable(cx: &TestAppContext
 #[cfg(not(target_family = "wasm"))]
 #[gpui_kit::test]
 async fn inflight_poll_read_cannot_restore_the_gated_bluetooth_row(cx: &TestAppContext) {
-    let _guard = debounce_test_lock();
     cx.update(|cx| install_for_tests(AppConfig::default(), cx));
     let (readers, bluetooth_reads) = mock_readers(ready_bluetooth());
     cx.update(|cx| cx.set_global(pending_snapshot()));
@@ -472,7 +466,6 @@ async fn inflight_poll_read_cannot_restore_the_gated_bluetooth_row(cx: &TestAppC
 #[cfg(not(target_family = "wasm"))]
 #[gpui_kit::test]
 async fn launch_handshake_reruns_only_with_a_persisted_optin(cx: &TestAppContext) {
-    let _guard = debounce_test_lock();
     cx.update(|cx| install_for_tests(AppConfig::default(), cx));
     let (readers, bluetooth_reads) = mock_readers(ready_bluetooth());
 

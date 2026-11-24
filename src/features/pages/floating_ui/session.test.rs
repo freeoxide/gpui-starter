@@ -1,7 +1,7 @@
 use gpui_kit::{AppContext as _, TestAppContext};
 
 use super::*;
-use crate::app_state::{AppConfig, debounce_test_lock, force_save, install_for_tests};
+use crate::app_state::{AppConfig, force_save, install_for_tests};
 use crate::ui::floating::init as init_floating;
 
 #[gpui_kit::test]
@@ -84,7 +84,6 @@ async fn external_close_drains_into_the_slot_after_an_update_boundary(cx: &mut T
 
 #[gpui_kit::test]
 async fn restore_windows_spawns_persisted_window_slots_once(cx: &mut TestAppContext) {
-    let _guard = debounce_test_lock();
     cx.update(gpui_kit::init);
     cx.update(init_floating);
     cx.update(|cx| {
@@ -165,7 +164,6 @@ async fn reset_window_position_respawns_the_window_open(cx: &mut TestAppContext)
 #[cfg(not(target_family = "wasm"))]
 #[gpui_kit::test]
 async fn open_windows_carry_a_bounds_watch_that_persists_the_origin(cx: &mut TestAppContext) {
-    let _guard = debounce_test_lock();
     cx.update(gpui_kit::init);
     cx.update(init_floating);
     // slot()/update_slot() need an installed AppState; the default config

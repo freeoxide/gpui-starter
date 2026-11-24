@@ -3,9 +3,7 @@ use std::collections::HashSet;
 use std::io::{Read as _, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-#[cfg(test)]
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[cfg(not(target_family = "wasm"))]
 use atomic_write_file::AtomicWriteFile;
@@ -45,10 +43,6 @@ pub const APP_STATE_VERSION: u32 = 1;
 /// corrupt file. Generous enough that exotic multi-monitor spans still persist.
 const MAX_PLAUSIBLE_DIM: f32 = 100_000.0;
 
-/// Set while a debounce timer is armed, so concurrent mutations reuse the
-/// pending timer instead of spawning another one.
-static SAVE_SCHEDULED: AtomicBool = AtomicBool::new(false);
-
 /// App-wide config store (GPUI global). Read through the helper fns in
 /// this module; write only via [`update_config`] and [`force_save`],
 /// which own the debounced persistence.
@@ -63,6 +57,9 @@ pub struct AppState {
     // Bumped by force_save; a background write already being polled cannot be
     // cancelled, so it checks this before the rename and abandons the commit.
     flush_generation: Arc<AtomicU64>,
+    // Set while a debounce timer is armed, so further mutations reuse the
+    // pending timer instead of arming another.
+    save_scheduled: bool,
     // Bound debounce task; dropped on shutdown so a suspended flush cannot
     // fire beneath the synchronous write.
     in_flight_save: Option<Task<()>>,
@@ -264,6 +261,7 @@ pub fn initialize(cx: &mut App) {
         dirty: false,
         last_flushed_bytes: initial_bytes,
         flush_generation: Arc::new(AtomicU64::new(0)),
+        save_scheduled: false,
         in_flight_save: None,
     });
 }
@@ -366,13 +364,12 @@ pub fn force_save(cx: &mut App) {
         return;
     }
 
-    SAVE_SCHEDULED.store(false, Ordering::Relaxed);
-
     // Shutdown: write synchronously (the process must not exit before the
     // write lands); the debounced hot path keeps fsync off the UI thread.
     cx.update_global::<AppState, _>(|state, _cx| {
         // Dropping only cancels a suspended flush; the generation bump makes
         // an in-flight write abandon its rename beneath this write.
+        state.save_scheduled = false;
         state.in_flight_save = None;
         state.flush_generation.fetch_add(1, Ordering::Release);
 
@@ -387,13 +384,17 @@ pub fn force_save(cx: &mut App) {
     });
 }
 
-/// Arm the debounced flush timer unless one is already pending; the
-/// `SAVE_SCHEDULED` compare_exchange keeps at most one timer in flight.
+/// Arm the debounced flush timer unless one is already pending, so at most
+/// one timer is in flight.
 fn arm_debounce(cx: &mut App) {
-    if SAVE_SCHEDULED
-        .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
-        .is_err()
-    {
+    let already_armed = cx.update_global::<AppState, _>(|state, _cx| {
+        if state.save_scheduled {
+            return true;
+        }
+        state.save_scheduled = true;
+        false
+    });
+    if already_armed {
         return;
     }
 
@@ -402,11 +403,10 @@ fn arm_debounce(cx: &mut App) {
         bg.timer(std::time::Duration::from_millis(DEBOUNCE_MS))
             .await;
 
-        SAVE_SCHEDULED.store(false, Ordering::Relaxed);
-
         // No I/O here.
         let request = cx.update(|cx| {
             cx.update_global::<AppState, _>(|state, _cx| {
+                state.save_scheduled = false;
                 if !state.dirty {
                     return None;
                 }
@@ -715,18 +715,6 @@ fn quarantine_bad_config(path: &Path) {
     }
 }
 
-// SAVE_SCHEDULED is process-global while each test gets its own App, so
-// debounce-arming tests serialize on this poison-tolerant lock.
-#[cfg(test)]
-static DEBOUNCE_TESTS: Mutex<()> = Mutex::new(());
-
-#[cfg(test)]
-pub(crate) fn debounce_test_lock() -> std::sync::MutexGuard<'static, ()> {
-    DEBOUNCE_TESTS
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
 /// Seed the AppState global from `config` with no disk read and no debounced
 /// save armed; feature tests use this instead of `initialize`, which touches
 /// the real state file. Trailing writes land in a throwaway per-test temp file.
@@ -753,6 +741,7 @@ pub(crate) fn install_for_tests(config: AppConfig, cx: &mut App) {
         dirty: false,
         last_flushed_bytes: flushed,
         flush_generation: Arc::new(AtomicU64::new(0)),
+        save_scheduled: false,
         in_flight_save: None,
     });
 }
