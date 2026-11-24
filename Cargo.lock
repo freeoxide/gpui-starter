@@ -2743,7 +2743,7 @@ dependencies = [
 [[package]]
 name = "freeoxide-gpui-form"
 version = "0.11.0"
-source = "git+https://github.com/hmziqagent/gpui-form?rev=602d5d5aca582992fd70aeee24ac95b527e4a8eb#602d5d5aca582992fd70aeee24ac95b527e4a8eb"
+source = "git+https://github.com/hmziqagent/gpui-form?rev=9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7#9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7"
 dependencies = [
  "bon",
  "freeoxide-gpui-form-component",
@@ -2755,7 +2755,7 @@ dependencies = [
 [[package]]
 name = "freeoxide-gpui-form-codegen"
 version = "0.11.0"
-source = "git+https://github.com/hmziqagent/gpui-form?rev=602d5d5aca582992fd70aeee24ac95b527e4a8eb#602d5d5aca582992fd70aeee24ac95b527e4a8eb"
+source = "git+https://github.com/hmziqagent/gpui-form?rev=9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7#9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7"
 dependencies = [
  "darling",
  "derive_more",
@@ -2769,7 +2769,7 @@ dependencies = [
 [[package]]
 name = "freeoxide-gpui-form-component"
 version = "0.11.0"
-source = "git+https://github.com/hmziqagent/gpui-form?rev=602d5d5aca582992fd70aeee24ac95b527e4a8eb#602d5d5aca582992fd70aeee24ac95b527e4a8eb"
+source = "git+https://github.com/hmziqagent/gpui-form?rev=9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7#9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7"
 dependencies = [
  "chrono",
  "freeoxide-gpui-form-component-derive",
@@ -2779,7 +2779,7 @@ dependencies = [
  "icu_calendar",
  "icu_datetime",
  "icu_locale_core",
- "jiff 0.2.37",
+ "jiff 1.0.2",
  "rust-i18n",
  "serde",
 ]
@@ -2787,7 +2787,7 @@ dependencies = [
 [[package]]
 name = "freeoxide-gpui-form-component-derive"
 version = "0.11.0"
-source = "git+https://github.com/hmziqagent/gpui-form?rev=602d5d5aca582992fd70aeee24ac95b527e4a8eb#602d5d5aca582992fd70aeee24ac95b527e4a8eb"
+source = "git+https://github.com/hmziqagent/gpui-form?rev=9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7#9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7"
 dependencies = [
  "darling",
  "proc-macro-crate",
@@ -2799,12 +2799,12 @@ dependencies = [
 [[package]]
 name = "freeoxide-gpui-form-core"
 version = "0.11.0"
-source = "git+https://github.com/hmziqagent/gpui-form?rev=602d5d5aca582992fd70aeee24ac95b527e4a8eb#602d5d5aca582992fd70aeee24ac95b527e4a8eb"
+source = "git+https://github.com/hmziqagent/gpui-form?rev=9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7#9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7"
 
 [[package]]
 name = "freeoxide-gpui-form-derive"
 version = "0.11.0"
-source = "git+https://github.com/hmziqagent/gpui-form?rev=602d5d5aca582992fd70aeee24ac95b527e4a8eb#602d5d5aca582992fd70aeee24ac95b527e4a8eb"
+source = "git+https://github.com/hmziqagent/gpui-form?rev=9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7#9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7"
 dependencies = [
  "darling",
  "freeoxide-gpui-form-codegen",
@@ -2820,7 +2820,7 @@ dependencies = [
 [[package]]
 name = "freeoxide-gpui-form-i18n"
 version = "0.11.0"
-source = "git+https://github.com/hmziqagent/gpui-form?rev=602d5d5aca582992fd70aeee24ac95b527e4a8eb#602d5d5aca582992fd70aeee24ac95b527e4a8eb"
+source = "git+https://github.com/hmziqagent/gpui-form?rev=9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7#9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7"
 dependencies = [
  "gpui-pre",
  "rust-i18n",
@@ -2832,7 +2832,7 @@ dependencies = [
 [[package]]
 name = "freeoxide-gpui-form-schema"
 version = "0.11.0"
-source = "git+https://github.com/hmziqagent/gpui-form?rev=602d5d5aca582992fd70aeee24ac95b527e4a8eb#602d5d5aca582992fd70aeee24ac95b527e4a8eb"
+source = "git+https://github.com/hmziqagent/gpui-form?rev=9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7#9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7"
 dependencies = [
  "heck 0.5.0",
  "inventory",

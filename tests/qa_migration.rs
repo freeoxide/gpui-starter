@@ -189,9 +189,9 @@ fn gpui_form_pins_migrated_freeoxide_repo() {
     assert!(
         manifest.contains(
             "gpui-form = { package = \"freeoxide-gpui-form\", git = \"https://github.com/hmziqagent/gpui-form\", \
-             rev = \"602d5d5aca582992fd70aeee24ac95b527e4a8eb\" }"
+             rev = \"9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7\" }"
         ),
-        "gpui-form must pin the hmziqagent kit-0.11.0 tracking branch byte-exact \
+        "gpui-form must pin the hmziqagent jiff-1.0 branch byte-exact \
          (package renamed freeoxide-gpui-form; lib name gpui_form)"
     );
     assert!(
@@ -223,6 +223,18 @@ fn gpui_form_pins_migrated_freeoxide_repo() {
         "gpui-form-collection must stay absent from the lock"
     );
     assert_single_version(&lock, "freeoxide-gpui-form", "0.11.0");
+    // A jiff 0.2 block stays in the lock: serde_with declares it as an
+    // optional dependency and no crate enables that feature.
+    let component = lock_blocks(&lock, "freeoxide-gpui-form-component");
+    assert_eq!(
+        component.len(),
+        1,
+        "expected one freeoxide-gpui-form-component in HEAD's Cargo.lock"
+    );
+    assert!(
+        !component[0].contains("\"jiff 0."),
+        "the form component must build on the kit's jiff 1 line, not a 0.2 copy"
+    );
     let query = lock_blocks(&lock, "gpui-query");
     assert_eq!(
         query.len(),
@@ -338,7 +350,7 @@ fn gpui_form_resolves_from_freeoxide_git_unpatched() {
     );
     assert!(
         blocks[0].contains(
-            "source = \"git+https://github.com/hmziqagent/gpui-form?rev=602d5d5aca582992fd70aeee24ac95b527e4a8eb"
+            "source = \"git+https://github.com/hmziqagent/gpui-form?rev=9239b1e44f85c276c4c61ebfe7ea5ff6d0d8b3b7"
         ),
         "gpui-form must resolve from the hmziqagent git source at the pinned rev"
     );
